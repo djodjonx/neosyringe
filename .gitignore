@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+# OS
+.DS_Store
+Thumbs.db
+# Logs
+logs/
+*.log
+npm-debug.log*
+# Environment
+.env
+.env.local
+.env.*.local
+# Coverage
+coverage/
+.nyc_output/
+# VitePress
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+# Misc
+.cache/
+temp/
+tmp/
