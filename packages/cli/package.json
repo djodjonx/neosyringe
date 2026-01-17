@@ -1,0 +1,24 @@
+{
+  "name": "@djodjonx/neosyringe-cli",
+  "version": "0.0.0",
+  "description": "CLI validator for Neo-Syringe",
+  "type": "module",
+  "bin": {
+    "neosyringe": "dist/index.mjs"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@djodjonx/neosyringe-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "devDependencies": {
+    "tsdown": "0.20.0-beta.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.17"
+  }
+}
