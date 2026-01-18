@@ -1,0 +1,150 @@
+/**
+ * Neo-Syringe Custom Theme
+ * Colors: Teal (#0d9488) + Orange (#f97316)
+ */
+
+:root {
+  /* Brand Colors */
+  --neo-teal: #0d9488;
+  --neo-teal-light: #14b8a6;
+  --neo-teal-dark: #0f766e;
+  --neo-orange: #f97316;
+  --neo-orange-light: #fb923c;
+  --neo-orange-dark: #ea580c;
+
+  /* VitePress Color Overrides */
+  --vp-c-brand-1: var(--neo-teal);
+  --vp-c-brand-2: var(--neo-teal-light);
+  --vp-c-brand-3: var(--neo-teal-dark);
+  --vp-c-brand-soft: rgba(13, 148, 136, 0.14);
+
+  /* Accent for highlights */
+  --vp-c-tip-1: var(--neo-teal);
+  --vp-c-tip-2: var(--neo-teal-light);
+  --vp-c-tip-3: var(--neo-teal-dark);
+  --vp-c-tip-soft: rgba(13, 148, 136, 0.14);
+
+  /* Warning with orange */
+  --vp-c-warning-1: var(--neo-orange);
+  --vp-c-warning-2: var(--neo-orange-light);
+  --vp-c-warning-3: var(--neo-orange-dark);
+  --vp-c-warning-soft: rgba(249, 115, 22, 0.14);
+
+  /* Button colors */
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: #fff;
+  --vp-button-brand-bg: var(--neo-teal);
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: #fff;
+  --vp-button-brand-hover-bg: var(--neo-teal-light);
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: #fff;
+  --vp-button-brand-active-bg: var(--neo-teal-dark);
+
+  /* Alt button with orange accent */
+  --vp-button-alt-border: var(--neo-orange);
+  --vp-button-alt-text: var(--neo-orange);
+  --vp-button-alt-bg: transparent;
+  --vp-button-alt-hover-border: var(--neo-orange-light);
+  --vp-button-alt-hover-text: var(--neo-orange-light);
+  --vp-button-alt-hover-bg: rgba(249, 115, 22, 0.1);
+
+  /* Home hero gradient */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, var(--neo-teal) 0%, var(--neo-orange) 100%);
+
+  --vp-home-hero-image-background-image: linear-gradient(135deg, rgba(13, 148, 136, 0.3) 0%, rgba(249, 115, 22, 0.3) 100%);
+  --vp-home-hero-image-filter: blur(44px);
+}
+
+.dark {
+  --vp-c-brand-1: var(--neo-teal-light);
+  --vp-c-brand-2: var(--neo-teal);
+  --vp-c-brand-3: var(--neo-teal-dark);
+
+  --vp-home-hero-image-background-image: linear-gradient(135deg, rgba(13, 148, 136, 0.4) 0%, rgba(249, 115, 22, 0.4) 100%);
+}
+
+/* Hero section enhancements */
+.VPHero .VPImage {
+  max-width: 280px;
+  max-height: 280px;
+}
+
+.VPHero .tagline {
+  font-size: 1.25rem !important;
+  color: var(--vp-c-text-2);
+}
+
+/* Feature cards */
+.VPFeature {
+  border: 1px solid var(--vp-c-divider);
+  transition: all 0.3s ease;
+}
+
+.VPFeature:hover {
+  border-color: var(--neo-teal);
+  box-shadow: 0 4px 20px rgba(13, 148, 136, 0.15);
+}
+
+.VPFeature .icon {
+  font-size: 2rem;
+}
+
+/* Code blocks */
+.vp-code-group .tabs label.active {
+  color: var(--neo-teal);
+}
+
+/* Custom badges */
+.vp-badge.tip {
+  background-color: var(--neo-teal);
+}
+
+.vp-badge.warning {
+  background-color: var(--neo-orange);
+}
+
+/* Navigation active state */
+.VPNavBarMenuLink.active,
+.VPSidebarItem.is-active > .item > .link > .text {
+  color: var(--neo-teal) !important;
+}
+
+/* Custom container styles */
+.custom-block.tip {
+  border-color: var(--neo-teal);
+}
+
+.custom-block.warning {
+  border-color: var(--neo-orange);
+}
+
+/* Table styling */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th {
+  background-color: rgba(13, 148, 136, 0.1);
+}
+
+/* Gradient text utility */
+.gradient-text {
+  background: linear-gradient(135deg, var(--neo-teal) 0%, var(--neo-orange) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Animation for hero */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.VPHero .VPImage img {
+  animation: float 3s ease-in-out infinite;
+}
+
