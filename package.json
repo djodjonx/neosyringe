@@ -9,6 +9,9 @@
     "typecheck": "tsc --noEmit",
     "validate": "pnpm lint && pnpm typecheck && pnpm test",
     "release": "pnpm build && changeset publish",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -16,9 +19,13 @@
     "@commitlint/cli": "^20.3.1",
     "@commitlint/config-conventional": "^20.3.1",
     "husky": "^9.1.7",
+    "inversify": "^7.11.0",
     "lint-staged": "^16.2.7",
     "oxlint": "^1.39.0",
+    "reflect-metadata": "^0.2.2",
+    "tsyringe": "^4.10.0",
     "typescript": "^5.9.3",
+    "vitepress": "^1.6.4",
     "vitest": "^4.0.17"
   },
   "packageManager": "pnpm@10.19.0"
