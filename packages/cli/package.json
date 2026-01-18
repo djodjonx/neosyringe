@@ -4,7 +4,7 @@
   "description": "CLI validator for Neo-Syringe",
   "type": "module",
   "bin": {
-    "neosyringe": "dist/index.mjs"
+    "neosyringe-check": "dist/index.mjs"
   },
   "files": [
     "dist"

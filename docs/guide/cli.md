@@ -27,15 +27,15 @@ yarn add -D @djodjonx/neosyringe-cli
 Run in your project root (where `tsconfig.json` is located):
 
 ```bash
-npx neosyringe
+npx neosyringe-check
 # or
-pnpm exec neosyringe
+pnpm exec neosyringe-check
 ```
 
 ### Options
 
 ```bash
-neosyringe [options]
+neosyringe-check [options]
 
 Options:
   -p, --project <path>   Path to tsconfig.json (default: "./tsconfig.json")
@@ -122,7 +122,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       
       - name: Validate DI Graph
-        run: pnpm exec neosyringe
+        run: pnpm exec neosyringe-check
 ```
 
 ### GitLab CI
@@ -133,7 +133,7 @@ validate:
   stage: test
   script:
     - pnpm install
-    - pnpm exec neosyringe
+    - pnpm exec neosyringe-check
 ```
 
 ### npm scripts
@@ -143,8 +143,8 @@ Add to `package.json`:
 ```json
 {
   "scripts": {
-    "validate": "neosyringe",
-    "prebuild": "neosyringe",
+    "validate": "neosyringe-check",
+    "prebuild": "neosyringe-check",
     "ci": "pnpm lint && pnpm validate && pnpm test"
   }
 }
@@ -159,7 +159,7 @@ Validate before building to catch errors early:
 ```json
 {
   "scripts": {
-    "prebuild": "neosyringe",
+    "prebuild": "neosyringe-check",
     "build": "vite build"
   }
 }
@@ -171,7 +171,7 @@ Add validation to your PR workflow:
 
 ```yaml
 - name: Validate Dependencies
-  run: pnpm exec neosyringe
+  run: pnpm exec neosyringe-check
   # Fails the PR if validation fails
 ```
 
@@ -181,5 +181,5 @@ Validate on pre-push:
 
 ```bash
 # .husky/pre-push
-pnpm exec neosyringe
+pnpm exec neosyringe-check
 ```

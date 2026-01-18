@@ -9,7 +9,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "validate": "neosyringe"
+    "validate": "neosyringe-check"
   },
   "dependencies": {
     "@djodjonx/neosyringe": "workspace:*",
@@ -17,6 +17,7 @@
     "vue": "^3.5.0"
   },
   "devDependencies": {
+    "@djodjonx/neosyringe-cli": "workspace:*",
     "@djodjonx/neosyringe-plugin": "workspace:*",
     "@djodjonx/neosyringe-lsp": "workspace:*",
     "@nuxt/devtools": "^2.0.0",
