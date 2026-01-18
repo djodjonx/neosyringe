@@ -32,9 +32,9 @@ export default defineConfig({
       {
         text: 'Links',
         items: [
-          { text: 'GitHub', link: 'https://github.com/djodjonx/neo-syringe' },
+          { text: 'GitHub', link: 'https://github.com/djodjonx/neosyringe' },
           { text: 'NPM', link: 'https://www.npmjs.com/package/@djodjonx/neo-syringe' },
-          { text: 'Changelog', link: 'https://github.com/djodjonx/neo-syringe/blob/main/CHANGELOG.md' },
+          { text: 'Changelog', link: 'https://github.com/djodjonx/neosyringe/blob/main/CHANGELOG.md' },
         ]
       }
     ],
@@ -87,7 +87,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/djodjonx/neo-syringe' },
+      { icon: 'github', link: 'https://github.com/djodjonx/neosyringe' },
       { icon: 'npm', link: 'https://www.npmjs.com/package/@djodjonx/neo-syringe' }
     ],
 
@@ -101,7 +101,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/djodjonx/neo-syringe/edit/main/docs/:path',
+      pattern: 'https://github.com/djodjonx/neosyringe/edit/main/docs/:path',
       text: 'Edit this page on GitHub'
     }
   }
