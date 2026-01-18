@@ -118,7 +118,7 @@ function transformUseInterfaceCalls(
 }
 
 /**
- * Neo-Syringe build plugin for Vite, Rollup, Webpack, and other bundlers.
+ * NeoSyringe build plugin for Vite, Rollup, Webpack, and other bundlers.
  *
  * Two transformations:
  * 1. Replaces `useInterface<T>()` calls with their tokenId strings (all files)
@@ -136,7 +136,7 @@ function transformUseInterfaceCalls(
  */
 export const neoSyringePlugin = createUnplugin(() => {
   return {
-    name: 'neo-syringe-plugin',
+    name: 'neosyringe-plugin',
 
     /**
      * Enforce 'pre' to run before esbuild transforms TypeScript.
@@ -212,7 +212,7 @@ export const neoSyringePlugin = createUnplugin(() => {
       for (const [tokenId, usage] of usedTokens) {
         if (!registeredTokens.has(tokenId)) {
           errors.push(
-            `[neo-syringe] Unregistered token: useInterface<${usage.interfaceName}>() at ${usage.file}:${usage.line}:${usage.column}\n` +
+            `[NeoSyringe] Unregistered token: useInterface<${usage.interfaceName}>() at ${usage.file}:${usage.line}:${usage.column}\n` +
             `  Token "${tokenId}" is not registered in any container.\n` +
             `  Add it to your defineBuilderConfig injections.`
           );

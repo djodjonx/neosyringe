@@ -1,7 +1,7 @@
 {
   "name": "@djodjonx/neosyringe-lsp",
   "version": "0.0.0",
-  "description": "TypeScript Language Service Plugin for Neo-Syringe",
+  "description": "TypeScript Language Service Plugin for NeoSyringe",
   "main": "dist/index.cjs",
   "types": "dist/index.d.cts",
   "exports": {

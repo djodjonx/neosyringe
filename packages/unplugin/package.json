@@ -1,7 +1,7 @@
 {
   "name": "@djodjonx/neosyringe-plugin",
   "version": "0.0.0",
-  "description": "Neo-Syringe build plugin (Vite, Rollup, Webpack)",
+  "description": "NeoSyringe build plugin (Vite, Rollup, Webpack)",
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",

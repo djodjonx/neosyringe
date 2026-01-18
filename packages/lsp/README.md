@@ -1,6 +1,6 @@
 # @djodjonx/neosyringe-lsp
 
-TypeScript Language Service Plugin for Neosyringe. Provides real-time error detection in VSCode.
+TypeScript Language Service Plugin for NeoSyringe. Provides real-time error detection in VSCode.
 
 ## Setup
 

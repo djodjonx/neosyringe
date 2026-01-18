@@ -1,5 +1,5 @@
 /**
- * E2E Tests - Neo-Syringe with tsyringe Legacy Container
+ * E2E Tests - NeoSyringe with tsyringe Legacy Container
  *
  * Tests the integration with a real tsyringe container.
  * This validates that the generated code correctly delegates
@@ -9,18 +9,18 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { container as tsyringeContainer, singleton } from 'tsyringe';
 import * as ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
-import { Generator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer } from '../../packages/core/src/analyzer/index';
+import { GraphValidator } from '../../packages/core/src/generator/index';
+import { Generator } from '../../packages/core/src/generator/index';
 
-describe('E2E - Neo-Syringe with tsyringe', () => {
+describe('E2E - NeoSyringe with tsyringe', () => {
   beforeEach(() => {
     // Reset tsyringe container between tests
     tsyringeContainer.reset();
   });
 
   const compileAndGenerate = (fileContent: string) => {
-    const fileName = 'e2e-tsyringe.ts';
+    const fileName = 'e2e-tsyringe';
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
@@ -208,7 +208,7 @@ describe('E2E - Neo-Syringe with tsyringe', () => {
 
       tsyringeContainer.registerSingleton(LegacyLogger);
 
-      // 2. Neo-Syringe service depending on legacy
+      // 2. NeoSyringe service depending on legacy
       class UserService {
         constructor(private logger: LegacyLogger) {}
 

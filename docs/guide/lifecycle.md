@@ -4,7 +4,7 @@ Control how instances are created and managed.
 
 ## Overview
 
-Neosyringe supports two lifecycle modes:
+NeoSyringe supports two lifecycle modes:
 
 | Lifecycle | Behavior | Default |
 |-----------|----------|---------|

@@ -1,7 +1,7 @@
 {
   "name": "@djodjonx/neosyringe-cli",
   "version": "0.0.0",
-  "description": "CLI validator for Neo-Syringe",
+  "description": "CLI validator for NeoSyringe",
   "type": "module",
   "bin": {
     "neosyringe-check": "dist/index.mjs"

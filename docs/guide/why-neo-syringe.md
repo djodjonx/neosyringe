@@ -1,10 +1,10 @@
-# Why Neosyringe?
+# Why NeoSyringe?
 
 A detailed comparison with other dependency injection solutions.
 
 ## Comparison Table
 
-| Feature | Neosyringe | tsyringe | InversifyJS | Awilix |
+| Feature | NeoSyringe | tsyringe | InversifyJS | Awilix |
 |---------|:-----------:|:--------:|:-----------:|:------:|
 | **Zero runtime overhead** | ✅ | ❌ | ❌ | ❌ |
 | **No decorators needed** | ✅ | ❌ | ❌ | ✅ |
@@ -26,7 +26,7 @@ Traditional DI containers add significant overhead:
 | InversifyJS | ~11 KB |
 | tsyringe | ~4 KB |
 | Awilix | ~8 KB |
-| **Neosyringe** | **~0 KB** (generated) |
+| **NeoSyringe** | **~0 KB** (generated) |
 
 ### Runtime Performance
 
@@ -39,7 +39,7 @@ container.resolve(UserService);
 // 4. Create instance with reflection
 // 5. Store singleton reference
 
-// Neosyringe - Direct instantiation
+// NeoSyringe - Direct instantiation
 container.resolve(UserService);
 // 1. Call generated factory function
 // That's it!
@@ -74,7 +74,7 @@ container.register(TYPES.IDatabase, { useClass: PostgresDatabase });
 container.register(UserService, { useClass: UserService });
 ```
 
-### Neosyringe Approach
+### NeoSyringe Approach
 
 ```typescript
 import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
@@ -108,16 +108,16 @@ container.resolve(UserService);
 // 💥 App crashes in production!
 ```
 
-### Neosyringe: Compile-Time Errors
+### NeoSyringe: Compile-Time Errors
 
 ```typescript
-// Neosyringe - Error in IDE instantly
+// NeoSyringe - Error in IDE instantly
 export const container = defineBuilderConfig({
   injections: [
     { token: UserService } // UserService needs ILogger
   ]
 });
-// 🔴 [Neosyringe] Missing binding: 'UserService' depends on 'ILogger'
+// 🔴 [NeoSyringe] Missing binding: 'UserService' depends on 'ILogger'
 // ✅ Fixed before you even save the file!
 ```
 
@@ -130,17 +130,17 @@ export const container = defineBuilderConfig({
 import { container } from 'tsyringe';
 
 beforeEach(() => {
-  container.reset();  // tsyringe API, NOT Neosyringe!
+  container.reset();  // tsyringe API, NOT NeoSyringe!
   container.register(TYPES.ILogger, { useClass: MockLogger });
   container.register(TYPES.IDatabase, { useClass: MockDatabase });
   container.register(UserService, { useClass: UserService });
 });
 ```
 
-### Neosyringe: Natural Overrides
+### NeoSyringe: Natural Overrides
 
 ```typescript
-// ✅ Neosyringe - Create a test container that overrides production services
+// ✅ NeoSyringe - Create a test container that overrides production services
 import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
 import { productionContainer } from './container';
 
@@ -169,10 +169,10 @@ Traditional DI often fails in edge environments:
 // Error: Cannot use decorators in Edge Runtime
 ```
 
-Neosyringe works everywhere:
+NeoSyringe works everywhere:
 
 ```typescript
-// ✅ Neosyringe in any environment
+// ✅ NeoSyringe in any environment
 // Generated code is pure JavaScript
 export class NeoContainer {
   resolve(token) {
@@ -196,7 +196,7 @@ const legacy = declareContainerTokens<{
   UserRepository: UserRepository;
 }>(legacyContainer);
 
-// New services use Neosyringe
+// New services use NeoSyringe
 export const container = defineBuilderConfig({
   useContainer: legacy, // Delegate to legacy
   injections: [
@@ -208,7 +208,7 @@ export const container = defineBuilderConfig({
 
 ## Summary
 
-| Aspect | Traditional DI | Neosyringe |
+| Aspect | Traditional DI | NeoSyringe |
 |--------|---------------|-------------|
 | **When errors occur** | Runtime | Compile-time |
 | **Bundle impact** | 4-11 KB | 0 KB |

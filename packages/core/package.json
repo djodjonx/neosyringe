@@ -1,7 +1,7 @@
 {
   "name": "@djodjonx/neosyringe-core",
   "version": "0.0.0",
-  "description": "Core analysis and generation logic for Neo-Syringe",
+  "description": "Core analysis and generation logic for NeoSyringe",
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",

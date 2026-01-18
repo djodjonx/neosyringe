@@ -49,12 +49,12 @@ describe('Generator', () => {
 
     // Verify Factory Functions
     // C depends on nothing -> new Import_0.ConsoleLogger()
-    expect(code).toContain('function create_ILogger(container: NeoContainer) {');
+    expect(code).toContain('private create_ILogger(): any {');
     expect(code).toContain('return new Import_0.ConsoleLogger();');
 
-    // B depends on C -> new Import_1.UserService(container.resolve(Import_0.ConsoleLogger))
-    expect(code).toContain('function create_UserService(container: NeoContainer) {');
-    expect(code).toContain('return new Import_1.UserService(container.resolve(Import_0.ConsoleLogger));');
+    // B depends on C -> new Import_1.UserService(this.resolve(Import_0.ConsoleLogger))
+    expect(code).toContain('private create_UserService(): any {');
+    expect(code).toContain('return new Import_1.UserService(this.resolve(Import_0.ConsoleLogger));');
 
     // Verify Container Class
     expect(code).toContain('export class NeoContainer {');
@@ -80,8 +80,8 @@ describe('Generator', () => {
     expect(code).toContain('if (!this.instances.has(Import_0.S))');
     
     // Transient Logic: Always call factory
-    // if (token === Import_1.T) { return create_Transient(this); }
-    expect(code).toContain('return create_Transient(this);');
+    // if (token === Import_1.T) { return this.create_Transient(); }
+    expect(code).toContain('return this.create_Transient();');
     expect(code).not.toContain('!this.instances.has(Import_1.T)');
   });
   
@@ -96,6 +96,6 @@ describe('Generator', () => {
       const generator = new Generator(graph);
       const code = generator.generate();
       
-      expect(code).toContain('function create__scope_Package(container: NeoContainer)');
+      expect(code).toContain('private create__scope_Package(): any');
   });
 });

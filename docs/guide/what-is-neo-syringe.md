@@ -1,6 +1,6 @@
-# What is Neosyringe?
+# What is NeoSyringe?
 
-Neosyringe is a **next-generation dependency injection system** for TypeScript that shifts resolution from **runtime** to **build-time**.
+NeoSyringe is a **next-generation dependency injection system** for TypeScript that shifts resolution from **runtime** to **build-time**.
 
 ## The Problem with Traditional DI
 
@@ -27,9 +27,9 @@ This approach has several drawbacks:
 | **Late errors** | Missing bindings only discovered at runtime |
 | **Framework coupling** | Classes polluted with DI decorators |
 
-## The Neosyringe Solution
+## The NeoSyringe Solution
 
-Neosyringe works as a **compiler plugin** that analyzes your configuration and generates optimized code:
+NeoSyringe works as a **compiler plugin** that analyzes your configuration and generates optimized code:
 
 ```typescript
 // Your code (pure TypeScript!)
@@ -112,7 +112,7 @@ Bridge existing containers while migrating:
 export const container = defineBuilderConfig({
   useContainer: legacyTsyringeContainer, // ← Delegate to legacy
   injections: [
-    { token: NewService } // New services in Neosyringe
+    { token: NewService } // New services in NeoSyringe
   ]
 });
 ```
@@ -156,7 +156,7 @@ export const container = defineBuilderConfig({
 
 ## Next Steps
 
-- [Getting Started](/guide/getting-started) - Install and configure Neosyringe
+- [Getting Started](/guide/getting-started) - Install and configure NeoSyringe
 - [Basic Usage](/guide/basic-usage) - Learn the core concepts
-- [Why Neosyringe?](/guide/why-neo-syringe) - Detailed comparison with alternatives
+- [Why NeoSyringe?](/guide/why-neo-syringe) - Detailed comparison with alternatives
 

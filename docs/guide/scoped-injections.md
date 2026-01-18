@@ -25,7 +25,7 @@ const child = defineBuilderConfig({
 
 ## The Solution: `scoped: true`
 
-Use `scoped: true` to tell Neosyringe that this token should be **resolved locally** instead of delegating to the parent:
+Use `scoped: true` to tell NeoSyringe that this token should be **resolved locally** instead of delegating to the parent:
 
 ```typescript
 const child = defineBuilderConfig({

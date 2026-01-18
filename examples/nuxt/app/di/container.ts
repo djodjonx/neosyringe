@@ -2,7 +2,7 @@
  * Main Application Container
  *
  * Single container with all services for the application.
- * Neo-Syringe transforms this file at build time.
+ * NeoSyringe transforms this file at build time.
  *
  * Lifecycle modes:
  * - singleton (default): One instance shared across the app
@@ -35,7 +35,7 @@ export const TOKENS = {
 /**
  * Application container with all services registered.
  *
- * At build time, Neo-Syringe replaces this with generated factory code.
+ * At build time, NeoSyringe replaces this with generated factory code.
  * The resolve() calls become direct instantiations - zero runtime overhead!
  */
 export const appContainer = defineBuilderConfig({

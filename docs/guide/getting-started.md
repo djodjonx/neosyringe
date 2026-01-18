@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide will help you install Neosyringe and create your first container in 5 minutes.
+This guide will help you install NeoSyringe and create your first container in 5 minutes.
 
 ## Installation
 
@@ -30,7 +30,7 @@ yarn add -D @djodjonx/neosyringe-plugin
 
 ## Configure Your Bundler
 
-Neosyringe works with all major bundlers through `unplugin`.
+NeoSyringe works with all major bundlers through `unplugin`.
 
 ::: code-group
 

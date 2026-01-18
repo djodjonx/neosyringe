@@ -1,8 +1,8 @@
-# Neo-Syringe + Nuxt 4.2 DDD Example
+# NeoSyringe + Nuxt 4.2 DDD Example
 
-A complete example demonstrating **Domain-Driven Design** architecture with **Neo-Syringe** compile-time dependency injection in a **Nuxt 4.2** application.
+A complete example demonstrating **Domain-Driven Design** architecture with **NeoSyringe** compile-time dependency injection in a **Nuxt 4.2** application.
 
-> ⚠️ This example uses Neo-Syringe from npm (`@djodjonx/neosyringe`) and demonstrates real DI container usage.
+> ⚠️ This example uses NeoSyringe from npm (`@djodjonx/neosyringe`) and demonstrates real DI container usage.
 
 ## 🚀 Quick Start
 
@@ -10,7 +10,7 @@ A complete example demonstrating **Domain-Driven Design** architecture with **Ne
 # Install dependencies
 pnpm install
 
-# Build (Neo-Syringe transforms DI at build time)
+# Build (NeoSyringe transforms DI at build time)
 pnpm build
 
 # Preview built app
@@ -20,7 +20,7 @@ pnpm preview
 pnpm dev
 ```
 
-## 💉 How Neo-Syringe is Used
+## 💉 How NeoSyringe is Used
 
 ### 1. Container Definition (`src/di/container.ts`)
 
@@ -88,7 +88,7 @@ export function useUsers() {
 
 ### 3. Build-Time Transformation
 
-At build time, Neo-Syringe:
+At build time, NeoSyringe:
 1. Analyzes the dependency graph
 2. Validates (no circular deps, no missing bindings)
 3. Generates optimized factory code
@@ -147,7 +147,7 @@ app/
 
 ## 🛠️ Nuxt Configuration
 
-The Neo-Syringe plugin is configured in `nuxt.config.ts`:
+The NeoSyringe plugin is configured in `nuxt.config.ts`:
 
 ```typescript
 import { neoSyringePlugin } from '@djodjonx/neosyringe/plugin';
@@ -170,6 +170,6 @@ export default defineNuxtConfig({
 
 ## 📚 Learn More
 
-- [Neo-Syringe Documentation](https://djodjonx.github.io/neo-syringe/)
+- [NeoSyringe Documentation](https://djodjonx.github.io/neo-syringe/)
 - [Getting Started](https://djodjonx.github.io/neo-syringe/guide/getting-started)
 

@@ -1,12 +1,12 @@
 import * as ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer } from '../../core/src/analyzer/index';
+import { GraphValidator } from '../../core/src/generator/index';
 
 /**
  * Initializes the TypeScript Language Service Plugin.
  *
  * This plugin wraps the standard TypeScript Language Service to provide
- * additional diagnostics for Neo-Syringe usage (e.g., circular dependencies).
+ * additional diagnostics for NeoSyringe usage (e.g., circular dependencies).
  *
  * @param modules - The typescript module passed by the tsserver.
  * @returns An object containing the `create` factory.
@@ -29,7 +29,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
     }
 
     /**
-     * Intercepts semantic diagnostics to add Neo-Syringe validation errors.
+     * Intercepts semantic diagnostics to add NeoSyringe validation errors.
      * @param fileName - The file being analyzed.
      */
     proxy.getSemanticDiagnostics = (fileName) => {
@@ -38,19 +38,19 @@ function init(modules: { typescript: typeof import('typescript') }) {
       // Debug log helper
       const log = (msg: string) => {
         if (info.project?.projectService?.logger) {
-          info.project.projectService.logger.info(`[Neo-Syringe LSP] ${msg}`);
+          info.project.projectService.logger.info(`[NeoSyringe LSP] ${msg}`);
         }
       };
 
       // Debug log
-      if (fileName.includes('container.ts')) {
+      if (fileName.includes('container')) {
         log(`Checking file: ${fileName}`);
       }
 
       try {
         const program = info.languageService.getProgram();
         if (!program) {
-          if (fileName.includes('container.ts')) {
+          if (fileName.includes('container')) {
             log(`No program available`);
           }
           return prior;
@@ -58,7 +58,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
 
         const sourceFile = program.getSourceFile(fileName);
         if (!sourceFile) {
-          if (fileName.includes('container.ts')) {
+          if (fileName.includes('container')) {
             log(`No source file`);
           }
           return prior;
@@ -67,7 +67,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
         // Only run analysis if the file contains container configuration
         const text = sourceFile.getText();
         if (!text.includes('defineBuilderConfig')) {
-          if (fileName.includes('container.ts')) {
+          if (fileName.includes('container')) {
             log(`No defineBuilderConfig found in file`);
           }
           return prior;
@@ -96,7 +96,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
                     file: sourceFile,
                     start: 0,
                     length: 10,
-                    messageText: `[Neo-Syringe] ${msg}`,
+                    messageText: `[NeoSyringe] ${msg}`,
                     category: ts.DiagnosticCategory.Error,
                     code: 9999,
                 });
@@ -117,7 +117,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
                             file: file,
                             start: 0,
                             length: 10,
-                            messageText: `[Neo-Syringe] ${e.message}`,
+                            messageText: `[NeoSyringe] ${e.message}`,
                             category: ts.DiagnosticCategory.Error,
                             code: 9998,
                         });

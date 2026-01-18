@@ -12,7 +12,7 @@ const navItems = [
       <div class="header-content">
         <NuxtLink to="/" class="logo">
           <span class="logo-icon">💉</span>
-          <span class="logo-text">Neo-Syringe</span>
+          <span class="logo-text">NeoSyringe</span>
         </NuxtLink>
         <nav class="nav">
           <NuxtLink
@@ -33,7 +33,7 @@ const navItems = [
     </main>
 
     <footer class="footer">
-      <p>Built with Neo-Syringe • Compile-Time DI</p>
+      <p>Built with NeoSyringe • Compile-Time DI</p>
     </footer>
   </div>
 </template>

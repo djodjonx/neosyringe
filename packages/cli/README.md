@@ -1,6 +1,6 @@
 # @djodjonx/neosyringe-cli
 
-CLI validator for Neosyringe dependency graphs.
+CLI validator for NeoSyringe dependency graphs.
 
 ## Usage
 

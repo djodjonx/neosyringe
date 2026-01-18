@@ -1,9 +1,9 @@
 
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { Generator } from '@djodjonx/neosyringe-core/generator';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer } from '../../packages/core/src/analyzer/index';
+import { Generator } from '../../packages/core/src/generator/index';
+import { GraphValidator } from '../../packages/core/src/generator/index';
 
 describe('E2E - Multi-File Tokens', () => {
   const compileAndGenerateMultiFile = (files: Record<string, string>) => {
@@ -49,14 +49,14 @@ describe('E2E - Multi-File Tokens', () => {
 
   it('should resolve tokens exported from another file', () => {
     const files = {
-      'tokens.ts': `
+      'tokens': `
         export function useInterface<T>(): any { return null; }
         export interface ILogger { log(msg: string): void; }
         export const TOKENS = {
           logger: useInterface<ILogger>()
         };
       `,
-      'container.ts': `
+      'container': `
         import { TOKENS, ILogger } from './tokens';
         function defineBuilderConfig(config: any) { return config; }
 
@@ -79,12 +79,12 @@ describe('E2E - Multi-File Tokens', () => {
 
   it('should resolve tokens from a partial config in another file', () => {
       const files = {
-          'tokens.ts': `
+          'tokens': `
             export function useInterface<T>(): any { return null; }
             export interface IService {}
             export const SERVICE_TOKEN = useInterface<IService>();
           `,
-          'partial.ts': `
+          'partial': `
             import { SERVICE_TOKEN, IService } from './tokens';
             function definePartialConfig(config: any) { return config; }
 
@@ -96,7 +96,7 @@ describe('E2E - Multi-File Tokens', () => {
                 ]
             });
           `,
-          'container.ts': `
+          'container': `
             import { partial } from './partial';
             function defineBuilderConfig(config: any) { return config; }
 

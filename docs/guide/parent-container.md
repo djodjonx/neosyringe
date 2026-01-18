@@ -4,7 +4,7 @@ Build hierarchical container architectures with `useContainer`.
 
 ## Overview
 
-Neosyringe supports parent containers for:
+NeoSyringe supports parent containers for:
 
 - **SharedKernel pattern**: Core services shared across bounded contexts
 - **Modular architecture**: Each module has its own container
@@ -37,7 +37,7 @@ const userModule = defineBuilderConfig({
 
 ## Resolution Order
 
-When you call `resolve()`, Neosyringe looks up the token in this order:
+When you call `resolve()`, NeoSyringe looks up the token in this order:
 
 ```
 1. Local container (this container's injections)
@@ -189,7 +189,7 @@ application.resolve(useInterface<ILogger>()); // From Infrastructure
 
 ## Validation
 
-Neosyringe validates parent containers at compile-time:
+NeoSyringe validates parent containers at compile-time:
 
 ### Duplicate Detection
 

@@ -1,6 +1,6 @@
 # Basic Usage
 
-Learn the fundamental concepts and injection patterns in Neosyringe.
+Learn the fundamental concepts and injection patterns in NeoSyringe.
 
 ## Container Configuration
 
@@ -23,7 +23,7 @@ export const container = defineBuilderConfig({
 
 ### Class Token (Autowire)
 
-The simplest form - register a class and let Neosyringe resolve its dependencies:
+The simplest form - register a class and let NeoSyringe resolve its dependencies:
 
 ```typescript
 class UserRepository {

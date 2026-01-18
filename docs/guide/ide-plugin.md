@@ -4,7 +4,7 @@ Get real-time error detection in your editor.
 
 ## Overview
 
-The Neosyringe LSP plugin integrates with TypeScript's language service to provide:
+The NeoSyringe LSP plugin integrates with TypeScript's language service to provide:
 
 - 🔴 **Circular dependency detection** - Instant feedback when you create cycles
 - 🔴 **Missing binding detection** - Errors when dependencies aren't registered
@@ -81,7 +81,7 @@ export const container = defineBuilderConfig({
     { token: B }
   ]
 });
-// Error: [Neosyringe] Circular dependency detected: A -> B -> A
+// Error: [NeoSyringe] Circular dependency detected: A -> B -> A
 ```
 
 ### Missing Binding
@@ -100,7 +100,7 @@ export const container = defineBuilderConfig({
     { token: UserService }  // 🔴 ILogger not registered!
   ]
 });
-// Error: [Neosyringe] Missing binding: 'UserService' depends on 'ILogger', 
+// Error: [NeoSyringe] Missing binding: 'UserService' depends on 'ILogger', 
 //        but no provider registered.
 ```
 
@@ -119,7 +119,7 @@ export const child = defineBuilderConfig({
     { token: useInterface<ILogger>(), provider: FileLogger }  // 🔴 Duplicate!
   ]
 });
-// Error: [Neosyringe] Duplicate registration: 'ILogger' is already registered 
+// Error: [NeoSyringe] Duplicate registration: 'ILogger' is already registered 
 //        in the parent container. Use 'scoped: true' to override intentionally.
 ```
 
@@ -139,7 +139,7 @@ export const child = defineBuilderConfig({
 │               ▲                                                  │
 │               │                                                  │
 │  ┌────────────┴───────────────────────────────────────────────┐ │
-│  │ 🔴 [Neosyringe] Missing binding: 'UserService' depends   │ │
+│  │ 🔴 [NeoSyringe] Missing binding: 'UserService' depends   │ │
 │  │    on 'ILogger', but no provider registered.               │ │
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                                  │

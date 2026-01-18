@@ -1,6 +1,6 @@
 # Configuration
 
-Configure Neosyringe in your project.
+Configure NeoSyringe in your project.
 
 ## Build Plugin
 
@@ -103,7 +103,7 @@ defineBuilderConfig({
   // Inherit from partial configs
   extends: [loggingPartial, databasePartial],
   
-  // Parent container (Neosyringe or legacy)
+  // Parent container (NeoSyringe or legacy)
   useContainer: parentContainer
 });
 ```
@@ -183,7 +183,7 @@ Type: `Container | any`
 Optional. Parent container for delegation.
 
 ```typescript
-// Neosyringe parent
+// NeoSyringe parent
 defineBuilderConfig({
   useContainer: sharedKernel,
   injections: [...]

@@ -4,35 +4,35 @@ exports[`Generated Code Snapshots > should match snapshot for complex real-world
 "
 import * as Import_0 from 'snapshot-test.ts';
 
-// -- Factories --
-
-function create_ILogger_b37e3d0c(container: NeoContainer) {
-  return new Import_0.ConsoleLogger();
-}
-
-function create_IDatabase_b37e3d0c(container: NeoContainer) {
-  return new Import_0.PostgresDB(container.resolve("ILogger_b37e3d0c"));
-}
-
-function create_ICache_b37e3d0c(container: NeoContainer) {
-  return new Import_0.RedisCache(container.resolve("ILogger_b37e3d0c"));
-}
-
-function create_UserRepository_b37e3d0c(container: NeoContainer) {
-  return new Import_0.UserRepository(container.resolve("IDatabase_b37e3d0c"), container.resolve("ICache_b37e3d0c"));
-}
-
-function create_UserService_b37e3d0c(container: NeoContainer) {
-  return new Import_0.UserService(container.resolve(Import_0.UserRepository), container.resolve("ILogger_b37e3d0c"));
-}
-
-function create_AuthService_b37e3d0c(container: NeoContainer) {
-  return new Import_0.AuthService(container.resolve(Import_0.UserService), container.resolve("ILogger_b37e3d0c"));
-}
-
 // -- Container --
 export class NeoContainer {
   private instances = new Map<any, any>();
+
+  // -- Factories --
+  
+  private create_ILogger_b37e3d0c(): any {
+    return new Import_0.ConsoleLogger();
+  }
+  
+  private create_IDatabase_b37e3d0c(): any {
+    return new Import_0.PostgresDB(this.resolve("ILogger_b37e3d0c"));
+  }
+  
+  private create_ICache_b37e3d0c(): any {
+    return new Import_0.RedisCache(this.resolve("ILogger_b37e3d0c"));
+  }
+  
+  private create_UserRepository_b37e3d0c(): any {
+    return new Import_0.UserRepository(this.resolve("IDatabase_b37e3d0c"), this.resolve("ICache_b37e3d0c"));
+  }
+  
+  private create_UserService_b37e3d0c(): any {
+    return new Import_0.UserService(this.resolve(Import_0.UserRepository), this.resolve("ILogger_b37e3d0c"));
+  }
+  
+  private create_AuthService_b37e3d0c(): any {
+    return new Import_0.AuthService(this.resolve(Import_0.UserService), this.resolve("ILogger_b37e3d0c"));
+  }
 
   constructor(
     private parent?: any,
@@ -72,7 +72,7 @@ export class NeoContainer {
   private resolveLocal(token: any): any {
     if (token === "ILogger_b37e3d0c") { 
             if (!this.instances.has("ILogger_b37e3d0c")) {
-                const instance = create_ILogger_b37e3d0c(this);
+                const instance = this.create_ILogger_b37e3d0c();
                 this.instances.set("ILogger_b37e3d0c", instance);
                 return instance;
             }
@@ -80,7 +80,7 @@ export class NeoContainer {
            }
     if (token === "IDatabase_b37e3d0c") { 
             if (!this.instances.has("IDatabase_b37e3d0c")) {
-                const instance = create_IDatabase_b37e3d0c(this);
+                const instance = this.create_IDatabase_b37e3d0c();
                 this.instances.set("IDatabase_b37e3d0c", instance);
                 return instance;
             }
@@ -88,7 +88,7 @@ export class NeoContainer {
            }
     if (token === "ICache_b37e3d0c") { 
             if (!this.instances.has("ICache_b37e3d0c")) {
-                const instance = create_ICache_b37e3d0c(this);
+                const instance = this.create_ICache_b37e3d0c();
                 this.instances.set("ICache_b37e3d0c", instance);
                 return instance;
             }
@@ -96,7 +96,7 @@ export class NeoContainer {
            }
     if (token === Import_0.UserRepository) { 
             if (!this.instances.has(Import_0.UserRepository)) {
-                const instance = create_UserRepository_b37e3d0c(this);
+                const instance = this.create_UserRepository_b37e3d0c();
                 this.instances.set(Import_0.UserRepository, instance);
                 return instance;
             }
@@ -104,7 +104,7 @@ export class NeoContainer {
            }
     if (token === Import_0.UserService) { 
             if (!this.instances.has(Import_0.UserService)) {
-                const instance = create_UserService_b37e3d0c(this);
+                const instance = this.create_UserService_b37e3d0c();
                 this.instances.set(Import_0.UserService, instance);
                 return instance;
             }
@@ -112,17 +112,13 @@ export class NeoContainer {
            }
     if (token === Import_0.AuthService) { 
             if (!this.instances.has(Import_0.AuthService)) {
-                const instance = create_AuthService_b37e3d0c(this);
+                const instance = this.create_AuthService_b37e3d0c();
                 this.instances.set(Import_0.AuthService, instance);
                 return instance;
             }
             return this.instances.get(Import_0.AuthService);
            }
     return undefined;
-  }
-
-  public createChildContainer(): NeoContainer {
-    return new NeoContainer(this, \`Child of \${this.name}\`);
   }
 
   // For debugging/inspection
@@ -140,15 +136,15 @@ exports[`Generated Code Snapshots > should match snapshot for interface tokens 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
-// -- Factories --
-
-function create_ILogger_b37e3d0c(container: NeoContainer) {
-  return new Import_0.ConsoleLogger();
-}
-
 // -- Container --
 export class NeoContainer {
   private instances = new Map<any, any>();
+
+  // -- Factories --
+  
+  private create_ILogger_b37e3d0c(): any {
+    return new Import_0.ConsoleLogger();
+  }
 
   constructor(
     private parent?: any,
@@ -188,17 +184,13 @@ export class NeoContainer {
   private resolveLocal(token: any): any {
     if (token === "ILogger_b37e3d0c") { 
             if (!this.instances.has("ILogger_b37e3d0c")) {
-                const instance = create_ILogger_b37e3d0c(this);
+                const instance = this.create_ILogger_b37e3d0c();
                 this.instances.set("ILogger_b37e3d0c", instance);
                 return instance;
             }
             return this.instances.get("ILogger_b37e3d0c");
            }
     return undefined;
-  }
-
-  public createChildContainer(): NeoContainer {
-    return new NeoContainer(this, \`Child of \${this.name}\`);
   }
 
   // For debugging/inspection
@@ -216,15 +208,15 @@ exports[`Generated Code Snapshots > should match snapshot for legacy container 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
-// -- Factories --
-
-function create_NewService_b37e3d0c(container: NeoContainer) {
-  return new Import_0.NewService(undefined);
-}
-
 // -- Container --
 export class NeoContainer {
   private instances = new Map<any, any>();
+
+  // -- Factories --
+  
+  private create_NewService_b37e3d0c(): any {
+    return new Import_0.NewService(undefined);
+  }
 
   constructor(
     private parent?: any,
@@ -264,17 +256,13 @@ export class NeoContainer {
   private resolveLocal(token: any): any {
     if (token === Import_0.NewService) { 
             if (!this.instances.has(Import_0.NewService)) {
-                const instance = create_NewService_b37e3d0c(this);
+                const instance = this.create_NewService_b37e3d0c();
                 this.instances.set(Import_0.NewService, instance);
                 return instance;
             }
             return this.instances.get(Import_0.NewService);
            }
     return undefined;
-  }
-
-  public createChildContainer(): NeoContainer {
-    return new NeoContainer(this, \`Child of \${this.name}\`);
   }
 
   // For debugging/inspection
@@ -292,19 +280,19 @@ exports[`Generated Code Snapshots > should match snapshot for mixed scopes 1`] =
 "
 import * as Import_0 from 'snapshot-test.ts';
 
-// -- Factories --
-
-function create_SingletonService_b37e3d0c(container: NeoContainer) {
-  return new Import_0.SingletonService();
-}
-
-function create_TransientService_b37e3d0c(container: NeoContainer) {
-  return new Import_0.TransientService();
-}
-
 // -- Container --
 export class NeoContainer {
   private instances = new Map<any, any>();
+
+  // -- Factories --
+  
+  private create_SingletonService_b37e3d0c(): any {
+    return new Import_0.SingletonService();
+  }
+  
+  private create_TransientService_b37e3d0c(): any {
+    return new Import_0.TransientService();
+  }
 
   constructor(
     private parent?: any,
@@ -344,18 +332,14 @@ export class NeoContainer {
   private resolveLocal(token: any): any {
     if (token === Import_0.SingletonService) { 
             if (!this.instances.has(Import_0.SingletonService)) {
-                const instance = create_SingletonService_b37e3d0c(this);
+                const instance = this.create_SingletonService_b37e3d0c();
                 this.instances.set(Import_0.SingletonService, instance);
                 return instance;
             }
             return this.instances.get(Import_0.SingletonService);
            }
-    if (token === Import_0.TransientService) { return create_TransientService_b37e3d0c(this); }
+    if (token === Import_0.TransientService) { return this.create_TransientService_b37e3d0c(); }
     return undefined;
-  }
-
-  public createChildContainer(): NeoContainer {
-    return new NeoContainer(this, \`Child of \${this.name}\`);
   }
 
   // For debugging/inspection
@@ -373,15 +357,15 @@ exports[`Generated Code Snapshots > should match snapshot for parent container 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
-// -- Factories --
-
-function create_AppService_b37e3d0c(container: NeoContainer) {
-  return new Import_0.AppService();
-}
-
 // -- Container --
 export class NeoContainer {
   private instances = new Map<any, any>();
+
+  // -- Factories --
+  
+  private create_AppService_b37e3d0c(): any {
+    return new Import_0.AppService();
+  }
 
   constructor(
     private parent?: any,
@@ -421,17 +405,13 @@ export class NeoContainer {
   private resolveLocal(token: any): any {
     if (token === Import_0.AppService) { 
             if (!this.instances.has(Import_0.AppService)) {
-                const instance = create_AppService_b37e3d0c(this);
+                const instance = this.create_AppService_b37e3d0c();
                 this.instances.set(Import_0.AppService, instance);
                 return instance;
             }
             return this.instances.get(Import_0.AppService);
            }
     return undefined;
-  }
-
-  public createChildContainer(): NeoContainer {
-    return new NeoContainer(this, \`Child of \${this.name}\`);
   }
 
   // For debugging/inspection
@@ -449,20 +429,20 @@ exports[`Generated Code Snapshots > should match snapshot for property tokens 1`
 "
 import * as Import_0 from 'snapshot-test.ts';
 
-// -- Factories --
-
-function create_PropertyToken_ApiService_apiUrl(container: NeoContainer) {
-  const userFactory = () => 'http://localhost';
-  return userFactory(container);
-}
-
-function create_ApiService_b37e3d0c(container: NeoContainer) {
-  return new Import_0.ApiService(undefined);
-}
-
 // -- Container --
 export class NeoContainer {
   private instances = new Map<any, any>();
+
+  // -- Factories --
+  
+  private create_PropertyToken_ApiService_apiUrl(): any {
+    const userFactory = () => 'http://localhost';
+    return userFactory(this);
+  }
+  
+  private create_ApiService_b37e3d0c(): any {
+    return new Import_0.ApiService(undefined);
+  }
 
   constructor(
     private parent?: any,
@@ -502,7 +482,7 @@ export class NeoContainer {
   private resolveLocal(token: any): any {
     if (token === "PropertyToken:ApiService.apiUrl") { 
             if (!this.instances.has("PropertyToken:ApiService.apiUrl")) {
-                const instance = create_PropertyToken_ApiService_apiUrl(this);
+                const instance = this.create_PropertyToken_ApiService_apiUrl();
                 this.instances.set("PropertyToken:ApiService.apiUrl", instance);
                 return instance;
             }
@@ -510,17 +490,13 @@ export class NeoContainer {
            }
     if (token === Import_0.ApiService) { 
             if (!this.instances.has(Import_0.ApiService)) {
-                const instance = create_ApiService_b37e3d0c(this);
+                const instance = this.create_ApiService_b37e3d0c();
                 this.instances.set(Import_0.ApiService, instance);
                 return instance;
             }
             return this.instances.get(Import_0.ApiService);
            }
     return undefined;
-  }
-
-  public createChildContainer(): NeoContainer {
-    return new NeoContainer(this, \`Child of \${this.name}\`);
   }
 
   // For debugging/inspection
@@ -538,19 +514,19 @@ exports[`Generated Code Snapshots > should match snapshot for service with depen
 "
 import * as Import_0 from 'snapshot-test.ts';
 
-// -- Factories --
-
-function create_Logger_b37e3d0c(container: NeoContainer) {
-  return new Import_0.Logger();
-}
-
-function create_UserService_b37e3d0c(container: NeoContainer) {
-  return new Import_0.UserService(container.resolve(Import_0.Logger));
-}
-
 // -- Container --
 export class NeoContainer {
   private instances = new Map<any, any>();
+
+  // -- Factories --
+  
+  private create_Logger_b37e3d0c(): any {
+    return new Import_0.Logger();
+  }
+  
+  private create_UserService_b37e3d0c(): any {
+    return new Import_0.UserService(this.resolve(Import_0.Logger));
+  }
 
   constructor(
     private parent?: any,
@@ -590,7 +566,7 @@ export class NeoContainer {
   private resolveLocal(token: any): any {
     if (token === Import_0.Logger) { 
             if (!this.instances.has(Import_0.Logger)) {
-                const instance = create_Logger_b37e3d0c(this);
+                const instance = this.create_Logger_b37e3d0c();
                 this.instances.set(Import_0.Logger, instance);
                 return instance;
             }
@@ -598,17 +574,13 @@ export class NeoContainer {
            }
     if (token === Import_0.UserService) { 
             if (!this.instances.has(Import_0.UserService)) {
-                const instance = create_UserService_b37e3d0c(this);
+                const instance = this.create_UserService_b37e3d0c();
                 this.instances.set(Import_0.UserService, instance);
                 return instance;
             }
             return this.instances.get(Import_0.UserService);
            }
     return undefined;
-  }
-
-  public createChildContainer(): NeoContainer {
-    return new NeoContainer(this, \`Child of \${this.name}\`);
   }
 
   // For debugging/inspection
@@ -626,15 +598,15 @@ exports[`Generated Code Snapshots > should match snapshot for simple service 1`]
 "
 import * as Import_0 from 'snapshot-test.ts';
 
-// -- Factories --
-
-function create_SimpleService_b37e3d0c(container: NeoContainer) {
-  return new Import_0.SimpleService();
-}
-
 // -- Container --
 export class NeoContainer {
   private instances = new Map<any, any>();
+
+  // -- Factories --
+  
+  private create_SimpleService_b37e3d0c(): any {
+    return new Import_0.SimpleService();
+  }
 
   constructor(
     private parent?: any,
@@ -674,17 +646,13 @@ export class NeoContainer {
   private resolveLocal(token: any): any {
     if (token === Import_0.SimpleService) { 
             if (!this.instances.has(Import_0.SimpleService)) {
-                const instance = create_SimpleService_b37e3d0c(this);
+                const instance = this.create_SimpleService_b37e3d0c();
                 this.instances.set(Import_0.SimpleService, instance);
                 return instance;
             }
             return this.instances.get(Import_0.SimpleService);
            }
     return undefined;
-  }
-
-  public createChildContainer(): NeoContainer {
-    return new NeoContainer(this, \`Child of \${this.name}\`);
   }
 
   // For debugging/inspection

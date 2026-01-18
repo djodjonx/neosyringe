@@ -10,13 +10,13 @@ class UserService {
   constructor(private logger: ILogger) {}
 }
 
-describe('Neo-Syringe Core API', () => {
+describe('NeoSyringe Core API', () => {
   it('should throw at runtime when defineBuilderConfig is called without plugin', () => {
     expect(() => defineBuilderConfig({
       injections: [
         { token: UserService }
       ]
-    })).toThrowError(/neo-syringe: defineBuilderConfig\(\) called at runtime/);
+    })).toThrowError(/NeoSyringe: defineBuilderConfig\(\) called at runtime/);
   });
 
   it('should export useInterface function', () => {
@@ -25,7 +25,7 @@ describe('Neo-Syringe Core API', () => {
   });
 
   it('should throw at runtime when useInterface is called without plugin', () => {
-    expect(() => useInterface<ILogger>()).toThrowError(/neo-syringe: useInterface<T>\(\) called at runtime/);
+    expect(() => useInterface<ILogger>()).toThrowError(/NeoSyringe: useInterface<T>\(\) called at runtime/);
   });
 });
 

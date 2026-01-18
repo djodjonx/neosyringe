@@ -1,6 +1,6 @@
 # Injection Types
 
-All the ways to define and inject dependencies in Neosyringe.
+All the ways to define and inject dependencies in NeoSyringe.
 
 ## Overview
 

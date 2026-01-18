@@ -3,7 +3,7 @@ import init from '../src/index';
 import * as ts from 'typescript';
 
 // Partial mocks
-vi.mock('@djodjonx/neosyringe-core/analyzer/Analyzer', () => {
+vi.mock('../../core/src/analyzer/index.ts', () => {
   return {
     Analyzer: vi.fn().mockImplementation(() => ({
       extract: vi.fn().mockReturnValue({ nodes: new Map(), roots: [] })

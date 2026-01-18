@@ -6,13 +6,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
-import { Generator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer } from '../../packages/core/src/analyzer/index';
+import { GraphValidator } from '../../packages/core/src/generator/index';
+import { Generator } from '../../packages/core/src/generator/index';
 
 describe('Generated Code Snapshots', () => {
   const generateCode = (fileContent: string) => {
-    const fileName = 'snapshot-test.ts';
+    const fileName = 'snapshot-test';
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 

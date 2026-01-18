@@ -196,7 +196,7 @@ export class Analyzer {
 
   /**
    * Extracts tokens provided by a parent container.
-   * Handles both Neo-Syringe containers (defineBuilderConfig) and
+   * Handles both NeoSyringe containers (defineBuilderConfig) and
    * declared legacy containers (declareContainerTokens).
    */
   private extractParentContainerTokens(containerIdentifier: ts.Identifier, graph: DependencyGraph): void {
@@ -210,7 +210,7 @@ export class Analyzer {
       const declaration = resolvedSymbol.valueDeclaration ?? resolvedSymbol.declarations?.[0];
       if (!declaration) return;
 
-      // Case 1: const parent = defineBuilderConfig({...}) - Neo-Syringe container
+      // Case 1: const parent = defineBuilderConfig({...}) - NeoSyringe container
       if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
           const init = declaration.initializer;
 

@@ -4,7 +4,7 @@ Understand what the compiler produces.
 
 ## Overview
 
-Neosyringe transforms your configuration into optimized TypeScript at build time. This page shows what your code looks like before and after compilation.
+NeoSyringe transforms your configuration into optimized TypeScript at build time. This page shows what your code looks like before and after compilation.
 
 ## Before (Your Configuration)
 
@@ -47,28 +47,26 @@ The build plugin replaces the entire file:
 // container.ts (after build)
 import * as Import_0 from './container';
 
-// -- Factories --
-
-function create_ILogger(container: NeoContainer) {
-  return new Import_0.ConsoleLogger();
-}
-
-function create_ApiService_apiUrl(container: NeoContainer) {
-  const userFactory = () => process.env.API_URL ?? 'http://localhost';
-  return userFactory(container);
-}
-
-function create_ApiService(container: NeoContainer) {
-  return new Import_0.ApiService(
-    container.resolve("ILogger"),
-    container.resolve("PropertyToken:ApiService.apiUrl")
-  );
-}
-
-// -- Container --
-
 export class NeoContainer {
   private instances = new Map<any, any>();
+
+  // -- Factories --
+
+  private create_ILogger(): any {
+    return new Import_0.ConsoleLogger();
+  }
+
+  private create_ApiService_apiUrl(): any {
+    const userFactory = () => process.env.API_URL ?? 'http://localhost';
+    return userFactory(this);
+  }
+
+  private create_ApiService(): any {
+    return new Import_0.ApiService(
+      this.resolve("ILogger"),
+      this.resolve("PropertyToken:ApiService.apiUrl")
+    );
+  }
 
   constructor(
     private parent?: any,
@@ -110,7 +108,7 @@ export class NeoContainer {
     // Interface token (string-based)
     if (token === "ILogger") {
       if (!this.instances.has("ILogger")) {
-        this.instances.set("ILogger", create_ILogger(this));
+        this.instances.set("ILogger", this.create_ILogger());
       }
       return this.instances.get("ILogger");
     }
@@ -118,7 +116,7 @@ export class NeoContainer {
     // Property token (string-based)
     if (token === "PropertyToken:ApiService.apiUrl") {
       if (!this.instances.has("PropertyToken:ApiService.apiUrl")) {
-        this.instances.set("PropertyToken:ApiService.apiUrl", create_ApiService_apiUrl(this));
+        this.instances.set("PropertyToken:ApiService.apiUrl", this.create_ApiService_apiUrl());
       }
       return this.instances.get("PropertyToken:ApiService.apiUrl");
     }
@@ -126,16 +124,12 @@ export class NeoContainer {
     // Class token (reference-based)
     if (token === Import_0.ApiService) {
       if (!this.instances.has(Import_0.ApiService)) {
-        this.instances.set(Import_0.ApiService, create_ApiService(this));
+        this.instances.set(Import_0.ApiService, this.create_ApiService());
       }
       return this.instances.get(Import_0.ApiService);
     }
 
     return undefined;
-  }
-
-  public createChildContainer(): NeoContainer {
-    return new NeoContainer(this, this.legacy, `Child of ${this.name}`);
   }
 
   // For debugging
@@ -159,11 +153,11 @@ export const container = new NeoContainer();
 
 ### Singleton Pattern
 
-Singletons use the `instances` Map:
+Singletons use the `instances` Map and call private factory methods:
 
 ```typescript
 if (!this.instances.has("ILogger")) {
-  this.instances.set("ILogger", create_ILogger(this));
+  this.instances.set("ILogger", this.create_ILogger());
 }
 return this.instances.get("ILogger");
 ```
@@ -174,19 +168,19 @@ Transients return directly without caching:
 
 ```typescript
 if (token === "RequestContext") {
-  return create_RequestContext(this);  // No caching!
+  return this.create_RequestContext();  // No caching!
 }
 ```
 
 ### Dependency Injection
 
-Dependencies are resolved recursively:
+Dependencies are resolved recursively via `this.resolve`:
 
 ```typescript
-function create_ApiService(container: NeoContainer) {
+private create_ApiService(): any {
   return new Import_0.ApiService(
-    container.resolve("ILogger"),          // Resolves ILogger first
-    container.resolve("PropertyToken:...")  // Resolves property
+    this.resolve("ILogger"),          // Resolves ILogger first
+    this.resolve("PropertyToken:...")  // Resolves property
   );
 }
 ```
@@ -244,18 +238,18 @@ export const child = new NeoContainer(parent);
 
 ```typescript
 // Generated
-function create_IDatabase(container: NeoContainer) {
+private create_IDatabase(): any {
   const userFactory = (container) => {
     const config = container.resolve("IConfig");
     return new PostgresDatabase(config.connectionString);
   };
-  return userFactory(container);
+  return userFactory(this);
 }
 ```
 
 ## Bundle Size Impact
 
-| Aspect | Traditional DI | Neosyringe |
+| Aspect | Traditional DI | NeoSyringe |
 |--------|---------------|-------------|
 | Container library | 4-11 KB | 0 KB |
 | reflect-metadata | ~3 KB | 0 KB |

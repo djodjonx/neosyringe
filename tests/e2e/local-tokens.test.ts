@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { Generator } from '@djodjonx/neosyringe-core/generator';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer } from '../../packages/core/src/analyzer/index';
+import { Generator } from '../../packages/core/src/generator/index';
+import { GraphValidator } from '../../packages/core/src/generator/index';
 
 describe('E2E - Local Tokens Object', () => {
   const compileAndGenerate = (fileContent: string) => {
-    const fileName = 'local-tokens.ts';
+    const fileName = 'local-tokens';
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 

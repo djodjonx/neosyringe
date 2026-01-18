@@ -186,8 +186,8 @@ describe('Legacy Container Integration', () => {
     });
   });
 
-  describe('Mixed Neo-Syringe and Legacy', () => {
-    it('should allow mixing Neo-Syringe and legacy dependencies', () => {
+  describe('Mixed NeoSyringe and Legacy', () => {
+    it('should allow mixing NeoSyringe and legacy dependencies', () => {
       const fileName = 'mixed.ts';
       const fileContent = `
         function defineBuilderConfig(config: any) { return config; }

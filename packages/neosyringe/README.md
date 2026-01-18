@@ -1,6 +1,6 @@
 # @djodjonx/neosyringe
 
-The runtime library for Neosyringe. Contains strict types and helper functions.
+The runtime library for NeoSyringe. Contains strict types and helper functions.
 
 ## Installation
 

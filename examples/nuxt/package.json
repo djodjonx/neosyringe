@@ -2,7 +2,7 @@
   "name": "neo-syringe-nuxt-ddd-example",
   "version": "1.0.0",
   "private": true,
-  "description": "Example Nuxt 4 project with Neo-Syringe DI and DDD architecture",
+  "description": "Example Nuxt 4 project with NeoSyringe DI and DDD architecture",
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxt build",

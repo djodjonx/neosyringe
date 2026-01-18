@@ -101,7 +101,7 @@ function resolveSingleton() {
 <template>
   <div class="page">
     <div class="hero">
-      <h1>🧪 Neo-Syringe + Nuxt DDD</h1>
+      <h1>🧪 NeoSyringe + Nuxt DDD</h1>
       <p class="hero-subtitle">
         Domain-Driven Design with <strong>Compile-Time</strong> Dependency Injection
       </p>

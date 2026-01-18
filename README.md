@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/djodjonx/neosyringe/main/logo/logo.png" alt="Neosyringe" width="200">
+  <img src="https://raw.githubusercontent.com/djodjonx/neosyringe/main/logo/logo.png" alt="NeoSyringe" width="200">
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
 <h1 align="center">Zero-Overhead, Compile-Time Dependency Injection</h1>
 
 <p align="center">
-  <strong>Neosyringe</strong> shifts DI resolution from <strong>Runtime</strong> to <strong>Build-Time</strong>.<br>
+  <strong>NeoSyringe</strong> shifts DI resolution from <strong>Runtime</strong> to <strong>Build-Time</strong>.<br>
   No reflection, no decorators, just pure TypeScript.
 </p>
 
@@ -23,7 +23,7 @@
 
 <p align="center">
   <a href="https://djodjonx.github.io/neosyringe/guide/getting-started">Getting Started</a> •
-  <a href="https://djodjonx.github.io/neosyringe/guide/why-neo-syringe">Why Neosyringe?</a> •
+  <a href="https://djodjonx.github.io/neosyringe/guide/why-neo-syringe">Why NeoSyringe?</a> •
   <a href="https://djodjonx.github.io/neosyringe/api/types">API Reference</a>
 </p>
 
@@ -94,7 +94,7 @@ For complete documentation, visit **[djodjonx.github.io/neosyringe](https://djod
 | Topic | Description |
 |-------|-------------|
 | [Getting Started](https://djodjonx.github.io/neosyringe/guide/getting-started) | Installation and first container |
-| [Why Neosyringe?](https://djodjonx.github.io/neosyringe/guide/why-neo-syringe) | Comparison with traditional DI |
+| [Why NeoSyringe?](https://djodjonx.github.io/neosyringe/guide/why-neo-syringe) | Comparison with traditional DI |
 | [Injection Types](https://djodjonx.github.io/neosyringe/guide/injection-types) | Classes, interfaces, factories, primitives |
 | [Lifecycle](https://djodjonx.github.io/neosyringe/guide/lifecycle) | Singleton vs transient |
 | [Scoped Injections](https://djodjonx.github.io/neosyringe/guide/scoped-injections) | Override parent container tokens |

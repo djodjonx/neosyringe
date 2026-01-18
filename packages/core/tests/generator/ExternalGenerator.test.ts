@@ -58,10 +58,10 @@ describe('Generator - External Bindings', () => {
     expect(code).toContain(`import * as Import_1 from '/src/shared.ts';`);
 
     // 2. Verify FeatureService Factory
-    // Should resolve SharedKernel via container.resolve()
-    expect(code).toContain('function create_FeatureService(container: NeoContainer) {');
+    // Should resolve SharedKernel via this.resolve()
+    expect(code).toContain('private create_FeatureService(): any {');
     // Import_0 is FeatureService, Import_1 is SharedKernel
-    expect(code).toContain('return new Import_0.FeatureService(container.resolve(Import_1.SharedKernel));');
+    expect(code).toContain('return new Import_0.FeatureService(this.resolve(Import_1.SharedKernel));');
 
     // 3. Verify SharedKernel Factory DOES NOT EXIST
     expect(code).not.toContain('function create_SharedKernel');

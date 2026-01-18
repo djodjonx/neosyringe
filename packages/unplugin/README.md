@@ -1,6 +1,6 @@
 # @djodjonx/neosyringe-plugin
 
-The build plugin for Neosyringe. Supports Vite, Rollup, Webpack, esbuild.
+The build plugin for NeoSyringe. Supports Vite, Rollup, Webpack, esbuild.
 
 ## Installation
 

@@ -52,13 +52,13 @@ describe('Generator - Declarative Config', () => {
 
     // 2. Check Factories
     // create_ILogger -> new ConsoleLogger()
-    expect(code).toContain('function create_ILogger(container: NeoContainer) {');
+    expect(code).toContain('private create_ILogger(): any {');
     expect(code).toContain('return new Import_0.ConsoleLogger();');
 
     // create_UserService -> new UserService(resolve("ILogger"))
-    expect(code).toContain('function create_UserService(container: NeoContainer) {');
+    expect(code).toContain('private create_UserService(): any {');
     // For interface token, we expect the STRING literal "ILogger" to be passed
-    expect(code).toContain('container.resolve("ILogger")');
+    expect(code).toContain('this.resolve("ILogger")');
 
     // 3. Check Resolve Switch
     // If token === "full_tokenId" || token === "ILogger"

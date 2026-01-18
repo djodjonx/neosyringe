@@ -1,5 +1,5 @@
 /**
- * Neo-Syringe: Zero-Overhead, Compile-Time Dependency Injection
+ * NeoSyringe: Zero-Overhead, Compile-Time Dependency Injection
  *
  * @example
  * ```typescript

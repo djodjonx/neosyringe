@@ -1,17 +1,17 @@
 # Legacy Migration
 
-Bridge existing DI containers (tsyringe, InversifyJS) while migrating to Neosyringe.
+Bridge existing DI containers (tsyringe, InversifyJS) while migrating to NeoSyringe.
 
 ## Overview
 
-You don't have to migrate everything at once. Neosyringe can delegate resolution to any container that has a `resolve()` method.
+You don't have to migrate everything at once. NeoSyringe can delegate resolution to any container that has a `resolve()` method.
 
 ```typescript
 // Bridge your existing container
 export const container = defineBuilderConfig({
   useContainer: legacyContainer,  // Delegate to legacy
   injections: [
-    { token: NewService }  // New services in Neosyringe
+    { token: NewService }  // New services in NeoSyringe
   ]
 });
 ```
@@ -61,7 +61,7 @@ const legacy = declareContainerTokens<{
 ### Step 3: Bridge and Extend
 
 ```typescript
-// New services using Neosyringe
+// New services using NeoSyringe
 interface ILogger {
   log(msg: string): void;
 }
@@ -96,7 +96,7 @@ import { appContainer } from './container';
 
 const userService = appContainer.resolve(UserService);
 // ✅ AuthService and LegacyUserRepository come from tsyringe
-// ✅ ILogger comes from neo-syringe
+// ✅ ILogger comes from NeoSyringe
 ```
 
 ## With InversifyJS
@@ -203,7 +203,7 @@ class NeoContainer {
     const local = this.resolveLocal(token);
     if (local !== undefined) return local;
 
-    // 2. Delegate to parent (Neosyringe container)
+    // 2. Delegate to parent (NeoSyringe container)
     if (this.parent) {
       try { return this.parent.resolve(token); }
       catch { /* continue */ }
@@ -224,7 +224,7 @@ class NeoContainer {
 
 ## Validation
 
-Neosyringe validates legacy bindings at compile-time:
+NeoSyringe validates legacy bindings at compile-time:
 
 | Check | Description |
 |-------|-------------|
@@ -250,7 +250,7 @@ export const container = defineBuilderConfig({
 });
 ```
 
-### Phase 2: New Services in Neosyringe
+### Phase 2: New Services in NeoSyringe
 
 ```typescript
 export const container = defineBuilderConfig({
@@ -271,7 +271,7 @@ const legacy = declareContainerTokens<{
   ServiceC: ServiceC;
 }>(tsyringeContainer);
 
-// Add to Neosyringe
+// Add to NeoSyringe
 export const container = defineBuilderConfig({
   useContainer: legacy,
   injections: [
@@ -307,7 +307,7 @@ Put legacy code in a separate file that you can eventually delete:
 src/
 ├── legacy/
 │   └── container.ts      # Will be deleted later
-├── container.ts          # Neosyringe
+├── container.ts          # NeoSyringe
 └── services/
     ├── legacy/           # To be migrated
     └── new/              # Pure TypeScript
@@ -315,7 +315,7 @@ src/
 
 ### Test Both Paths
 
-Ensure services work whether resolved from legacy or Neosyringe:
+Ensure services work whether resolved from legacy or NeoSyringe:
 
 ```typescript
 describe('UserService', () => {
@@ -324,7 +324,7 @@ describe('UserService', () => {
     expect(service).toBeDefined();
   });
   
-  it('works from neo-syringe container', () => {
+  it('works from NeoSyringe container', () => {
     const service = container.resolve(UserService);
     expect(service).toBeDefined();
   });

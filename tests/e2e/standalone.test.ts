@@ -1,18 +1,18 @@
 /**
- * E2E Tests - Neo-Syringe Standalone
+ * E2E Tests - NeoSyringe Standalone
  *
  * Tests the complete flow from configuration to code generation
  * without any legacy container integration.
  */
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
-import { Generator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer } from '../../packages/core/src/analyzer/index';
+import { GraphValidator } from '../../packages/core/src/generator/index';
+import { Generator } from '../../packages/core/src/generator/index';
 
-describe('E2E - Neo-Syringe Standalone', () => {
+describe('E2E - NeoSyringe Standalone', () => {
   const compileAndGenerate = (fileContent: string) => {
-    const fileName = 'e2e-test.ts';
+    const fileName = 'e2e-test';
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
@@ -202,7 +202,7 @@ describe('E2E - Neo-Syringe Standalone', () => {
     expect(code).toContain('AppService');
   });
 
-  it('should compile with parent Neo-Syringe container', () => {
+  it('should compile with parent NeoSyringe container', () => {
     const code = compileAndGenerate(`
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }

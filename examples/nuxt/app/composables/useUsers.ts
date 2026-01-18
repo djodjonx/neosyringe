@@ -1,7 +1,7 @@
 /**
  * Composable for User Service
  *
- * This composable uses Neo-Syringe DI to resolve the UserService.
+ * This composable uses NeoSyringe DI to resolve the UserService.
  * At build time, the container.resolve() calls are replaced with
  * generated factory code - zero runtime DI overhead!
  *

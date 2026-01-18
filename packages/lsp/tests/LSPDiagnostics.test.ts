@@ -51,7 +51,7 @@ describe('LSP Diagnostics Integration', () => {
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     expect(diagnostics.length).toBeGreaterThan(0);
-    expect(diagnostics[0].messageText).toContain('[Neo-Syringe] Circular dependency detected');
+    expect(diagnostics[0].messageText).toContain('[NeoSyringe] Circular dependency detected');
   });
 
   it('should report missing binding diagnostics', () => {
@@ -92,7 +92,7 @@ describe('LSP Diagnostics Integration', () => {
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     expect(diagnostics.length).toBeGreaterThan(0);
-    expect(diagnostics[0].messageText).toContain('[Neo-Syringe] Missing binding');
+    expect(diagnostics[0].messageText).toContain('[NeoSyringe] Missing binding');
   });
 
   it('should not report error when dependency is in legacy container', () => {
@@ -142,7 +142,7 @@ describe('LSP Diagnostics Integration', () => {
 
     // Should have NO errors - AuthService is in legacy container
     const neoSyringeErrors = diagnostics.filter((d: any) =>
-      typeof d.messageText === 'string' && d.messageText.includes('[Neo-Syringe]')
+      typeof d.messageText === 'string' && d.messageText.includes('[NeoSyringe]')
     );
     expect(neoSyringeErrors.length).toBe(0);
   });
@@ -193,7 +193,7 @@ describe('LSP Diagnostics Integration', () => {
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     expect(diagnostics.length).toBeGreaterThan(0);
-    expect(diagnostics[0].messageText).toContain('[Neo-Syringe]');
+    expect(diagnostics[0].messageText).toContain('[NeoSyringe]');
     expect(diagnostics[0].messageText).toContain('Duplicate');
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Customize VitePress theme with Neo-Syringe colors
+ * Customize VitePress theme with NeoSyringe colors
  * Primary: Teal/Cyan (#0d9488)
  * Accent: Orange (#f97316)
  */

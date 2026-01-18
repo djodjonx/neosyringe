@@ -261,7 +261,7 @@ describe('Scoped Injection', () => {
 
       // UserService should resolve ILogger from local container
       expect(code).toContain('create_UserService');
-      expect(code).toContain('container.resolve');
+      expect(code).toContain('this.resolve');
     });
   });
 
@@ -335,10 +335,10 @@ describe('Scoped Injection', () => {
       const generator = new Generator(graph);
       const code = generator.generate();
 
-      // Transient should NOT use instances cache
+      // Should have factory
       expect(code).toMatch(/create_.*IRequest/);
       // The transient resolution should return directly without caching
-      expect(code).toMatch(/if \(token === ".*IRequest_.*"\) \{\s*return create_/);
+      expect(code).toMatch(/if \(token === ".*IRequest_.*"\) \{\s*return this\.create_/);
     });
   });
 

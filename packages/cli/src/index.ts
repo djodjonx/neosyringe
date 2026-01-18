@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Neo-Syringe CLI
+ * NeoSyringe CLI
  *
  * Validates the dependency graph for a TypeScript project.
  * Detects circular dependencies, missing bindings, and duplicate registrations.
  *
  * @example
  * ```bash
- * npx neo-syringe
+ * npx neo-syringe-check
  * ```
  */
 import * as ts from 'typescript';

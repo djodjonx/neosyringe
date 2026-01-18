@@ -4,7 +4,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
   devtools: { enabled: true },
 
-  // Configure Vite with Neo-Syringe plugin
+  // Configure Vite with NeoSyringe plugin
   vite: {
     plugins: [neoSyringePlugin.vite()]
   },

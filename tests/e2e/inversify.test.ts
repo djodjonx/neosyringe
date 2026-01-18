@@ -1,5 +1,5 @@
 /**
- * E2E Tests - Neo-Syringe with InversifyJS Legacy Container
+ * E2E Tests - NeoSyringe with InversifyJS Legacy Container
  *
  * Tests the integration with a real Inversify container.
  */
@@ -7,11 +7,11 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Container, injectable } from 'inversify';
 import * as ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
-import { Generator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer } from '../../packages/core/src/analyzer/index';
+import { GraphValidator } from '../../packages/core/src/generator/index';
+import { Generator } from '../../packages/core/src/generator/index';
 
-describe('E2E - Neo-Syringe with InversifyJS', () => {
+describe('E2E - NeoSyringe with InversifyJS', () => {
   let inversifyContainer: Container;
 
   beforeEach(() => {
@@ -19,7 +19,7 @@ describe('E2E - Neo-Syringe with InversifyJS', () => {
   });
 
   const compileAndGenerate = (fileContent: string) => {
-    const fileName = 'e2e-inversify.ts';
+    const fileName = 'e2e-inversify';
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
@@ -141,7 +141,7 @@ describe('E2E - Neo-Syringe with InversifyJS', () => {
       expect(db.find('user-1')).toEqual({ name: 'Alice' });
     });
 
-    it('should resolve mixed Inversify + Neo-Syringe services', () => {
+    it('should resolve mixed Inversify + NeoSyringe services', () => {
       // Inversify service
       @injectable()
       class InversifyLogger {
@@ -158,7 +158,7 @@ describe('E2E - Neo-Syringe with InversifyJS', () => {
 
       inversifyContainer.bind(InversifyLogger).toSelf().inSingletonScope();
 
-      // Neo-Syringe service
+      // NeoSyringe service
       class OrderService {
         constructor(private logger: InversifyLogger) {}
 

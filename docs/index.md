@@ -2,12 +2,12 @@
 layout: home
 
 hero:
-  name: Neosyringe
+  name: NeoSyringe
   text: Compile-Time DI
   tagline: Zero-overhead dependency injection that shifts resolution from Runtime to Build-Time. No reflection, no decorators, just pure TypeScript.
   image:
     src: /logo.png
-    alt: Neosyringe
+    alt: NeoSyringe
   actions:
     - theme: brand
       text: Get Started
@@ -49,7 +49,7 @@ features:
 }
 </style>
 
-## Why Choose Neosyringe?
+## Why Choose NeoSyringe?
 
 Traditional DI containers like InversifyJS and tsyringe rely on **runtime resolution**:
 
@@ -58,7 +58,7 @@ Traditional DI containers like InversifyJS and tsyringe rely on **runtime resolu
 - ❌ Interfaces are erased, requiring manual Symbols
 - ❌ Need decorators and reflect-metadata
 
-**Neosyringe is different.** It works as a **compiler plugin**:
+**NeoSyringe is different.** It works as a **compiler plugin**:
 
 - ✅ Generate optimized factories at build time
 - ✅ Errors detected in your IDE
