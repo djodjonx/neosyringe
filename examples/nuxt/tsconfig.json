@@ -1,0 +1,25 @@
+{
+  "extends": "./.nuxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "plugins": [
+      {
+        "name": "@djodjonx/neosyringe-lsp",
+        "verbose": true
+      }
+    ]
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.vue",
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "app.vue",
+    "nuxt.config.ts"
+  ]
+}
