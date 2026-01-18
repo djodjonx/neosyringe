@@ -19,7 +19,7 @@ The Neosyringe LSP plugin integrates with TypeScript's language service to provi
 {
   "compilerOptions": {
     "plugins": [
-      { "name": "@djodjonx/neosyringe/lsp" }
+      { "name": "@djodjonx/neosyringe-lsp" }
     ]
   }
 }
@@ -47,7 +47,7 @@ require('lspconfig').tsserver.setup {
   init_options = {
     plugins = {
       {
-        name = "@djodjonx/neosyringe/lsp",
+        name = "@djodjonx/neosyringe-lsp",
         location = "./node_modules/@djodjonx/neosyringe/dist/lsp"
       }
     }
@@ -190,7 +190,7 @@ Currently, the plugin uses default settings. Future versions may support:
   "compilerOptions": {
     "plugins": [
       {
-        "name": "@djodjonx/neosyringe/lsp",
+        "name": "@djodjonx/neosyringe-lsp",
         "options": {
           "strictMode": true,
           "warnOnUnusedProviders": true

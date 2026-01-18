@@ -8,17 +8,17 @@ This guide will help you install Neosyringe and create your first container in 5
 
 ```bash [pnpm]
 pnpm add @djodjonx/neosyringe
-pnpm add -D unplugin
+pnpm add -D @djodjonx/neosyringe-plugin
 ```
 
 ```bash [npm]
 npm install @djodjonx/neosyringe
-npm install -D unplugin
+npm install -D @djodjonx/neosyringe-plugin
 ```
 
 ```bash [yarn]
 yarn add @djodjonx/neosyringe
-yarn add -D unplugin
+yarn add -D @djodjonx/neosyringe-plugin
 ```
 
 :::
@@ -37,7 +37,7 @@ Neosyringe works with all major bundlers through `unplugin`.
 ```typescript [Vite]
 // vite.config.ts
 import { defineConfig } from 'vite';
-import { neoSyringePlugin } from '@djodjonx/neosyringe/plugin';
+import { neoSyringePlugin } from '@djodjonx/neosyringe-plugin';
 
 export default defineConfig({
   plugins: [neoSyringePlugin.vite()]
@@ -46,7 +46,7 @@ export default defineConfig({
 
 ```typescript [Rollup]
 // rollup.config.js
-import { neoSyringePlugin } from '@djodjonx/neosyringe/plugin';
+import { neoSyringePlugin } from '@djodjonx/neosyringe-plugin';
 
 export default {
   plugins: [neoSyringePlugin.rollup()]
@@ -56,13 +56,13 @@ export default {
 ```javascript [Webpack]
 // webpack.config.js
 module.exports = {
-  plugins: [require('@djodjonx/neosyringe/plugin').webpack()]
+  plugins: [require('@djodjonx/neosyringe-plugin').webpack()]
 };
 ```
 
 ```typescript [esbuild]
 // esbuild.config.js
-import { neoSyringePlugin } from '@djodjonx/neosyringe/plugin';
+import { neoSyringePlugin } from '@djodjonx/neosyringe-plugin';
 
 await esbuild.build({
   plugins: [neoSyringePlugin.esbuild()]

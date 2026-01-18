@@ -9,7 +9,7 @@ Configure Neosyringe in your project.
 ```typescript
 // vite.config.ts
 import { defineConfig } from 'vite';
-import { neoSyringePlugin } from '@djodjonx/neosyringe/plugin';
+import { neoSyringePlugin } from '@djodjonx/neosyringe-plugin';
 
 export default defineConfig({
   plugins: [neoSyringePlugin.vite()]
@@ -20,7 +20,7 @@ export default defineConfig({
 
 ```typescript
 // rollup.config.js
-import { neoSyringePlugin } from '@djodjonx/neosyringe/plugin';
+import { neoSyringePlugin } from '@djodjonx/neosyringe-plugin';
 
 export default {
   input: 'src/main.ts',
@@ -36,7 +36,7 @@ export default {
 
 ```javascript
 // webpack.config.js
-const { webpack } = require('@djodjonx/neosyringe/plugin');
+const { webpack } = require('@djodjonx/neosyringe-plugin');
 
 module.exports = {
   plugins: [webpack()]
@@ -47,7 +47,7 @@ module.exports = {
 
 ```typescript
 // esbuild.config.js
-import { neoSyringePlugin } from '@djodjonx/neosyringe/plugin';
+import { neoSyringePlugin } from '@djodjonx/neosyringe-plugin';
 import esbuild from 'esbuild';
 
 await esbuild.build({
@@ -62,7 +62,7 @@ await esbuild.build({
 
 ```javascript
 // rspack.config.js
-const { rspack } = require('@djodjonx/neosyringe/plugin');
+const { rspack } = require('@djodjonx/neosyringe-plugin');
 
 module.exports = {
   plugins: [rspack()]
@@ -77,7 +77,7 @@ Add to `tsconfig.json` for IDE error detection:
 {
   "compilerOptions": {
     "plugins": [
-      { "name": "@djodjonx/neosyringe/lsp" }
+      { "name": "@djodjonx/neosyringe-lsp" }
     ]
   }
 }
