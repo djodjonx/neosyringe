@@ -6,13 +6,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
-import { Generator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer } from '../../packages/core/src/analyzer/index';
+import { GraphValidator } from '../../packages/core/src/generator/index';
+import { Generator } from '../../packages/core/src/generator/index';
 
 describe('E2E - Generated Code Validation', () => {
   const compileAndGenerate = (fileContent: string) => {
-    const fileName = 'e2e-validation.ts';
+    const fileName = 'e2e-validation';
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
@@ -69,7 +69,7 @@ describe('E2E - Generated Code Validation', () => {
         });
       `);
 
-      expect(code).toMatch(/function create_\w+\(container/);
+      expect(code).toMatch(/private create_\w+\(\)/);
       expect(code).toContain('ServiceA');
       expect(code).toContain('ServiceB');
       expect(code).toContain('ServiceC');
@@ -105,10 +105,10 @@ describe('Dependency Resolution', () => {
       `);
 
       // All factories should be generated
-      expect(code).toContain('function create_');
+      expect(code).toContain('create_');
 
       // Should have resolve calls for dependencies
-      expect(code).toContain('container.resolve');
+      expect(code).toContain('this.resolve');
 
       // Should instantiate with new
       expect(code).toContain('return new');
@@ -134,11 +134,11 @@ describe('Dependency Resolution', () => {
       `);
 
       // All classes should have factories
-      expect(code).toContain('function create_');
+      expect(code).toContain('create_');
       expect(code).toContain('return new');
 
       // Should have multiple resolve calls
-      const resolveCount = (code.match(/container\.resolve/g) || []).length;
+      const resolveCount = (code.match(/this\.resolve/g) || []).length;
       expect(resolveCount).toBeGreaterThanOrEqual(4); // At least 4 dependencies
     });
   });
@@ -191,7 +191,7 @@ it('should resolve class dependencies on interfaces', () => {
       // UserService factory should resolve interfaces by string ID
       expect(code).toContain('ILogger');
       expect(code).toContain('IDatabase');
-      expect(code).toContain('container.resolve');
+      expect(code).toContain('this.resolve');
       expect(code).toContain('UserService');
     });
   });
@@ -281,7 +281,7 @@ it('should resolve class dependencies on interfaces', () => {
       `);
 
       // Factory function should receive container parameter
-      expect(code).toMatch(/create_.*\(container.*\)/);
+      expect(code).toMatch(/private create_.*\(\)/);
     });
   });
 
@@ -608,7 +608,7 @@ it('should generate PropertyToken resolution', () => {
       expect(code).toContain('UserService');
 
       // Should have proper resolution chain
-      expect(code).toContain('container.resolve');
+      expect(code).toContain('this.resolve');
     });
 
     it('should handle factory with dependencies from container', () => {
@@ -627,7 +627,7 @@ it('should generate PropertyToken resolution', () => {
             {
               token: useInterface<IConfig>(),
               provider: (container) => {
-                const logger = container.resolve('ILogger');
+                const logger = this.resolve('ILogger');
                 logger.log('Creating config');
                 return { apiUrl: 'http://api.com' };
               },
@@ -727,19 +727,6 @@ it('should generate PropertyToken resolution', () => {
       expect(code).toContain('ServiceA');
       expect(code).toContain('ServiceB');
     });
-
-    it('should include createChildContainer method', () => {
-      const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        class Service {}
-        export const c = defineBuilderConfig({
-          injections: [{ token: Service }]
-        });
-      `);
-
-      expect(code).toContain('createChildContainer');
-      expect(code).toContain('return new NeoContainer(this');
-    });
   });
 
   describe('Edge Cases', () => {
@@ -835,7 +822,7 @@ it('should generate PropertyToken resolution', () => {
       expect(code).toContain('L10');
 
       // Should have 10 resolve calls minimum
-      const resolveCount = (code.match(/container\.resolve/g) || []).length;
+      const resolveCount = (code.match(/this\.resolve/g) || []).length;
       expect(resolveCount).toBeGreaterThanOrEqual(10);
     });
 
@@ -884,7 +871,7 @@ it('should generate PropertyToken resolution', () => {
 
       expect(code).toContain('MultiLogger');
       // Should resolve Logger 3 times
-      expect(code).toMatch(/container\.resolve.*container\.resolve.*container\.resolve/s);
+      expect(code).toMatch(/this\.resolve.*this\.resolve.*this\.resolve/s);
     });
   });
 
@@ -919,7 +906,7 @@ it('should generate PropertyToken resolution', () => {
 
       // Try to parse the generated code as TypeScript
       const sourceFile = ts.createSourceFile(
-        'generated.ts',
+        'generated',
         code,
         ts.ScriptTarget.Latest,
         true
@@ -943,7 +930,7 @@ it('should generate PropertyToken resolution', () => {
       // Name should be escaped or rejected
       // At minimum, the generated code should still be valid
       const sourceFile = ts.createSourceFile(
-        'generated.ts',
+        'generated',
         code,
         ts.ScriptTarget.Latest,
         true
@@ -1071,7 +1058,7 @@ it('should generate PropertyToken resolution', () => {
 
       expect(code).toContain('UserRepository');
       expect(code).toContain('UserService');
-      expect(code).toContain('container.resolve');
+      expect(code).toContain('this.resolve');
     });
 
     it('should handle class with multiple interfaces', () => {
@@ -1172,7 +1159,7 @@ it('should generate PropertyToken resolution', () => {
       expect(code).toContain('Service49');
 
       // Should have 50 factory functions
-      const factoryCount = (code.match(/function create_/g) || []).length;
+      const factoryCount = (code.match(/private create_/g) || []).length;
       expect(factoryCount).toBe(50);
     });
 
@@ -1211,7 +1198,7 @@ it('should generate PropertyToken resolution', () => {
       expect(code).toContain('MegaService');
 
       // Should resolve all 10 dependencies
-      const resolveCount = (code.match(/container\.resolve/g) || []).length;
+      const resolveCount = (code.match(/this\.resolve/g) || []).length;
       expect(resolveCount).toBeGreaterThanOrEqual(10);
     });
   });
@@ -1301,7 +1288,7 @@ it('should generate PropertyToken resolution', () => {
         class One { constructor(d: Dep) {} }
         export const c = defineBuilderConfig({ injections: [{ token: Dep }, { token: One }] });
       `);
-      expect(code1).toContain('container.resolve');
+      expect(code1).toContain('this.resolve');
 
       // 5 deps
       const code5 = compileAndGenerate(`
@@ -1312,7 +1299,7 @@ it('should generate PropertyToken resolution', () => {
           injections: [{ token: D1 }, { token: D2 }, { token: D3 }, { token: D4 }, { token: D5 }, { token: Five }]
         });
       `);
-      const count = (code5.match(/container\.resolve/g) || []).length;
+      const count = (code5.match(/this\.resolve/g) || []).length;
       expect(count).toBeGreaterThanOrEqual(5);
     });
 

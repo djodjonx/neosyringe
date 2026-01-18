@@ -1,6 +1,6 @@
 # Types
 
-Type definitions for Neosyringe.
+Type definitions for NeoSyringe.
 
 ## Lifecycle
 
@@ -142,17 +142,13 @@ Main configuration for a container:
 
 ## Container
 
-```typescript
 interface Container {
   resolve<T>(token: Token<T>): T;
-  createChildContainer(): Container;
 }
-```
 
 The generated container interface:
 
 | Method | Description |
 |--------|-------------|
 | `resolve<T>(token)` | Resolve a service by token |
-| `createChildContainer()` | Create a child container |
 

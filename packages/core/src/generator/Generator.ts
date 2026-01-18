@@ -62,10 +62,10 @@ export class Generator {
       if (node.service.isFactory && node.service.factorySource) {
           const userFactory = node.service.factorySource;
           factories.push(`
-function ${factoryId}(container: NeoContainer) {
-  const userFactory = ${userFactory};
-  return userFactory(container);
-}`);
+  private ${factoryId}(): any {
+    const userFactory = ${userFactory};
+    return userFactory(this);
+  }`);
       } else {
           // Standard class instantiation
           const className = node.service.implementationSymbol
@@ -79,21 +79,21 @@ function ${factoryId}(container: NeoContainer) {
               }
 
               if (depNode.service.isInterfaceToken) {
-                  return `container.resolve("${depNode.service.tokenId}")`;
+                  return `this.resolve("${depNode.service.tokenId}")`;
               } else if (depNode.service.tokenSymbol) {
                   const tokenClass = getImport(depNode.service.tokenSymbol);
-                  return `container.resolve(${tokenClass})`;
+                  return `this.resolve(${tokenClass})`;
               } else if (depNode.service.implementationSymbol) {
                  const depClass = getImport(depNode.service.implementationSymbol);
-                 return `container.resolve(${depClass})`;
+                 return `this.resolve(${depClass})`;
               }
               return 'undefined';
           }).join(', ');
 
           factories.push(`
-function ${factoryId}(container: NeoContainer) {
-  return new ${className}(${args});
-}`);
+  private ${factoryId}(): any {
+    return new ${className}(${args});
+  }`);
       }
 
       // 2. Generate Resolve Switch Case
@@ -122,10 +122,10 @@ function ${factoryId}(container: NeoContainer) {
       }
 
       const creationLogic = isTransient
-          ? `return ${factoryId}(this);`
+          ? `return this.${factoryId}();`
           : `
             if (!this.instances.has(${tokenKey})) {
-                const instance = ${factoryId}(this);
+                const instance = this.${factoryId}();
                 this.instances.set(${tokenKey}, instance);
                 return instance;
             }
@@ -147,12 +147,12 @@ function ${factoryId}(container: NeoContainer) {
     return `
 ${importLines.join('\n')}
 
-// -- Factories --
-${factories.join('\n')}
-
 // -- Container --
 export class NeoContainer {
   private instances = new Map<any, any>();
+
+  // -- Factories --
+  ${factories.join('\n  ')}
 
   constructor(
     private parent?: any,
@@ -192,10 +192,6 @@ export class NeoContainer {
   private resolveLocal(token: any): any {
     ${resolveCases.join('\n    ')}
     return undefined;
-  }
-
-  public createChildContainer(): NeoContainer {
-    return new NeoContainer(this, \`Child of \${this.name}\`);
   }
 
   // For debugging/inspection

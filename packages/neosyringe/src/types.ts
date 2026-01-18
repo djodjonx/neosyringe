@@ -25,14 +25,6 @@ export interface Container {
    * @throws {Error} If the service is not found or not registered.
    */
   resolve<T>(token: Token<T>): T;
-
-  /**
-   * Creates a child container.
-   * Child containers can override services from the parent and have their own singleton scope.
-   *
-   * @returns A new child Container instance.
-   */
-  createChildContainer(): Container;
 }
 
 // ============================================================================
@@ -129,7 +121,7 @@ export interface BuilderConfig extends PartialConfig {
   name?: string;
   extends?: PartialConfig[];
   /**
-   * Parent container instance to bridge (Neo-Syringe or legacy).
+   * Parent container instance to bridge (NeoSyringe or legacy).
    */
   useContainer?: any;
 }
@@ -149,7 +141,7 @@ export function definePartialConfig(config: PartialConfig): PartialConfig {
  */
 export function defineBuilderConfig(_config: BuilderConfig): Container {
   throw new Error(
-    'neo-syringe: defineBuilderConfig() called at runtime. ' +
+    'NeoSyringe: defineBuilderConfig() called at runtime. ' +
     'This library requires the compiler plugin to generate the container. ' +
     'Ensure the plugin is configured in your build system (Vite, Rollup, Webpack).'
   );
@@ -162,7 +154,7 @@ export function defineBuilderConfig(_config: BuilderConfig): Container {
  * @throws {Error} If called at runtime without compilation.
  */
 export function useInterface<T>(): InterfaceToken<T> {
-  throw new Error('neo-syringe: useInterface<T>() called at runtime. The build plugin is missing.');
+  throw new Error('NeoSyringe: useInterface<T>() called at runtime. The build plugin is missing.');
 }
 
 /**
@@ -188,7 +180,7 @@ export function useProperty<T, C extends Constructor<any>>(
   paramName: string
 ): PropertyToken<T, InstanceType<C>> {
   throw new Error(
-    `neo-syringe: useProperty(${targetClass.name}, '${paramName}') called at runtime. The build plugin is missing.`
+    `NeoSyringe: useProperty(${targetClass.name}, '${paramName}') called at runtime. The build plugin is missing.`
   );
 }
 

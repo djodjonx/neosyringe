@@ -1,6 +1,6 @@
 # Functions
 
-API functions exported by Neosyringe.
+API functions exported by NeoSyringe.
 
 ## defineBuilderConfig
 
@@ -265,27 +265,4 @@ const logger = container.resolve(useInterface<ILogger>());
 const apiUrl = container.resolve(useProperty<string>(ApiService, 'apiUrl'));
 ```
 
----
-
-## Container.createChildContainer
-
-```typescript
-createChildContainer(): Container
-```
-
-Create a child container that inherits from this one.
-
-### Returns
-
-`Container` - A new child container
-
-### Example
-
-```typescript
-const parent = container;
-const child = parent.createChildContainer();
-
-// Child can resolve parent's services
-const logger = child.resolve(useInterface<ILogger>());
-```
 

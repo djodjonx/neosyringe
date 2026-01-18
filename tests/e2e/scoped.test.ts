@@ -6,13 +6,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
-import { Generator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer } from '../../packages/core/src/analyzer/index';
+import { GraphValidator } from '../../packages/core/src/generator/index';
+import { Generator } from '../../packages/core/src/generator/index';
 
 describe('E2E - Scoped Injections', () => {
   const compileAndGenerate = (fileContent: string): string => {
-    const fileName = 'scoped-e2e.ts';
+    const fileName = 'scoped-e2e';
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
@@ -151,7 +151,7 @@ describe('E2E - Scoped Injections', () => {
       `);
 
       // Transient should return directly without caching
-      expect(code).toMatch(/if \(token === ".*IRequest_.*"\) \{\s*return create_/);
+      expect(code).toMatch(/if \(token === ".*IRequest_.*"\) \{\s*return this\.create_/);
     });
   });
 
