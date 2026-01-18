@@ -8,8 +8,17 @@
     "strict": true,
     "skipLibCheck": true,
     "declaration": true,
-    "outDir": "./dist"
+    "baseUrl": ".",
+    "paths": {
+      "@djodjonx/neosyringe": ["./packages/neosyringe/src"],
+      "@djodjonx/neosyringe-core/analyzer": ["./packages/core/src/analyzer/index.ts"],
+      "@djodjonx/neosyringe-core/generator": ["./packages/core/src/generator/index.ts"],
+      "@djodjonx/neosyringe-core": ["./packages/core/src"],
+      "@djodjonx/neosyringe-plugin": ["./packages/unplugin/src"],
+      "@djodjonx/neosyringe-lsp": ["./packages/lsp/src"],
+      "@djodjonx/neosyringe-cli": ["./packages/cli/src"]
+    }
   },
-  "include": ["src", "tests"],
-  "exclude": ["docs"]
+  "include": ["packages/*/src", "packages/*/tests", "tests"],
+  "exclude": ["docs", "examples", "node_modules", "dist"]
 }

@@ -9,9 +9,9 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { container as tsyringeContainer, singleton } from 'tsyringe';
 import * as ts from 'typescript';
-import { Analyzer } from '../../src/analyzer/Analyzer';
-import { GraphValidator } from '../../src/generator/GraphValidator';
-import { Generator } from '../../src/generator/Generator';
+import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
+import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
+import { Generator } from '@djodjonx/neosyringe-core/generator';
 
 describe('E2E - Neo-Syringe with tsyringe', () => {
   beforeEach(() => {

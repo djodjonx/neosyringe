@@ -1,9 +1,9 @@
 
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { Analyzer } from '../../src/analyzer/Analyzer';
-import { Generator } from '../../src/generator/Generator';
-import { GraphValidator } from '../../src/generator/GraphValidator';
+import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
+import { Generator } from '@djodjonx/neosyringe-core/generator';
+import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
 
 describe('E2E - Multi-File Tokens', () => {
   const compileAndGenerateMultiFile = (files: Record<string, string>) => {

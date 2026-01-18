@@ -6,6 +6,12 @@
   "bin": {
     "neosyringe": "dist/index.mjs"
   },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsdown",
     "test": "vitest run"
