@@ -69,12 +69,20 @@ jobs:
 
       - name: Verify build output
         run: |
-          test -f dist/index.mjs
-          test -f dist/index.cjs
-          test -f dist/index.d.mts
-          test -f dist/unplugin/index.mjs
-          test -f dist/lsp/index.mjs
-          test -f dist/cli/index.mjs
+          # Core
+          test -f packages/core/dist/analyzer/index.mjs
+          test -f packages/core/dist/generator/index.mjs
+          # Library
+          test -f packages/neosyringe/dist/index.mjs
+          test -f packages/neosyringe/dist/index.cjs
+          test -f packages/neosyringe/dist/index.d.mts
+          # Plugin
+          test -f packages/unplugin/dist/index.mjs
+          test -f packages/unplugin/dist/index.cjs
+          # LSP
+          test -f packages/lsp/dist/index.cjs
+          # CLI
+          test -f packages/cli/dist/index.mjs
 
   security:
     runs-on: ubuntu-latest

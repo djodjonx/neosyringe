@@ -1,5 +1,5 @@
 {
-  "name": "neo-syringe-monorepo",
+  "name": "neosyringe-monorepo",
   "private": true,
   "type": "module",
   "scripts": {

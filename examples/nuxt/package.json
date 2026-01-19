@@ -1,5 +1,5 @@
 {
-  "name": "neo-syringe-nuxt-ddd-example",
+  "name": "neosyringe-nuxt-ddd-example",
   "version": "1.0.1",
   "private": true,
   "description": "Example Nuxt 4 project with NeoSyringe DI and DDD architecture",

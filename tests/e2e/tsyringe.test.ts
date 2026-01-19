@@ -198,7 +198,7 @@ describe('E2E - NeoSyringe with tsyringe', () => {
       expect(userRepo.findById('123')).toEqual({ id: '123', name: 'John Doe' });
     });
 
-    it('should resolve mixed dependencies (legacy + neo-syringe)', () => {
+    it('should resolve mixed dependencies (legacy + neosyringe)', () => {
       // 1. Register in tsyringe
       @singleton()
       class LegacyLogger {
