@@ -2,6 +2,7 @@
   "name": "neosyringe-monorepo",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
