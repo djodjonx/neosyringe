@@ -142,13 +142,15 @@ Main configuration for a container:
 
 ## Container
 
+```typescript
 interface Container {
   resolve<T>(token: Token<T>): T;
 }
+```
 
 The generated container interface:
 
 | Method | Description |
 |--------|-------------|
-| `resolve<T>(token)` | Resolve a service by token |
+| `resolve\<T\>(token)` | Resolve a service by token |
 
