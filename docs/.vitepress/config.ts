@@ -13,7 +13,7 @@ export default defineConfig({
     ['meta', { property: 'og:image', content: '/logo.png' }],
   ],
 
-  base: '/neo-syringe/',
+  base: '/neosyringe/',
 
   themeConfig: {
     logo: '/logo.png',
