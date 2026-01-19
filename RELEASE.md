@@ -26,7 +26,7 @@ Suivez les instructions interactives :
 Quand vous êtes prêt à publier, mettez à jour les versions :
 
 ```bash
-pnpm version
+pnpm version-packages
 ```
 
 Cette commande :
@@ -52,11 +52,13 @@ Cette commande :
 - Synchronise le README
 - Build tous les packages
 - Publie sur npm avec `changeset publish`
-- **Crée automatiquement les tags git pour chaque package publié**
+- **Crée les tags git pour chaque package publié avec `changeset tag`**
 - **Push automatiquement les tags vers le dépôt distant**
 - **Vous demandera votre code 2FA de npm pendant la publication**
 
-**Important** : `changeset publish` gère automatiquement le 2FA de manière interactive. Il vous demandera votre code OTP pendant la publication de chaque package.
+**Important** : 
+- `changeset publish` gère automatiquement le 2FA de manière interactive. Il vous demandera votre code OTP pendant la publication de chaque package.
+- Les exemples (comme `examples/nuxt`) ne sont PAS publiés sur npm, ils restent dans le repo avec des versions fixes pour CodeSandbox.
 
 ## Workflow complet en résumé
 
@@ -65,7 +67,7 @@ Cette commande :
 pnpm changeset
 
 # 2. Mettre à jour les versions (crée un commit auto)
-pnpm version
+pnpm version-packages
 
 # 3. Push le commit de version
 git push
