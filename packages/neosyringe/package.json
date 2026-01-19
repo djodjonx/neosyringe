@@ -1,6 +1,6 @@
 {
   "name": "@djodjonx/neosyringe",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Runtime library for NeoSyringe DI",
   "type": "module",
   "main": "dist/index.cjs",
