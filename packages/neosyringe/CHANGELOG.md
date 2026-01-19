@@ -1,5 +1,11 @@
 # @djodjonx/neosyringe
 
+## 0.1.1
+
+### Patch Changes
+
+- Add MIT license to all packages and fix test imports to use source code instead of published packages. This ensures tests run against the actual source code in CI environments.
+
 ## 0.1.0
 
 ### Minor Changes

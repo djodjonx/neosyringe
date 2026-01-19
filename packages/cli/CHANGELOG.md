@@ -1,5 +1,13 @@
 # @djodjonx/neosyringe-cli
 
+## 0.0.2
+
+### Patch Changes
+
+- Add MIT license to all packages and fix test imports to use source code instead of published packages. This ensures tests run against the actual source code in CI environments.
+- Updated dependencies
+  - @djodjonx/neosyringe-core@0.1.1
+
 ## 0.0.1
 
 ### Patch Changes
