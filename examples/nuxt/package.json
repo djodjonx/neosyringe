@@ -12,14 +12,14 @@
     "validate": "neosyringe-check"
   },
   "dependencies": {
-    "@djodjonx/neosyringe": "workspace:*",
+    "@djodjonx/neosyringe": "0.1.1",
     "nuxt": "^4.2.2",
     "vue": "^3.5.0"
   },
   "devDependencies": {
-    "@djodjonx/neosyringe-cli": "workspace:*",
-    "@djodjonx/neosyringe-plugin": "workspace:*",
-    "@djodjonx/neosyringe-lsp": "workspace:*",
+    "@djodjonx/neosyringe-cli": "0.0.2",
+    "@djodjonx/neosyringe-plugin": "0.0.2",
+    "@djodjonx/neosyringe-lsp": "0.0.2",
     "@nuxt/devtools": "^2.0.0",
     "typescript": "^5.6.0",
     "unplugin": "^2.0.0",
