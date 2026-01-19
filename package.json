@@ -4,7 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "build": "pnpm -r run build",
+    "build": "pnpm --filter './packages/**' run build",
     "test": "pnpm -r run test",
     "lint": "oxlint .",
     "typecheck": "tsc --noEmit",
