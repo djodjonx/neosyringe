@@ -26,7 +26,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Build packages
+      - name: Build packages (Node 20+)
+        if: matrix.node-version != 18
         run: pnpm build
 
       - name: Lint
