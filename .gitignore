@@ -34,3 +34,6 @@ docs/.vitepress/dist/
 .cache/
 temp/
 tmp/
+
+# Synchronized documentation
+packages/neosyringe/README.md
