@@ -5,8 +5,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer } from '../../core/src/analyzer/Analyzer.js';
+import { GraphValidator } from '../../core/src/generator/GraphValidator.js';
 
 describe('CLI - Validation Logic', () => {
   const createProgram = (fileName: string, fileContent: string) => {

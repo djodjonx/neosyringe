@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { generateTokenId } from '@djodjonx/neosyringe-core/analyzer';
+import { generateTokenId } from '../../core/src/analyzer/Analyzer.js';
 
 // Import the transform function (we need to extract it or test the plugin directly)
 
