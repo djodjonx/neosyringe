@@ -13,7 +13,7 @@
     "validate": "pnpm lint && pnpm typecheck && pnpm test",
     "changeset": "changeset",
     "version": "changeset version && pnpm install --no-frozen-lockfile",
-    "release": "pnpm sync-readme && pnpm build && changeset publish",
+    "release": "pnpm sync-readme && pnpm build && changeset publish && git push --follow-tags",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",

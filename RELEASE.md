@@ -34,12 +34,11 @@ Cette commande :
 - Met à jour les versions dans les `package.json`
 - Met à jour les CHANGELOGs
 - Met à jour `pnpm-lock.yaml`
+- **Crée automatiquement un commit git avec les changements**
 
-### 3. Commit et push
+### 3. Push les changements de version
 
 ```bash
-git add .
-git commit -m "chore: version packages"
 git push
 ```
 
@@ -53,15 +52,29 @@ Cette commande :
 - Synchronise le README
 - Build tous les packages
 - Publie sur npm avec `changeset publish`
+- **Crée automatiquement les tags git pour chaque package publié**
+- **Push automatiquement les tags vers le dépôt distant**
 - **Vous demandera votre code 2FA de npm pendant la publication**
 
 **Important** : `changeset publish` gère automatiquement le 2FA de manière interactive. Il vous demandera votre code OTP pendant la publication de chaque package.
 
-### 5. Créer un tag git et push
+## Workflow complet en résumé
 
 ```bash
-git push --follow-tags
+# 1. Créer un changeset après vos modifications
+pnpm changeset
+
+# 2. Mettre à jour les versions (crée un commit auto)
+pnpm version
+
+# 3. Push le commit de version
+git push
+
+# 4. Publier et créer les tags (demande 2FA, push auto des tags)
+pnpm release
 ```
+
+Les tags seront au format `@djodjonx/package-name@version` (ex: `@djodjonx/neosyringe@0.1.2`).
 
 ## Publication avec Token (CI/CD)
 
