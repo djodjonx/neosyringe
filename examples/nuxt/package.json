@@ -3,6 +3,9 @@
   "version": "1.0.1",
   "private": true,
   "description": "Example Nuxt 4 project with NeoSyringe DI and DDD architecture",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxt build",
