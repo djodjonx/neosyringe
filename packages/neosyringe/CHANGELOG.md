@@ -1,5 +1,11 @@
 # @djodjonx/neosyringe
 
+## 0.1.2
+
+### Patch Changes
+
+- afbcc52: fix dependencies versions in all packages published
+
 ## 0.1.1
 
 ### Patch Changes

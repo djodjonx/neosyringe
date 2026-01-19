@@ -6,6 +6,5 @@
   "linked": [],
   "access": "public",
   "baseBranch": "main",
-  "updateInternalDependencies": "patch",
-  "ignore": ["neosyringe-nuxt-ddd-example"]
+  "updateInternalDependencies": "patch"
 }

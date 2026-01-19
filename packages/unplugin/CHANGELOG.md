@@ -1,5 +1,13 @@
 # @djodjonx/neosyringe-plugin
 
+## 0.0.3
+
+### Patch Changes
+
+- afbcc52: fix dependencies versions in all packages published
+- Updated dependencies [afbcc52]
+  - @djodjonx/neosyringe-core@0.1.2
+
 ## 0.0.2
 
 ### Patch Changes
