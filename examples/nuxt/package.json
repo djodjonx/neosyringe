@@ -1,5 +1,5 @@
 {
-  "name": "nuxt",
+  "name": "neosyringe-nuxt-ddd-example",
   "type": "module",
   "private": true,
   "scripts": {
