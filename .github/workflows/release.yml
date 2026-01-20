@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - "@djodjonx/*@*"
 
 permissions:
   contents: write
@@ -17,30 +17,96 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Parse tag
+        id: parse_tag
+        run: |
+          # Extract package name and version from tag format: @djodjonx/package@version
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "Full tag: $TAG"
+
+          # Extract package name (everything before the last @)
+          PACKAGE_NAME="${TAG%@*}"
+          # Extract version (everything after the last @)
+          VERSION="${TAG##*@}"
+          # Extract package short name (after the last /)
+          PACKAGE_SHORT_NAME="${PACKAGE_NAME##*/}"
+
+          echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "package_short_name=$PACKAGE_SHORT_NAME" >> $GITHUB_OUTPUT
+
+          echo "Package: $PACKAGE_NAME"
+          echo "Short name: $PACKAGE_SHORT_NAME"
+          echo "Version: $VERSION"
+
+      - name: Find package directory
+        id: find_package
+        run: |
+          PACKAGE_SHORT_NAME="${{ steps.parse_tag.outputs.package_short_name }}"
+
+          # Map package names to directories
+          case "$PACKAGE_SHORT_NAME" in
+            "neosyringe")
+              PACKAGE_DIR="packages/neosyringe"
+              ;;
+            "neosyringe-cli")
+              PACKAGE_DIR="packages/cli"
+              ;;
+            "neosyringe-core")
+              PACKAGE_DIR="packages/core"
+              ;;
+            "neosyringe-lsp")
+              PACKAGE_DIR="packages/lsp"
+              ;;
+            "neosyringe-unplugin")
+              PACKAGE_DIR="packages/unplugin"
+              ;;
+            *)
+              echo "Unknown package: $PACKAGE_SHORT_NAME"
+              exit 1
+              ;;
+          esac
+
+          echo "package_dir=$PACKAGE_DIR" >> $GITHUB_OUTPUT
+          echo "Package directory: $PACKAGE_DIR"
+
       - name: Extract release notes
         id: extract_release_notes
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "Processing version: $VERSION"
+          VERSION="${{ steps.parse_tag.outputs.version }}"
+          PACKAGE_DIR="${{ steps.find_package.outputs.package_dir }}"
+          CHANGELOG_PATH="${PACKAGE_DIR}/CHANGELOG.md"
 
-          # Extract notes from the main package changelog
-          # Changesets uses "## VERSION" format
-          sed -n "/^## ${VERSION}/,/^## /p" packages/neosyringe/CHANGELOG.md | grep -v "^## ${VERSION}" | sed '$d' > RELEASE_BODY.md
+          echo "Extracting release notes for version $VERSION from $CHANGELOG_PATH"
 
-          # If no content found, create a default message
-          if [ ! -s RELEASE_BODY.md ]; then
-            echo "## Release v$VERSION" > RELEASE_BODY.md
+          if [ ! -f "$CHANGELOG_PATH" ]; then
+            echo "Warning: No CHANGELOG.md found at $CHANGELOG_PATH"
+            echo "## Release $VERSION" > RELEASE_BODY.md
             echo "" >> RELEASE_BODY.md
-            echo "Initial release of NeoSyringe." >> RELEASE_BODY.md
+            echo "See the [full changelog](https://github.com/${{ github.repository }}/blob/main/$CHANGELOG_PATH) for details." >> RELEASE_BODY.md
+          else
+            # Extract notes for this version from CHANGELOG.md
+            # Changesets format: ## VERSION or ## VERSION (YYYY-MM-DD)
+            sed -n "/^## ${VERSION}/,/^## /p" "$CHANGELOG_PATH" | sed '1d' | sed '$d' > RELEASE_BODY.md
+
+            # If extraction failed or is empty, create a default message
+            if [ ! -s RELEASE_BODY.md ]; then
+              echo "## Changes" > RELEASE_BODY.md
+              echo "" >> RELEASE_BODY.md
+              echo "See the [full changelog](https://github.com/${{ github.repository }}/blob/main/$CHANGELOG_PATH) for details." >> RELEASE_BODY.md
+            fi
           fi
 
+          echo "Release notes content:"
           cat RELEASE_BODY.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           body_path: RELEASE_BODY.md
+          name: "${{ steps.parse_tag.outputs.package_name }}@${{ steps.parse_tag.outputs.version }}"
+          tag_name: ${{ github.ref_name }}
           draft: false
-          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
+          prerelease: ${{ contains(steps.parse_tag.outputs.version, '-alpha') || contains(steps.parse_tag.outputs.version, '-beta') || contains(steps.parse_tag.outputs.version, '-rc') }}
           generate_release_notes: false
 
