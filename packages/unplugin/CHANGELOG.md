@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-plugin
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies
+  - @djodjonx/neosyringe-core@1.0.0
+
 ## 0.0.3
 
 ### Patch Changes

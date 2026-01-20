@@ -1,6 +1,6 @@
 {
   "name": "@djodjonx/neosyringe-core",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "description": "Core analysis and generation logic for NeoSyringe",
   "type": "module",
   "license": "MIT",

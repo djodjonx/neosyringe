@@ -1,6 +1,6 @@
 {
   "name": "@djodjonx/neosyringe-lsp",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "TypeScript Language Service Plugin for NeoSyringe",
   "license": "MIT",
   "main": "dist/index.cjs",
