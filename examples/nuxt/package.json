@@ -1,23 +1,19 @@
 {
-  "name": "neosyringe-nuxt-ddd-example",
-  "version": "1.0.1",
+  "name": "nuxt",
+  "type": "module",
   "private": true,
-  "description": "Example Nuxt 4 project with NeoSyringe DI and DDD architecture",
-  "engines": {
-    "node": ">=22.0.0"
-  },
   "scripts": {
-    "dev": "nuxt dev",
     "build": "nuxt build",
+    "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare",
-    "validate": "neosyringe-check"
+    "postinstall": "nuxt prepare"
   },
   "dependencies": {
     "@djodjonx/neosyringe": "0.1.2",
     "nuxt": "^4.2.2",
-    "vue": "^3.5.27"
+    "vue": "^3.5.27",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@djodjonx/neosyringe-cli": "0.0.3",

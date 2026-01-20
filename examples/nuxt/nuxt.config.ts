@@ -1,17 +1,10 @@
 import { neoSyringePlugin } from '@djodjonx/neosyringe-plugin';
 
+// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  compatibilityDate: '2025-01-01',
+  compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-
-  // Configure Vite with NeoSyringe plugin
   vite: {
     plugins: [neoSyringePlugin.vite()]
   },
-
-  // TypeScript config
-  typescript: {
-    strict: true,
-    typeCheck: false
-  }
-});
+})

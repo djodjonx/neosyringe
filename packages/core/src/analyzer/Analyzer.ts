@@ -165,7 +165,13 @@ export class Analyzer {
                 graph.variableExportModifier = 'export default';
               } else if (hasExport) {
                 graph.variableExportModifier = 'export';
+              } else {
+                // No export modifier found
+                graph.variableExportModifier = 'none';
               }
+            } else {
+              // No modifiers at all
+              graph.variableExportModifier = 'none';
             }
           }
         }

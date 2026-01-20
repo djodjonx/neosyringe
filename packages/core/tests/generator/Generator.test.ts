@@ -99,4 +99,56 @@ describe('Generator', () => {
 
       expect(code).toContain('private create__scope_Package(): any');
   });
+
+  it('should respect export modifiers for container variable', () => {
+    // Test 'export' modifier
+    const graphExport: DependencyGraph = {
+      nodes: new Map([
+        ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
+      ]),
+      roots: [],
+      exportedVariableName: 'myContainer',
+      variableExportModifier: 'export'
+    };
+    const codeExport = new Generator(graphExport).generate();
+    expect(codeExport).toContain('export const myContainer = new NeoContainer');
+    expect(codeExport).not.toContain('export default');
+
+    // Test 'export default' modifier
+    const graphDefault: DependencyGraph = {
+      nodes: new Map([
+        ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
+      ]),
+      roots: [],
+      exportedVariableName: 'container',
+      variableExportModifier: 'export default'
+    };
+    const codeDefault = new Generator(graphDefault).generate();
+    expect(codeDefault).toContain('const container = new NeoContainer');
+    expect(codeDefault).toContain('export default container;');
+
+    // Test 'none' modifier (no export)
+    const graphNone: DependencyGraph = {
+      nodes: new Map([
+        ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
+      ]),
+      roots: [],
+      exportedVariableName: 'privateContainer',
+      variableExportModifier: 'none'
+    };
+    const codeNone = new Generator(graphNone).generate();
+    expect(codeNone).toContain('const privateContainer = new NeoContainer');
+    expect(codeNone).not.toContain('export');
+
+    // Test undefined (defaults to export for backward compatibility)
+    const graphUndefined: DependencyGraph = {
+      nodes: new Map([
+        ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
+      ]),
+      roots: [],
+      exportedVariableName: 'legacyContainer'
+    };
+    const codeUndefined = new Generator(graphUndefined).generate();
+    expect(codeUndefined).toContain('export const legacyContainer = new NeoContainer');
+  });
 });

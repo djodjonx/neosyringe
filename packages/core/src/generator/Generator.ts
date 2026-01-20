@@ -240,17 +240,18 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
 const ${variableName} = ${instantiation};
 export default ${variableName};
 `;
-    } else if (exportModifier === 'export' || exportModifier === undefined) {
+    } else if (exportModifier === 'none') {
+      // User explicitly did not export the variable
+      return `
+// -- Container Instance --
+const ${variableName} = ${instantiation};
+`;
+    } else {
+      // 'export' or undefined (backward compatibility)
       // Default to 'export' for backward compatibility when modifier is not set
       return `
 // -- Container Instance --
 export const ${variableName} = ${instantiation};
-`;
-    } else {
-      // Explicitly no export (would need a specific value like 'none', but for now undefined defaults to export)
-      return `
-// -- Container Instance --
-const ${variableName} = ${instantiation};
 `;
     }
   }

@@ -88,8 +88,8 @@ export interface DependencyGraph {
   /** The exported variable name used for the container (e.g., 'appContainer'). */
   exportedVariableName?: string;
 
-  /** Export modifier for the container variable: 'export', 'export default', or undefined (no export). */
-  variableExportModifier?: 'export' | 'export default' | undefined;
+  /** Export modifier for the container variable: 'export', 'export default', 'none', or undefined (defaults to 'export'). */
+  variableExportModifier?: 'export' | 'export default' | 'none';
 
   /** Start position of the variable statement containing defineBuilderConfig (where to insert generated code). */
   variableStatementStart?: number;
