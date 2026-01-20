@@ -230,28 +230,37 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
    * If no modifier is specified (undefined), defaults to 'export' for backward compatibility.
    */
   private generateContainerVariable(): string {
-    const variableName = this.graph.exportedVariableName || 'container';
+    const variableName = this.graph.exportedVariableName;
     const instantiation = this.generateInstantiation();
     const exportModifier = this.graph.variableExportModifier;
 
     if (exportModifier === 'export default') {
-      return `
+      // Support both: export default defineBuilderConfig() and const x = defineBuilderConfig(); export default x;
+      if (variableName) {
+        return `
 // -- Container Instance --
 const ${variableName} = ${instantiation};
 export default ${variableName};
 `;
+      } else {
+        // Direct export default without variable
+        return `
+// -- Container Instance --
+export default ${instantiation};
+`;
+      }
     } else if (exportModifier === 'none') {
       // User explicitly did not export the variable
       return `
 // -- Container Instance --
-const ${variableName} = ${instantiation};
+const ${variableName || 'container'} = ${instantiation};
 `;
     } else {
       // 'export' or undefined (backward compatibility)
       // Default to 'export' for backward compatibility when modifier is not set
       return `
 // -- Container Instance --
-export const ${variableName} = ${instantiation};
+export const ${variableName || 'container'} = ${instantiation};
 `;
     }
   }

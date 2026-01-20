@@ -138,6 +138,8 @@ export class Analyzer {
       if (this.isDefineBuilderConfigCall(node)) {
         // Check if this is a parent container (should be skipped)
         const parent = node.parent;
+
+        // Case 1: const x = defineBuilderConfig(...)
         if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
           if (this.parentContainerNames.has(parent.name.text)) {
             // Skip - this container is used as a parent, already processed
@@ -175,6 +177,14 @@ export class Analyzer {
             }
           }
         }
+        // Case 2: export default defineBuilderConfig(...)
+        else if (ts.isExportAssignment(parent) && parent.isExportEquals === false) {
+          // This is 'export default <expression>'
+          graph.variableExportModifier = 'export default';
+          graph.variableStatementStart = parent.getStart();
+          // No variable name in this case
+        }
+
         // Store the position of defineBuilderConfig call for replacement
         graph.defineBuilderConfigStart = node.getStart();
         graph.defineBuilderConfigEnd = node.getEnd();

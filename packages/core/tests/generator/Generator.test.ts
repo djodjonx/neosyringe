@@ -151,4 +151,20 @@ describe('Generator', () => {
     const codeUndefined = new Generator(graphUndefined).generate();
     expect(codeUndefined).toContain('export const legacyContainer = new NeoContainer');
   });
+
+  it('should handle export default without variable name', () => {
+    // When user writes: export default defineBuilderConfig({ ... })
+    // We should generate: export default new NeoContainer(...)
+    const graph: DependencyGraph = {
+      nodes: new Map([
+        ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
+      ]),
+      roots: [],
+      variableExportModifier: 'export default'
+      // Note: no exportedVariableName
+    };
+    const code = new Generator(graph).generate();
+    expect(code).toContain('export default new NeoContainer');
+    expect(code).not.toContain('const container =');
+  });
 });
