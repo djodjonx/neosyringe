@@ -57,7 +57,8 @@ describe('Generator', () => {
     expect(code).toContain('return new Import_1.UserService(this.resolve(Import_0.ConsoleLogger));');
 
     // Verify Container Class
-    expect(code).toContain('export class NeoContainer {');
+    expect(code).toContain('class NeoContainer {');
+    expect(code).not.toContain('export class NeoContainer {');
     expect(code).toContain('constructor(');
     expect(code).toContain('private name: string = \'NeoContainer\'');
     expect(code).toContain('throw new Error(`[${this.name}] Service not found');
@@ -78,13 +79,13 @@ describe('Generator', () => {
     // Singleton Logic: Check cache
     // if (token === Import_0.S) { if (!this.instances.has(Import_0.S)) ... }
     expect(code).toContain('if (!this.instances.has(Import_0.S))');
-    
+
     // Transient Logic: Always call factory
     // if (token === Import_1.T) { return this.create_Transient(); }
     expect(code).toContain('return this.create_Transient();');
     expect(code).not.toContain('!this.instances.has(Import_1.T)');
   });
-  
+
   it('should sanitize variable names for factories', () => {
       const graph: DependencyGraph = {
           nodes: new Map([
@@ -92,10 +93,10 @@ describe('Generator', () => {
           ]),
           roots: []
       };
-      
+
       const generator = new Generator(graph);
       const code = generator.generate();
-      
+
       expect(code).toContain('private create__scope_Package(): any');
   });
 });

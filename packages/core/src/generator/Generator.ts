@@ -159,7 +159,7 @@ export class Generator {
 ${importLines.join('\n')}
 
 // -- Container --
-export class NeoContainer {
+class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --
@@ -210,10 +210,7 @@ export class NeoContainer {
     return ${JSON.stringify(Array.from(this.graph.nodes.keys()))};
   }
 }
-${this.useDirectSymbolNames ? '' : `
-// -- Container Instance --
-export const ${this.graph.exportedVariableName || 'container'} = ${this.generateInstantiation()};
-`}`;
+${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   }
 
   /**
@@ -225,6 +222,37 @@ export const ${this.graph.exportedVariableName || 'container'} = ${this.generate
     const legacyArgs = this.graph.legacyContainers ? `[${this.graph.legacyContainers.join(', ')}]` : 'undefined';
     const nameArg = this.graph.containerName ? `'${this.graph.containerName}'` : 'undefined';
     return `new NeoContainer(${buildArgs}, ${legacyArgs}, ${nameArg})`;
+  }
+
+  /**
+   * Generates the container variable declaration with the user's export modifier.
+   * This respects whether the user used 'export', 'export default', or no export at all.
+   * If no modifier is specified (undefined), defaults to 'export' for backward compatibility.
+   */
+  private generateContainerVariable(): string {
+    const variableName = this.graph.exportedVariableName || 'container';
+    const instantiation = this.generateInstantiation();
+    const exportModifier = this.graph.variableExportModifier;
+
+    if (exportModifier === 'export default') {
+      return `
+// -- Container Instance --
+const ${variableName} = ${instantiation};
+export default ${variableName};
+`;
+    } else if (exportModifier === 'export' || exportModifier === undefined) {
+      // Default to 'export' for backward compatibility when modifier is not set
+      return `
+// -- Container Instance --
+export const ${variableName} = ${instantiation};
+`;
+    } else {
+      // Explicitly no export (would need a specific value like 'none', but for now undefined defaults to export)
+      return `
+// -- Container Instance --
+const ${variableName} = ${instantiation};
+`;
+    }
   }
 
   /**

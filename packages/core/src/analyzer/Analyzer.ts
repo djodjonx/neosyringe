@@ -146,7 +146,7 @@ export class Analyzer {
           // Extract the exported variable name
           graph.exportedVariableName = parent.name.text;
 
-          // Find the VariableStatement to get insertion position
+          // Find the VariableStatement to get insertion position and export modifier
           let current: ts.Node = parent;
           while (current && !ts.isVariableStatement(current)) {
             current = current.parent;
@@ -154,6 +154,19 @@ export class Analyzer {
           if (current && ts.isVariableStatement(current)) {
             // Use getStart() to exclude leading comments - we want to preserve them
             graph.variableStatementStart = current.getStart();
+
+            // Detect export modifier
+            const modifiers = ts.canHaveModifiers(current) ? ts.getModifiers(current) : undefined;
+            if (modifiers) {
+              const hasExport = modifiers.some(m => m.kind === ts.SyntaxKind.ExportKeyword);
+              const hasDefault = modifiers.some(m => m.kind === ts.SyntaxKind.DefaultKeyword);
+
+              if (hasExport && hasDefault) {
+                graph.variableExportModifier = 'export default';
+              } else if (hasExport) {
+                graph.variableExportModifier = 'export';
+              }
+            }
           }
         }
         // Store the position of defineBuilderConfig call for replacement
