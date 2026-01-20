@@ -4,6 +4,36 @@ import * as path from 'node:path';
 import { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from './types';
 
 /**
+ * Error thrown when a duplicate registration is detected.
+ * Includes the position of the duplicate registration node.
+ */
+export class DuplicateRegistrationError extends Error {
+  constructor(
+    message: string,
+    public readonly node: ts.Node,
+    public readonly sourceFile: ts.SourceFile
+  ) {
+    super(message);
+    this.name = 'DuplicateRegistrationError';
+  }
+}
+
+/**
+ * Error thrown when a provider type is incompatible with the token type.
+ * Includes the position of the registration node.
+ */
+export class TypeMismatchError extends Error {
+  constructor(
+    message: string,
+    public readonly node: ts.Node,
+    public readonly sourceFile: ts.SourceFile
+  ) {
+    super(message);
+    this.name = 'TypeMismatchError';
+  }
+}
+
+/**
  * Generates a unique, deterministic Token ID for a symbol.
  * Uses the symbol name and a short hash of its relative file path.
  */
@@ -62,6 +92,7 @@ export class Analyzer {
       nodes: new Map(),
       roots: [],
       buildArguments: [],
+      errors: [], // Initialize error collection
     };
 
     // First pass: identify all parent containers (useContainer references)
@@ -79,6 +110,8 @@ export class Analyzer {
     // After extracting all nodes, resolve dependencies for each
     this.resolveAllDependencies(graph);
 
+    // Return the graph with collected errors
+    // CLI and Generator will check graph.errors and throw if needed
     return graph;
   }
 
@@ -413,7 +446,17 @@ export class Analyzer {
           if (tokenId) {
               // Check for duplicate - allow if scoped: true (intentional override)
               if (graph.nodes.has(tokenId) && !isScoped) {
-                  throw new Error(`Duplicate registration: '${tokenId}' is already registered.`);
+                  const sourceFile = obj.getSourceFile();
+                  // Collect error instead of throwing
+                  if (!graph.errors) graph.errors = [];
+                  graph.errors.push({
+                    type: 'duplicate',
+                    message: `Duplicate registration: '${tokenId}' is already registered.`,
+                    node: obj,
+                    sourceFile: sourceFile
+                  });
+                  // Continue processing to find more errors
+                  return;
               }
 
               const definition: ServiceDefinition = {
@@ -459,7 +502,22 @@ export class Analyzer {
       if (tokenId && implementationSymbol) {
          // Check for duplicate - allow if scoped: true (intentional override)
          if (graph.nodes.has(tokenId) && !isScoped) {
-              throw new Error(`Duplicate registration: '${tokenId}' is already registered.`);
+              const sourceFile = obj.getSourceFile();
+              // Collect error instead of throwing
+              if (!graph.errors) graph.errors = [];
+              graph.errors.push({
+                type: 'duplicate',
+                message: `Duplicate registration: '${tokenId}' is already registered.`,
+                node: obj,
+                sourceFile: sourceFile
+              });
+              // Continue processing to find more errors
+              return;
+         }
+
+         // Check type compatibility between token and provider (only for explicit registrations)
+         if (type === 'explicit' && isInterfaceToken && providerNode) {
+             this.validateTypeCompatibility(tokenNode, providerNode, obj, graph);
          }
 
          const definition: ServiceDefinition = {
@@ -550,6 +608,70 @@ export class Analyzer {
           }
       }
       return undefined;
+  }
+
+  /**
+   * Validates that the provider type is compatible with the token type.
+   * @param tokenNode - The token node (e.g., useInterface<ILogger>())
+   * @param providerNode - The provider node (e.g., ConsoleLogger)
+   * @param registrationNode - The full registration object for error reporting
+   * @param graph - The dependency graph to collect errors
+   */
+  private validateTypeCompatibility(tokenNode: ts.Node, providerNode: ts.Node, registrationNode: ts.Node, graph: DependencyGraph): void {
+      // Extract the interface type from useInterface<ILogger>()
+      let tokenType: ts.Type | undefined;
+
+      // Resolve tokenNode to the actual call expression if it's an identifier
+      let resolvedTokenNode = tokenNode;
+      if (ts.isExpression(tokenNode)) {
+          const resolved = this.resolveToInitializer(tokenNode);
+          if (resolved) {
+              resolvedTokenNode = resolved;
+          }
+      }
+
+      if (ts.isCallExpression(resolvedTokenNode) && this.isUseInterfaceCall(resolvedTokenNode)) {
+          // Extract type from useInterface<T>()
+          const typeArgs = resolvedTokenNode.typeArguments;
+          if (typeArgs && typeArgs.length > 0) {
+              tokenType = this.checker.getTypeFromTypeNode(typeArgs[0]);
+          }
+      }
+
+      if (!tokenType) return;
+
+      // Get the provider type (the class constructor)
+      const providerType = this.checker.getTypeAtLocation(providerNode);
+
+      // Get the instance type of the provider (what it returns when instantiated)
+      let providerInstanceType: ts.Type | undefined;
+      const constructSignatures = providerType.getConstructSignatures();
+      if (constructSignatures.length > 0) {
+          providerInstanceType = constructSignatures[0].getReturnType();
+      } else {
+          // Not a class, might be a value
+          providerInstanceType = providerType;
+      }
+
+      if (!providerInstanceType) return;
+
+      // Check if provider instance type is assignable to token type
+      const isAssignable = this.checker.isTypeAssignableTo(providerInstanceType, tokenType);
+
+      if (!isAssignable) {
+          const sourceFile = registrationNode.getSourceFile();
+          const tokenTypeName = this.checker.typeToString(tokenType);
+          const providerTypeName = this.checker.typeToString(providerInstanceType);
+
+          // Collect error instead of throwing
+          if (!graph.errors) graph.errors = [];
+          graph.errors.push({
+            type: 'type-mismatch',
+            message: `Type mismatch: Provider '${providerTypeName}' is not assignable to token type '${tokenTypeName}'.`,
+            node: registrationNode,
+            sourceFile: sourceFile
+          });
+      }
   }
 
   private extractPropertyTokenId(node: ts.CallExpression): { tokenId: TokenId; className: string; paramName: string } {

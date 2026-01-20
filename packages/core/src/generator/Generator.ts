@@ -1,5 +1,6 @@
 import * as ts from 'typescript';
 import { DependencyGraph, TokenId } from '../analyzer/types';
+import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 
 /**
  * Generates TypeScript code for the dependency injection container.
@@ -15,7 +16,17 @@ export class Generator {
    * @param graph - The validated dependency graph to generate code from.
    * @param useDirectSymbolNames - If true, uses symbol names directly without import prefixes.
    */
-  constructor(private graph: DependencyGraph, private useDirectSymbolNames: boolean = false) {}
+  constructor(private graph: DependencyGraph, private useDirectSymbolNames: boolean = false) {
+    // Check for analysis errors and throw the first one for CLI compatibility
+    if (graph.errors && graph.errors.length > 0) {
+      const firstError = graph.errors[0];
+      if (firstError.type === 'duplicate') {
+        throw new DuplicateRegistrationError(firstError.message, firstError.node, firstError.sourceFile);
+      } else if (firstError.type === 'type-mismatch') {
+        throw new TypeMismatchError(firstError.message, firstError.node, firstError.sourceFile);
+      }
+    }
+  }
 
   /**
    * Generates the complete container code as a string.

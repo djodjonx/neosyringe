@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { Analyzer } from '../../core/src/analyzer/index';
+import { Analyzer, DuplicateRegistrationError, TypeMismatchError } from '../../core/src/analyzer/index';
 import { GraphValidator } from '../../core/src/generator/index';
 
 /**
@@ -76,54 +76,105 @@ function init(modules: { typescript: typeof import('typescript') }) {
         log(`Running analysis on: ${fileName}`);
 
         const analyzer = new Analyzer(program);
-        const graph = analyzer.extract();
 
-        log(`Graph extracted with ${graph.nodes.size} nodes`);
-
-        const validator = new GraphValidator();
         try {
-            validator.validate(graph);
-            log(`Validation passed`);
+          const graph = analyzer.extract();
+
+          log(`Graph extracted with ${graph.nodes.size} nodes`);
+
+          // Process analysis errors (duplicates, type mismatches)
+          if (graph.errors && graph.errors.length > 0) {
+            log(`Found ${graph.errors.length} analysis error(s)`);
+
+            for (const error of graph.errors) {
+              const start = error.node.getStart(error.sourceFile);
+              const end = error.node.getEnd();
+              const length = end - start;
+
+              const code = error.type === 'duplicate' ? 9998 : 9997;
+
+              prior.push({
+                file: error.sourceFile,
+                start: start,
+                length: length,
+                messageText: `[NeoSyringe] ${error.message}`,
+                category: ts.DiagnosticCategory.Error,
+                code: code,
+              });
+            }
+          }
+
+          // Validate graph (circular dependencies, missing bindings)
+          const validator = new GraphValidator();
+          try {
+              validator.validate(graph);
+              log(`Validation passed`);
+          } catch (e: unknown) {
+              if (e instanceof Error) {
+                  // Catch all validation errors (Cycle, Missing)
+                  const msg = e.message;
+
+                  log(`Validation error: ${msg}`);
+
+                  // Determine category. Most are errors.
+                  prior.push({
+                      file: sourceFile,
+                      start: 0,
+                      length: 10,
+                      messageText: `[NeoSyringe] ${msg}`,
+                      category: ts.DiagnosticCategory.Error,
+                      code: 9999,
+                  });
+              }
+          }
         } catch (e: unknown) {
-            if (e instanceof Error) {
-                // Catch all validation errors (Cycle, Missing, Duplicate)
-                const msg = e.message;
+          // Fallback for unexpected errors during extraction
+          if (e instanceof DuplicateRegistrationError) {
+              log(`Duplicate registration detected (fallback): ${e.message}`);
 
-                log(`Validation error: ${msg}`);
+              const start = e.node.getStart(e.sourceFile);
+              const end = e.node.getEnd();
+              const length = end - start;
 
-                // Determine category. Most are errors.
-                prior.push({
+              prior.push({
+                  file: e.sourceFile,
+                  start: start,
+                  length: length,
+                  messageText: `[NeoSyringe] ${e.message}`,
+                  category: ts.DiagnosticCategory.Error,
+                  code: 9998,
+              });
+          } else if (e instanceof TypeMismatchError) {
+              log(`Type mismatch detected (fallback): ${e.message}`);
+
+              const start = e.node.getStart(e.sourceFile);
+              const end = e.node.getEnd();
+              const length = end - start;
+
+              prior.push({
+                  file: e.sourceFile,
+                  start: start,
+                  length: length,
+                  messageText: `[NeoSyringe] ${e.message}`,
+                  category: ts.DiagnosticCategory.Error,
+                  code: 9997,
+              });
+          } else if (e instanceof Error) {
+              log(`Analyzer exception: ${e.message}`);
+
+              prior.push({
                     file: sourceFile,
                     start: 0,
                     length: 10,
-                    messageText: `[NeoSyringe] ${msg}`,
+                    messageText: `[NeoSyringe] ${e.message}`,
                     category: ts.DiagnosticCategory.Error,
-                    code: 9999,
-                });
-            }
-        }
-
-      } catch (e: unknown) {
-          // Catch Analyzer errors (e.g. Duplicates thrown during extraction)
-          if (e instanceof Error) {
-              log(`Analyzer exception: ${e.message}`);
-
-              if (e.message.includes('Duplicate')) {
-                  const program = info.languageService.getProgram();
-                  const file = program?.getSourceFile(fileName);
-                  if (file) {
-                      log(`Adding duplicate diagnostic`);
-                      prior.push({
-                            file: file,
-                            start: 0,
-                            length: 10,
-                            messageText: `[NeoSyringe] ${e.message}`,
-                            category: ts.DiagnosticCategory.Error,
-                            code: 9998,
-                        });
-                  }
-              }
+                    code: 9996,
+              });
           }
+        }
+      } catch (e: unknown) {
+        // Catch any unexpected errors at the top level
+        log(`Unexpected error: ${e instanceof Error ? e.message : String(e)}`);
       }
 
       return prior;

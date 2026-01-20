@@ -113,8 +113,15 @@ describe('CLI - Validation Logic', () => {
       `);
 
       const analyzer = new Analyzer(program);
+      const graph = analyzer.extract();
 
-      expect(() => analyzer.extract()).toThrow(/Duplicate registration.*A/);
+      // Check that duplicate error was collected
+      expect(graph.errors).toBeDefined();
+      expect(graph.errors!.length).toBeGreaterThan(0);
+
+      const duplicateError = graph.errors!.find(e => e.type === 'duplicate');
+      expect(duplicateError).toBeDefined();
+      expect(duplicateError!.message).toMatch(/Duplicate registration.*A/);
     });
   });
 

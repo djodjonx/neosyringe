@@ -30,7 +30,15 @@ describe('Analyzer Safety', () => {
     const program = ts.createProgram([fileName], {}, compilerHost);
     const analyzer = new Analyzer(program);
 
-    expect(() => analyzer.extract()).toThrowError(/Duplicate registration: 'A_.*' is already registered/);
+    const graph = analyzer.extract();
+
+    // Check that duplicate error was collected
+    expect(graph.errors).toBeDefined();
+    expect(graph.errors!.length).toBeGreaterThan(0);
+
+    const duplicateError = graph.errors!.find(e => e.type === 'duplicate');
+    expect(duplicateError).toBeDefined();
+    expect(duplicateError!.message).toMatch(/Duplicate registration: 'A_.*' is already registered/);
   });
 
   it('should throw error on duplicate with parent container', () => {

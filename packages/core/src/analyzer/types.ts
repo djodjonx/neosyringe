@@ -102,4 +102,29 @@ export interface DependencyGraph {
 
   /** Tokens provided by the parent container (used for validation). */
   parentProvidedTokens?: Set<TokenId>;
+
+  /** Analysis errors collected during extraction (duplicates, type mismatches, etc.). */
+  errors?: AnalysisError[];
+}
+
+/**
+ * Type of analysis error.
+ */
+export type AnalysisErrorType = 'duplicate' | 'type-mismatch';
+
+/**
+ * An error detected during dependency graph analysis.
+ */
+export interface AnalysisError {
+  /** Type of error. */
+  type: AnalysisErrorType;
+
+  /** Error message. */
+  message: string;
+
+  /** The AST node where the error occurred. */
+  node: Node;
+
+  /** The source file containing the error. */
+  sourceFile: any; // ts.SourceFile but avoiding circular dependency
 }

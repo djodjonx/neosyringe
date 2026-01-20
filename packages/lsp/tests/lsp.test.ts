@@ -4,10 +4,26 @@ import * as ts from 'typescript';
 
 // Partial mocks
 vi.mock('../../core/src/analyzer/index.ts', () => {
+  class DuplicateRegistrationError extends Error {
+    constructor(message: string, public readonly node: any, public readonly sourceFile: any) {
+      super(message);
+      this.name = 'DuplicateRegistrationError';
+    }
+  }
+
+  class TypeMismatchError extends Error {
+    constructor(message: string, public readonly node: any, public readonly sourceFile: any) {
+      super(message);
+      this.name = 'TypeMismatchError';
+    }
+  }
+
   return {
     Analyzer: vi.fn().mockImplementation(() => ({
       extract: vi.fn().mockReturnValue({ nodes: new Map(), roots: [] })
-    }))
+    })),
+    DuplicateRegistrationError,
+    TypeMismatchError
   };
 });
 
