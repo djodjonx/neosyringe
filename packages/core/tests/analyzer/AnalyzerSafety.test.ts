@@ -38,7 +38,8 @@ describe('Analyzer Safety', () => {
 
     const duplicateError = graph.errors!.find(e => e.type === 'duplicate');
     expect(duplicateError).toBeDefined();
-    expect(duplicateError!.message).toMatch(/Duplicate registration: 'A_.*' is already registered/);
+    // Should show the original code 'A' not the transformed tokenId
+    expect(duplicateError!.message).toContain("Duplicate registration: 'A'");
   });
 
   it('should throw error on duplicate with parent container', () => {

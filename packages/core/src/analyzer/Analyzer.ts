@@ -447,11 +447,13 @@ export class Analyzer {
               // Check for duplicate - allow if scoped: true (intentional override)
               if (graph.nodes.has(tokenId) && !isScoped) {
                   const sourceFile = obj.getSourceFile();
+                  // Get the original token text for better readability
+                  const tokenText = tokenNode.getText(sourceFile);
                   // Collect error instead of throwing
                   if (!graph.errors) graph.errors = [];
                   graph.errors.push({
                     type: 'duplicate',
-                    message: `Duplicate registration: '${tokenId}' is already registered.`,
+                    message: `Duplicate registration: '${tokenText}' is already registered.`,
                     node: obj,
                     sourceFile: sourceFile
                   });
@@ -503,11 +505,13 @@ export class Analyzer {
          // Check for duplicate - allow if scoped: true (intentional override)
          if (graph.nodes.has(tokenId) && !isScoped) {
               const sourceFile = obj.getSourceFile();
+              // Get the original token text for better readability
+              const tokenText = tokenNode.getText(sourceFile);
               // Collect error instead of throwing
               if (!graph.errors) graph.errors = [];
               graph.errors.push({
                 type: 'duplicate',
-                message: `Duplicate registration: '${tokenId}' is already registered.`,
+                message: `Duplicate registration: '${tokenText}' is already registered.`,
                 node: obj,
                 sourceFile: sourceFile
               });
