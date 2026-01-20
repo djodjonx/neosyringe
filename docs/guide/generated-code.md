@@ -201,7 +201,7 @@ const child = defineBuilderConfig({
 // Generated
 import { parent } from './parent-container';
 
-export class NeoContainer {
+class NeoContainer {
   constructor(
     private parent: typeof parent = parent,  // 👈 Parent reference
     // ...

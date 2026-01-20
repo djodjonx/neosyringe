@@ -174,12 +174,14 @@ NeoSyringe works everywhere:
 ```typescript
 // ✅ NeoSyringe in any environment
 // Generated code is pure JavaScript
-export class NeoContainer {
+class NeoContainer {
   resolve(token) {
     if (token === "ILogger") return new ConsoleLogger();
     // ... pure function calls
   }
 }
+
+export const container = new NeoContainer();
 ```
 
 ## Migration Path

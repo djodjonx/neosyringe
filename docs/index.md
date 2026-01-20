@@ -110,13 +110,15 @@ function create_UserService(container) {
   return new UserService(container.resolve("ILogger"));
 }
 
-export class NeoContainer {
+class NeoContainer {
   resolve(token) {
     if (token === "ILogger") return this.getInstance("ILogger", create_ILogger);
     if (token === UserService) return this.getInstance(UserService, create_UserService);
     throw new Error(`Service not found: ${token}`);
   }
 }
+
+export const container = new NeoContainer();
 ```
 
 **Zero DI library shipped to production!**
