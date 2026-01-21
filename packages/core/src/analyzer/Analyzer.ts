@@ -1,7 +1,27 @@
 import * as ts from 'typescript';
 import * as crypto from 'node:crypto';
 import * as path from 'node:path';
-import { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from './types';
+import {
+  DependencyGraph,
+  DependencyNode,
+  ServiceDefinition,
+  TokenId,
+  AnalysisResult,
+  ConfigGraph,
+  AnalysisError
+} from './types';
+import { ConfigCollector, type IConfigCollector } from './collectors';
+import { TokenResolver, type ITokenResolver } from './resolvers';
+import {
+  CompositeValidator,
+  DuplicateValidator,
+  TypeValidator,
+  MissingDependencyValidator,
+  DependencyAnalyzer,
+  type IValidator,
+  type ValidationContext
+} from './validators';
+import { ErrorFormatter, CycleError, type IErrorFormatter } from './errors';
 
 /**
  * Error thrown when a duplicate registration is detected.
@@ -84,6 +104,7 @@ export class Analyzer {
    * Extracts the dependency graph from the program's source files.
    *
    * It scans all non-declaration source files for container configurations.
+   * Each defineBuilderConfig gets its own isolated graph to avoid false positives.
    *
    * @returns A `DependencyGraph` containing all registered services and their dependencies.
    */
@@ -102,6 +123,7 @@ export class Analyzer {
     }
 
     // Second pass: parse all containers except parents
+    // Each defineBuilderConfig gets its own isolated graph
     for (const sourceFile of this.program.getSourceFiles()) {
       if (sourceFile.isDeclarationFile) continue;
       this.visitNode(sourceFile, graph);
@@ -113,6 +135,93 @@ export class Analyzer {
     // Return the graph with collected errors
     // CLI and Generator will check graph.errors and throw if needed
     return graph;
+  }
+
+  // ============================================================================
+  // NEW MODULAR API for LSP
+  // ============================================================================
+
+  private configCollector: IConfigCollector | null = null;
+  private tokenResolver: ITokenResolver | null = null;
+  private validator: IValidator | null = null;
+  private collectedConfigs: Map<string, ConfigGraph> | null = null;
+
+  /**
+   * Lazily initialize the modular components.
+   */
+  private initModularComponents(): void {
+    if (this.configCollector) return;
+
+    const errorFormatter: IErrorFormatter = new ErrorFormatter();
+    const dependencyAnalyzer = new DependencyAnalyzer(this.checker);
+
+    this.configCollector = new ConfigCollector(this.program, this.checker);
+    this.tokenResolver = new TokenResolver();
+    this.validator = new CompositeValidator([
+      new DuplicateValidator(errorFormatter),
+      new TypeValidator(this.checker, errorFormatter),
+      new MissingDependencyValidator(errorFormatter, dependencyAnalyzer),
+    ]);
+  }
+
+  /**
+   * Get collected configs (with caching).
+   */
+  private getCollectedConfigs(): Map<string, ConfigGraph> {
+    if (!this.collectedConfigs) {
+      this.initModularComponents();
+      this.collectedConfigs = this.configCollector!.collect();
+    }
+    return this.collectedConfigs;
+  }
+
+  /**
+   * Entry point for LSP - analyzes a specific file.
+   * Uses the modular architecture for isolated validation.
+   *
+   * @param fileName - The file to analyze
+   * @returns Analysis result with errors for this file only
+   */
+  public extractForFile(fileName: string): AnalysisResult {
+    this.initModularComponents();
+
+    const allConfigs = this.getCollectedConfigs();
+    const errors: AnalysisError[] = [];
+
+    // Find configs defined in this file
+    const configsInFile = [...allConfigs.values()]
+      .filter(c => c.sourceFile.fileName === fileName);
+
+    // Validate each config
+    for (const config of configsInFile) {
+      const context: ValidationContext = { allConfigs };
+
+      // For builders, resolve inherited tokens
+      if (config.type === 'builder') {
+        try {
+          context.inheritedTokens = this.tokenResolver!.resolveInheritedTokens(
+            config,
+            allConfigs
+          );
+        } catch (e) {
+          if (e instanceof CycleError) {
+            errors.push({
+              type: 'cycle',
+              message: e.message,
+              node: config.node,
+              sourceFile: config.sourceFile,
+              context: { chain: e.chain },
+            });
+            continue;
+          }
+          throw e;
+        }
+      }
+
+      errors.push(...this.validator!.validate(config, context));
+    }
+
+    return { configs: allConfigs, errors };
   }
 
   /**
@@ -189,10 +298,69 @@ export class Analyzer {
         graph.defineBuilderConfigStart = node.getStart();
         graph.defineBuilderConfigEnd = node.getEnd();
         this.parseBuilderConfig(node, graph);
+      } else if (this.isDefinePartialConfigCall(node)) {
+        // Standalone partial configs (not extended by any defineBuilderConfig)
+        // should be validated in isolation to catch internal duplicates/type mismatches
+        // but their nodes should NOT be added to the main graph
+        const parent = node.parent;
+
+        if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+          const partialName = parent.name.text;
+
+          // Check if this partial is used in any extends array
+          // If not, validate it in isolation
+          if (!this.isPartialUsedInExtends(partialName)) {
+            const partialGraph: DependencyGraph = {
+              nodes: new Map(),
+              roots: [],
+              errors: []
+            };
+
+            this.parseBuilderConfig(node, partialGraph);
+
+            // Only merge errors, not nodes
+            if (partialGraph.errors && partialGraph.errors.length > 0) {
+              if (!graph.errors) graph.errors = [];
+              graph.errors.push(...partialGraph.errors);
+            }
+          }
+        }
       }
     }
 
     ts.forEachChild(node, (child) => this.visitNode(child, graph));
+  }
+
+  /**
+   * Check if a partial config is used in any extends array.
+   */
+  private partialNamesUsedInExtends: Set<string> | null = null;
+
+  private isPartialUsedInExtends(partialName: string): boolean {
+    // Lazy initialization - scan all files once for extends references
+    if (this.partialNamesUsedInExtends === null) {
+      this.partialNamesUsedInExtends = new Set<string>();
+      for (const sourceFile of this.program.getSourceFiles()) {
+        if (sourceFile.isDeclarationFile) continue;
+        this.collectPartialsInExtends(sourceFile);
+      }
+    }
+    return this.partialNamesUsedInExtends.has(partialName);
+  }
+
+  private collectPartialsInExtends(node: ts.Node): void {
+    if (ts.isPropertyAssignment(node) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === 'extends' &&
+        ts.isArrayLiteralExpression(node.initializer)) {
+      // Found extends: [...], collect all identifiers
+      for (const element of node.initializer.elements) {
+        if (ts.isIdentifier(element)) {
+          this.partialNamesUsedInExtends!.add(element.text);
+        }
+      }
+    }
+    ts.forEachChild(node, (child) => this.collectPartialsInExtends(child));
   }
 
   private isDefineBuilderConfigCall(node: ts.CallExpression): boolean {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { Analyzer, TypeMismatchError } from '../../src/analyzer';
+import { Analyzer } from '../../src/analyzer';
 
 describe('Type Validation', () => {
   it('should throw TypeMismatchError when provider does not implement token interface', () => {

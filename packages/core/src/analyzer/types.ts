@@ -1,4 +1,4 @@
-import type { Symbol, Node } from 'typescript';
+import type { Symbol, Node, SourceFile, CallExpression } from 'typescript';
 
 /**
  * Unique identifier for a token (interface name or class name).
@@ -58,6 +58,103 @@ export interface ServiceDefinition {
   isScoped?: boolean;
 }
 
+// ============================================================================
+// CONFIG GRAPH TYPES (for modular validation)
+// ============================================================================
+
+/**
+ * Type of container configuration.
+ */
+export type ConfigType = 'builder' | 'partial';
+
+/**
+ * Represents a collected configuration (defineBuilderConfig or definePartialConfig).
+ */
+export interface ConfigGraph {
+  /** Variable name (appContainer, sharedPartial) */
+  name: string;
+
+  /** Configuration type */
+  type: ConfigType;
+
+  /** Source file containing this config */
+  sourceFile: SourceFile;
+
+  /** AST node of the call expression */
+  node: CallExpression;
+
+  /** Local injections (tokenId -> info) */
+  localInjections: Map<TokenId, InjectionInfo>;
+
+  /** Duplicate injections detected during collection (for error reporting) */
+  duplicates: InjectionInfo[];
+
+  /** Extended partial names - BUILDER ONLY */
+  extendsRefs: string[];
+
+  /** Parent container reference - BUILDER ONLY */
+  useContainerRef: string | null;
+
+  /** Tokens provided by legacy parent containers (declareContainerTokens) - BUILDER ONLY */
+  legacyParentTokens?: Set<TokenId>;
+
+  /** Container name from config */
+  containerName?: string;
+}
+
+/**
+ * Information about a single injection.
+ */
+export interface InjectionInfo {
+  /** Service definition */
+  definition: ServiceDefinition;
+
+  /** AST node for error positioning */
+  node: Node;
+
+  /** Token text for error messages */
+  tokenText: string;
+
+  /** Is this a scoped override? */
+  isScoped: boolean;
+}
+
+// ============================================================================
+// INHERITED TOKEN TYPES
+// ============================================================================
+
+/**
+ * A token inherited from parent or extends.
+ */
+export interface InheritedToken {
+  /** Token ID */
+  tokenId: TokenId;
+
+  /** Source of inheritance */
+  source: TokenSource;
+
+  /** Token text for error messages */
+  tokenText: string;
+}
+
+/**
+ * Source of an inherited token.
+ */
+export interface TokenSource {
+  /** Source config name */
+  name: string;
+
+  /** Type of source */
+  type: 'parent' | 'extends';
+
+  /** Full chain for deep inheritance */
+  chain?: string[];
+}
+
+// ============================================================================
+// DEPENDENCY GRAPH (legacy, for code generation)
+// ============================================================================
+
 /**
  * A node in the dependency graph representing a service and its dependencies.
  */
@@ -110,10 +207,28 @@ export interface DependencyGraph {
   errors?: AnalysisError[];
 }
 
+// ============================================================================
+// ERROR TYPES
+// ============================================================================
+
 /**
  * Type of analysis error.
  */
-export type AnalysisErrorType = 'duplicate' | 'type-mismatch';
+export type AnalysisErrorType = 'duplicate' | 'type-mismatch' | 'cycle' | 'missing';
+
+/**
+ * Context for error messages.
+ */
+export interface ErrorContext {
+  /** Token text */
+  tokenText?: string;
+
+  /** Conflict source name */
+  conflictSource?: string;
+
+  /** Dependency chain (for cycles) */
+  chain?: string[];
+}
 
 /**
  * An error detected during dependency graph analysis.
@@ -129,5 +244,26 @@ export interface AnalysisError {
   node: Node;
 
   /** The source file containing the error. */
-  sourceFile: any; // ts.SourceFile but avoiding circular dependency
+  sourceFile: SourceFile;
+
+  /** Additional context for the message. */
+  context?: ErrorContext;
+}
+
+// ============================================================================
+// ANALYSIS RESULT
+// ============================================================================
+
+/**
+ * Result of analyzing a file or program.
+ */
+export interface AnalysisResult {
+  /** All configs collected */
+  configs: Map<string, ConfigGraph>;
+
+  /** Detected errors */
+  errors: AnalysisError[];
+
+  /** Primary graph for code generation */
+  primaryGraph?: DependencyGraph;
 }
