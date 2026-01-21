@@ -92,7 +92,7 @@ describe('LSP Diagnostics Integration', () => {
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     expect(diagnostics.length).toBeGreaterThan(0);
-    expect(diagnostics[0].messageText).toContain('[NeoSyringe] Missing binding');
+    expect(diagnostics[0].messageText).toContain('[NeoSyringe] Missing injection');
   });
 
   it('should not report error when dependency is in legacy container', () => {
@@ -257,8 +257,9 @@ describe('LSP Diagnostics Integration', () => {
     const length = dupeDiag!.length!;
     const highlightedText = sourceFile.text.substring(start, start + length);
 
-    // The highlighted text should contain the duplicate token registration
-    expect(highlightedText).toContain('token');
+    // The highlighted text should now contain just the token (improved precision)
+    // Previously it contained the full object { token: AuthService }
+    // Now it points directly to the AuthService token
     expect(highlightedText).toContain('AuthService');
 
     // Should NOT be highlighting the comment
