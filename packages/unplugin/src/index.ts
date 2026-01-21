@@ -160,6 +160,18 @@ export const neoSyringePlugin = createUnplugin(() => {
         const analyzer = new Analyzer(program);
         const graph = analyzer.extract();
 
+        // Check for analysis errors (duplicates, type mismatches) and fail the build
+        if (graph.errors && graph.errors.length > 0) {
+          const error = graph.errors[0]; // Report first error
+          const errorMessage = `[neosyringe-plugin] ${error.message}`;
+
+          // Create a custom error class for better error handling
+          const buildError = new Error(errorMessage) as Error & { file?: string };
+          buildError.name = error.type === 'duplicate' ? 'DuplicateRegistrationError' : 'TypeMismatchError';
+          buildError.file = id;
+          throw buildError;
+        }
+
         if (graph.nodes.size > 0 &&
             graph.defineBuilderConfigStart !== undefined &&
             graph.defineBuilderConfigEnd !== undefined &&
