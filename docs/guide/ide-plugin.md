@@ -4,12 +4,21 @@ Get real-time error detection in your editor.
 
 ## Overview
 
-The NeoSyringe LSP plugin integrates with TypeScript's language service to provide:
+The NeoSyringe LSP plugin integrates with TypeScript's language service to provide comprehensive real-time validation:
 
+- 🔴 **Missing dependency detection** - Shows ALL missing dependencies at once, not just the first one
 - 🔴 **Circular dependency detection** - Instant feedback when you create cycles
-- 🔴 **Missing binding detection** - Errors when dependencies aren't registered
-- 🔴 **Duplicate registration detection** - Warnings for conflicts
-- 💡 **Suggestions** - Helpful tips to fix issues
+- 🔴 **Duplicate registration detection** - Warnings for conflicts in parent containers or partialConfigs
+- 🎯 **Precise error positioning** - Errors point to the exact token, even for imported services
+- 💡 **Clean error messages** - Readable names without internal hash IDs
+
+### What's Validated
+
+The plugin validates dependencies across:
+- **defineBuilderConfig**: Local injections + parent containers + extends
+- **definePartialConfig**: Local injections only
+- **Cross-file imports**: Services imported from other files work correctly
+- **Constructor dependencies**: Automatically extracts required dependencies from class constructors
 
 ## Setup
 
@@ -62,6 +71,40 @@ After configuration, restart the TypeScript server:
 - **VS Code**: `Ctrl+Shift+P` → "TypeScript: Restart TS Server"
 - **WebStorm**: File → Invalidate Caches / Restart
 
+## Comprehensive Validation
+
+### All Errors Shown at Once
+
+Unlike build-time validation that stops at the first error, the LSP shows **all validation errors simultaneously**:
+
+```typescript
+export const container = defineBuilderConfig({
+  injections: [
+    { token: ServiceA },  // 🔴 Missing: ILogger
+    { token: ServiceB },  // 🔴 Missing: ILogger  
+    { token: ServiceC },  // 🔴 Missing: IDatabase
+  ]
+});
+```
+
+You'll see **3 errors in the Problems panel**, allowing you to fix all issues at once instead of one-by-one.
+
+### Validation Context
+
+The plugin validates dependencies based on context:
+
+**For `definePartialConfig`**:
+- Only checks local injections
+- Reports missing dependencies within the partial config
+
+**For `defineBuilderConfig`**:
+- Checks local injections
+- Validates against parent container (via `useContainer`)
+- Validates against extended partials (via `extends`)
+- Recursive validation through the entire dependency tree
+
+**Priority**: Parent container → extends → local injections (with `scoped: true` overriding everything)
+
 ## Detected Errors
 
 ### Circular Dependency
@@ -86,23 +129,52 @@ export const container = defineBuilderConfig({
 
 ### Missing Binding
 
+The LSP detects when a service requires dependencies that aren't registered. It checks:
+- Constructor parameters in classes
+- All services in the container (not just the first error)
+- Dependencies in parent containers and extends
+- Cross-file imports
+
 ```typescript
 interface ILogger {
   log(msg: string): void;
 }
 
+interface IEventBus {
+  publish(event: any): void;
+}
+
+class InMemoryEventBus implements IEventBus {
+  constructor(private logger: ILogger) {}  // Requires ILogger
+  publish(event: any) {}
+}
+
 class UserService {
-  constructor(private logger: ILogger) {}
+  constructor(
+    private logger: ILogger,      // Requires ILogger
+    private eventBus: IEventBus
+  ) {}
 }
 
 export const container = defineBuilderConfig({
   injections: [
-    { token: UserService }  // 🔴 ILogger not registered!
+    // ILogger is NOT registered
+    { token: useInterface<IEventBus>(), provider: InMemoryEventBus },  // 🔴 Error!
+    { token: UserService }  // 🔴 Error!
   ]
 });
-// Error: [NeoSyringe] Missing binding: 'UserService' depends on 'ILogger', 
-//        but no provider registered.
+// Error on line with IEventBus: 
+// [NeoSyringe] Missing binding: Service 'IEventBus' depends on 'ILogger', 
+//              but no provider was registered.
+//
+// Error on line with UserService:
+// [NeoSyringe] Missing binding: Service 'UserService' depends on 'ILogger',
+//              but no provider was registered.
 ```
+
+**All missing dependencies are shown at once**, helping you see the full picture.
+
+**Error positioning**: The error appears on the exact line where the problematic service is registered, making it easy to locate and fix.
 
 ### Duplicate Registration
 
@@ -123,9 +195,11 @@ export const child = defineBuilderConfig({
 //        in the parent container. Use 'scoped: true' to override intentionally.
 ```
 
-## Screenshots
+## Error Display
 
-### Error in Editor
+### Precise Error Positioning
+
+Errors appear on the **exact token** that has the problem, not on the entire object:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -135,28 +209,21 @@ export const child = defineBuilderConfig({
 │  export const container = defineBuilderConfig({                  │
 │    injections: [                                                 │
 │      { token: UserService }                                      │
-│               ~~~~~~~~~~~                                        │
+│               ~~~~~~~~~~~  ← Error here, not on entire line      │
 │               ▲                                                  │
-│               │                                                  │
 │  ┌────────────┴───────────────────────────────────────────────┐ │
-│  │ 🔴 [NeoSyringe] Missing binding: 'UserService' depends   │ │
-│  │    on 'ILogger', but no provider registered.               │ │
+│  │ 🔴 [NeoSyringe] Missing binding: Service 'UserService'    │ │
+│  │    depends on 'ILogger', but no provider was registered.   │ │
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Quick Fix Available
-
-```
-┌────────────────────────────────────────────┐
-│ Quick Fix                                   │
-├────────────────────────────────────────────┤
-│ 💡 Add missing injection for ILogger       │
-│ 💡 Mark as optional dependency             │
-│ 💡 Ignore this error                       │
-└────────────────────────────────────────────┘
-```
+**Key features**:
+- Error positioned on the `token: ServiceName` property
+- Works correctly even when services are imported from other files
+- Clean error messages with readable names (no internal hash IDs)
+- All errors shown simultaneously in the Problems panel
 
 ## Troubleshooting
 
@@ -180,24 +247,3 @@ If the plugin reports errors that shouldn't exist:
 1. Check that all imports are correct
 2. Ensure interface names match
 3. Try restarting the TypeScript server
-
-## Configuration
-
-Currently, the plugin uses default settings. Future versions may support:
-
-```json
-{
-  "compilerOptions": {
-    "plugins": [
-      {
-        "name": "@djodjonx/neosyringe-lsp",
-        "options": {
-          "strictMode": true,
-          "warnOnUnusedProviders": true
-        }
-      }
-    ]
-  }
-}
-```
-

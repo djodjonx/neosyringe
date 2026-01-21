@@ -31,10 +31,12 @@
 
 ## ✨ Features
 
+- **IDE Plugin** - Real-time validation with **all errors shown at once**, precise error positioning
 - **Use Interfaces as Tokens** - `useInterface<ILogger>()` without manual Symbols
 - **Zero Runtime Overhead** - Generated factory functions, no DI library shipped
-- **Compile-Time Safety** - Errors detected in your IDE, not at runtime
+- **Compile-Time Safety** - Missing dependencies, cycles, and duplicates detected in your IDE
 - **Pure Classes** - No decorators, no DI imports in your business code
+- **Comprehensive Validation** - Validates across parent containers, extends, and partialConfigs
 - **Gradual Migration** - Bridge existing containers (tsyringe, InversifyJS)
 - **CI Validation** - CLI to verify your dependency graph
 
@@ -143,7 +145,7 @@ module.exports = {
 
 ## 🛡️ IDE Support
 
-Add to `tsconfig.json` for real-time error detection:
+Get **comprehensive real-time validation** in your editor:
 
 ```json
 {
@@ -154,6 +156,15 @@ Add to `tsconfig.json` for real-time error detection:
   }
 }
 ```
+
+**What you get**:
+- ✅ **All missing dependencies** shown at once (not just the first error)
+- ✅ **Precise error positioning** on the exact token with the problem
+- ✅ **Clean error messages** without internal hash IDs
+- ✅ **Cross-file validation** works correctly with imported services
+- ✅ **Context-aware** validates across parent containers and extends
+
+See [IDE Plugin Guide](https://djodjonx.github.io/neosyringe/guide/ide-plugin) for setup details.
 
 ## 📄 License
 
