@@ -151,10 +151,13 @@ src/
 ├── container.ts          # ✅ Container configuration
 ├── services/
 │   ├── logger.ts         # Pure service
-│   ├── user.service.ts   # Pure service
-│   └── index.ts          # Barrel exports
+│   └── user.service.ts   # Pure service
 └── main.ts               # Application entry
 ```
+
+::: tip Tree Shaking
+Import services directly instead of using barrel exports (`index.ts`) for better tree shaking in client-side code.
+:::
 
 ## Development Mode
 
