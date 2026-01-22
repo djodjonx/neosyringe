@@ -1,5 +1,25 @@
 # @djodjonx/neosyringe-lsp
 
+## 0.2.0
+
+### Minor Changes
+
+- Add structured logging with LSPLogger class and performance optimizations.
+- Add comprehensive missing dependency detection.
+  The analyzer now detects when a service depends on tokens that are not registered in the container, considering the full container hierarchy (parent containers via useContainer and extended partials via extends).
+  All missing dependencies are reported at once with clean error messages showing readable token names without internal hash IDs.
+- Add comprehensive missing dependency detection with clean error messages.
+
+### Patch Changes
+
+- Fix IntelliJ IDEA and WebStorm compatibility with runtime capability detection.
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @djodjonx/neosyringe-core@1.1.0
+
 ## 0.1.0
 
 ### Minor Changes

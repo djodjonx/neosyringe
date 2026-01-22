@@ -1,5 +1,22 @@
 # @djodjonx/neosyringe-core
 
+## 1.1.0
+
+### Minor Changes
+
+- Add comprehensive missing dependency detection.
+  The analyzer now detects when a service depends on tokens that are not registered in the container, considering the full container hierarchy (parent containers via useContainer and extended partials via extends).
+  All missing dependencies are reported at once with clean error messages showing readable token names without internal hash IDs.
+- Add comprehensive missing dependency detection with clean error messages.
+- Support multiple defineBuilderConfig per file with unique container IDs.
+  Each container can have a unique `name` field that becomes its container ID. If no name is provided, a stable hash is generated. The generator creates unique class names like `NeoContainer_UserModule` or `NeoContainer_a1b2c3d4`.
+  Duplicate container names in the same file are detected and reported as errors during validation.
+- Support multiple defineBuilderConfig per file with unique container IDs.
+
+### Patch Changes
+
+- Add modular validator architecture with ConfigCollector, ErrorFormatter, and TokenResolver for better code organization and maintainability.
+
 ## 1.0.0
 
 ### Major Changes
