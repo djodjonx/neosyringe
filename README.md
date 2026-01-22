@@ -99,6 +99,7 @@ For complete documentation, visit **[djodjonx.github.io/neosyringe](https://djod
 | [Why NeoSyringe?](https://djodjonx.github.io/neosyringe/guide/why-neo-syringe) | Comparison with traditional DI |
 | [Injection Types](https://djodjonx.github.io/neosyringe/guide/injection-types) | Classes, interfaces, factories, primitives |
 | [Lifecycle](https://djodjonx.github.io/neosyringe/guide/lifecycle) | Singleton vs transient |
+| [Multiple Containers](https://djodjonx.github.io/neosyringe/guide/multi-containers) | Organize multiple containers per file |
 | [Scoped Injections](https://djodjonx.github.io/neosyringe/guide/scoped-injections) | Override parent container tokens |
 | [Parent Container](https://djodjonx.github.io/neosyringe/guide/parent-container) | SharedKernel architecture |
 | [Legacy Migration](https://djodjonx.github.io/neosyringe/guide/legacy-migration) | Bridge tsyringe, InversifyJS |

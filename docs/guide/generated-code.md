@@ -247,6 +247,79 @@ private create_IDatabase(): any {
 }
 ```
 
+## Multiple Containers per File
+
+When you declare multiple containers in the same file, each gets its own unique class:
+
+### Before
+
+```typescript
+// containers.ts
+export const userContainer = defineBuilderConfig({
+  name: 'UserModule',
+  injections: [{ token: UserService }]
+});
+
+export const productContainer = defineBuilderConfig({
+  name: 'ProductModule',
+  injections: [{ token: ProductService }]
+});
+```
+
+### After
+
+```typescript
+// containers.ts (after build)
+import * as Import_0 from './containers';
+
+// Class for UserModule
+class NeoContainer_UserModule {
+  private instances = new Map<any, any>();
+
+  private create_UserService(): any {
+    return new Import_0.UserService();
+  }
+
+  constructor(
+    private parent?: any,
+    private name: string = 'UserModule'
+  ) {}
+
+  public resolve(token: any): any {
+    // ... resolution logic
+  }
+}
+
+export const userContainer = new NeoContainer_UserModule();
+
+// Class for ProductModule
+class NeoContainer_ProductModule {
+  private instances = new Map<any, any>();
+
+  private create_ProductService(): any {
+    return new Import_0.ProductService();
+  }
+
+  constructor(
+    private parent?: any,
+    private name: string = 'ProductModule'
+  ) {}
+
+  public resolve(token: any): any {
+    // ... resolution logic
+  }
+}
+
+export const productContainer = new NeoContainer_ProductModule();
+```
+
+**Key points**:
+- Each container gets a unique class name: `NeoContainer_{name}`
+- The `name` field determines the class name
+- If no `name` field, a hash is used: `NeoContainer_a1b2c3d4`
+
+See [Multiple Containers](./multi-containers.md) for more details.
+
 ## Bundle Size Impact
 
 | Aspect | Traditional DI | NeoSyringe |
@@ -275,4 +348,3 @@ Each container also has a `name` for error messages:
 ```typescript
 // Error: [AppContainer] Service not found: UnknownToken
 ```
-
