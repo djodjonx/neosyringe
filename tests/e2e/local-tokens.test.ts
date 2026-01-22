@@ -6,13 +6,19 @@ import { GraphValidator } from '../../packages/core/src/generator/index';
 
 describe('E2E - Local Tokens Object', () => {
   const compileAndGenerate = (fileContent: string) => {
-    const fileName = 'local-tokens';
+    const fileName = 'local-tokens.ts';
+
+    const fullContent = `
+      import { defineBuilderConfig, definePartialConfig, useInterface, useProperty, declareContainerTokens } from '@djodjonx/neosyringe';
+      ${fileContent}
+    `;
+
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
     compilerHost.getSourceFile = (name, languageVersion) => {
       if (name === fileName) {
-        return ts.createSourceFile(fileName, fileContent, languageVersion);
+        return ts.createSourceFile(fileName, fullContent, languageVersion);
       }
       return originalGetSourceFile(name, languageVersion);
     };
@@ -32,7 +38,7 @@ describe('E2E - Local Tokens Object', () => {
     const code = compileAndGenerate(`
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
-        
+
         interface IRequestContext { id: string; }
         interface IOperationTracker { id: string; }
 
@@ -60,19 +66,18 @@ describe('E2E - Local Tokens Object', () => {
           ]
         });
     `);
-    
+
         expect(code).toContain('IRequestContext_');
-    
+
         expect(code).toContain('IOperationTracker_');
-    
+
         // Ensure factories are generated
-    
+
         expect(code).toMatch(/create_IRequestContext_/);
-    
+
         expect(code).toMatch(/create_IOperationTracker_/);
-    
+
       });
-    
+
     });
-    
-    
+

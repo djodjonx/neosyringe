@@ -19,13 +19,19 @@ describe('E2E - NeoSyringe with InversifyJS', () => {
   });
 
   const compileAndGenerate = (fileContent: string) => {
-    const fileName = 'e2e-inversify';
+    const fileName = 'e2e-inversify.ts';
+
+    const fullContent = `
+      import { defineBuilderConfig, definePartialConfig, useInterface, useProperty, declareContainerTokens } from '@djodjonx/neosyringe';
+      ${fileContent}
+    `;
+
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
     compilerHost.getSourceFile = (name, languageVersion) => {
       if (name === fileName) {
-        return ts.createSourceFile(fileName, fileContent, languageVersion);
+        return ts.createSourceFile(fileName, fullContent, languageVersion);
       }
       return originalGetSourceFile(name, languageVersion);
     };
@@ -44,8 +50,6 @@ describe('E2E - NeoSyringe with InversifyJS', () => {
   describe('Compilation with Inversify bridge', () => {
     it('should generate valid code bridging to Inversify', () => {
       const { code } = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function declareContainerTokens<T>(container: any): T { return container; }
 
         class DatabaseConnection {
           query(sql: string) { return []; }

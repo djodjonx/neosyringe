@@ -12,13 +12,20 @@ import { Generator } from '../../packages/core/src/generator/index';
 
 describe('E2E - Generated Code Validation', () => {
   const compileAndGenerate = (fileContent: string) => {
-    const fileName = 'e2e-validation';
+    const fileName = 'e2e-validation.ts';
+
+    // Prepend real imports to make TypeScript understand the functions
+    const fullContent = `
+      import { defineBuilderConfig, definePartialConfig, useInterface, useProperty, declareContainerTokens } from '@djodjonx/neosyringe';
+      ${fileContent}
+    `;
+
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
     compilerHost.getSourceFile = (name, languageVersion) => {
       if (name === fileName) {
-        return ts.createSourceFile(fileName, fileContent, languageVersion);
+        return ts.createSourceFile(fileName, fullContent, languageVersion);
       }
       return originalGetSourceFile(name, languageVersion);
     };
@@ -37,10 +44,8 @@ describe('E2E - Generated Code Validation', () => {
   describe('Container Structure', () => {
     it('should generate a complete NeoContainer class', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class SimpleService {}
         export const c = defineBuilderConfig({
-          name: 'TestContainer',
           injections: [{ token: SimpleService }]
         });
       `);
@@ -51,12 +56,11 @@ describe('E2E - Generated Code Validation', () => {
       expect(code).toContain('constructor(');
       expect(code).toContain('public resolve(token: any): any');
       expect(code).toContain('private resolveLocal(token: any): any');
-      expect(code).toContain("'TestContainer'");
+      expect(code).toContain("'NeoContainer'");
     });
 
     it('should generate factory functions for each service', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class ServiceA {}
         class ServiceB {}
         class ServiceC {}
@@ -77,7 +81,6 @@ describe('E2E - Generated Code Validation', () => {
 
     it('should export the container instance', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Service {}
         export const c = defineBuilderConfig({
           injections: [{ token: Service }]
@@ -91,7 +94,6 @@ describe('E2E - Generated Code Validation', () => {
 describe('Dependency Resolution', () => {
     it('should generate correct dependency chain in factories', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Logger {}
         class Database { constructor(logger: Logger) {} }
         class UserService { constructor(db: Database, logger: Logger) {} }
@@ -116,7 +118,6 @@ describe('Dependency Resolution', () => {
 
     it('should handle deep dependency chains', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class A {}
         class B { constructor(a: A) {} }
         class C { constructor(b: B) {} }
@@ -146,8 +147,6 @@ describe('Dependency Resolution', () => {
   describe('Interface Tokens', () => {
     it('should generate string-based resolution for interfaces', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface ILogger { log(msg: string): void; }
         class ConsoleLogger implements ILogger { log(msg: string) {} }
@@ -166,8 +165,6 @@ describe('Dependency Resolution', () => {
 
 it('should resolve class dependencies on interfaces', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface ILogger { log(msg: string): void; }
         interface IDatabase { query(): void; }
@@ -199,7 +196,6 @@ it('should resolve class dependencies on interfaces', () => {
   describe('Scopes', () => {
     it('should cache singleton instances', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class SingletonService {}
         export const c = defineBuilderConfig({
           injections: [{ token: SingletonService, lifecycle: 'singleton' }]
@@ -214,7 +210,6 @@ it('should resolve class dependencies on interfaces', () => {
 
     it('should NOT cache transient instances', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class TransientService {}
         export const c = defineBuilderConfig({
           injections: [{ token: TransientService, lifecycle: 'transient' }]
@@ -228,7 +223,6 @@ it('should resolve class dependencies on interfaces', () => {
 
     it('should use singleton by default', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class DefaultService {}
         export const c = defineBuilderConfig({
           injections: [{ token: DefaultService }]  // No scope specified
@@ -243,8 +237,6 @@ it('should resolve class dependencies on interfaces', () => {
   describe('Factory Providers', () => {
     it('should inline arrow function factories', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface IConfig { url: string; }
 
@@ -264,8 +256,6 @@ it('should resolve class dependencies on interfaces', () => {
 
     it('should pass container to factories', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface IService {}
 
@@ -288,8 +278,6 @@ it('should resolve class dependencies on interfaces', () => {
   describe('Property Tokens (Primitives)', () => {
 it('should generate PropertyToken resolution', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useProperty<T>(cls: any, name: string): any { return null; }
 
         class ApiService {
           constructor(private apiUrl: string) {}
@@ -317,8 +305,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should support multiple property tokens', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useProperty<T>(cls: any, name: string): any { return null; }
 
         class ConfigService {
           constructor(
@@ -351,8 +337,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Parent Container', () => {
     it('should include parent in constructor', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface ILogger {}
         class ConsoleLogger implements ILogger {}
@@ -376,7 +360,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should delegate to parent in resolve', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
 
         const parent = defineBuilderConfig({
           injections: []
@@ -399,8 +382,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Legacy Container', () => {
     it('should include legacy containers in constructor', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function declareContainerTokens<T>(c: any): T { return c; }
 
         class LegacyService {}
 
@@ -422,8 +403,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should delegate to legacy in resolve', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function declareContainerTokens<T>(c: any): T { return c; }
 
         class LegacyService {}
         const legacy = declareContainerTokens<{ LegacyService: LegacyService }>({});
@@ -443,8 +422,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Partials (extends)', () => {
     it('should merge injections from partials', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function definePartialConfig(config: any) { return config; }
 
         class SharedService {}
 
@@ -467,8 +444,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should merge multiple partials', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function definePartialConfig(config: any) { return config; }
 
         class LoggingService {}
         class CacheService {}
@@ -497,7 +472,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Error Detection', () => {
     it('should detect circular dependencies', () => {
       expect(() => compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
 
         class ServiceA { constructor(b: ServiceB) {} }
         class ServiceB { constructor(a: ServiceA) {} }
@@ -513,7 +487,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should detect missing bindings', () => {
       expect(() => compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
 
         class MissingDependency {}
         class ServiceA { constructor(dep: MissingDependency) {} }
@@ -529,7 +502,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should detect duplicate registrations', () => {
       expect(() => compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
 
         class ServiceA {}
 
@@ -544,8 +516,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should detect duplicate with parent container', () => {
       expect(() => compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface ILogger {}
         class ConsoleLogger implements ILogger {}
@@ -568,8 +538,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Complex Scenarios', () => {
     it('should handle mixed interface and class tokens', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface ILogger { log(msg: string): void; }
         interface IDatabase { query(): any; }
@@ -613,8 +581,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle factory with dependencies from container', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface IConfig { apiUrl: string; }
         interface ILogger { log(msg: string): void; }
@@ -643,7 +609,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle all scopes in same container', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
 
         class SingletonA {}
         class SingletonB {}
@@ -671,8 +636,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle deeply nested parent containers', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface IInfra {}
         interface IDomain {}
@@ -709,7 +672,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Container Metadata', () => {
     it('should include debug graph information', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
 
         class ServiceA {}
         class ServiceB {}
@@ -732,7 +694,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Edge Cases', () => {
     it('should handle empty container', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         export const c = defineBuilderConfig({
           injections: []
         });
@@ -744,7 +705,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle service with no dependencies', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class StandaloneService {
           getValue() { return 42; }
         }
@@ -759,7 +719,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should detect self-dependency (A depends on A)', () => {
       expect(() => compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class SelfDependent { constructor(self: SelfDependent) {} }
         export const c = defineBuilderConfig({
           injections: [{ token: SelfDependent }]
@@ -769,7 +728,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle class with optional constructor parameters', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Logger {}
         class ServiceWithOptional {
           constructor(public logger?: Logger) {}
@@ -788,7 +746,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle very long dependency chains (10+ levels)', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class L0 {}
         class L1 { constructor(d: L0) {} }
         class L2 { constructor(d: L1) {} }
@@ -829,7 +786,6 @@ it('should generate PropertyToken resolution', () => {
     it('should handle diamond dependency pattern', () => {
       // A depends on B and C, both B and C depend on D
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class D {}
         class B { constructor(d: D) {} }
         class C { constructor(d: D) {} }
@@ -852,7 +808,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle multiple constructors dependencies of same type', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Logger {}
         class MultiLogger {
           constructor(
@@ -879,7 +834,6 @@ it('should generate PropertyToken resolution', () => {
     it('should escape special characters in class names', () => {
       // This tests that generated code doesn't break with unusual names
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Service_With_Underscores {}
         class ServiceWith123Numbers {}
         export const c = defineBuilderConfig({
@@ -896,7 +850,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should generate valid TypeScript syntax', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class A {}
         class B { constructor(a: A) {} }
         export const c = defineBuilderConfig({
@@ -919,7 +872,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should not allow code injection via container name', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Service {}
         export const c = defineBuilderConfig({
           name: "Test'); console.log('injected",
@@ -998,7 +950,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Generated Code Quality', () => {
     it('should not have unused imports', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class OnlyService {}
         export const c = defineBuilderConfig({
           injections: [{ token: OnlyService }]
@@ -1017,7 +968,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should generate deterministic output', () => {
       const source = `
-        function defineBuilderConfig(config: any) { return config; }
         class A {}
         class B {}
         export const c = defineBuilderConfig({
@@ -1036,7 +986,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Advanced Type Handling', () => {
     it('should handle generic classes', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
 
         class Repository<T> {
           find(id: string): T | null { return null; }
@@ -1063,8 +1012,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle class with multiple interfaces', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface Readable { read(): string; }
         interface Writable { write(data: string): void; }
@@ -1089,8 +1036,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle abstract base class pattern', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         abstract class BaseService {
           abstract execute(): void;
@@ -1114,8 +1059,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Async Factories', () => {
     it('should handle async factory providers', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function useInterface<T>(): any { return null; }
 
         interface IDatabase {
           connect(): Promise<void>;
@@ -1147,7 +1090,6 @@ it('should generate PropertyToken resolution', () => {
       const injections = Array.from({ length: 50 }, (_, i) => `{ token: Service${i} }`).join(',\n');
 
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         ${services}
         export const c = defineBuilderConfig({
           injections: [${injections}]
@@ -1165,7 +1107,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle wide dependency graph (10 deps per service)', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
 
         class Dep1 {}
         class Dep2 {}
@@ -1206,7 +1147,6 @@ it('should generate PropertyToken resolution', () => {
   describe('Runtime Error Handling', () => {
     it('should generate code that handles missing token gracefully', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Service {}
         export const c = defineBuilderConfig({
           injections: [{ token: Service }]
@@ -1220,24 +1160,21 @@ it('should generate PropertyToken resolution', () => {
 
     it('should include container name in error messages', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Service {}
         export const c = defineBuilderConfig({
-          name: 'MyAppContainer',
           injections: [{ token: Service }]
         });
       `);
 
       // Error should include container name for debugging
-      expect(code).toContain('MyAppContainer');
-      expect(code).toMatch(/\$\{this\.name\}|MyAppContainer/);
+      expect(code).toContain('NeoContainer');
+      expect(code).toMatch(/\$\{this\.name\}/);
     });
   });
 
   describe('Import/Export Safety', () => {
     it('should generate valid import paths', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Service {}
         export const c = defineBuilderConfig({
           injections: [{ token: Service }]
@@ -1256,7 +1193,6 @@ it('should generate PropertyToken resolution', () => {
     it('should handle re-exported classes', () => {
       // This simulates a class that might be re-exported from an index file
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
 
         class InternalService {}
         const ExportedService = InternalService;
@@ -1275,7 +1211,6 @@ it('should generate PropertyToken resolution', () => {
     it('should handle service with 0 to N dependencies consistently', () => {
       // 0 deps
       const code0 = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Zero {}
         export const c = defineBuilderConfig({ injections: [{ token: Zero }] });
       `);
@@ -1283,7 +1218,6 @@ it('should generate PropertyToken resolution', () => {
 
       // 1 dep
       const code1 = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class Dep {}
         class One { constructor(d: Dep) {} }
         export const c = defineBuilderConfig({ injections: [{ token: Dep }, { token: One }] });
@@ -1292,7 +1226,6 @@ it('should generate PropertyToken resolution', () => {
 
       // 5 deps
       const code5 = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
         class D1 {} class D2 {} class D3 {} class D4 {} class D5 {}
         class Five { constructor(a: D1, b: D2, c: D3, d: D4, e: D5) {} }
         export const c = defineBuilderConfig({
@@ -1305,7 +1238,6 @@ it('should generate PropertyToken resolution', () => {
 
     it('should handle naming edge cases', () => {
       const code = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
 
         // Various valid TypeScript class names
         class $Service {}

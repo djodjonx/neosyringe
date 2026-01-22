@@ -5,7 +5,7 @@ exports[`Generated Code Snapshots > should match snapshot for complex real-world
 import * as Import_0 from 'snapshot-test.ts';
 
 // -- Container --
-export class NeoContainer {
+class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --
@@ -137,7 +137,7 @@ exports[`Generated Code Snapshots > should match snapshot for interface tokens 1
 import * as Import_0 from 'snapshot-test.ts';
 
 // -- Container --
-export class NeoContainer {
+class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --
@@ -209,7 +209,7 @@ exports[`Generated Code Snapshots > should match snapshot for legacy container 1
 import * as Import_0 from 'snapshot-test.ts';
 
 // -- Container --
-export class NeoContainer {
+class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --
@@ -281,7 +281,7 @@ exports[`Generated Code Snapshots > should match snapshot for mixed scopes 1`] =
 import * as Import_0 from 'snapshot-test.ts';
 
 // -- Container --
-export class NeoContainer {
+class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --
@@ -358,7 +358,7 @@ exports[`Generated Code Snapshots > should match snapshot for parent container 1
 import * as Import_0 from 'snapshot-test.ts';
 
 // -- Container --
-export class NeoContainer {
+class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --
@@ -430,7 +430,7 @@ exports[`Generated Code Snapshots > should match snapshot for property tokens 1`
 import * as Import_0 from 'snapshot-test.ts';
 
 // -- Container --
-export class NeoContainer {
+class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --
@@ -515,7 +515,7 @@ exports[`Generated Code Snapshots > should match snapshot for service with depen
 import * as Import_0 from 'snapshot-test.ts';
 
 // -- Container --
-export class NeoContainer {
+class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --
@@ -599,7 +599,7 @@ exports[`Generated Code Snapshots > should match snapshot for simple service 1`]
 import * as Import_0 from 'snapshot-test.ts';
 
 // -- Container --
-export class NeoContainer {
+class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --

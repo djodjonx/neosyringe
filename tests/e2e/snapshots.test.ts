@@ -12,13 +12,19 @@ import { Generator } from '../../packages/core/src/generator/index';
 
 describe('Generated Code Snapshots', () => {
   const generateCode = (fileContent: string) => {
-    const fileName = 'snapshot-test';
+    const fileName = 'snapshot-test.ts';
+
+    const fullContent = `
+      import { defineBuilderConfig, definePartialConfig, useInterface, useProperty, declareContainerTokens } from '@djodjonx/neosyringe';
+      ${fileContent}
+    `;
+
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
     compilerHost.getSourceFile = (name, languageVersion) => {
       if (name === fileName) {
-        return ts.createSourceFile(fileName, fileContent, languageVersion);
+        return ts.createSourceFile(fileName, fullContent, languageVersion);
       }
       return originalGetSourceFile(name, languageVersion);
     };

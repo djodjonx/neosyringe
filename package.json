@@ -6,6 +6,7 @@
   "scripts": {
     "build": "pnpm --filter './packages/**' run build",
     "test": "pnpm -r run test",
+    "test:e2e": "vitest run tests/e2e",
     "lint": "oxlint .",
     "typecheck": "tsc --noEmit",
     "test:coverage": "pnpm -r run test --coverage",

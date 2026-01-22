@@ -12,13 +12,19 @@ import { Generator } from '../../packages/core/src/generator/index';
 
 describe('E2E - NeoSyringe Standalone', () => {
   const compileAndGenerate = (fileContent: string) => {
-    const fileName = 'e2e-test';
+    const fileName = 'e2e-test.ts';
+
+    const fullContent = `
+      import { defineBuilderConfig, definePartialConfig, useInterface, useProperty, declareContainerTokens } from '@djodjonx/neosyringe';
+      ${fileContent}
+    `;
+
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
     compilerHost.getSourceFile = (name, languageVersion) => {
       if (name === fileName) {
-        return ts.createSourceFile(fileName, fileContent, languageVersion);
+        return ts.createSourceFile(fileName, fullContent, languageVersion);
       }
       return originalGetSourceFile(name, languageVersion);
     };

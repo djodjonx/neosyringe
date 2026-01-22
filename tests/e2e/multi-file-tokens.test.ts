@@ -7,12 +7,21 @@ import { GraphValidator } from '../../packages/core/src/generator/index';
 
 describe('E2E - Multi-File Tokens', () => {
   const compileAndGenerateMultiFile = (files: Record<string, string>) => {
+    // Prepend imports to each file
+    const filesWithImports: Record<string, string> = {};
+    for (const [filename, content] of Object.entries(files)) {
+      filesWithImports[filename] = `
+import { defineBuilderConfig, definePartialConfig, useInterface, useProperty, declareContainerTokens } from '@djodjonx/neosyringe';
+${content}
+      `;
+    }
+
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
     compilerHost.getSourceFile = (name, languageVersion) => {
-      if (files[name]) {
-        return ts.createSourceFile(name, files[name], languageVersion);
+      if (filesWithImports[name]) {
+        return ts.createSourceFile(name, filesWithImports[name], languageVersion);
       }
       return originalGetSourceFile(name, languageVersion);
     };
@@ -24,7 +33,7 @@ describe('E2E - Multi-File Tokens', () => {
             if (moduleName.startsWith('.')) {
                 // assume flat structure for simplicity
                 const resolvedName = moduleName.replace('./', '') + '.ts';
-                if (files[resolvedName]) {
+                if (filesWithImports[resolvedName]) {
                     return {
                         resolvedFileName: resolvedName,
                         isExternalLibraryImport: false,
@@ -49,16 +58,14 @@ describe('E2E - Multi-File Tokens', () => {
 
   it('should resolve tokens exported from another file', () => {
     const files = {
-      'tokens': `
-        export function useInterface<T>(): any { return null; }
+      'tokens.ts': `
         export interface ILogger { log(msg: string): void; }
         export const TOKENS = {
           logger: useInterface<ILogger>()
         };
       `,
-      'container': `
+      'container.ts': `
         import { TOKENS, ILogger } from './tokens';
-        function defineBuilderConfig(config: any) { return config; }
 
         class ConsoleLogger implements ILogger { log(msg: string) {} }
 
@@ -79,14 +86,12 @@ describe('E2E - Multi-File Tokens', () => {
 
   it('should resolve tokens from a partial config in another file', () => {
       const files = {
-          'tokens': `
-            export function useInterface<T>(): any { return null; }
+          'tokens.ts': `
             export interface IService {}
             export const SERVICE_TOKEN = useInterface<IService>();
           `,
-          'partial': `
+          'partial.ts': `
             import { SERVICE_TOKEN, IService } from './tokens';
-            function definePartialConfig(config: any) { return config; }
 
             class ServiceImpl implements IService {}
 
@@ -96,9 +101,8 @@ describe('E2E - Multi-File Tokens', () => {
                 ]
             });
           `,
-          'container': `
+          'container.ts': `
             import { partial } from './partial';
-            function defineBuilderConfig(config: any) { return config; }
 
             export const container = defineBuilderConfig({
                 extends: [partial]

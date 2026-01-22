@@ -20,13 +20,19 @@ describe('E2E - NeoSyringe with tsyringe', () => {
   });
 
   const compileAndGenerate = (fileContent: string) => {
-    const fileName = 'e2e-tsyringe';
+    const fileName = 'e2e-tsyringe.ts';
+
+    const fullContent = `
+      import { defineBuilderConfig, definePartialConfig, useInterface, useProperty, declareContainerTokens } from '@djodjonx/neosyringe';
+      ${fileContent}
+    `;
+
     const compilerHost = ts.createCompilerHost({});
     const originalGetSourceFile = compilerHost.getSourceFile;
 
     compilerHost.getSourceFile = (name, languageVersion) => {
       if (name === fileName) {
-        return ts.createSourceFile(fileName, fileContent, languageVersion);
+        return ts.createSourceFile(fileName, fullContent, languageVersion);
       }
       return originalGetSourceFile(name, languageVersion);
     };
@@ -45,8 +51,6 @@ describe('E2E - NeoSyringe with tsyringe', () => {
   describe('Compilation with tsyringe bridge', () => {
     it('should generate valid code bridging to tsyringe', () => {
       const { code } = compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function declareContainerTokens<T>(container: any): T { return container; }
 
         class AuthService {
           validateToken(token: string): boolean { return true; }
@@ -87,8 +91,6 @@ describe('E2E - NeoSyringe with tsyringe', () => {
 
     it('should detect missing legacy token declaration', () => {
       expect(() => compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function declareContainerTokens<T>(container: any): T { return container; }
 
         class AuthService {}
         class MissingService {}  // Not in legacy!
@@ -115,8 +117,6 @@ describe('E2E - NeoSyringe with tsyringe', () => {
 
     it('should prevent duplicate registration of tsyringe tokens', () => {
       expect(() => compileAndGenerate(`
-        function defineBuilderConfig(config: any) { return config; }
-        function declareContainerTokens<T>(container: any): T { return container; }
 
         class AuthService {}
         class MyAuthService {}
