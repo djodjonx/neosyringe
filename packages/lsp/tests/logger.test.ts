@@ -225,4 +225,69 @@ describe('LSPLogger', () => {
       expect(mockLogger.info.mock.calls[3][0]).toContain('ERROR');
     });
   });
+
+  describe('IntelliJ IDEA compatibility', () => {
+    it('should work without loggingEnabled method (IntelliJ)', () => {
+      const mockLogger = {
+        info: vi.fn(),
+        // No loggingEnabled method
+      };
+
+      const logger = new LSPLogger(mockLogger as any);
+
+      // Should still log (fallback to assuming enabled)
+      logger.info('test message');
+
+      expect(mockLogger.info).toHaveBeenCalledWith('[NeoSyringe INFO] test message');
+    });
+
+    it('should work without startGroup/endGroup methods (IntelliJ)', () => {
+      const mockLogger = {
+        info: vi.fn(),
+        // No startGroup/endGroup methods
+      };
+
+      const logger = new LSPLogger(mockLogger as any);
+
+      // Should not crash, just log the group name
+      logger.startGroup('Test Group');
+      logger.info('inside group');
+      logger.endGroup();
+
+      expect(mockLogger.info).toHaveBeenCalledWith('[NeoSyringe INFO] === Test Group ===');
+      expect(mockLogger.info).toHaveBeenCalledWith('[NeoSyringe INFO] inside group');
+      expect(mockLogger.info).toHaveBeenCalledTimes(2);
+    });
+
+    it('should gracefully handle minimal logger (IntelliJ)', () => {
+      const mockLogger = {
+        info: vi.fn(),
+        // Only info method, nothing else
+      };
+
+      const logger = new LSPLogger(mockLogger as any);
+
+      expect(() => {
+        logger.verbose('verbose');
+        logger.info('info');
+        logger.warn('warn');
+        logger.error('error');
+        logger.startGroup('group');
+        logger.endGroup();
+        logger.lazyInfo(() => 'lazy');
+      }).not.toThrow();
+
+      expect(mockLogger.info).toHaveBeenCalled();
+    });
+
+    it('should report enabled as true with minimal logger', () => {
+      const mockLogger = {
+        info: vi.fn(),
+        // No loggingEnabled
+      };
+
+      const logger = new LSPLogger(mockLogger as any);
+      expect(logger.enabled).toBe(true);
+    });
+  });
 });

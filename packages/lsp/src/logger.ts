@@ -16,6 +16,9 @@ export enum LogLevel {
  * Provides structured logging with multiple levels and performance optimizations.
  * All logging is automatically disabled when TypeScript Server logging is off.
  *
+ * Compatible with VS Code, IntelliJ IDEA, WebStorm, and other TypeScript IDEs.
+ * Gracefully degrades features not supported by the IDE (e.g., log groups).
+ *
  * @example
  * ```ts
  * const logger = new LSPLogger(info.project?.projectService?.logger);
@@ -27,7 +30,7 @@ export enum LogLevel {
  * // Lazy evaluation for expensive operations
  * logger.lazyVerbose(() => `Details: ${JSON.stringify(data)}`);
  *
- * // Group related logs
+ * // Group related logs (no-op in IDEs without group support)
  * logger.startGroup('Analysis');
  * logger.info('Step 1');
  * logger.info('Step 2');
@@ -35,13 +38,27 @@ export enum LogLevel {
  * ```
  */
 export class LSPLogger {
-  constructor(private readonly logger?: ts.server.Logger) {}
+  private readonly hasGroupSupport: boolean;
+  private readonly hasLoggingEnabledSupport: boolean;
+
+  constructor(private readonly logger?: ts.server.Logger) {
+    this.hasGroupSupport = typeof this.logger?.startGroup === 'function' &&
+                           typeof this.logger?.endGroup === 'function';
+    this.hasLoggingEnabledSupport = typeof this.logger?.loggingEnabled === 'function';
+  }
 
   /**
    * Check if logging is currently enabled in TypeScript Server.
+   * Falls back to checking if logger exists for IDEs without loggingEnabled support.
    */
   private shouldLog(): boolean {
-    return this.logger?.loggingEnabled() ?? false;
+    if (!this.logger) return false;
+
+    if (this.hasLoggingEnabledSupport) {
+      return this.logger.loggingEnabled();
+    }
+
+    return true;
   }
 
   /**
@@ -116,6 +133,8 @@ export class LSPLogger {
    * Start a log group for related operations.
    * Groups help organize logs for complex analyses.
    *
+   * Note: Gracefully degrades to a simple log message in IDEs without group support (e.g., IntelliJ).
+   *
    * @param name - Name of the group
    *
    * @example
@@ -128,15 +147,23 @@ export class LSPLogger {
    */
   startGroup(name: string): void {
     if (!this.shouldLog()) return;
-    this.logger!.startGroup();
+
+    if (this.hasGroupSupport) {
+      this.logger!.startGroup();
+    }
+
     this.info(`=== ${name} ===`);
   }
 
   /**
    * End the current log group.
+   *
+   * Note: No-op in IDEs without group support (e.g., IntelliJ).
    */
   endGroup(): void {
-    if (this.shouldLog()) {
+    if (!this.shouldLog()) return;
+
+    if (this.hasGroupSupport) {
       this.logger!.endGroup();
     }
   }

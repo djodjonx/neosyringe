@@ -195,7 +195,11 @@ function init(modules: { typescript: typeof import('typescript') }) {
       } catch (e: unknown) {
         logger.error(`Unexpected error: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
-        logger.endGroup();
+        try {
+          logger.endGroup();
+        } catch {
+          // Ignore logger errors for IDE compatibility
+        }
       }
 
       return prior;
