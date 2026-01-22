@@ -57,10 +57,7 @@ describe('LSP Diagnostics Integration', () => {
       getProgram: () => program,
     };
 
-    const proxy = pluginFactory.create({
-        languageService: languageServiceMock,
-        project: { projectService: { logger: { info: () => {}, loggingEnabled: () => false } } }
-    } as any);
+    const proxy = createPluginProxy(languageServiceMock);
 
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
