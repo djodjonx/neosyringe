@@ -1,0 +1,159 @@
+import type * as ts from 'typescript';
+
+/**
+ * Log levels for the LSP logger.
+ */
+export enum LogLevel {
+  VERBOSE = 'VERBOSE',
+  INFO = 'INFO',
+  WARN = 'WARN',
+  ERROR = 'ERROR',
+}
+
+/**
+ * Logger for TypeScript Language Service Plugin.
+ *
+ * Provides structured logging with multiple levels and performance optimizations.
+ * All logging is automatically disabled when TypeScript Server logging is off.
+ *
+ * @example
+ * ```ts
+ * const logger = new LSPLogger(info.project?.projectService?.logger);
+ *
+ * logger.info('Running analysis');
+ * logger.warn('Potential issue detected');
+ * logger.error('Validation failed');
+ *
+ * // Lazy evaluation for expensive operations
+ * logger.lazyVerbose(() => `Details: ${JSON.stringify(data)}`);
+ *
+ * // Group related logs
+ * logger.startGroup('Analysis');
+ * logger.info('Step 1');
+ * logger.info('Step 2');
+ * logger.endGroup();
+ * ```
+ */
+export class LSPLogger {
+  constructor(private readonly logger?: ts.server.Logger) {}
+
+  /**
+   * Check if logging is currently enabled in TypeScript Server.
+   */
+  private shouldLog(): boolean {
+    return this.logger?.loggingEnabled() ?? false;
+  }
+
+  /**
+   * Internal log method with level formatting.
+   */
+  private log(level: LogLevel, msg: string): void {
+    if (!this.shouldLog()) return;
+
+    this.logger!.info(`[NeoSyringe ${level}] ${msg}`);
+  }
+
+  /**
+   * Log verbose diagnostic information.
+   * Use for detailed internal operations.
+   */
+  verbose(msg: string): void {
+    this.log(LogLevel.VERBOSE, msg);
+  }
+
+  /**
+   * Log general information.
+   * Use for analysis progress and results.
+   */
+  info(msg: string): void {
+    this.log(LogLevel.INFO, msg);
+  }
+
+  /**
+   * Log warnings for non-critical issues.
+   * Use for fallbacks or potential problems.
+   */
+  warn(msg: string): void {
+    this.log(LogLevel.WARN, msg);
+  }
+
+  /**
+   * Log errors for critical failures.
+   * Use for exceptions and validation failures.
+   */
+  error(msg: string): void {
+    this.log(LogLevel.ERROR, msg);
+  }
+
+  /**
+   * Log with lazy message evaluation.
+   * Message factory is only called if logging is enabled.
+   *
+   * @param msgFactory - Function that returns the log message
+   *
+   * @example
+   * ```ts
+   * // Expensive operation only runs if logging is enabled
+   * logger.lazyInfo(() => `Config: ${JSON.stringify(complexObject)}`);
+   * ```
+   */
+  lazyInfo(msgFactory: () => string): void {
+    if (!this.shouldLog()) return;
+    this.info(msgFactory());
+  }
+
+  /**
+   * Log verbose message with lazy evaluation.
+   *
+   * @param msgFactory - Function that returns the log message
+   */
+  lazyVerbose(msgFactory: () => string): void {
+    if (!this.shouldLog()) return;
+    this.verbose(msgFactory());
+  }
+
+  /**
+   * Start a log group for related operations.
+   * Groups help organize logs for complex analyses.
+   *
+   * @param name - Name of the group
+   *
+   * @example
+   * ```ts
+   * logger.startGroup('Container Analysis');
+   * logger.info('Found 3 containers');
+   * logger.info('Validating dependencies');
+   * logger.endGroup();
+   * ```
+   */
+  startGroup(name: string): void {
+    if (!this.shouldLog()) return;
+    this.logger!.startGroup();
+    this.info(`=== ${name} ===`);
+  }
+
+  /**
+   * End the current log group.
+   */
+  endGroup(): void {
+    if (this.shouldLog()) {
+      this.logger!.endGroup();
+    }
+  }
+
+  /**
+   * Check if logging is currently enabled.
+   * Useful for conditional expensive operations.
+   *
+   * @example
+   * ```ts
+   * if (logger.enabled) {
+   *   const details = expensiveAnalysis();
+   *   logger.info(`Details: ${details}`);
+   * }
+   * ```
+   */
+  get enabled(): boolean {
+    return this.shouldLog();
+  }
+}

@@ -1,6 +1,7 @@
 import * as ts from 'typescript';
 import { Analyzer, DuplicateRegistrationError, TypeMismatchError, type AnalysisErrorType } from '../../core/src/analyzer/index';
 import { GraphValidator } from '../../core/src/generator/index';
+import { LSPLogger } from './logger';
 
 /**
  * Maps error types to diagnostic codes.
@@ -27,6 +28,8 @@ function init(modules: { typescript: typeof import('typescript') }) {
   const ts = modules.typescript;
 
   function create(info: ts.server.PluginCreateInfo) {
+    const logger = new LSPLogger(info.project?.projectService?.logger);
+
     const proxy: ts.LanguageService = Object.create(null);
 
     for (const k of Object.keys(info.languageService) as Array<keyof ts.LanguageService>) {
@@ -38,11 +41,6 @@ function init(modules: { typescript: typeof import('typescript') }) {
     proxy.getSemanticDiagnostics = (fileName) => {
       const prior = info.languageService.getSemanticDiagnostics(fileName);
 
-      const log = (msg: string) => {
-        if (info.project?.projectService?.logger) {
-          info.project.projectService.logger.info(`[NeoSyringe LSP] ${msg}`);
-        }
-      };
 
       try {
         const program = info.languageService.getProgram();
@@ -57,14 +55,14 @@ function init(modules: { typescript: typeof import('typescript') }) {
 
         if (!hasBuilderConfig && !hasPartialConfig) return prior;
 
-        log(`Running analysis on: ${fileName}`);
+        logger.startGroup(`Analysis of ${fileName}`);
+        logger.info(`Found defineBuilderConfig: ${hasBuilderConfig}, definePartialConfig: ${hasPartialConfig}`);
 
         const analyzer = new Analyzer(program);
 
         try {
-          // Use the new modular extractForFile for isolated validation
           const result = analyzer.extractForFile(fileName);
-          log(`Analysis: ${result.configs.size} configs, ${result.errors.length} errors`);
+          logger.info(`Extracted ${result.configs.size} config(s), ${result.errors.length} error(s)`);
 
           // Add errors as diagnostics
           for (const error of result.errors) {
@@ -98,7 +96,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
                 start = 0;
                 length = 1;
               }
-              log(`Warning: Node from different file, using fallback position for: ${error.message}`);
+              logger.warn(`Node from different file, using fallback position`);
             }
 
             prior.push({
@@ -167,7 +165,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
                 code,
               });
 
-              log(`Graph validation error: ${validationError.type} on ${validationError.tokenId}`);
+              logger.verbose(`Graph validation: ${validationError.type} on ${validationError.tokenId}`);
             }
           }
         } catch (e: unknown) {
@@ -191,11 +189,13 @@ function init(modules: { typescript: typeof import('typescript') }) {
               code: 9997,
             });
           } else if (e instanceof Error) {
-            log(`Analyzer exception: ${e.message}`);
+            logger.error(`Analyzer exception: ${e.message}`);
           }
         }
       } catch (e: unknown) {
-        log(`Unexpected error: ${e instanceof Error ? e.message : String(e)}`);
+        logger.error(`Unexpected error: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        logger.endGroup();
       }
 
       return prior;

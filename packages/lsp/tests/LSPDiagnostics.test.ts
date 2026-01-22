@@ -7,6 +7,20 @@ describe('LSP Diagnostics Integration', () => {
   const modules = { typescript: ts };
   const pluginFactory = init(modules);
 
+  const createMockLogger = () => ({
+    info: () => {},
+    loggingEnabled: () => false,
+    startGroup: () => {},
+    endGroup: () => {},
+  });
+
+  const createPluginProxy = (languageService: any) => {
+    return pluginFactory.create({
+      languageService,
+      project: { projectService: { logger: createMockLogger() } }
+    } as any);
+  };
+
   it('should report circular dependency diagnostics', () => {
     const fileName = path.resolve('/tmp/cycle-test.ts');
     const fileContent = `
@@ -45,7 +59,7 @@ describe('LSP Diagnostics Integration', () => {
 
     const proxy = pluginFactory.create({
         languageService: languageServiceMock,
-        project: { projectService: { logger: { info: () => {} } } }
+        project: { projectService: { logger: { info: () => {}, loggingEnabled: () => false } } }
     } as any);
 
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
@@ -88,7 +102,7 @@ describe('LSP Diagnostics Integration', () => {
       getProgram: () => program,
     };
 
-    const proxy = pluginFactory.create({ languageService: languageServiceMock } as any);
+    const proxy = createPluginProxy(languageServiceMock);
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     expect(diagnostics.length).toBeGreaterThan(0);
@@ -137,7 +151,7 @@ describe('LSP Diagnostics Integration', () => {
       getProgram: () => program,
     };
 
-    const proxy = pluginFactory.create({ languageService: languageServiceMock } as any);
+    const proxy = createPluginProxy(languageServiceMock);
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     // Should have NO errors - AuthService is in legacy container
@@ -189,7 +203,7 @@ describe('LSP Diagnostics Integration', () => {
       getProgram: () => program,
     };
 
-    const proxy = pluginFactory.create({ languageService: languageServiceMock } as any);
+    const proxy = createPluginProxy(languageServiceMock);
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     expect(diagnostics.length).toBeGreaterThan(0);
@@ -235,7 +249,7 @@ describe('LSP Diagnostics Integration', () => {
       getProgram: () => program,
     };
 
-    const proxy = pluginFactory.create({ languageService: languageServiceMock } as any);
+    const proxy = createPluginProxy(languageServiceMock);
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     expect(diagnostics.length).toBeGreaterThan(0);
@@ -315,7 +329,7 @@ describe('LSP Diagnostics Integration', () => {
       getProgram: () => program,
     };
 
-    const proxy = pluginFactory.create({ languageService: languageServiceMock } as any);
+    const proxy = createPluginProxy(languageServiceMock);
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     expect(diagnostics.length).toBeGreaterThan(0);
