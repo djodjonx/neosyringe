@@ -21,28 +21,67 @@ export class ConfigCollector implements IConfigCollector {
 
   collect(): Map<string, ConfigGraph> {
     const configs = new Map<string, ConfigGraph>();
+    const containerIdsByFile = new Map<string, Map<string, ConfigGraph>>();
 
     for (const sourceFile of this.program.getSourceFiles()) {
       if (sourceFile.isDeclarationFile) continue;
-      this.visitNode(sourceFile, sourceFile, configs);
+
+      const fileConfigs = new Map<string, ConfigGraph>();
+      this.visitNode(sourceFile, sourceFile, configs, fileConfigs);
+
+      if (fileConfigs.size > 0) {
+        containerIdsByFile.set(sourceFile.fileName, fileConfigs);
+      }
     }
 
+    // Validate no duplicate containerIds in the same file
+    this.validateContainerIdCollisions(containerIdsByFile);
+
     return configs;
+  }
+
+  private validateContainerIdCollisions(
+    containerIdsByFile: Map<string, Map<string, ConfigGraph>>
+  ): void {
+    for (const [fileName, fileConfigs] of containerIdsByFile) {
+      const seenIds = new Map<string, ConfigGraph>();
+
+      for (const config of fileConfigs.values()) {
+        const existing = seenIds.get(config.containerId);
+        if (existing) {
+          throw new Error(
+            `Duplicate container name '${config.containerId}' found in ${fileName}.\n` +
+            `Each container must have a unique 'name' field within the same file.\n` +
+            `First occurrence: line ${config.sourceFile.getLineAndCharacterOfPosition(existing.node.getStart()).line + 1}\n` +
+            `Second occurrence: line ${config.sourceFile.getLineAndCharacterOfPosition(config.node.getStart()).line + 1}`
+          );
+        }
+        seenIds.set(config.containerId, config);
+      }
+    }
   }
 
   private visitNode(
     node: ts.Node,
     sourceFile: ts.SourceFile,
-    configs: Map<string, ConfigGraph>
+    configs: Map<string, ConfigGraph>,
+    fileConfigs?: Map<string, ConfigGraph>
   ): void {
     if (ts.isCallExpression(node)) {
       const config = this.tryParseConfig(node, sourceFile);
       if (config) {
-        configs.set(config.name, config);
+        // Use unique key: fileName:variableName to avoid collisions
+        const uniqueKey = `${sourceFile.fileName}:${config.name}`;
+        configs.set(uniqueKey, config);
+        if (fileConfigs) {
+          // Use unique key for fileConfigs too (name + position)
+          const fileUniqueKey = `${config.name}:${node.getStart()}`;
+          fileConfigs.set(fileUniqueKey, config);
+        }
       }
     }
 
-    ts.forEachChild(node, (child) => this.visitNode(child, sourceFile, configs));
+    ts.forEachChild(node, (child) => this.visitNode(child, sourceFile, configs, fileConfigs));
   }
 
   private tryParseConfig(
@@ -85,6 +124,9 @@ export class ConfigCollector implements IConfigCollector {
       return null;
     }
 
+    // Generate unique container ID from 'name' field or hash
+    const containerId = this.generateContainerId(configArg, sourceFile, node.getStart());
+
     // Collect injections and detect internal duplicates
     const { injections: localInjections, duplicates } = this.collectInjections(configArg, sourceFile);
 
@@ -101,6 +143,7 @@ export class ConfigCollector implements IConfigCollector {
     const containerName = this.getContainerName(configArg);
 
     return {
+      containerId,
       name,
       type,
       sourceFile,
@@ -517,5 +560,61 @@ export class ConfigCollector implements IConfigCollector {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Generates a unique container ID from the 'name' field or a hash.
+   * Priority 1: Use the 'name' field from the config object
+   * Priority 2: Generate a stable hash based on file + position + content
+   */
+  private generateContainerId(
+    configObject: ts.ObjectLiteralExpression,
+    sourceFile: ts.SourceFile,
+    position: number
+  ): string {
+    // Priority 1: Extract the 'name' field
+    const configName = this.extractConfigName(configObject);
+    if (configName) {
+      return configName;
+    }
+
+    // Priority 2: Generate a hash
+    const fileName = require('path').basename(sourceFile.fileName, '.ts');
+    const configText = configObject.getText();
+    const hash = this.createHash(`${fileName}:${position}:${configText}`).substring(0, 8);
+
+    return `Container_${hash}`;
+  }
+
+  /**
+   * Extracts the value of the 'name' field from a config object.
+   */
+  private extractConfigName(configObject: ts.ObjectLiteralExpression): string | undefined {
+    for (const prop of configObject.properties) {
+      if (ts.isPropertyAssignment(prop) &&
+          ts.isIdentifier(prop.name) &&
+          prop.name.text === 'name') {
+
+        // The value should be a string literal
+        if (ts.isStringLiteral(prop.initializer)) {
+          return prop.initializer.text;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Creates a simple hash from a string.
+   */
+  private createHash(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16);
   }
 }

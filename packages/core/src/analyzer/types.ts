@@ -71,6 +71,9 @@ export type ConfigType = 'builder' | 'partial';
  * Represents a collected configuration (defineBuilderConfig or definePartialConfig).
  */
 export interface ConfigGraph {
+  /** Unique container ID (from 'name' field or generated hash) */
+  containerId: string;
+
   /** Variable name (appContainer, sharedPartial) */
   name: string;
 
@@ -170,6 +173,9 @@ export interface DependencyNode {
  * Complete dependency graph for a container configuration.
  */
 export interface DependencyGraph {
+  /** Unique container ID (from 'name' field or generated hash) */
+  containerId: string;
+
   /** All service nodes indexed by their token ID. */
   nodes: Map<TokenId, DependencyNode>;
 

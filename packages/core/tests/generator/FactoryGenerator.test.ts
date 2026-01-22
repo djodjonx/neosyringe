@@ -12,7 +12,7 @@ describe('Generator - Factory Support', () => {
 
   it('should generate code for factory provider', () => {
     const graph: DependencyGraph = {
-      nodes: new Map<string, DependencyNode>([
+      containerId: "TestContainer", nodes: new Map<string, DependencyNode>([
         ['IConfig', {
           service: {
             tokenId: 'IConfig',
@@ -44,7 +44,7 @@ describe('Generator - Factory Support', () => {
 
   it('should generate singleton logic for factory', () => {
     const graph: DependencyGraph = {
-      nodes: new Map<string, DependencyNode>([
+      containerId: "TestContainer", nodes: new Map<string, DependencyNode>([
         ['IDatabase', {
           service: {
             tokenId: 'IDatabase',
@@ -72,7 +72,7 @@ describe('Generator - Factory Support', () => {
 
   it('should generate transient logic for factory', () => {
     const graph: DependencyGraph = {
-      nodes: new Map<string, DependencyNode>([
+      containerId: "TestContainer", nodes: new Map<string, DependencyNode>([
         ['IRequest', {
           service: {
             tokenId: 'IRequest',
@@ -99,7 +99,7 @@ describe('Generator - Factory Support', () => {
 
   it('should generate correct code for class (not factory)', () => {
     const graph: DependencyGraph = {
-      nodes: new Map<string, DependencyNode>([
+      containerId: "TestContainer", nodes: new Map<string, DependencyNode>([
         ['UserService', {
           service: {
             tokenId: 'UserService',
@@ -125,7 +125,7 @@ describe('Generator - Factory Support', () => {
 
   it('should mix factories and classes in same container', () => {
     const graph: DependencyGraph = {
-      nodes: new Map<string, DependencyNode>([
+      containerId: "TestContainer", nodes: new Map<string, DependencyNode>([
         ['IConfig', {
           service: {
             tokenId: 'IConfig',

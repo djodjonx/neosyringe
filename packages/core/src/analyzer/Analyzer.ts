@@ -110,6 +110,7 @@ export class Analyzer {
    */
   public extract(): DependencyGraph {
     const graph: DependencyGraph = {
+      containerId: 'DefaultContainer', // Will be set by parseBuilderConfig
       nodes: new Map(),
       roots: [],
       buildArguments: [],
@@ -145,6 +146,7 @@ export class Analyzer {
   private tokenResolver: ITokenResolver | null = null;
   private validator: IValidator | null = null;
   private collectedConfigs: Map<string, ConfigGraph> | null = null;
+  private collectionError: Error | null = null;
 
   /**
    * Lazily initialize the modular components.
@@ -168,9 +170,22 @@ export class Analyzer {
    * Get collected configs (with caching).
    */
   private getCollectedConfigs(): Map<string, ConfigGraph> {
+    // If we had a collection error before, re-throw it
+    if (this.collectionError) {
+      throw this.collectionError;
+    }
+
     if (!this.collectedConfigs) {
       this.initModularComponents();
-      this.collectedConfigs = this.configCollector!.collect();
+      try {
+        this.collectedConfigs = this.configCollector!.collect();
+      } catch (e) {
+        // Store the error to re-throw on subsequent calls
+        if (e instanceof Error) {
+          this.collectionError = e;
+        }
+        throw e;
+      }
     }
     return this.collectedConfigs;
   }
@@ -311,6 +326,7 @@ export class Analyzer {
           // If not, validate it in isolation
           if (!this.isPartialUsedInExtends(partialName)) {
             const partialGraph: DependencyGraph = {
+              containerId: partialName,
               nodes: new Map(),
               roots: [],
               errors: []
@@ -378,13 +394,17 @@ export class Analyzer {
     const configObj = args[0];
     if (!ts.isObjectLiteralExpression(configObj)) return;
 
-    // Parse 'name' property
+    // Parse 'name' property for containerName and containerId
     const nameProp = configObj.properties.find(p =>
         p.name && ts.isIdentifier(p.name) && p.name.text === 'name'
     );
 
     if (nameProp && ts.isPropertyAssignment(nameProp) && ts.isStringLiteral(nameProp.initializer)) {
         graph.containerName = nameProp.initializer.text;
+        graph.containerId = nameProp.initializer.text;
+    } else {
+        // Generate hash-based containerId if no name field
+        graph.containerId = this.generateHashBasedContainerId(node);
     }
 
     // Parse 'injections' property
@@ -448,7 +468,11 @@ export class Analyzer {
               // Check if it's defineBuilderConfig
               if (this.isDefineBuilderConfigCall(init) || this.isDefinePartialConfigCall(init)) {
                   // Parse the parent config to extract its tokens
-                  const parentGraph: DependencyGraph = { nodes: new Map(), roots: [] };
+                  const parentGraph: DependencyGraph = {
+                    containerId: containerIdentifier.text,
+                    nodes: new Map(),
+                    roots: []
+                  };
                   this.parseBuilderConfig(init, parentGraph);
 
                   // Add all parent tokens to parentProvidedTokens
@@ -1052,5 +1076,29 @@ export class Analyzer {
           return this.resolveSymbol(this.checker.getAliasedSymbol(symbol));
       }
       return symbol;
+  }
+
+  /**
+   * Generates a hash-based container ID when no 'name' field is provided.
+   * @param node - The defineBuilderConfig call expression
+   * @returns A unique container ID like "Container_a1b2c3d4"
+   */
+  private generateHashBasedContainerId(node: ts.CallExpression): string {
+    const sourceFile = node.getSourceFile();
+    const fileName = path.basename(sourceFile.fileName, '.ts');
+    const position = node.getStart();
+    const configText = node.getText();
+
+    // Create a stable hash
+    const hashInput = `${fileName}:${position}:${configText}`;
+    let hash = 0;
+    for (let i = 0; i < hashInput.length; i++) {
+      const char = hashInput.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+
+    const hashStr = Math.abs(hash).toString(16).substring(0, 8);
+    return `Container_${hashStr}`;
   }
 }

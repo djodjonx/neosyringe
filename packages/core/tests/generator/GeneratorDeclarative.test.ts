@@ -34,7 +34,7 @@ function createNode(
 describe('Generator - Declarative Config', () => {
   it('should generate container handling both Class and Interface tokens', () => {
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         // Interface Token: "ILogger" (String ID) -> ConsoleLogger (Class)
         ['ILogger', createNode('ILogger', 'ConsoleLogger', [], true)],
         // Class Token: "UserService" (Class ID) -> UserService (Class) depends on "ILogger"

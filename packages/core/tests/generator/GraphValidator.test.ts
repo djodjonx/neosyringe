@@ -32,7 +32,7 @@ describe('GraphValidator', () => {
 
   it('should pass for a simple linear graph (A -> B)', () => {
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['A', createMockNode('A', ['B'])],
         ['B', createMockNode('B', [])],
       ]),
@@ -50,7 +50,7 @@ describe('GraphValidator', () => {
     //  \ /
     //   D
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['A', createMockNode('A', ['B', 'C'])],
         ['B', createMockNode('B', ['D'])],
         ['C', createMockNode('C', ['D'])],
@@ -64,7 +64,7 @@ describe('GraphValidator', () => {
 
   it('should detect a direct self-cycle (A -> A)', () => {
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['A', createMockNode('A', ['A'])],
       ]),
       roots: ['A'],
@@ -77,7 +77,7 @@ describe('GraphValidator', () => {
 
   it('should detect a simple cycle (A -> B -> A)', () => {
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['A', createMockNode('A', ['B'])],
         ['B', createMockNode('B', ['A'])],
       ]),
@@ -91,7 +91,7 @@ describe('GraphValidator', () => {
 
   it('should detect a long cycle (A -> B -> C -> A)', () => {
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['A', createMockNode('A', ['B'])],
         ['B', createMockNode('B', ['C'])],
         ['C', createMockNode('C', ['A'])],
@@ -106,7 +106,7 @@ describe('GraphValidator', () => {
 
   it('should pass for disconnected components', () => {
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['A', createMockNode('A', [])],
         ['B', createMockNode('B', [])],
       ]),

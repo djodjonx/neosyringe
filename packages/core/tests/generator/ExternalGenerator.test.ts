@@ -39,7 +39,7 @@ describe('Generator - External Bindings', () => {
   it('should generate code that delegates external tokens to parent', () => {
     // Graph: FeatureService -> SharedKernel (External)
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['SharedKernel', createMockNode('SharedKernel', [], 'SharedKernel', '/src/shared.ts', 'parent')],
         ['FeatureService', createMockNode('FeatureService', ['SharedKernel'], 'FeatureService', '/src/feature.ts', 'autowire')],
       ]),

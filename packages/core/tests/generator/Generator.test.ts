@@ -33,7 +33,7 @@ describe('Generator', () => {
   it('should generate factories and container class', () => {
     // Graph: Service -> Logger
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['ILogger', createMockNode('ILogger', [], 'ConsoleLogger', '/src/logger.ts')],
         ['UserService', createMockNode('UserService', ['ILogger'], 'UserService', '/src/user.ts')],
       ]),
@@ -66,7 +66,7 @@ describe('Generator', () => {
 
   it('should handle scopes correctly', () => {
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['Singleton', createMockNode('Singleton', [], 'S', '/src/s.ts', 'singleton')],
         ['Transient', createMockNode('Transient', [], 'T', '/src/t.ts', 'transient')],
       ]),
@@ -88,7 +88,7 @@ describe('Generator', () => {
 
   it('should sanitize variable names for factories', () => {
       const graph: DependencyGraph = {
-          nodes: new Map([
+          containerId: "TestContainer", nodes: new Map([
               ['@scope/Package', createMockNode('@scope/Package', [], 'Pkg', '/src/pkg.ts')]
           ]),
           roots: []
@@ -103,7 +103,7 @@ describe('Generator', () => {
   it('should respect export modifiers for container variable', () => {
     // Test 'export' modifier
     const graphExport: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
       ]),
       roots: [],
@@ -116,7 +116,7 @@ describe('Generator', () => {
 
     // Test 'export default' modifier
     const graphDefault: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
       ]),
       roots: [],
@@ -129,7 +129,7 @@ describe('Generator', () => {
 
     // Test 'none' modifier (no export)
     const graphNone: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
       ]),
       roots: [],
@@ -142,7 +142,7 @@ describe('Generator', () => {
 
     // Test undefined (defaults to export for backward compatibility)
     const graphUndefined: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
       ]),
       roots: [],
@@ -156,7 +156,7 @@ describe('Generator', () => {
     // When user writes: export default defineBuilderConfig({ ... })
     // We should generate: export default new NeoContainer(...)
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
       ]),
       roots: [],

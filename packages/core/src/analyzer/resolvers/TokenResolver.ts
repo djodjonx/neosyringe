@@ -47,7 +47,7 @@ export class TokenResolver implements ITokenResolver {
 
     // 1. useContainer (highest priority) - resolve recursively first
     if (config.useContainerRef) {
-      const parent = allConfigs.get(config.useContainerRef);
+      const parent = this.findConfigByName(allConfigs, config.useContainerRef);
       if (parent) {
         // Resolve parent's inheritance chain first
         this.resolveRecursive(
@@ -65,12 +65,28 @@ export class TokenResolver implements ITokenResolver {
 
     // 2. extends (in array order)
     for (const partialName of config.extendsRefs) {
-      const partial = allConfigs.get(partialName);
+      const partial = this.findConfigByName(allConfigs, partialName);
       if (partial) {
         // Partials don't have extends/useContainer, so just add their tokens
         this.addTokensFromConfig(partial, inherited, 'extends', chain);
       }
     }
+  }
+
+  /**
+   * Find a config by its variable name.
+   * Config keys are now "fileName:variableName", so we need to search for it.
+   */
+  private findConfigByName(
+    allConfigs: Map<string, ConfigGraph>,
+    variableName: string
+  ): ConfigGraph | undefined {
+    for (const [_key, config] of allConfigs) {
+      if (config.name === variableName) {
+        return config;
+      }
+    }
+    return undefined;
   }
 
   private addTokensFromConfig(

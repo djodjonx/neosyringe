@@ -17,7 +17,7 @@ describe('GraphValidator Safety', () => {
   it('should detect error for missing binding', () => {
     // A depends on B, but B is not in nodes
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['A', {
             service: {
               tokenId: 'A',
@@ -41,7 +41,7 @@ describe('GraphValidator Safety', () => {
   it('should detect multiple missing bindings', () => {
     // A depends on B and C, neither are registered
     const graph: DependencyGraph = {
-      nodes: new Map([
+      containerId: "TestContainer", nodes: new Map([
         ['A', {
             service: {
               tokenId: 'A',
