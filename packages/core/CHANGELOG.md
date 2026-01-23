@@ -1,5 +1,30 @@
 # @djodjonx/neosyringe-core
 
+## 1.2.0
+
+### Minor Changes
+
+- **Core: Major internal refactoring and improvements**
+
+  - Refactor Analyzer: reduce codebase from 1070 to 447 lines (-58%)
+  - Add specialized services for better code organization:
+    - HashUtils: centralized hashing utilities
+    - TokenResolverService: token resolution logic
+    - ConfigParser: config parsing and validation
+    - DependencyResolver: constructor dependency analysis
+    - ParentContainerResolver: parent container logic
+    - CallExpressionUtils: call expression identification
+    - ASTVisitor: generic AST visitor (for future use)
+  - Add 46 new unit tests for the new services
+  - Improve code documentation with comprehensive JSDoc
+  - Eliminate ~200 lines of duplicated code
+  - Simplify MissingDependencyValidator logic
+  - Update core README documentation
+
+  **LSP: Build improvements**
+
+  - Add `type: "module"` to package.json to eliminate build warnings
+
 ## 1.1.0
 
 ### Minor Changes
