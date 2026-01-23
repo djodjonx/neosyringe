@@ -1,6 +1,6 @@
 {
   "name": "@djodjonx/neosyringe-plugin",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "NeoSyringe build plugin (Vite, Rollup, Webpack)",
   "type": "module",
   "license": "MIT",
