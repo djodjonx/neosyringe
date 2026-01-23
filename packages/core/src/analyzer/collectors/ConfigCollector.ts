@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId } from '../types';
-import { generateTokenId } from '../Analyzer';
+import { HashUtils, TokenResolverService } from '../shared';
 
 /**
  * Interface for collecting configurations from source files.
@@ -12,12 +12,31 @@ export interface IConfigCollector {
 
 /**
  * Collects defineBuilderConfig and definePartialConfig calls from the program.
+ *
+ * This collector scans all source files for container configurations and builds
+ * a map of ConfigGraph objects. It uses the TokenResolverService for consistent
+ * token ID generation across the analyzer.
+ *
+ * @example
+ * ```typescript
+ * const collector = new ConfigCollector(program, checker);
+ * const configs = collector.collect();
+ *
+ * for (const [key, config] of configs) {
+ *   console.log(`Found config: ${config.containerId}`);
+ *   console.log(`Injections: ${config.localInjections.size}`);
+ * }
+ * ```
  */
 export class ConfigCollector implements IConfigCollector {
+  private tokenResolverService: TokenResolverService;
+
   constructor(
     private program: ts.Program,
     private checker: ts.TypeChecker
-  ) {}
+  ) {
+    this.tokenResolverService = new TokenResolverService(checker);
+  }
 
   collect(): Map<string, ConfigGraph> {
     const configs = new Map<string, ConfigGraph>();
@@ -61,6 +80,17 @@ export class ConfigCollector implements IConfigCollector {
     }
   }
 
+  /**
+   * Recursively visits AST nodes to find container configurations.
+   *
+   * Identifies defineBuilderConfig and definePartialConfig calls and
+   * collects them into the configs map with unique keys.
+   *
+   * @param node - AST node to visit
+   * @param sourceFile - Source file containing the node
+   * @param configs - Global map of all configs
+   * @param fileConfigs - Optional map of configs in this file only (for validation)
+   */
   private visitNode(
     node: ts.Node,
     sourceFile: ts.SourceFile,
@@ -84,6 +114,16 @@ export class ConfigCollector implements IConfigCollector {
     ts.forEachChild(node, (child) => this.visitNode(child, sourceFile, configs, fileConfigs));
   }
 
+  /**
+   * Attempts to parse a call expression as a container configuration.
+   *
+   * Checks if the call is to defineBuilderConfig or definePartialConfig
+   * and delegates to parseConfig if so.
+   *
+   * @param node - Call expression to analyze
+   * @param sourceFile - Source file containing the call
+   * @returns ConfigGraph if successful, null otherwise
+   */
   private tryParseConfig(
     node: ts.CallExpression,
     sourceFile: ts.SourceFile
@@ -292,119 +332,24 @@ export class ConfigCollector implements IConfigCollector {
     };
   }
 
+  /**
+   * Resolves a token ID from an expression node.
+   *
+   * Uses the TokenResolverService for consistent token ID generation.
+   * This ensures tokens are resolved the same way across the analyzer.
+   *
+   * @param tokenNode - Expression node to resolve
+   * @returns Token ID or null if not resolvable
+   */
   private resolveTokenId(tokenNode: ts.Expression): TokenId | null {
-    // Resolve variable references
-    const resolved = this.resolveToInitializer(tokenNode);
-    const node = resolved || tokenNode;
-
-    // Case: useInterface<I>()
-    if (ts.isCallExpression(node) && this.isUseInterfaceCall(node)) {
-      return this.extractInterfaceTokenId(node);
-    }
-
-    // Case: useProperty<T>(Class, 'prop')
-    if (ts.isCallExpression(node) && this.isUsePropertyCall(node)) {
-      return this.extractPropertyTokenId(node);
-    }
-
-    // Case: Class (direct reference)
-    const type = this.checker.getTypeAtLocation(tokenNode);
-    return this.getTypeId(type);
+    return this.tokenResolverService.resolveTokenId(tokenNode);
   }
 
-  private resolveToInitializer(node: ts.Expression): ts.Expression | null {
-    // Case 1: Simple identifier (e.g., myToken)
-    if (ts.isIdentifier(node)) {
-      const symbol = this.checker.getSymbolAtLocation(node);
-      if (!symbol) return null;
-
-      const declarations = symbol.getDeclarations();
-      if (!declarations || declarations.length === 0) return null;
-
-      const decl = declarations[0];
-      if (ts.isVariableDeclaration(decl) && decl.initializer) {
-        return decl.initializer;
-      }
-
-      return null;
-    }
-
-    // Case 2: Property access (e.g., TOKENS.IRequestContext)
-    if (ts.isPropertyAccessExpression(node)) {
-      const objectSymbol = this.checker.getSymbolAtLocation(node.expression);
-      if (!objectSymbol) return null;
-
-      const declarations = objectSymbol.getDeclarations();
-      if (!declarations || declarations.length === 0) return null;
-
-      const decl = declarations[0];
-      if (ts.isVariableDeclaration(decl) && decl.initializer && ts.isObjectLiteralExpression(decl.initializer)) {
-        // Find the property in the object literal
-        const propName = node.name.text;
-        for (const prop of decl.initializer.properties) {
-          if (ts.isPropertyAssignment(prop) &&
-              ts.isIdentifier(prop.name) &&
-              prop.name.text === propName) {
-            return prop.initializer;
-          }
-        }
-      }
-
-      return null;
-    }
-
-    return null;
-  }
-
+  /**
+   * Checks if a node is a useInterface call expression.
+   */
   private isUseInterfaceCall(node: ts.Expression): boolean {
-    if (!ts.isCallExpression(node)) return false;
-    const expr = node.expression;
-    return ts.isIdentifier(expr) && expr.text === 'useInterface';
-  }
-
-  private isUsePropertyCall(node: ts.Expression): boolean {
-    if (!ts.isCallExpression(node)) return false;
-    const expr = node.expression;
-    return ts.isIdentifier(expr) && expr.text === 'useProperty';
-  }
-
-  private extractInterfaceTokenId(node: ts.CallExpression): TokenId {
-    const typeArgs = node.typeArguments;
-    if (!typeArgs || typeArgs.length === 0) {
-      return 'UnknownInterface';
-    }
-
-    const typeArg = typeArgs[0];
-    const type = this.checker.getTypeAtLocation(typeArg);
-    const typeId = this.getTypeId(type);
-
-    return `useInterface<${typeId}>()`;
-  }
-
-  private extractPropertyTokenId(node: ts.CallExpression): TokenId {
-    const args = node.arguments;
-    if (args.length < 2) return 'UnknownProperty';
-
-    const className = args[0].getText();
-    const propName = ts.isStringLiteral(args[1]) ? args[1].text : args[1].getText();
-
-    return `useProperty<${className}>('${propName}')`;
-  }
-
-  private getTypeId(type: ts.Type): string {
-    const symbol = type.getSymbol() || type.aliasSymbol;
-    if (!symbol) {
-      return this.checker.typeToString(type);
-    }
-
-    // Use the same ID generation as Analyzer for consistency
-    const declarations = symbol.getDeclarations();
-    if (declarations && declarations.length > 0) {
-      const sourceFile = declarations[0].getSourceFile();
-      return generateTokenId(symbol, sourceFile);
-    }
-
-    return symbol.getName();
+    return this.tokenResolverService.isUseInterfaceCall(node);
   }
 
   private simpleHash(str: string): string {
@@ -499,6 +444,9 @@ export class ConfigCollector implements IConfigCollector {
 
   /**
    * Extracts tokens from declareContainerTokens<{ Token: Type }>().
+   *
+   * @param node - The declareContainerTokens call expression
+   * @returns Set of token IDs or undefined if empty
    */
   private extractDeclaredTokens(node: ts.CallExpression): Set<string> | undefined {
     if (!node.typeArguments || node.typeArguments.length === 0) {
@@ -514,7 +462,7 @@ export class ConfigCollector implements IConfigCollector {
     for (const prop of properties) {
       const propType = this.checker.getTypeOfSymbol(prop);
       if (propType) {
-        const tokenId = this.getTypeId(propType);
+        const tokenId = this.tokenResolverService.getTypeId(propType);
         tokens.add(tokenId);
       }
     }
@@ -566,6 +514,11 @@ export class ConfigCollector implements IConfigCollector {
    * Generates a unique container ID from the 'name' field or a hash.
    * Priority 1: Use the 'name' field from the config object
    * Priority 2: Generate a stable hash based on file + position + content
+   *
+   * @param configObject - The configuration object literal
+   * @param sourceFile - Source file containing the config
+   * @param position - Position of the config in the file
+   * @returns Unique container ID
    */
   private generateContainerId(
     configObject: ts.ObjectLiteralExpression,
@@ -578,16 +531,19 @@ export class ConfigCollector implements IConfigCollector {
       return configName;
     }
 
-    // Priority 2: Generate a hash
-    const fileName = require('path').basename(sourceFile.fileName, '.ts');
+    // Priority 2: Generate a hash using HashUtils
+    const path = require('path');
+    const fileName = path.basename(sourceFile.fileName, '.ts');
     const configText = configObject.getText();
-    const hash = this.createHash(`${fileName}:${position}:${configText}`).substring(0, 8);
 
-    return `Container_${hash}`;
+    return HashUtils.generateContainerId(fileName, position, configText);
   }
 
   /**
    * Extracts the value of the 'name' field from a config object.
+   *
+   * @param configObject - The configuration object literal
+   * @returns The name string or undefined if not present
    */
   private extractConfigName(configObject: ts.ObjectLiteralExpression): string | undefined {
     for (const prop of configObject.properties) {
@@ -603,18 +559,5 @@ export class ConfigCollector implements IConfigCollector {
     }
 
     return undefined;
-  }
-
-  /**
-   * Creates a simple hash from a string.
-   */
-  private createHash(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return Math.abs(hash).toString(16);
   }
 }
