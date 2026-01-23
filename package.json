@@ -13,7 +13,7 @@
     "sync-readme": "cp README.md packages/neosyringe/README.md",
     "validate": "pnpm lint && pnpm typecheck && pnpm test",
     "changeset": "changeset",
-    "version-packages": "changeset version && pnpm install --no-frozen-lockfile",
+    "version-packages": "changeset version && pnpm install --no-frozen-lockfile && git add pnpm-lock.yaml && git commit --amend --no-edit",
     "release": "pnpm sync-readme && pnpm build && changeset publish && changeset tag && git push --follow-tags",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",

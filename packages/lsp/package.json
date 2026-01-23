@@ -2,6 +2,7 @@
   "name": "@djodjonx/neosyringe-lsp",
   "version": "0.2.0",
   "description": "TypeScript Language Service Plugin for NeoSyringe",
+  "type": "module",
   "license": "MIT",
   "main": "dist/index.cjs",
   "types": "dist/index.d.cts",
