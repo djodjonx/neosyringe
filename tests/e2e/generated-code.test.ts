@@ -54,7 +54,7 @@ describe('E2E - Generated Code Validation', () => {
       expect(code).toContain('class NeoContainer');
       expect(code).toContain('private instances = new Map<any, any>()');
       expect(code).toContain('constructor(');
-      expect(code).toContain('public resolve(token: any): any');
+      expect(code).toContain('public resolve<T>(token: any): T');
       expect(code).toContain('private resolveLocal(token: any): any');
       expect(code).toContain("'NeoContainer'");
     });

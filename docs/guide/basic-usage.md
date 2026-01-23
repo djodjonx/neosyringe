@@ -164,18 +164,43 @@ export const container = defineBuilderConfig({
 
 ## Resolving Services
 
+The `container.resolve()` method provides **full type safety** without any type assertions:
+
 ```typescript
 import { container } from './container';
 import { UserService } from './services/user.service';
 import { useInterface } from '@djodjonx/neosyringe';
 import type { ILogger } from './services/logger';
 
-// Resolve by class
+// ✅ Resolve by class - Type: UserService
 const userService = container.resolve(UserService);
+userService.createUser('John'); // Full auto-completion!
 
-// Resolve by interface
+// ✅ Resolve by interface - Type: ILogger  
 const logger = container.resolve(useInterface<ILogger>());
+logger.log('Hello'); // ILogger methods available
+
+// ✅ Resolve by property - Type: string
+const apiUrl = container.resolve(useProperty<string>(ApiService, 'apiUrl'));
+apiUrl.toUpperCase(); // String methods work
 ```
+
+### Type Inference
+
+TypeScript automatically infers the return type from the token:
+
+```typescript
+// No type assertion needed!
+const service = container.resolve(UserService);
+// Type: UserService ✅
+
+// Compare with other DI libraries:
+// ❌ const service = container.get('UserService') as UserService;
+```
+
+::: tip IDE Support
+Your IDE will provide full auto-completion for resolved services. No more guessing what methods are available!
+:::
 
 ## Partials (Modular Configuration)
 

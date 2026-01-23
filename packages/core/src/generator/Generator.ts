@@ -171,7 +171,7 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  public resolve(token: any): any {
+  public resolve<T>(token: any): T {
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
     if (result !== undefined) return result;

@@ -148,9 +148,34 @@ interface Container {
 }
 ```
 
-The generated container interface:
+The generated container interface.
 
-| Method | Description |
-|--------|-------------|
-| `resolve\<T\>(token)` | Resolve a service by token |
+### resolve\<T\>(token: Token\<T\>): T
+
+Resolve a service by its token. The return type is automatically inferred from the token.
+
+**Type Safety**: TypeScript infers the correct type based on the token:
+
+```typescript
+// Resolving a class - returns the class type
+const userService = container.resolve(UserService);
+// Type: UserService ✅
+
+// Resolving an interface - returns the interface type
+const logger = container.resolve(useInterface<ILogger>());
+// Type: ILogger ✅
+
+// Resolving a property - returns the property type
+const apiUrl = container.resolve(useProperty<string>(ApiService, 'apiUrl'));
+// Type: string ✅
+```
+
+**Benefits**:
+- ✨ Full auto-completion in your IDE
+- 🛡️ Compile-time type checking
+- 📝 No type assertions needed
+
+::: tip Zero Runtime Overhead
+The generated container uses the generic `<T>` for type inference only. At runtime, it's just a fast switch statement!
+:::
 

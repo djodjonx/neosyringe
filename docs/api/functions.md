@@ -230,13 +230,13 @@ export const container = defineBuilderConfig({
 resolve<T>(token: Token<T>): T
 ```
 
-Resolve a service from the container.
+Resolve a service from the container. The return type is **automatically inferred** from the token.
 
 ### Type Parameters
 
 | Name | Description |
 |------|-------------|
-| `T` | The service type |
+| `T` | The service type (inferred automatically) |
 
 ### Parameters
 
@@ -246,23 +246,67 @@ Resolve a service from the container.
 
 ### Returns
 
-`T` - The resolved instance
+`T` - The resolved instance with **full type safety**
 
 ### Throws
 
 `Error` - If the service is not found
 
-### Example
+### Type Inference Examples
+
+NeoSyringe provides complete type safety without any type assertions:
 
 ```typescript
-// By class
+// ✅ Class token - Type: UserService
 const userService = container.resolve(UserService);
+userService.createUser('John'); // Full auto-completion
 
-// By interface
+// ✅ Interface token - Type: ILogger
 const logger = container.resolve(useInterface<ILogger>());
+logger.log('Hello'); // Methods of ILogger available
 
-// By property (unusual, but possible)
+// ✅ Property token - Type: string
 const apiUrl = container.resolve(useProperty<string>(ApiService, 'apiUrl'));
+apiUrl.toUpperCase(); // String methods available
+
+// ✅ Generic classes - Type: Repository<User>
+const userRepo = container.resolve(Repository<User>);
+userRepo.findById(1); // Typed with User
 ```
+
+### Advanced Type Safety
+
+```typescript
+// Dependencies are also fully typed
+class UserService {
+  constructor(
+    private logger: ILogger,
+    private repo: UserRepository
+  ) {}
+  
+  async createUser(name: string) {
+    // this.logger is typed as ILogger
+    this.logger.log(`Creating user: ${name}`);
+    // this.repo is typed as UserRepository
+    return this.repo.save({ name });
+  }
+}
+
+const service = container.resolve(UserService);
+// Type: UserService
+// All properties correctly typed!
+```
+
+::: tip No Type Assertions Needed
+Unlike other DI libraries, you never need `as` or `<Type>` casts:
+
+```typescript
+// ❌ Other libraries
+const service = container.get('UserService') as UserService;
+
+// ✅ NeoSyringe
+const service = container.resolve(UserService);
+```
+:::
 
 

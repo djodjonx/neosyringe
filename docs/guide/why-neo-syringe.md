@@ -10,6 +10,7 @@ A detailed comparison with other dependency injection solutions.
 | **No decorators needed** | ✅ | ❌ | ❌ | ✅ |
 | **No reflect-metadata** | ✅ | ❌ | ❌ | ✅ |
 | **Interface as tokens** | ✅ | ❌ | ❌ | ❌ |
+| **Full type inference** | ✅ | ⚠️ | ⚠️ | ❌ |
 | **Compile-time validation** | ✅ | ❌ | ❌ | ❌ |
 | **IDE error detection** | ✅ | ❌ | ❌ | ❌ |
 | **Tree-shakeable** | ✅ | ❌ | ❌ | ❌ |
@@ -95,6 +96,11 @@ export const container = defineBuilderConfig({
     { token: UserService }
   ]
 });
+
+// ✨ Full type safety - no type assertions needed!
+const service = container.resolve(UserService);
+// Type: UserService (auto-inferred)
+
 ```
 
 ## Error Detection
@@ -157,6 +163,82 @@ const testContainer = defineBuilderConfig({
 const userService = testContainer.resolve(UserService);
 ```
 
+## Type Safety
+
+### Traditional: Type Assertions Required
+
+Most DI libraries lose type information:
+
+```typescript
+// ❌ tsyringe - Type assertion needed
+const service = container.resolve('UserService') as UserService;
+//                                                 ^^^^^^^^^^^^
+// Manual type assertion required!
+
+// ❌ InversifyJS - Same issue
+const service = container.get<UserService>(TYPES.UserService);
+//                          ^^^^^^^^^^^^
+// Generic parameter required!
+
+// ❌ Awilix - String-based resolution
+const service = container.resolve('userService') as UserService;
+```
+
+### NeoSyringe: Full Type Inference
+
+```typescript
+// ✅ NeoSyringe - Type automatically inferred
+const service = container.resolve(UserService);
+// Type: UserService (no assertion needed!)
+
+const logger = container.resolve(useInterface<ILogger>());
+// Type: ILogger (inferred from token!)
+
+const apiUrl = container.resolve(useProperty<string>(ApiService, 'apiUrl'));
+// Type: string (fully typed!)
+```
+
+**Benefits**:
+- ✨ IDE auto-completion works perfectly
+- 🛡️ Compile-time type checking on all resolved instances
+- 📝 No manual type annotations needed
+- 🚀 Refactoring is safe and easy
+
+### Example: Type Safety in Action
+
+```typescript
+// Define services
+interface IUserRepository {
+  findById(id: number): Promise<User>;
+  save(user: User): Promise<void>;
+}
+
+class UserService {
+  constructor(private repo: IUserRepository) {}
+  
+  async getUser(id: number) {
+    return this.repo.findById(id);
+  }
+}
+
+// Configure container
+const container = defineBuilderConfig({
+  injections: [
+    { token: useInterface<IUserRepository>(), provider: UserRepository },
+    { token: UserService }
+  ]
+});
+
+// Use with full type safety
+const userService = container.resolve(UserService);
+// ✅ Type: UserService
+
+const user = await userService.getUser(1);
+// ✅ Type: User
+// ✅ Full auto-completion on userService methods
+// ✅ No type casts anywhere!
+```
+
 ## Edge Computing / Workers
 
 Traditional DI often fails in edge environments:
@@ -213,6 +295,7 @@ export const container = defineBuilderConfig({
 | Aspect | Traditional DI | NeoSyringe |
 |--------|---------------|-------------|
 | **When errors occur** | Runtime | Compile-time |
+| **Type inference** | Manual assertions | Automatic |
 | **Bundle impact** | 4-11 KB | 0 KB |
 | **Class purity** | Polluted with decorators | 100% pure |
 | **Interface support** | Manual Symbols | Automatic |

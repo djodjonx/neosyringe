@@ -92,8 +92,9 @@ export const container = defineBuilderConfig({
   ]
 });
 
-// Use it
+// Use it with full type safety
 const userService = container.resolve(UserService);
+// Type: UserService ✅ - Full auto-completion!
 ```
 
 ## Generated Output
@@ -111,7 +112,7 @@ function create_UserService(container) {
 }
 
 class NeoContainer {
-  resolve(token) {
+  resolve<T>(token: any): T {  // ✨ Fully typed!
     if (token === "ILogger") return this.getInstance("ILogger", create_ILogger);
     if (token === UserService) return this.getInstance(UserService, create_UserService);
     throw new Error(`Service not found: ${token}`);

@@ -135,12 +135,19 @@ export const container = defineBuilderConfig({
 import { container } from './container';
 import { UserService } from './services/user.service';
 
-// Resolve and use
+// Resolve with full type safety - no type assertions!
 const userService = container.resolve(UserService);
+// Type: UserService ✅ (automatically inferred)
+
 const user = userService.createUser('John Doe');
+// Full auto-completion available!
 
 console.log(user); // { id: 'xxx-xxx', name: 'John Doe' }
 ```
+
+::: tip Type Safety
+The `resolve()` method automatically infers the return type from the token. No manual type assertions needed!
+:::
 
 ## Project Structure
 
