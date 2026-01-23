@@ -1,9 +1,17 @@
 name: Release
 
 on:
+  # Permet de lancer manuellement pour tester (très utile pour debug)
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to simulate (ex: @djodjonx/neosyringe@0.0.6)'
+        required: true
+        default: '@djodjonx/neosyringe@0.0.6'
   push:
     tags:
-      - "@djodjonx/*@*"
+      # Guillemets simples pour éviter l'interprétation YAML
+      - '@djodjonx/*@*'
 
 permissions:
   contents: write
@@ -20,9 +28,14 @@ jobs:
       - name: Parse tag
         id: parse_tag
         run: |
-          # Extract package name and version from tag format: @djodjonx/package@version
-          TAG=${GITHUB_REF#refs/tags/}
-          echo "Full tag: $TAG"
+          # Gestion du cas manuel (workflow_dispatch) vs push de tag réel
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+          fi
+
+          echo "Processing Tag: $TAG"
 
           # Extract package name (everything before the last @)
           PACKAGE_NAME="${TAG%@*}"
@@ -35,9 +48,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "package_short_name=$PACKAGE_SHORT_NAME" >> $GITHUB_OUTPUT
 
-          echo "Package: $PACKAGE_NAME"
-          echo "Short name: $PACKAGE_SHORT_NAME"
-          echo "Version: $VERSION"
+          echo "✅ Parsed: Package=$PACKAGE_NAME | Short=$PACKAGE_SHORT_NAME | Version=$VERSION"
 
       - name: Find package directory
         id: find_package
@@ -46,29 +57,19 @@ jobs:
 
           # Map package names to directories
           case "$PACKAGE_SHORT_NAME" in
-            "neosyringe")
-              PACKAGE_DIR="packages/neosyringe"
-              ;;
-            "neosyringe-cli")
-              PACKAGE_DIR="packages/cli"
-              ;;
-            "neosyringe-core")
-              PACKAGE_DIR="packages/core"
-              ;;
-            "neosyringe-lsp")
-              PACKAGE_DIR="packages/lsp"
-              ;;
-            "neosyringe-unplugin")
-              PACKAGE_DIR="packages/unplugin"
-              ;;
+            "neosyringe") PACKAGE_DIR="packages/neosyringe" ;;
+            "neosyringe-cli") PACKAGE_DIR="packages/cli" ;;
+            "neosyringe-core") PACKAGE_DIR="packages/core" ;;
+            "neosyringe-lsp") PACKAGE_DIR="packages/lsp" ;;
+            "neosyringe-plugin") PACKAGE_DIR="packages/unplugin" ;;
             *)
-              echo "Unknown package: $PACKAGE_SHORT_NAME"
+              echo "❌ Unknown package: $PACKAGE_SHORT_NAME"
               exit 1
               ;;
           esac
 
           echo "package_dir=$PACKAGE_DIR" >> $GITHUB_OUTPUT
-          echo "Package directory: $PACKAGE_DIR"
+          echo "✅ Package directory: $PACKAGE_DIR"
 
       - name: Extract release notes
         id: extract_release_notes
@@ -101,6 +102,8 @@ jobs:
           cat RELEASE_BODY.md
 
       - name: Create GitHub Release
+        # Ne créer la release que si c'est un vrai tag, pas un test manuel
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           body_path: RELEASE_BODY.md
