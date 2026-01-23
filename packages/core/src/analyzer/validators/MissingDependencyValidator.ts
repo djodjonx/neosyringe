@@ -28,9 +28,8 @@ export class MissingDependencyValidator implements IValidator {
       const requiredDeps = this.dependencyAnalyzer.getRequiredDependencies(info.definition);
 
       for (const depTokenId of requiredDeps) {
-        // Check if the dependency is available directly OR as an interface token
-        const isAvailable = availableTokens.has(depTokenId) ||
-                           availableTokens.has(`useInterface<${depTokenId}>()`);
+        // Check if the dependency is available
+        const isAvailable = availableTokens.has(depTokenId);
 
         if (!isAvailable) {
           // Find the token node for better error positioning
