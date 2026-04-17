@@ -1,4 +1,5 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../TSContext';
 import { DependencyGraph, TokenId } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 

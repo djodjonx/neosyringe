@@ -1,4 +1,6 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { basename } from 'path';
+import { TSContext } from '../../TSContext';
 import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId } from '../types';
 import { HashUtils, TokenResolverService } from '../shared';
 
@@ -97,7 +99,7 @@ export class ConfigCollector implements IConfigCollector {
     configs: Map<string, ConfigGraph>,
     fileConfigs?: Map<string, ConfigGraph>
   ): void {
-    if (ts.isCallExpression(node)) {
+    if (TSContext.ts.isCallExpression(node)) {
       const config = this.tryParseConfig(node, sourceFile);
       if (config) {
         // Use unique key: fileName:variableName to avoid collisions
@@ -111,7 +113,7 @@ export class ConfigCollector implements IConfigCollector {
       }
     }
 
-    ts.forEachChild(node, (child) => this.visitNode(child, sourceFile, configs, fileConfigs));
+    TSContext.ts.forEachChild(node, (child) => this.visitNode(child, sourceFile, configs, fileConfigs));
   }
 
   /**
@@ -143,7 +145,7 @@ export class ConfigCollector implements IConfigCollector {
 
   private getFunctionName(node: ts.CallExpression): string | null {
     const expression = node.expression;
-    if (ts.isIdentifier(expression)) {
+    if (TSContext.ts.isIdentifier(expression)) {
       return expression.text;
     }
     return null;
@@ -160,7 +162,7 @@ export class ConfigCollector implements IConfigCollector {
 
     // Parse the config object
     const configArg = node.arguments[0];
-    if (!configArg || !ts.isObjectLiteralExpression(configArg)) {
+    if (!configArg || !TSContext.ts.isObjectLiteralExpression(configArg)) {
       return null;
     }
 
@@ -201,12 +203,12 @@ export class ConfigCollector implements IConfigCollector {
     const parent = node.parent;
 
     // Case 1: const x = defineBuilderConfig(...)
-    if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+    if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
       return parent.name.text;
     }
 
     // Case 2: export default defineBuilderConfig(...)
-    if (ts.isExportAssignment(parent)) {
+    if (TSContext.ts.isExportAssignment(parent)) {
       return '__default__';
     }
 
@@ -222,13 +224,13 @@ export class ConfigCollector implements IConfigCollector {
 
     // Find the 'injections' property
     const injectionsProperty = this.findProperty(configObj, 'injections');
-    if (!injectionsProperty || !ts.isArrayLiteralExpression(injectionsProperty.initializer)) {
+    if (!injectionsProperty || !TSContext.ts.isArrayLiteralExpression(injectionsProperty.initializer)) {
       return { injections, duplicates };
     }
 
     // Parse each injection
     for (const element of injectionsProperty.initializer.elements) {
-      if (!ts.isObjectLiteralExpression(element)) continue;
+      if (!TSContext.ts.isObjectLiteralExpression(element)) continue;
 
       const info = this.parseInjection(element, sourceFile);
       if (info) {
@@ -255,7 +257,7 @@ export class ConfigCollector implements IConfigCollector {
     let isScoped = false;
 
     for (const prop of obj.properties) {
-      if (!ts.isPropertyAssignment(prop) || !ts.isIdentifier(prop.name)) continue;
+      if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
 
       switch (prop.name.text) {
         case 'token':
@@ -265,17 +267,17 @@ export class ConfigCollector implements IConfigCollector {
           providerNode = prop.initializer;
           break;
         case 'lifecycle':
-          if (ts.isStringLiteral(prop.initializer) && prop.initializer.text === 'transient') {
+          if (TSContext.ts.isStringLiteral(prop.initializer) && prop.initializer.text === 'transient') {
             lifecycle = 'transient';
           }
           break;
         case 'useFactory':
-          if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+          if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
             useFactory = true;
           }
           break;
         case 'scoped':
-          if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+          if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
             isScoped = true;
           }
           break;
@@ -292,7 +294,7 @@ export class ConfigCollector implements IConfigCollector {
     if (!tokenId) return null;
 
     // Auto-detect factory
-    if (providerNode && (ts.isArrowFunction(providerNode) || ts.isFunctionExpression(providerNode))) {
+    if (providerNode && (TSContext.ts.isArrowFunction(providerNode) || TSContext.ts.isFunctionExpression(providerNode))) {
       useFactory = true;
     }
 
@@ -371,9 +373,9 @@ export class ConfigCollector implements IConfigCollector {
     const refs: string[] = [];
     const extendsProp = this.findProperty(configObj, 'extends');
 
-    if (extendsProp && ts.isArrayLiteralExpression(extendsProp.initializer)) {
+    if (extendsProp && TSContext.ts.isArrayLiteralExpression(extendsProp.initializer)) {
       for (const element of extendsProp.initializer.elements) {
-        if (ts.isIdentifier(element)) {
+        if (TSContext.ts.isIdentifier(element)) {
           refs.push(element.text);
         }
       }
@@ -385,7 +387,7 @@ export class ConfigCollector implements IConfigCollector {
   private getUseContainerRef(configObj: ts.ObjectLiteralExpression): string | null {
     const useContainerProp = this.findProperty(configObj, 'useContainer');
 
-    if (useContainerProp && ts.isIdentifier(useContainerProp.initializer)) {
+    if (useContainerProp && TSContext.ts.isIdentifier(useContainerProp.initializer)) {
       return useContainerProp.initializer.text;
     }
 
@@ -395,7 +397,7 @@ export class ConfigCollector implements IConfigCollector {
   private getContainerName(configObj: ts.ObjectLiteralExpression): string | undefined {
     const nameProp = this.findProperty(configObj, 'name');
 
-    if (nameProp && ts.isStringLiteral(nameProp.initializer)) {
+    if (nameProp && TSContext.ts.isStringLiteral(nameProp.initializer)) {
       return nameProp.initializer.text;
     }
 
@@ -424,15 +426,15 @@ export class ConfigCollector implements IConfigCollector {
 
     // Check if it's a declareContainerTokens call
     if (
-      ts.isVariableDeclaration(declaration) &&
+      TSContext.ts.isVariableDeclaration(declaration) &&
       declaration.initializer &&
-      ts.isCallExpression(declaration.initializer)
+      TSContext.ts.isCallExpression(declaration.initializer)
     ) {
       const callExpr = declaration.initializer;
 
       // Check if it's declareContainerTokens
       if (
-        ts.isIdentifier(callExpr.expression) &&
+        TSContext.ts.isIdentifier(callExpr.expression) &&
         callExpr.expression.text === 'declareContainerTokens'
       ) {
         return this.extractDeclaredTokens(callExpr);
@@ -482,12 +484,12 @@ export class ConfigCollector implements IConfigCollector {
     const visit = (node: ts.Node) => {
       if (result) return;
 
-      if (ts.isIdentifier(node) && node.text === name) {
+      if (TSContext.ts.isIdentifier(node) && node.text === name) {
         result = node;
         return;
       }
 
-      ts.forEachChild(node, visit);
+      TSContext.ts.forEachChild(node, visit);
     };
 
     visit(sourceFile);
@@ -500,8 +502,8 @@ export class ConfigCollector implements IConfigCollector {
   ): ts.PropertyAssignment | undefined {
     for (const prop of obj.properties) {
       if (
-        ts.isPropertyAssignment(prop) &&
-        ts.isIdentifier(prop.name) &&
+        TSContext.ts.isPropertyAssignment(prop) &&
+        TSContext.ts.isIdentifier(prop.name) &&
         prop.name.text === name
       ) {
         return prop;
@@ -532,8 +534,7 @@ export class ConfigCollector implements IConfigCollector {
     }
 
     // Priority 2: Generate a hash using HashUtils
-    const path = require('path');
-    const fileName = path.basename(sourceFile.fileName, '.ts');
+    const fileName = basename(sourceFile.fileName, '.ts');
     const configText = configObject.getText();
 
     return HashUtils.generateContainerId(fileName, position, configText);
@@ -547,12 +548,12 @@ export class ConfigCollector implements IConfigCollector {
    */
   private extractConfigName(configObject: ts.ObjectLiteralExpression): string | undefined {
     for (const prop of configObject.properties) {
-      if (ts.isPropertyAssignment(prop) &&
-          ts.isIdentifier(prop.name) &&
+      if (TSContext.ts.isPropertyAssignment(prop) &&
+          TSContext.ts.isIdentifier(prop.name) &&
           prop.name.text === 'name') {
 
         // The value should be a string literal
-        if (ts.isStringLiteral(prop.initializer)) {
+        if (TSContext.ts.isStringLiteral(prop.initializer)) {
           return prop.initializer.text;
         }
       }

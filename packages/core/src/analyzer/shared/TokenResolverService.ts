@@ -1,4 +1,5 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../../TSContext';
 import type { TokenId } from '../types';
 import { HashUtils } from './HashUtils';
 
@@ -67,26 +68,26 @@ export class TokenResolverService {
 
     // Unwrap type assertions, parentheses, and satisfies expressions
     while (
-      ts.isParenthesizedExpression(expr) ||
-      ts.isAsExpression(expr) ||
-      ts.isTypeAssertionExpression(expr) ||
-      (ts.isSatisfiesExpression && ts.isSatisfiesExpression(expr))
+      TSContext.ts.isParenthesizedExpression(expr) ||
+      TSContext.ts.isAsExpression(expr) ||
+      TSContext.ts.isTypeAssertionExpression(expr) ||
+      (TSContext.ts.isSatisfiesExpression && TSContext.ts.isSatisfiesExpression(expr))
     ) {
       expr = expr.expression;
     }
 
     // If already a call expression, return it
-    if (ts.isCallExpression(expr)) {
+    if (TSContext.ts.isCallExpression(expr)) {
       return expr;
     }
 
     // Resolve simple identifiers
-    if (ts.isIdentifier(expr)) {
+    if (TSContext.ts.isIdentifier(expr)) {
       return this.resolveIdentifierToInitializer(expr);
     }
 
     // Resolve property access (e.g., TOKENS.ILogger)
-    if (ts.isPropertyAccessExpression(expr)) {
+    if (TSContext.ts.isPropertyAccessExpression(expr)) {
       return this.resolvePropertyAccessToInitializer(expr);
     }
 
@@ -123,14 +124,14 @@ export class TokenResolverService {
     const decl = declarations[0];
 
     // Variable declaration: const x = ...
-    if (ts.isVariableDeclaration(decl) && decl.initializer) {
+    if (TSContext.ts.isVariableDeclaration(decl) && decl.initializer) {
       return decl.initializer;
     }
 
     // Import specifier: import { x } from '...'
-    if (ts.isImportSpecifier(decl)) {
+    if (TSContext.ts.isImportSpecifier(decl)) {
       const importDecl = decl.parent.parent.parent;
-      if (ts.isImportDeclaration(importDecl)) {
+      if (TSContext.ts.isImportDeclaration(importDecl)) {
         // Follow the import to the original declaration
         const importSymbol = this.checker.getSymbolAtLocation(decl.name);
         if (importSymbol) {
@@ -138,7 +139,7 @@ export class TokenResolverService {
           const aliasedDeclarations = aliasedSymbol.getDeclarations();
           if (aliasedDeclarations && aliasedDeclarations.length > 0) {
             const aliasedDecl = aliasedDeclarations[0];
-            if (ts.isVariableDeclaration(aliasedDecl) && aliasedDecl.initializer) {
+            if (TSContext.ts.isVariableDeclaration(aliasedDecl) && aliasedDecl.initializer) {
               return aliasedDecl.initializer;
             }
           }
@@ -176,7 +177,7 @@ export class TokenResolverService {
     if (!objectSymbol) return undefined;
 
     // Follow aliases (imports)
-    const resolvedSymbol = objectSymbol.flags & ts.SymbolFlags.Alias
+    const resolvedSymbol = objectSymbol.flags & TSContext.ts.SymbolFlags.Alias
       ? this.checker.getAliasedSymbol(objectSymbol)
       : objectSymbol;
 
@@ -185,16 +186,16 @@ export class TokenResolverService {
 
     const decl = declarations[0];
     if (
-      ts.isVariableDeclaration(decl) &&
+      TSContext.ts.isVariableDeclaration(decl) &&
       decl.initializer &&
-      ts.isObjectLiteralExpression(decl.initializer)
+      TSContext.ts.isObjectLiteralExpression(decl.initializer)
     ) {
       // Find the property in the object literal
       const propName = propertyAccess.name.text;
       for (const prop of decl.initializer.properties) {
         if (
-          ts.isPropertyAssignment(prop) &&
-          ts.isIdentifier(prop.name) &&
+          TSContext.ts.isPropertyAssignment(prop) &&
+          TSContext.ts.isIdentifier(prop.name) &&
           prop.name.text === propName
         ) {
           return prop.initializer;
@@ -220,9 +221,9 @@ export class TokenResolverService {
    * ```
    */
   isUseInterfaceCall(node: ts.Expression | undefined): node is ts.CallExpression {
-    if (!node || !ts.isCallExpression(node)) return false;
+    if (!node || !TSContext.ts.isCallExpression(node)) return false;
     const expr = node.expression;
-    return ts.isIdentifier(expr) && expr.text === 'useInterface';
+    return TSContext.ts.isIdentifier(expr) && expr.text === 'useInterface';
   }
 
   /**
@@ -240,9 +241,9 @@ export class TokenResolverService {
    * ```
    */
   isUsePropertyCall(node: ts.Expression | undefined): node is ts.CallExpression {
-    if (!node || !ts.isCallExpression(node)) return false;
+    if (!node || !TSContext.ts.isCallExpression(node)) return false;
     const expr = node.expression;
-    return ts.isIdentifier(expr) && expr.text === 'useProperty';
+    return TSContext.ts.isIdentifier(expr) && expr.text === 'useProperty';
   }
 
   /**
@@ -305,11 +306,11 @@ export class TokenResolverService {
     const classArg = node.arguments[0];
     const nameArg = node.arguments[1];
 
-    if (!ts.isIdentifier(classArg)) {
+    if (!TSContext.ts.isIdentifier(classArg)) {
       throw new Error('useProperty first argument must be a class identifier.');
     }
 
-    if (!ts.isStringLiteral(nameArg)) {
+    if (!TSContext.ts.isStringLiteral(nameArg)) {
       throw new Error('useProperty second argument must be a string literal.');
     }
 

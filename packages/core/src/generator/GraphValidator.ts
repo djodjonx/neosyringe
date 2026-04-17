@@ -182,32 +182,4 @@ export class GraphValidator {
     stack.delete(nodeId);
   }
 
-  /**
-   * @deprecated Use detectCycleCollect instead
-   */
-  private detectCycle(
-    nodeId: TokenId,
-    graph: DependencyGraph,
-    visited: Set<TokenId>,
-    stack: Set<TokenId>,
-    parentTokens: Set<TokenId>
-  ): void {
-    visited.add(nodeId);
-    stack.add(nodeId);
-
-    const node = graph.nodes.get(nodeId);
-    if (node) {
-      for (const depId of node.dependencies) {
-        if (parentTokens.has(depId)) continue;
-
-        if (!visited.has(depId)) {
-          this.detectCycle(depId, graph, visited, stack, parentTokens);
-        } else if (stack.has(depId)) {
-          throw new Error(`Circular dependency detected: ${[...stack, depId].join(' -> ')}`);
-        }
-      }
-    }
-
-    stack.delete(nodeId);
-  }
 }

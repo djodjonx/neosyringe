@@ -1,4 +1,5 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../../TSContext';
 
 /**
  * Utility functions for identifying specific call expressions in the AST.
@@ -28,7 +29,7 @@ export class CallExpressionUtils {
    */
   static isDefineBuilderConfig(node: ts.CallExpression): boolean {
     const expression = node.expression;
-    return ts.isIdentifier(expression) && expression.text === 'defineBuilderConfig';
+    return TSContext.ts.isIdentifier(expression) && expression.text === 'defineBuilderConfig';
   }
 
   /**
@@ -45,7 +46,7 @@ export class CallExpressionUtils {
    */
   static isDefinePartialConfig(node: ts.CallExpression): boolean {
     const expression = node.expression;
-    return ts.isIdentifier(expression) && expression.text === 'definePartialConfig';
+    return TSContext.ts.isIdentifier(expression) && expression.text === 'definePartialConfig';
   }
 
   /**
@@ -63,7 +64,7 @@ export class CallExpressionUtils {
    * ```
    */
   static isDeclareContainerTokens(node: ts.CallExpression): boolean {
-    return ts.isIdentifier(node.expression) &&
+    return TSContext.ts.isIdentifier(node.expression) &&
            node.expression.text === 'declareContainerTokens';
   }
 

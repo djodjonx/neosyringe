@@ -1,4 +1,5 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../../TSContext';
 import type { DependencyGraph } from '../types';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { CallExpressionUtils } from '../utils/CallExpressionUtils';
@@ -65,10 +66,10 @@ export class ParentContainerResolver {
     if (!declaration) return;
 
     // Case 1: NeoSyringe container (defineBuilderConfig or definePartialConfig)
-    if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+    if (TSContext.ts.isVariableDeclaration(declaration) && declaration.initializer) {
       const init = declaration.initializer;
 
-      if (ts.isCallExpression(init)) {
+      if (TSContext.ts.isCallExpression(init)) {
         // Check if it's a NeoSyringe config call
         if (CallExpressionUtils.isDefineBuilderConfig(init) ||
             CallExpressionUtils.isDefinePartialConfig(init)) {
@@ -165,7 +166,7 @@ export class ParentContainerResolver {
    * @returns The resolved symbol (follows import aliases)
    */
   private resolveSymbol(symbol: ts.Symbol): ts.Symbol {
-    if (symbol.flags & ts.SymbolFlags.Alias) {
+    if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
       return this.resolveSymbol(this.checker.getAliasedSymbol(symbol));
     }
     return symbol;

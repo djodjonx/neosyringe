@@ -1,4 +1,5 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../../TSContext';
 import type { DependencyGraph, DependencyNode, TokenId } from '../types';
 import { TokenResolverService } from '../shared/TokenResolverService';
 
@@ -94,7 +95,7 @@ export class DependencyResolver {
     const declarations = symbol.getDeclarations();
     if (!declarations || declarations.length === 0) return;
 
-    const classDecl = declarations.find((d) => ts.isClassDeclaration(d)) as
+    const classDecl = declarations.find((d) => TSContext.ts.isClassDeclaration(d)) as
       | ts.ClassDeclaration
       | undefined;
     if (!classDecl) return;
@@ -103,7 +104,7 @@ export class DependencyResolver {
 
     // Find constructor
     const constructor = classDecl.members.find((m) =>
-      ts.isConstructorDeclaration(m)
+      TSContext.ts.isConstructorDeclaration(m)
     ) as ts.ConstructorDeclaration | undefined;
 
     if (!constructor) {

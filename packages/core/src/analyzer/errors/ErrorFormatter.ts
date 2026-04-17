@@ -1,4 +1,5 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../../TSContext';
 import type { SourceFile, Node } from 'typescript';
 import type { AnalysisError, InjectionInfo, TokenSource } from '../types';
 
@@ -35,13 +36,13 @@ export class ErrorFormatter implements IErrorFormatter {
    * because the value might be an imported symbol whose AST node is in a different file.
    */
   private findTokenNode(injectionNode: Node): Node | null {
-    if (!ts.isObjectLiteralExpression(injectionNode)) {
+    if (!TSContext.ts.isObjectLiteralExpression(injectionNode)) {
       return null;
     }
 
     for (const prop of injectionNode.properties) {
-      if (ts.isPropertyAssignment(prop) &&
-          ts.isIdentifier(prop.name) &&
+      if (TSContext.ts.isPropertyAssignment(prop) &&
+          TSContext.ts.isIdentifier(prop.name) &&
           prop.name.text === 'token') {
         // Return the entire property assignment, not just the initializer
         // This ensures the node is always in the current file

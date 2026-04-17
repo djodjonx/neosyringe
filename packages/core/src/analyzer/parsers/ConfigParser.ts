@@ -1,4 +1,5 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../../TSContext';
 import type { DependencyGraph, ServiceDefinition, TokenId } from '../types';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { HashUtils } from '../shared/HashUtils';
@@ -52,14 +53,14 @@ export class ConfigParser {
     if (args.length < 1) return;
 
     const configObj = args[0];
-    if (!ts.isObjectLiteralExpression(configObj)) return;
+    if (!TSContext.ts.isObjectLiteralExpression(configObj)) return;
 
     // Parse 'name' property for containerName and containerId
     const nameProp = configObj.properties.find(p =>
-      p.name && ts.isIdentifier(p.name) && p.name.text === 'name'
+      p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'name'
     );
 
-    if (nameProp && ts.isPropertyAssignment(nameProp) && ts.isStringLiteral(nameProp.initializer)) {
+    if (nameProp && TSContext.ts.isPropertyAssignment(nameProp) && TSContext.ts.isStringLiteral(nameProp.initializer)) {
       graph.containerName = nameProp.initializer.text;
       graph.containerId = nameProp.initializer.text;
     } else {
@@ -69,34 +70,34 @@ export class ConfigParser {
 
     // Parse 'injections' property
     const injectionsProp = configObj.properties.find(p =>
-      p.name && ts.isIdentifier(p.name) && p.name.text === 'injections'
+      p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'injections'
     );
 
-    if (injectionsProp && ts.isPropertyAssignment(injectionsProp) && ts.isArrayLiteralExpression(injectionsProp.initializer)) {
+    if (injectionsProp && TSContext.ts.isPropertyAssignment(injectionsProp) && TSContext.ts.isArrayLiteralExpression(injectionsProp.initializer)) {
       this.parseInjectionsArray(injectionsProp.initializer, graph);
     }
 
     // Parse 'extends' property
     const extendsProp = configObj.properties.find(p =>
-      p.name && ts.isIdentifier(p.name) && p.name.text === 'extends'
+      p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'extends'
     );
 
-    if (extendsProp && ts.isPropertyAssignment(extendsProp) && ts.isArrayLiteralExpression(extendsProp.initializer)) {
+    if (extendsProp && TSContext.ts.isPropertyAssignment(extendsProp) && TSContext.ts.isArrayLiteralExpression(extendsProp.initializer)) {
       this.parseExtendsArray(extendsProp.initializer, graph, parentContainerNames);
     }
 
     // Parse 'useContainer' property
     const useContainerProp = configObj.properties.find(p =>
-      p.name && ts.isIdentifier(p.name) && p.name.text === 'useContainer'
+      p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'useContainer'
     );
 
-    if (useContainerProp && ts.isPropertyAssignment(useContainerProp)) {
+    if (useContainerProp && TSContext.ts.isPropertyAssignment(useContainerProp)) {
       if (!graph.legacyContainers) graph.legacyContainers = [];
       if (!graph.parentProvidedTokens) graph.parentProvidedTokens = new Set();
 
       const containerExpr = useContainerProp.initializer;
 
-      if (ts.isIdentifier(containerExpr)) {
+      if (TSContext.ts.isIdentifier(containerExpr)) {
         graph.legacyContainers.push(containerExpr.text);
         // Mark as parent container
         parentContainerNames.add(containerExpr.text);
@@ -112,7 +113,7 @@ export class ConfigParser {
    */
   private parseInjectionsArray(arrayLiteral: ts.ArrayLiteralExpression, graph: DependencyGraph): void {
     for (const element of arrayLiteral.elements) {
-      if (ts.isObjectLiteralExpression(element)) {
+      if (TSContext.ts.isObjectLiteralExpression(element)) {
         this.parseInjectionObject(element, graph);
       }
     }
@@ -136,20 +137,20 @@ export class ConfigParser {
     let isScoped = false;
 
     for (const prop of obj.properties) {
-      if (!ts.isPropertyAssignment(prop) || !ts.isIdentifier(prop.name)) continue;
+      if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
 
       if (prop.name.text === 'token') {
         tokenNode = prop.initializer;
       } else if (prop.name.text === 'provider') {
         providerNode = prop.initializer;
-      } else if (prop.name.text === 'lifecycle' && ts.isStringLiteral(prop.initializer)) {
+      } else if (prop.name.text === 'lifecycle' && TSContext.ts.isStringLiteral(prop.initializer)) {
         if (prop.initializer.text === 'transient') lifecycle = 'transient';
       } else if (prop.name.text === 'useFactory') {
-        if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+        if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
           useFactory = true;
         }
       } else if (prop.name.text === 'scoped') {
-        if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+        if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
           isScoped = true;
         }
       }
@@ -158,7 +159,7 @@ export class ConfigParser {
     if (!tokenNode) return;
 
     // Auto-detect factory if provider is an arrow function or function expression
-    if (providerNode && (ts.isArrowFunction(providerNode) || ts.isFunctionExpression(providerNode))) {
+    if (providerNode && (TSContext.ts.isArrowFunction(providerNode) || TSContext.ts.isFunctionExpression(providerNode))) {
       useFactory = true;
     }
 
@@ -199,7 +200,7 @@ export class ConfigParser {
       // Case: token: Class
       const tokenType = this.checker.getTypeAtLocation(tokenNode);
       tokenId = this.tokenResolverService.getTypeIdFromConstructor(tokenType);
-      if (ts.isIdentifier(tokenNode)) {
+      if (TSContext.ts.isIdentifier(tokenNode)) {
         tokenSymbol = this.checker.getSymbolAtLocation(tokenNode);
       }
     }
@@ -248,7 +249,7 @@ export class ConfigParser {
       type = 'explicit';
     } else {
       // Autowiring: Provider is the Token Class itself
-      if (ts.isIdentifier(tokenNode)) {
+      if (TSContext.ts.isIdentifier(tokenNode)) {
         implementationSymbol = this.checker.getSymbolAtLocation(tokenNode);
         type = 'autowire';
       }
@@ -307,14 +308,14 @@ export class ConfigParser {
 
     // Resolve tokenNode to the actual call expression
     let resolvedTokenNode = tokenNode;
-    if (ts.isExpression(tokenNode)) {
+    if (TSContext.ts.isExpression(tokenNode)) {
       const resolved = this.tokenResolverService.resolveToInitializer(tokenNode);
       if (resolved) {
         resolvedTokenNode = resolved;
       }
     }
 
-    if (ts.isExpression(resolvedTokenNode) && this.tokenResolverService.isUseInterfaceCall(resolvedTokenNode)) {
+    if (TSContext.ts.isExpression(resolvedTokenNode) && this.tokenResolverService.isUseInterfaceCall(resolvedTokenNode)) {
       const typeArgs = resolvedTokenNode.typeArguments;
       if (typeArgs && typeArgs.length > 0) {
         tokenType = this.checker.getTypeFromTypeNode(typeArgs[0]);
@@ -368,7 +369,7 @@ export class ConfigParser {
     parentContainerNames: Set<string>
   ): void {
     for (const element of arrayLiteral.elements) {
-      if (ts.isIdentifier(element)) {
+      if (TSContext.ts.isIdentifier(element)) {
         this.parsePartialConfig(element, graph, parentContainerNames);
       }
     }
@@ -395,9 +396,9 @@ export class ConfigParser {
     if (!declaration) return;
 
     // Expect: const config = definePartialConfig({...})
-    if (ts.isVariableDeclaration(declaration) &&
+    if (TSContext.ts.isVariableDeclaration(declaration) &&
         declaration.initializer &&
-        ts.isCallExpression(declaration.initializer)) {
+        TSContext.ts.isCallExpression(declaration.initializer)) {
       const callExpr = declaration.initializer;
 
       if (this.isDefinePartialConfigCall(callExpr)) {
@@ -412,7 +413,7 @@ export class ConfigParser {
    */
   private isDefinePartialConfigCall(node: ts.CallExpression): boolean {
     const expression = node.expression;
-    if (ts.isIdentifier(expression)) {
+    if (TSContext.ts.isIdentifier(expression)) {
       return expression.text === 'definePartialConfig';
     }
     return false;
@@ -435,7 +436,7 @@ export class ConfigParser {
    * Resolves a symbol, following aliases.
    */
   private resolveSymbol(symbol: ts.Symbol): ts.Symbol {
-    if (symbol.flags & ts.SymbolFlags.Alias) {
+    if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
       return this.resolveSymbol(this.checker.getAliasedSymbol(symbol));
     }
     return symbol;

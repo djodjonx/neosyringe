@@ -1,4 +1,5 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../../TSContext';
 import type { TokenId, ServiceDefinition } from '../types';
 import { generateTokenId } from '../Analyzer';
 
@@ -38,14 +39,14 @@ export class DependencyAnalyzer {
     const declarations = symbol.getDeclarations();
     if (!declarations || declarations.length === 0) return dependencies;
 
-    const classDecl = declarations.find(d => ts.isClassDeclaration(d)) as ts.ClassDeclaration | undefined;
+    const classDecl = declarations.find(d => TSContext.ts.isClassDeclaration(d)) as ts.ClassDeclaration | undefined;
     if (!classDecl) return dependencies;
 
     const className = classDecl.name?.getText() ?? 'Anonymous';
 
     // Find constructor
     const constructor = classDecl.members.find(
-      m => ts.isConstructorDeclaration(m)
+      m => TSContext.ts.isConstructorDeclaration(m)
     ) as ts.ConstructorDeclaration | undefined;
 
     if (!constructor) return dependencies; // No constructor or default constructor

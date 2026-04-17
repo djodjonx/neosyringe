@@ -1,4 +1,5 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../TSContext';
 import {
   DependencyGraph,
   AnalysisResult,
@@ -83,7 +84,7 @@ export function generateTokenId(symbol: ts.Symbol, sourceFile: ts.SourceFile): s
  *
  * @example
  * ```typescript
- * const program = ts.createProgram(['src/container.ts'], compilerOptions);
+ * const program = TSContext.ts.createProgram(['src/container.ts'], compilerOptions);
  * const analyzer = new Analyzer(program);
  *
  * // Extract the complete dependency graph
@@ -119,9 +120,9 @@ export class Analyzer {
    *
    * @example
    * ```typescript
-   * const program = ts.createProgram(['src/app.ts'], {
-   *   target: ts.ScriptTarget.ES2020,
-   *   module: ts.ModuleKind.ESNext
+   * const program = TSContext.ts.createProgram(['src/app.ts'], {
+   *   target: TSContext.ts.ScriptTarget.ES2020,
+   *   module: TSContext.ts.ModuleKind.ESNext
    * });
    * const analyzer = new Analyzer(program);
    * ```
@@ -286,13 +287,13 @@ export class Analyzer {
    * First pass: identify containers used as parents so we can skip them in visitNode.
    */
   private identifyParentContainers(node: ts.Node): void {
-    if (ts.isPropertyAssignment(node) &&
-        ts.isIdentifier(node.name) &&
+    if (TSContext.ts.isPropertyAssignment(node) &&
+        TSContext.ts.isIdentifier(node.name) &&
         node.name.text === 'useContainer' &&
-        ts.isIdentifier(node.initializer)) {
+        TSContext.ts.isIdentifier(node.initializer)) {
       this.parentContainerNames.add(node.initializer.text);
     }
-    ts.forEachChild(node, (child) => this.identifyParentContainers(child));
+    TSContext.ts.forEachChild(node, (child) => this.identifyParentContainers(child));
   }
 
   /**
@@ -301,13 +302,13 @@ export class Analyzer {
    * @param graph - The graph to populate.
    */
   private visitNode(node: ts.Node, graph: DependencyGraph): void {
-    if (ts.isCallExpression(node)) {
+    if (TSContext.ts.isCallExpression(node)) {
       if (CallExpressionUtils.isDefineBuilderConfig(node)) {
         // Check if this is a parent container (should be skipped)
         const parent = node.parent;
 
         // Case 1: const x = defineBuilderConfig(...)
-        if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+        if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
           if (this.parentContainerNames.has(parent.name.text)) {
             // Skip - this container is used as a parent, already processed
             return;
@@ -317,18 +318,18 @@ export class Analyzer {
 
           // Find the VariableStatement to get insertion position and export modifier
           let current: ts.Node = parent;
-          while (current && !ts.isVariableStatement(current)) {
+          while (current && !TSContext.ts.isVariableStatement(current)) {
             current = current.parent;
           }
-          if (current && ts.isVariableStatement(current)) {
+          if (current && TSContext.ts.isVariableStatement(current)) {
             // Use getStart() to exclude leading comments - we want to preserve them
             graph.variableStatementStart = current.getStart();
 
             // Detect export modifier
-            const modifiers = ts.canHaveModifiers(current) ? ts.getModifiers(current) : undefined;
+            const modifiers = TSContext.ts.canHaveModifiers(current) ? TSContext.ts.getModifiers(current) : undefined;
             if (modifiers) {
-              const hasExport = modifiers.some(m => m.kind === ts.SyntaxKind.ExportKeyword);
-              const hasDefault = modifiers.some(m => m.kind === ts.SyntaxKind.DefaultKeyword);
+              const hasExport = modifiers.some(m => m.kind === TSContext.ts.SyntaxKind.ExportKeyword);
+              const hasDefault = modifiers.some(m => m.kind === TSContext.ts.SyntaxKind.DefaultKeyword);
 
               if (hasExport && hasDefault) {
                 graph.variableExportModifier = 'export default';
@@ -345,7 +346,7 @@ export class Analyzer {
           }
         }
         // Case 2: export default defineBuilderConfig(...)
-        else if (ts.isExportAssignment(parent) && parent.isExportEquals === false) {
+        else if (TSContext.ts.isExportAssignment(parent) && parent.isExportEquals === false) {
           // This is 'export default <expression>'
           graph.variableExportModifier = 'export default';
           graph.variableStatementStart = parent.getStart();
@@ -362,7 +363,7 @@ export class Analyzer {
         // but their nodes should NOT be added to the main graph
         const parent = node.parent;
 
-        if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+        if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
           const partialName = parent.name.text;
 
           // Check if this partial is used in any extends array
@@ -387,7 +388,7 @@ export class Analyzer {
       }
     }
 
-    ts.forEachChild(node, (child) => this.visitNode(child, graph));
+    TSContext.ts.forEachChild(node, (child) => this.visitNode(child, graph));
   }
 
   /**
@@ -408,18 +409,18 @@ export class Analyzer {
   }
 
   private collectPartialsInExtends(node: ts.Node): void {
-    if (ts.isPropertyAssignment(node) &&
-        ts.isIdentifier(node.name) &&
+    if (TSContext.ts.isPropertyAssignment(node) &&
+        TSContext.ts.isIdentifier(node.name) &&
         node.name.text === 'extends' &&
-        ts.isArrayLiteralExpression(node.initializer)) {
+        TSContext.ts.isArrayLiteralExpression(node.initializer)) {
       // Found extends: [...], collect all identifiers
       for (const element of node.initializer.elements) {
-        if (ts.isIdentifier(element)) {
+        if (TSContext.ts.isIdentifier(element)) {
           this.partialNamesUsedInExtends!.add(element.text);
         }
       }
     }
-    ts.forEachChild(node, (child) => this.collectPartialsInExtends(child));
+    TSContext.ts.forEachChild(node, (child) => this.collectPartialsInExtends(child));
   }
 
   /**
@@ -432,12 +433,12 @@ export class Analyzer {
 
     // Handle parent container token extraction
     const args = node.arguments;
-    if (args.length >= 1 && ts.isObjectLiteralExpression(args[0])) {
+    if (args.length >= 1 && TSContext.ts.isObjectLiteralExpression(args[0])) {
       const useContainerProp = args[0].properties.find(p =>
-        p.name && ts.isIdentifier(p.name) && p.name.text === 'useContainer'
+        p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'useContainer'
       );
 
-      if (useContainerProp && ts.isPropertyAssignment(useContainerProp) && ts.isIdentifier(useContainerProp.initializer)) {
+      if (useContainerProp && TSContext.ts.isPropertyAssignment(useContainerProp) && TSContext.ts.isIdentifier(useContainerProp.initializer)) {
         // Delegate to ParentContainerResolver
         this.parentContainerResolver.extractParentContainerTokens(
           useContainerProp.initializer,
@@ -468,7 +469,7 @@ export class Analyzer {
    * @returns The resolved symbol.
    */
   private resolveSymbol(symbol: ts.Symbol): ts.Symbol {
-      if (symbol.flags & ts.SymbolFlags.Alias) {
+      if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
           return this.resolveSymbol(this.checker.getAliasedSymbol(symbol));
       }
       return symbol;

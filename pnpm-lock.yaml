@@ -17,6 +17,9 @@ importers:
       '@commitlint/config-conventional':
         specifier: ^20.3.1
         version: 20.3.1
+      '@djodjonx/neosyringe-lsp':
+        specifier: link:packages/lsp
+        version: link:packages/lsp
       '@vitest/coverage-v8':
         specifier: ^4.0.17
         version: 4.0.17(vitest@4.0.17(@types/node@25.0.9)(jiti@2.6.1)(terser@5.46.0)(yaml@2.8.2))

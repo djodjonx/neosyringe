@@ -2,7 +2,8 @@ import type { AnalysisError, ConfigGraph, TokenId } from '../types';
 import type { IValidator, ValidationContext } from './Validator';
 import type { IErrorFormatter } from '../errors/ErrorFormatter';
 import { DependencyAnalyzer } from './DependencyAnalyzer';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../../TSContext';
 
 /**
  * Validates that all required dependencies are available in the container.
@@ -64,13 +65,13 @@ export class MissingDependencyValidator implements IValidator {
    * because the value might be an imported symbol whose AST node is in a different file.
    */
   private findTokenNode(injectionNode: ts.Node): ts.Node | null {
-    if (!ts.isObjectLiteralExpression(injectionNode)) {
+    if (!TSContext.ts.isObjectLiteralExpression(injectionNode)) {
       return null;
     }
 
     for (const prop of injectionNode.properties) {
-      if (ts.isPropertyAssignment(prop) &&
-          ts.isIdentifier(prop.name) &&
+      if (TSContext.ts.isPropertyAssignment(prop) &&
+          TSContext.ts.isIdentifier(prop.name) &&
           prop.name.text === 'token') {
         // Return the entire property assignment, not just the initializer
         // This ensures the node is always in the current file

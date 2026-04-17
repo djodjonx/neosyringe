@@ -1,4 +1,5 @@
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+import { TSContext } from '../../TSContext';
 
 /**
  * Results collected by the ASTVisitor during traversal.
@@ -71,17 +72,17 @@ export class ASTVisitor {
    */
   visit(node: ts.Node): void {
     // Handle call expressions (defineBuilderConfig, definePartialConfig)
-    if (ts.isCallExpression(node)) {
+    if (TSContext.ts.isCallExpression(node)) {
       this.handleCallExpression(node);
     }
 
     // Handle property assignments (useContainer, extends)
-    if (ts.isPropertyAssignment(node)) {
+    if (TSContext.ts.isPropertyAssignment(node)) {
       this.handlePropertyAssignment(node);
     }
 
     // Recursively visit child nodes
-    ts.forEachChild(node, (child) => this.visit(child));
+    TSContext.ts.forEachChild(node, (child) => this.visit(child));
   }
 
   /**
@@ -113,19 +114,19 @@ export class ASTVisitor {
    * @param node - Property assignment to analyze
    */
   private handlePropertyAssignment(node: ts.PropertyAssignment): void {
-    if (!ts.isIdentifier(node.name)) return;
+    if (!TSContext.ts.isIdentifier(node.name)) return;
 
     const propertyName = node.name.text;
 
     // Detect: useContainer: someContainer
-    if (propertyName === 'useContainer' && ts.isIdentifier(node.initializer)) {
+    if (propertyName === 'useContainer' && TSContext.ts.isIdentifier(node.initializer)) {
       this.parentContainers.add(node.initializer.text);
     }
 
     // Detect: extends: [partial1, partial2, ...]
-    if (propertyName === 'extends' && ts.isArrayLiteralExpression(node.initializer)) {
+    if (propertyName === 'extends' && TSContext.ts.isArrayLiteralExpression(node.initializer)) {
       for (const element of node.initializer.elements) {
-        if (ts.isIdentifier(element)) {
+        if (TSContext.ts.isIdentifier(element)) {
           this.extendsReferences.add(element.text);
         }
       }
@@ -148,7 +149,7 @@ export class ASTVisitor {
    * ```
    */
   private getFunctionName(node: ts.CallExpression): string | undefined {
-    if (ts.isIdentifier(node.expression)) {
+    if (TSContext.ts.isIdentifier(node.expression)) {
       return node.expression.text;
     }
     return undefined;
