@@ -75,7 +75,7 @@ export class TokenResolver implements ITokenResolver {
 
   /**
    * Find a config by its variable name.
-   * Config keys are now "fileName:variableName", so we need to search for it.
+   * Config keys are "fileName:variableName", so we search by config.name (the variable name part).
    */
   private findConfigByName(
     allConfigs: Map<string, ConfigGraph>,

@@ -1,13 +1,16 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
 import type { TokenId, ServiceDefinition } from '../types';
-import { generateTokenId } from '../Analyzer';
+import { TokenResolverService } from '../shared/TokenResolverService';
 
 /**
  * Analyzes class constructors and factory functions to extract required dependencies.
  */
 export class DependencyAnalyzer {
-  constructor(private readonly checker: ts.TypeChecker) {}
+  constructor(
+    private readonly checker: ts.TypeChecker,
+    private readonly tokenResolverService: TokenResolverService
+  ) {}
 
   /**
    * Extracts all dependencies required by a service definition.
@@ -42,64 +45,20 @@ export class DependencyAnalyzer {
     const classDecl = declarations.find(d => TSContext.ts.isClassDeclaration(d)) as ts.ClassDeclaration | undefined;
     if (!classDecl) return dependencies;
 
-    const className = classDecl.name?.getText() ?? 'Anonymous';
-
-    // Find constructor
     const constructor = classDecl.members.find(
       m => TSContext.ts.isConstructorDeclaration(m)
     ) as ts.ConstructorDeclaration | undefined;
 
-    if (!constructor) return dependencies; // No constructor or default constructor
+    if (!constructor) return dependencies;
 
     for (const param of constructor.parameters) {
-      const paramName = param.name.getText();
       const typeNode = param.type;
-
-      if (!typeNode) {
-        // No type annotation - can't safely determine dependency
-        continue;
-      }
+      if (!typeNode) continue; // No type annotation — cannot determine dependency
 
       const type = this.checker.getTypeFromTypeNode(typeNode);
-
-      // Try to get a meaningful token ID for this dependency
-      const depTokenId = this.getTypeId(type, className, paramName);
-      dependencies.push(depTokenId);
+      dependencies.push(this.tokenResolverService.getHashedTokenIdFromType(type));
     }
 
     return dependencies;
-  }
-
-  /**
-   * Generates a unique Token ID for a given Type.
-   * Uses symbol name and file path hash for consistency.
-   *
-   * @param type - The TypeScript Type
-   * @param _className - Parent class name (for property tokens) - reserved for future use
-   * @param _paramName - Parameter name (for property tokens) - reserved for future use
-   * @returns A string identifier for the token
-   */
-  private getTypeId(type: ts.Type, _className?: string, _paramName?: string): TokenId {
-    const symbol = type.getSymbol();
-    if (!symbol) {
-      return this.checker.typeToString(type);
-    }
-
-    const name = symbol.getName();
-
-    // Guard against internal property names
-    if (name === '__type' || name === 'InterfaceToken' || name === '__brand') {
-      return this.checker.typeToString(type);
-    }
-
-    // Use the same ID generation logic as the Analyzer
-    const declarations = symbol.getDeclarations();
-    if (declarations && declarations.length > 0) {
-      const sourceFile = declarations[0].getSourceFile();
-      return generateTokenId(symbol, sourceFile);
-    }
-
-    // Fallback to symbol name
-    return name;
   }
 }

@@ -2,8 +2,7 @@ import type { AnalysisError, ConfigGraph, TokenId } from '../types';
 import type { IValidator, ValidationContext } from './Validator';
 import type { IErrorFormatter } from '../errors/ErrorFormatter';
 import { DependencyAnalyzer } from './DependencyAnalyzer';
-import type * as ts from 'typescript';
-import { TSContext } from '../../TSContext';
+import { PropertyFinder } from '../utils/PropertyFinder';
 
 /**
  * Validates that all required dependencies are available in the container.
@@ -35,7 +34,7 @@ export class MissingDependencyValidator implements IValidator {
         if (!isAvailable) {
           // Find the token node for better error positioning
           // Use info.node (the injection object) as fallback
-          const tokenNode = this.findTokenNode(info.node);
+          const tokenNode = PropertyFinder.findTokenAssignment(info.node);
 
           // IMPORTANT: We must use the config's sourceFile because the node
           // comes from parsing that file. Using node.getSourceFile() can fail
@@ -57,29 +56,6 @@ export class MissingDependencyValidator implements IValidator {
     }
 
     return errors;
-  }
-
-  /**
-   * Finds the token property node within an injection object for better error positioning.
-   * Returns the entire property assignment (e.g., "token: UserService") not just the value,
-   * because the value might be an imported symbol whose AST node is in a different file.
-   */
-  private findTokenNode(injectionNode: ts.Node): ts.Node | null {
-    if (!TSContext.ts.isObjectLiteralExpression(injectionNode)) {
-      return null;
-    }
-
-    for (const prop of injectionNode.properties) {
-      if (TSContext.ts.isPropertyAssignment(prop) &&
-          TSContext.ts.isIdentifier(prop.name) &&
-          prop.name.text === 'token') {
-        // Return the entire property assignment, not just the initializer
-        // This ensures the node is always in the current file
-        return prop;
-      }
-    }
-
-    return null;
   }
 
   /**

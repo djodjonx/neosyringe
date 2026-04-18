@@ -442,4 +442,38 @@ export class TokenResolverService {
     const type = this.checker.getTypeAtLocation(tokenNode);
     return this.getTypeIdFromConstructor(type);
   }
+
+  /**
+   * Produces a hash-based token ID from a ts.Type, matching the format used
+   * when registering tokens in defineBuilderConfig (e.g. "IFoo_a1b2c3d4").
+   * Used by DependencyAnalyzer to match constructor parameter types against
+   * registered token IDs.
+   */
+  getHashedTokenIdFromType(type: ts.Type): string {
+    const symbol = type.getSymbol();
+    if (!symbol) return this.checker.typeToString(type);
+
+    const name = symbol.getName();
+    if (name === '__type' || name === 'InterfaceToken' || name === '__brand') {
+      return this.checker.typeToString(type);
+    }
+
+    const declarations = symbol.getDeclarations();
+    if (declarations && declarations.length > 0) {
+      return HashUtils.generateTokenId(symbol, declarations[0].getSourceFile());
+    }
+
+    return name;
+  }
+
+  /**
+   * Resolves a symbol, following import aliases until the original declaration.
+   * Centralises the alias-unwrapping logic used across Analyzer and resolvers.
+   */
+  resolveSymbol(symbol: ts.Symbol): ts.Symbol {
+    if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
+      return this.resolveSymbol(this.checker.getAliasedSymbol(symbol));
+    }
+    return symbol;
+  }
 }

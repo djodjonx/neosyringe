@@ -61,7 +61,12 @@ export class ParentContainerResolver {
     // Mark this container as a parent
     parentContainerNames.add(containerIdentifier.text);
 
-    const resolvedSymbol = this.resolveSymbol(symbol);
+    // Ensure parentProvidedTokens is initialized before any sub-call populates it
+    if (!graph.parentProvidedTokens) {
+      graph.parentProvidedTokens = new Set();
+    }
+
+    const resolvedSymbol = this.tokenResolverService.resolveSymbol(symbol);
     const declaration = resolvedSymbol.valueDeclaration ?? resolvedSymbol.declarations?.[0];
     if (!declaration) return;
 
@@ -111,15 +116,17 @@ export class ParentContainerResolver {
     // Use callback to parse (avoids circular dependency)
     this.parseBuilderConfigCallback(init, parentGraph);
 
+    graph.parentProvidedTokens ??= new Set();
+
     // Add all parent tokens to parentProvidedTokens
     for (const tokenId of parentGraph.nodes.keys()) {
-      graph.parentProvidedTokens!.add(tokenId);
+      graph.parentProvidedTokens.add(tokenId);
     }
 
     // Also inherit parent's parent tokens (transitive inheritance)
     if (parentGraph.parentProvidedTokens) {
       for (const tokenId of parentGraph.parentProvidedTokens) {
-        graph.parentProvidedTokens!.add(tokenId);
+        graph.parentProvidedTokens.add(tokenId);
       }
     }
   }
@@ -145,30 +152,20 @@ export class ParentContainerResolver {
     const typeArg = node.typeArguments[0];
     const type = this.checker.getTypeFromTypeNode(typeArg);
 
+    graph.parentProvidedTokens ??= new Set();
+
     // Get properties of the type (e.g., { AuthService: AuthService, UserRepo: UserRepo })
     const properties = type.getProperties();
     for (const prop of properties) {
       const propType = this.checker.getTypeOfSymbol(prop);
       if (propType) {
         const tokenId = this.tokenResolverService.getTypeId(propType);
-        graph.parentProvidedTokens!.add(tokenId);
+        graph.parentProvidedTokens.add(tokenId);
       } else {
         // Fallback to property name if type not available
-        graph.parentProvidedTokens!.add(prop.getName());
+        graph.parentProvidedTokens.add(prop.getName());
       }
     }
   }
 
-  /**
-   * Resolves a symbol, following aliases if necessary.
-   *
-   * @param symbol - The symbol to resolve
-   * @returns The resolved symbol (follows import aliases)
-   */
-  private resolveSymbol(symbol: ts.Symbol): ts.Symbol {
-    if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
-      return this.resolveSymbol(this.checker.getAliasedSymbol(symbol));
-    }
-    return symbol;
-  }
 }

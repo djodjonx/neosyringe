@@ -1,7 +1,9 @@
 import type * as ts from 'typescript';
+import { TSContext } from '../../TSContext';
 import type { AnalysisError, ConfigGraph, InjectionInfo } from '../types';
 import type { IValidator, ValidationContext } from './Validator';
 import type { IErrorFormatter } from '../errors/ErrorFormatter';
+import { PropertyFinder } from '../utils/PropertyFinder';
 
 /**
  * Validates type compatibility between tokens and providers.
@@ -31,25 +33,15 @@ export class TypeValidator implements IValidator {
   private checkTypeCompatibility(info: InjectionInfo): AnalysisError | null {
     const { definition } = info;
 
-    // Skip if no implementation symbol (factories, etc.)
-    if (!definition.implementationSymbol) {
-      return null;
-    }
+    if (!definition.implementationSymbol) return null;
+    if (!definition.isInterfaceToken) return null;
 
-    // Skip if not an interface token (class tokens are self-validated by TS)
-    if (!definition.isInterfaceToken) {
-      return null;
-    }
-
-    // Get the token type from the useInterface<T>() call
     const tokenType = this.getTokenType(info);
     if (!tokenType) return null;
 
-    // Get the implementation type
     const implType = this.getImplementationType(info);
     if (!implType) return null;
 
-    // Check if implementation is assignable to token type
     if (!this.checker.isTypeAssignableTo(implType, tokenType)) {
       const expectedTypeName = this.checker.typeToString(tokenType);
       const actualTypeName = this.checker.typeToString(implType);
@@ -59,20 +51,32 @@ export class TypeValidator implements IValidator {
     return null;
   }
 
-  private getTokenType(_info: InjectionInfo): ts.Type | null {
-    // The token type is extracted from the ServiceDefinition
-    // This would typically come from useInterface<T>() type argument
-    // For now, we rely on the existing type extraction in the collector
-    return null;
+  /**
+   * Extracts the interface type T from the useInterface<T>() call in the injection object.
+   * The injection object is { token: useInterface<T>(), provider: Impl }.
+   */
+  private getTokenType(info: InjectionInfo): ts.Type | null {
+    const tokenProp = PropertyFinder.findTokenAssignment(info.node);
+    if (!tokenProp) return null;
+
+    const tokenExpr = tokenProp.initializer;
+    if (!TSContext.ts.isCallExpression(tokenExpr)) return null;
+    if (!tokenExpr.typeArguments || tokenExpr.typeArguments.length === 0) return null;
+
+    try {
+      return this.checker.getTypeFromTypeNode(tokenExpr.typeArguments[0]);
+    } catch {
+      return null;
+    }
   }
 
   private getImplementationType(info: InjectionInfo): ts.Type | null {
     const { definition } = info;
     if (!definition.implementationSymbol) return null;
 
-    const declarations = definition.implementationSymbol.getDeclarations();
-    if (!declarations || declarations.length === 0) return null;
-
-    return this.checker.getTypeOfSymbolAtLocation(definition.implementationSymbol, declarations[0]);
+    // getDeclaredTypeOfSymbol returns the instance type (e.g., ConsoleLogger),
+    // whereas getTypeOfSymbolAtLocation returns the constructor type (typeof ConsoleLogger)
+    // which is not structurally assignable to an interface.
+    return this.checker.getDeclaredTypeOfSymbol(definition.implementationSymbol);
   }
 }

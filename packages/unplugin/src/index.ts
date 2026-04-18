@@ -4,31 +4,21 @@ import { Analyzer, generateTokenId } from '@djodjonx/neosyringe-core/analyzer';
 import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
 import { Generator } from '@djodjonx/neosyringe-core/generator';
 
-/**
- * Registry of tokens that are registered in container files.
- * Used to validate useInterface<T>() calls in other files.
- */
-const registeredTokens = new Set<string>();
-
-/**
- * Registry of tokens that are used (resolved) in non-container files.
- * Used to validate that all used tokens are registered.
- */
-const usedTokens = new Map<string, { file: string; line: number; column: number; interfaceName: string }>();
+type UsedTokenEntry = { file: string; line: number; column: number; interfaceName: string };
 
 /**
  * Transforms useInterface<T>() calls into their tokenId string values.
  * This runs on ALL TypeScript files, not just container files.
  *
  * @param excludeRange - Optional range to exclude from transformation (used for defineBuilderConfig content)
- * @param collectUsedTokens - If true, collects used tokens for later validation
+ * @param usedTokens - Registry to collect used tokens for later validation (only when non-null)
  */
 function transformUseInterfaceCalls(
   code: string,
   id: string,
   compilerOptions: ts.CompilerOptions,
   excludeRange?: { start: number; end: number },
-  collectUsedTokens: boolean = false
+  usedTokens?: Map<string, UsedTokenEntry>
 ): string | null {
   if (!code.includes('useInterface')) return null;
 
@@ -89,7 +79,7 @@ function transformUseInterfaceCalls(
         });
 
         // Collect used tokens for validation at build end
-        if (collectUsedTokens && !usedTokens.has(tokenId)) {
+        if (usedTokens && !usedTokens.has(tokenId)) {
           const line = sourceFile.getLineAndCharacterOfPosition(nodeStart);
           usedTokens.set(tokenId, {
             file: id,
@@ -135,6 +125,22 @@ function transformUseInterfaceCalls(
  * ```
  */
 export const neoSyringePlugin = createUnplugin(() => {
+  // Per-build registries — scoped to the factory instance, safe for parallel builds
+  const registeredTokens = new Set<string>();
+  const usedTokens = new Map<string, UsedTokenEntry>();
+
+  // Cache tsconfig parsing — tsconfig doesn't change during a build
+  let compilerOptions: ts.CompilerOptions | undefined;
+
+  function getCompilerOptions(): ts.CompilerOptions | undefined {
+    if (compilerOptions) return compilerOptions;
+    const configFile = ts.findConfigFile(process.cwd(), ts.sys.fileExists, 'tsconfig.json');
+    if (!configFile) return undefined;
+    const { config } = ts.readConfigFile(configFile, ts.sys.readFile);
+    compilerOptions = ts.parseJsonConfigFileContent(config, ts.sys, process.cwd()).options;
+    return compilerOptions;
+  }
+
   return {
     name: 'neosyringe-plugin',
 
@@ -148,15 +154,12 @@ export const neoSyringePlugin = createUnplugin(() => {
     },
 
     transform(code, id) {
-      const configFile = ts.findConfigFile(process.cwd(), ts.sys.fileExists, 'tsconfig.json');
-      if (!configFile) return;
-
-      const { config } = ts.readConfigFile(configFile, ts.sys.readFile);
-      const { options: compilerOptions } = ts.parseJsonConfigFileContent(config, ts.sys, process.cwd());
+      const options = getCompilerOptions();
+      if (!options) return;
 
       // 1. If file contains defineBuilderConfig, handle it specially
       if (code.includes('defineBuilderConfig')) {
-        const program = ts.createProgram([id], compilerOptions);
+        const program = ts.createProgram([id], options);
         const analyzer = new Analyzer(program);
         const graph = analyzer.extract();
 
@@ -203,7 +206,7 @@ export const neoSyringePlugin = createUnplugin(() => {
 
           // Step 3: Transform useInterface calls in the final code
           // Don't collect used tokens here since tokens are defined in this file
-          const finalCode = transformUseInterfaceCalls(codeWithContainer, id, compilerOptions);
+          const finalCode = transformUseInterfaceCalls(codeWithContainer, id, options);
 
           return finalCode || codeWithContainer;
         }
@@ -211,7 +214,7 @@ export const neoSyringePlugin = createUnplugin(() => {
 
       // 2. Transform useInterface<T>() calls to tokenId strings (for non-container files)
       // Collect used tokens for validation at build end
-      return transformUseInterfaceCalls(code, id, compilerOptions, undefined, true);
+      return transformUseInterfaceCalls(code, id, options, undefined, usedTokens);
     },
 
     /**
@@ -232,7 +235,6 @@ export const neoSyringePlugin = createUnplugin(() => {
       }
 
       if (errors.length > 0) {
-        // Clear registries for next build
         registeredTokens.clear();
         usedTokens.clear();
 
@@ -245,7 +247,6 @@ export const neoSyringePlugin = createUnplugin(() => {
         );
       }
 
-      // Clear registries for next build
       registeredTokens.clear();
       usedTokens.clear();
     },

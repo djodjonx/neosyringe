@@ -1,7 +1,6 @@
-import type * as ts from 'typescript';
-import { TSContext } from '../../TSContext';
 import type { SourceFile, Node } from 'typescript';
 import type { AnalysisError, InjectionInfo, TokenSource } from '../types';
+import { PropertyFinder } from '../utils/PropertyFinder';
 
 /**
  * Interface for error formatting.
@@ -30,29 +29,6 @@ export interface IErrorFormatter {
  * Default error formatter with descriptive messages.
  */
 export class ErrorFormatter implements IErrorFormatter {
-  /**
-   * Finds the token property node within an injection object for better error positioning.
-   * Returns the entire property assignment (e.g., "token: UserService") not just the value,
-   * because the value might be an imported symbol whose AST node is in a different file.
-   */
-  private findTokenNode(injectionNode: Node): Node | null {
-    if (!TSContext.ts.isObjectLiteralExpression(injectionNode)) {
-      return null;
-    }
-
-    for (const prop of injectionNode.properties) {
-      if (TSContext.ts.isPropertyAssignment(prop) &&
-          TSContext.ts.isIdentifier(prop.name) &&
-          prop.name.text === 'token') {
-        // Return the entire property assignment, not just the initializer
-        // This ensures the node is always in the current file
-        return prop;
-      }
-    }
-
-    return null;
-  }
-
   formatDuplicateError(
     injection: InjectionInfo,
     source: TokenSource | { name: string; type: 'internal' }
@@ -68,7 +44,7 @@ export class ErrorFormatter implements IErrorFormatter {
     }
 
     // Use the token node for precise error positioning
-    const errorNode = this.findTokenNode(injection.node) || injection.node;
+    const errorNode = PropertyFinder.findTokenAssignment(injection.node) ?? injection.node;
 
     return {
       type: 'duplicate',
@@ -87,8 +63,9 @@ export class ErrorFormatter implements IErrorFormatter {
     expectedType: string,
     actualType: string
   ): AnalysisError {
-    // Use the token node for precise error positioning
-    const errorNode = this.findTokenNode(injection.node) || injection.node;
+    // Use the full registration object so the error spans both token and provider,
+    // making it clear which combination is incompatible.
+    const errorNode = injection.node;
 
     return {
       type: 'type-mismatch',

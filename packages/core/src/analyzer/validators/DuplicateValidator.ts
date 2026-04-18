@@ -23,6 +23,11 @@ export class DuplicateValidator implements IValidator {
       errors.push(...this.validateInheritedDuplicates(config, context.inheritedTokens));
     }
 
+    // 3. Legacy parent duplicates (builders with declareContainerTokens parent)
+    if (config.type === 'builder' && config.legacyParentTokens) {
+      errors.push(...this.validateLegacyDuplicates(config));
+    }
+
     return errors;
   }
 
@@ -37,6 +42,24 @@ export class DuplicateValidator implements IValidator {
           type: 'internal',
         })
       );
+    }
+
+    return errors;
+  }
+
+  private validateLegacyDuplicates(config: ConfigGraph): AnalysisError[] {
+    const errors: AnalysisError[] = [];
+
+    for (const [tokenId, info] of config.localInjections) {
+      if (info.isScoped) continue;
+      if (config.legacyParentTokens!.has(tokenId)) {
+        errors.push(
+          this.errorFormatter.formatDuplicateError(info, {
+            name: config.useContainerRef ?? 'legacy container',
+            type: 'parent',
+          })
+        );
+      }
     }
 
     return errors;

@@ -199,7 +199,7 @@ export class Analyzer {
     if (this.configCollector) return;
 
     const errorFormatter: IErrorFormatter = new ErrorFormatter();
-    const dependencyAnalyzer = new DependencyAnalyzer(this.checker);
+    const dependencyAnalyzer = new DependencyAnalyzer(this.checker, this.tokenResolverService);
 
     this.configCollector = new ConfigCollector(this.program, this.checker);
     this.tokenResolver = new TokenResolver();
@@ -463,15 +463,4 @@ export class Analyzer {
   }
 
 
-  /**
-   * Resolves a symbol, following aliases if necessary.
-   * @param symbol - The symbol to resolve.
-   * @returns The resolved symbol.
-   */
-  private resolveSymbol(symbol: ts.Symbol): ts.Symbol {
-      if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
-          return this.resolveSymbol(this.checker.getAliasedSymbol(symbol));
-      }
-      return symbol;
-  }
 }
