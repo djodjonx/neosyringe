@@ -23,6 +23,7 @@ import {
 import { ErrorFormatter, CycleError, type IErrorFormatter } from './errors';
 import { HashUtils, TokenResolverService } from './shared';
 import { CallExpressionUtils } from './utils';
+import { ASTVisitor } from './visitors';
 
 /**
  * Error thrown when a duplicate registration is detected.
@@ -107,8 +108,11 @@ export class Analyzer {
   private configParser: ConfigParser;
   private parentContainerResolver: ParentContainerResolver;
 
-  /** Set of variable names that are parent containers (should not be added to main graph) */
+  /** Variable names that are parent containers (should not be added to main graph) */
   private parentContainerNames = new Set<string>();
+
+  /** Variable names referenced in any extends array — populated by ASTVisitor before visitNode runs */
+  private extendsReferences = new Set<string>();
 
   /**
    * Creates a new Analyzer instance.
@@ -161,24 +165,26 @@ export class Analyzer {
       errors: [], // Initialize error collection
     };
 
-    // First pass: identify all parent containers (useContainer references)
+    // Single pass: collect parent container names, extends refs, and config call sites
+    // This replaces three separate AST traversals with one.
+    const visitor = new ASTVisitor();
     for (const sourceFile of this.program.getSourceFiles()) {
       if (sourceFile.isDeclarationFile) continue;
-      this.identifyParentContainers(sourceFile);
+      visitor.visit(sourceFile);
     }
+    const visitorResults = visitor.getResults();
+    for (const name of visitorResults.parentContainers) {
+      this.parentContainerNames.add(name);
+    }
+    this.extendsReferences = visitorResults.extendsReferences;
 
-    // Second pass: parse all containers except parents
-    // Each defineBuilderConfig gets its own isolated graph
+    // Second pass: parse and build the dependency graph
     for (const sourceFile of this.program.getSourceFiles()) {
       if (sourceFile.isDeclarationFile) continue;
       this.visitNode(sourceFile, graph);
     }
 
-    // After extracting all nodes, resolve dependencies for each
     this.resolveAllDependencies(graph);
-
-    // Return the graph with collected errors
-    // CLI and Generator will check graph.errors and throw if needed
     return graph;
   }
 
@@ -284,19 +290,6 @@ export class Analyzer {
   }
 
   /**
-   * First pass: identify containers used as parents so we can skip them in visitNode.
-   */
-  private identifyParentContainers(node: ts.Node): void {
-    if (TSContext.ts.isPropertyAssignment(node) &&
-        TSContext.ts.isIdentifier(node.name) &&
-        node.name.text === 'useContainer' &&
-        TSContext.ts.isIdentifier(node.initializer)) {
-      this.parentContainerNames.add(node.initializer.text);
-    }
-    TSContext.ts.forEachChild(node, (child) => this.identifyParentContainers(child));
-  }
-
-  /**
    * Visits an AST node to find container calls.
    * @param node - The AST node to visit.
    * @param graph - The graph to populate.
@@ -391,36 +384,9 @@ export class Analyzer {
     TSContext.ts.forEachChild(node, (child) => this.visitNode(child, graph));
   }
 
-  /**
-   * Check if a partial config is used in any extends array.
-   */
-  private partialNamesUsedInExtends: Set<string> | null = null;
-
+  /** Returns true if a partial config name appears in any extends array (pre-collected by ASTVisitor). */
   private isPartialUsedInExtends(partialName: string): boolean {
-    // Lazy initialization - scan all files once for extends references
-    if (this.partialNamesUsedInExtends === null) {
-      this.partialNamesUsedInExtends = new Set<string>();
-      for (const sourceFile of this.program.getSourceFiles()) {
-        if (sourceFile.isDeclarationFile) continue;
-        this.collectPartialsInExtends(sourceFile);
-      }
-    }
-    return this.partialNamesUsedInExtends.has(partialName);
-  }
-
-  private collectPartialsInExtends(node: ts.Node): void {
-    if (TSContext.ts.isPropertyAssignment(node) &&
-        TSContext.ts.isIdentifier(node.name) &&
-        node.name.text === 'extends' &&
-        TSContext.ts.isArrayLiteralExpression(node.initializer)) {
-      // Found extends: [...], collect all identifiers
-      for (const element of node.initializer.elements) {
-        if (TSContext.ts.isIdentifier(element)) {
-          this.partialNamesUsedInExtends!.add(element.text);
-        }
-      }
-    }
-    TSContext.ts.forEachChild(node, (child) => this.collectPartialsInExtends(child));
+    return this.extendsReferences.has(partialName);
   }
 
   /**

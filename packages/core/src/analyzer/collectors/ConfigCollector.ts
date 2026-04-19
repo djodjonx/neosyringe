@@ -102,11 +102,12 @@ export class ConfigCollector implements IConfigCollector {
     if (TSContext.ts.isCallExpression(node)) {
       const config = this.tryParseConfig(node, sourceFile);
       if (config) {
-        // Use unique key: fileName:variableName to avoid collisions
+        // Global key uses fileName:name to guarantee uniqueness across all files.
+        // Per-file key uses name:position to allow the same name in different
+        // files without collision during the intra-file duplicate-id check.
         const uniqueKey = `${sourceFile.fileName}:${config.name}`;
         configs.set(uniqueKey, config);
         if (fileConfigs) {
-          // Use unique key for fileConfigs too (name + position)
           const fileUniqueKey = `${config.name}:${node.getStart()}`;
           fileConfigs.set(fileUniqueKey, config);
         }

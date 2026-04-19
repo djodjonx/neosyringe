@@ -119,7 +119,7 @@ describe('TokenResolverService', () => {
       const callExpr = findNode(sourceFile, ts.isCallExpression);
       if (callExpr) {
         expect(() => testService.extractInterfaceTokenId(callExpr)).toThrow(
-          'useInterface must have a type argument'
+          'useInterface() must have a type argument'
         );
       }
     });
