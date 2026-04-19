@@ -1,6 +1,6 @@
 import { createUnplugin } from 'unplugin';
 import * as ts from 'typescript';
-import { Analyzer, generateTokenId } from '@djodjonx/neosyringe-core/analyzer';
+import { Analyzer, HashUtils } from '@djodjonx/neosyringe-core/analyzer';
 import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
 import { Generator } from '@djodjonx/neosyringe-core/generator';
 
@@ -67,7 +67,7 @@ function transformUseInterfaceCalls(
 
         if (declarations && declarations.length > 0) {
           const declSourceFile = declarations[0].getSourceFile();
-          tokenId = generateTokenId(symbol, declSourceFile);
+          tokenId = HashUtils.generateTokenId(symbol, declSourceFile);
         } else {
           tokenId = symbol.getName();
         }

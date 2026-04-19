@@ -20,7 +20,7 @@ describe('Generator - Factory Support', () => {
             type: 'factory',
             lifecycle: 'singleton',
             isInterfaceToken: true,
-            isFactory: true,
+            
             factorySource: '(container) => ({ apiUrl: "http://example.com" })'
           },
           dependencies: []
@@ -52,7 +52,7 @@ describe('Generator - Factory Support', () => {
             type: 'factory',
             lifecycle: 'singleton',
             isInterfaceToken: true,
-            isFactory: true,
+            
             factorySource: '() => ({ query: () => [] })'
           },
           dependencies: []
@@ -80,7 +80,7 @@ describe('Generator - Factory Support', () => {
             type: 'factory',
             lifecycle: 'transient',
             isInterfaceToken: true,
-            isFactory: true,
+            
             factorySource: '() => ({ id: Math.random() })'
           },
           dependencies: []
@@ -108,7 +108,7 @@ describe('Generator - Factory Support', () => {
             registrationNode: {} as any,
             type: 'autowire',
             lifecycle: 'singleton',
-            isFactory: false
+            
           },
           dependencies: []
         }]
@@ -133,7 +133,7 @@ describe('Generator - Factory Support', () => {
             type: 'factory',
             lifecycle: 'singleton',
             isInterfaceToken: true,
-            isFactory: true,
+            
             factorySource: '() => ({ env: "prod" })'
           },
           dependencies: []
@@ -146,7 +146,7 @@ describe('Generator - Factory Support', () => {
             registrationNode: {} as any,
             type: 'autowire',
             lifecycle: 'singleton',
-            isFactory: false
+            
           },
           dependencies: ['IConfig']
         }]

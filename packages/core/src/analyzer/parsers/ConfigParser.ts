@@ -234,7 +234,6 @@ export class ConfigParser {
           lifecycle: lifecycle,
           isInterfaceToken,
           isValueToken,
-          isFactory: true,
           factorySource,
           isScoped
         };

@@ -427,7 +427,7 @@ const analyzer = new Analyzer(program);
       );
       expect(configNode).toBeDefined();
       expect(configNode!.service.isScoped).toBe(true);
-      expect(configNode!.service.isFactory).toBe(true);
+      expect(configNode!.service.type).toBe('factory');
     });
   });
 });

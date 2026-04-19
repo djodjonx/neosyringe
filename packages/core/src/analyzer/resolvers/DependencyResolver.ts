@@ -85,7 +85,7 @@ export class DependencyResolver {
   resolve(node: DependencyNode, graph: DependencyGraph): void {
     // Factories handle their own dependencies via container.resolve()
     // We don't need to analyze them statically
-    if (node.service.isFactory || node.service.type === 'factory') {
+    if (node.service.type === 'factory') {
       return;
     }
 
