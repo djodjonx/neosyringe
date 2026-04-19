@@ -149,7 +149,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
 
       const factoryId = this.getFactoryName(tokenId);
 
-      if (node.service.isFactory && node.service.factorySource) {
+      if (node.service.type === 'factory' && node.service.factorySource) {
         const userFactory = node.service.factorySource;
         factories.push(`
   private ${factoryId}(): any {

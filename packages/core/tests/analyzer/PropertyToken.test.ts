@@ -70,7 +70,7 @@ describe('Analyzer - PropertyToken Support', () => {
     const apiUrlNode = findNodeByName(graph, 'ApiService.apiUrl');
     expect(apiUrlNode).toBeDefined();
     expect(apiUrlNode?.key).toBe('PropertyToken:ApiService.apiUrl');
-    expect(apiUrlNode?.value.service.isFactory).toBe(true);
+    expect(apiUrlNode?.value.service.type).toBe('factory');
     expect(apiUrlNode?.value.service.isValueToken).toBe(true);
 
     const maxRetriesNode = findNodeByName(graph, 'ApiService.maxRetries');

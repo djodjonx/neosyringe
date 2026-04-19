@@ -19,7 +19,7 @@ export class DependencyAnalyzer {
    */
   getRequiredDependencies(definition: ServiceDefinition): TokenId[] {
     // Factories handle their own dependencies via container.resolve()
-    if (definition.isFactory || definition.type === 'factory') {
+    if (definition.type === 'factory') {
       return [];
     }
 

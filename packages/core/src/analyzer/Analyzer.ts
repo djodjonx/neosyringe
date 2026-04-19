@@ -55,16 +55,6 @@ export class TypeMismatchError extends Error {
   }
 }
 
-/**
- * Generates a unique, deterministic Token ID for a symbol.
- * Uses the symbol name and a short hash of its relative file path.
- *
- * @deprecated Use HashUtils.generateTokenId instead
- * @internal
- */
-export function generateTokenId(symbol: ts.Symbol, sourceFile: ts.SourceFile): string {
-  return HashUtils.generateTokenId(symbol, sourceFile);
-}
 
 /**
  * Analyzes TypeScript source code to extract the dependency injection graph.

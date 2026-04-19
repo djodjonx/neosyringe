@@ -48,9 +48,6 @@ export interface ServiceDefinition {
   /** True if the token is a value token for primitives. */
   isValueToken?: boolean;
 
-  /** True if the provider is a factory function. */
-  isFactory?: boolean;
-
   /** The raw source text of the factory function (for code generation). */
   factorySource?: string;
 

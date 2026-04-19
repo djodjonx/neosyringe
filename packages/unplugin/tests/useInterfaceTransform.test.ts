@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
-import { generateTokenId } from '../../core/src/analyzer/Analyzer.js';
+import { HashUtils } from '../../core/src/analyzer/shared/HashUtils.js';
 
 // Import the transform function (we need to extract it or test the plugin directly)
 
@@ -50,7 +50,7 @@ describe('useInterface Transformation', () => {
 
           if (declarations && declarations.length > 0) {
             const declSourceFile = declarations[0].getSourceFile();
-            tokenId = generateTokenId(symbol, declSourceFile);
+            tokenId = HashUtils.generateTokenId(symbol, declSourceFile);
           } else {
             tokenId = symbol.getName();
           }

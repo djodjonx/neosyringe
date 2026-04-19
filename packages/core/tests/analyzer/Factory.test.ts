@@ -59,7 +59,7 @@ describe('Analyzer - Factory Support', () => {
     expect(hasNodeWithName(graph, 'IConfig')).toBe(true);
 
     const node = findNodeByName(graph, 'IConfig');
-    expect(node?.service.isFactory).toBe(true);
+    expect(node?.service.type).toBe('factory');
     expect(node?.service.type).toBe('factory');
     expect(node?.service.factorySource).toContain('apiUrl');
   });
@@ -93,7 +93,7 @@ describe('Analyzer - Factory Support', () => {
     expect(hasNodeWithName(graph, 'IDatabase')).toBe(true);
 
     const node = findNodeByName(graph, 'IDatabase');
-    expect(node?.service.isFactory).toBe(true);
+    expect(node?.service.type).toBe('factory');
     expect(node?.service.type).toBe('factory');
   });
 
@@ -132,7 +132,7 @@ describe('Analyzer - Factory Support', () => {
     expect(hasNodeWithName(graph, 'IService')).toBe(true);
 
     const serviceNode = findNodeByName(graph, 'IService');
-    expect(serviceNode?.service.isFactory).toBe(true);
+    expect(serviceNode?.service.type).toBe('factory');
     expect(serviceNode?.service.factorySource).toContain('container.resolve');
   });
 
@@ -162,7 +162,7 @@ describe('Analyzer - Factory Support', () => {
     const graph = analyzer.extract();
 
     const node = findNodeByName(graph, 'IRequest');
-    expect(node?.service.isFactory).toBe(true);
+    expect(node?.service.type).toBe('factory');
     expect(node?.service.lifecycle).toBe('transient');
   });
 
@@ -185,7 +185,7 @@ describe('Analyzer - Factory Support', () => {
     const graph = analyzer.extract();
 
     const node = findNodeByName(graph, 'UserService');
-    expect(node?.service.isFactory).toBeFalsy();
+    expect(node?.service.type).not.toBe('factory');
     expect(node?.service.type).toBe('autowire');
   });
 });

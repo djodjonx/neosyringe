@@ -322,8 +322,7 @@ export class ConfigCollector implements IConfigCollector {
       type: registrationType,
       lifecycle,
       isInterfaceToken,
-      isFactory: useFactory,
-      factorySource: useFactory && providerNode ? providerNode.getText(sourceFile) : undefined,
+      factorySource: registrationType === 'factory' && providerNode ? providerNode.getText(sourceFile) : undefined,
       isScoped,
     };
 
@@ -353,17 +352,6 @@ export class ConfigCollector implements IConfigCollector {
    */
   private isUseInterfaceCall(node: ts.Expression): boolean {
     return this.tokenResolverService.isUseInterfaceCall(node);
-  }
-
-  private simpleHash(str: string): string {
-    // Deprecated - use generateTokenId instead
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(16).slice(0, 8);
   }
 
   private getSymbolForNode(node: ts.Node): ts.Symbol | undefined {
