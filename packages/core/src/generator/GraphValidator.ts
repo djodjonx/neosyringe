@@ -129,16 +129,13 @@ export class GraphValidator {
   }
 
   /**
-   * Validates the graph structure.
-   * @deprecated Use validateAll() instead for complete error reporting.
-   *
-   * @param graph - The dependency graph to validate.
-   * @throws {Error} If a circular dependency or missing binding is detected.
+   * Validates the graph and throws on the first error found.
+   * Useful in test assertions and simple CLI contexts.
+   * For collecting all errors, use validateAll().
    */
   public validate(graph: DependencyGraph): void {
     const result = this.validateAll(graph);
     if (!result.valid && result.errors.length > 0) {
-      // Throw the first error for backward compatibility
       throw new Error(result.errors[0].message);
     }
   }

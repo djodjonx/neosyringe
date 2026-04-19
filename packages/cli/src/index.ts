@@ -49,14 +49,18 @@ function main() {
 
     console.log('🛡️  Validating graph...');
     const validator = new GraphValidator();
-    validator.validate(graph);
+    const result = validator.validateAll(graph);
+
+    if (!result.valid) {
+      console.error('\n❌ Validation Failed:');
+      result.errors.forEach(e => console.error(`   ${e.message}`));
+      process.exit(1);
+    }
 
     console.log('✅ Validation passed! No circular dependencies or missing bindings found.');
     process.exit(0);
   } catch (e: any) {
-    console.error(`
-❌ Validation Failed:`);
-    console.error(`   ${e.message}`);
+    console.error(`\n❌ Unexpected error: ${e.message}`);
     process.exit(1);
   }
 }
