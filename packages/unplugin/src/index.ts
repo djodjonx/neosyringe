@@ -192,9 +192,15 @@ export const neoSyringePlugin = createUnplugin(() => {
             registeredTokens.add(tokenId);
           }
 
-          // Step 1: Generate container code
+          // Step 1: Validate graph — report all errors before generating
           const validator = new GraphValidator();
-          validator.validate(graph);
+          const validationResult = validator.validateAll(graph);
+          if (!validationResult.valid) {
+            const messages = validationResult.errors.map(e => e.message).join('\n  ');
+            const buildError = new Error(`[neosyringe-plugin]\n  ${messages}`) as Error & { file?: string };
+            buildError.file = id;
+            throw buildError;
+          }
 
           const generator = new Generator(graph, true);
           const containerClass = generator.generate();
