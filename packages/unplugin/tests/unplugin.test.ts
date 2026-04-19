@@ -34,14 +34,15 @@ describe('neoSyringePlugin', () => {
     expect(result).toBeUndefined();
   });
 
-  it('should ignore files if tsconfig is not found', () => {
+  it('should throw if tsconfig is not found', () => {
     vi.mocked(ts.findConfigFile).mockReturnValue(undefined);
 
     // @ts-expect-error - testing specific method
     const transform = plugin.transform as (code: string, id: string) => string | undefined;
 
-    const result = transform('defineBuilderConfig({})', 'file.ts');
-    expect(result).toBeUndefined();
+    expect(() => transform('defineBuilderConfig({})', 'file.ts')).toThrow(
+      '[NeoSyringe] Could not find tsconfig.json'
+    );
   });
 
   it('should process files with defineBuilderConfig and valid tsconfig', () => {

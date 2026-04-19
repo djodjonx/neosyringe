@@ -14,8 +14,13 @@ import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analy
 export class Generator {
   /**
    * Creates a new Generator.
+   *
    * @param graph - The validated dependency graph to generate code from.
-   * @param useDirectSymbolNames - If true, uses symbol names directly without import prefixes.
+   * @param useDirectSymbolNames - When true, symbol names are referenced directly
+   *   (e.g. `MyService`) instead of via namespace imports (`Import_0.MyService`).
+   *   Use true when the generated code is inlined inside the same file as the
+   *   original definitions (unplugin transform); use false (default) when the
+   *   generated code is written to a separate output file that needs explicit imports.
    */
   constructor(private graph: DependencyGraph, private useDirectSymbolNames: boolean = false) {
     // Check for analysis errors and throw the first one for CLI compatibility
@@ -36,125 +41,29 @@ export class Generator {
   public generate(): string {
     const sorted = this.topologicalSort();
     const imports = new Map<string, string>(); // filePath -> importAliasPrefix
-    const factories: string[] = [];
-    const resolveCases: string[] = [];
 
-    // Helper to get or create import
     const getImport = (symbol: ts.Symbol): string => {
-      // If using direct symbol names (for inline injection), just return the symbol name
       if (this.useDirectSymbolNames) {
         return symbol.getName();
       }
-
       const decl = symbol.declarations?.[0];
       if (!decl) return 'UNKNOWN';
-
-      const sourceFile = decl.getSourceFile();
-      const filePath = sourceFile.fileName;
-
+      const filePath = decl.getSourceFile().fileName;
       if (!imports.has(filePath)) {
-        const alias = `Import_${imports.size}`;
-        imports.set(filePath, alias);
+        imports.set(filePath, `Import_${imports.size}`);
       }
-
       return `${imports.get(filePath)}.${symbol.getName()}`;
     };
 
-    // 1. Generate Factories
-    for (const tokenId of sorted) {
-      const node = this.graph.nodes.get(tokenId);
-      if (!node) continue;
+    const factories = this.generateFactories(sorted, getImport);
+    const resolveCases = this.generateResolveCases(sorted, getImport);
 
-      // Skip factory generation for parent provided services
-      if (node.service.type === 'parent') continue;
-
-      const factoryId = this.getFactoryName(tokenId);
-
-      // Handle user-defined factory functions
-      if (node.service.isFactory && node.service.factorySource) {
-          const userFactory = node.service.factorySource;
-          factories.push(`
-  private ${factoryId}(): any {
-    const userFactory = ${userFactory};
-    return userFactory(this);
-  }`);
-      } else {
-          // Standard class instantiation
-          const className = node.service.implementationSymbol
-              ? getImport(node.service.implementationSymbol)
-              : 'undefined';
-
-          const args = node.dependencies.map(depId => {
-              const depNode = this.graph.nodes.get(depId);
-              if (!depNode) {
-                  return 'undefined';
-              }
-
-              if (depNode.service.isInterfaceToken) {
-                  return `this.resolve("${depNode.service.tokenId}")`;
-              } else if (depNode.service.tokenSymbol) {
-                  const tokenClass = getImport(depNode.service.tokenSymbol);
-                  return `this.resolve(${tokenClass})`;
-              } else if (depNode.service.implementationSymbol) {
-                 const depClass = getImport(depNode.service.implementationSymbol);
-                 return `this.resolve(${depClass})`;
-              }
-              return 'undefined';
-          }).join(', ');
-
-          factories.push(`
-  private ${factoryId}(): any {
-    return new ${className}(${args});
-  }`);
-      }
-
-      // 2. Generate Resolve Switch Case
-      const isTransient = node.service.lifecycle === 'transient';
-
-      // Determine key for instances Map and token check
-      let tokenKey: string;
-      let tokenCheck: string;
-
-      if (node.service.isInterfaceToken) {
-          tokenKey = `"${node.service.tokenId}"`;
-          // tokenId is now the interface name directly (e.g., "ILogger")
-          tokenCheck = `if (token === "${node.service.tokenId}")`;
-      } else if (node.service.tokenSymbol) {
-          const tokenClass = getImport(node.service.tokenSymbol);
-          tokenKey = tokenClass;
-          tokenCheck = `if (token === ${tokenClass})`;
-      } else if (node.service.implementationSymbol) {
-          const className = getImport(node.service.implementationSymbol);
-          tokenKey = className;
-          tokenCheck = `if (token === ${className})`;
-      } else {
-          // Factory without class - use string token
-          tokenKey = `"${node.service.tokenId}"`;
-          tokenCheck = `if (token === "${node.service.tokenId}")`;
-      }
-
-      const creationLogic = isTransient
-          ? `return this.${factoryId}();`
-          : `
-            if (!this.instances.has(${tokenKey})) {
-                const instance = this.${factoryId}();
-                this.instances.set(${tokenKey}, instance);
-                return instance;
-            }
-            return this.instances.get(${tokenKey});
-          `;
-
-      resolveCases.push(`${tokenCheck} { ${creationLogic} }`);
-    }
-
-    // Generate Import Statements (only if not using direct symbol names)
     const importLines: string[] = [];
     if (!this.useDirectSymbolNames) {
       for (const [filePath, alias] of imports) {
-          importLines.push(`import * as ${alias} from '${filePath}';`);
+        importLines.push(`import * as ${alias} from '${filePath}';`);
       }
     }
-
 
     return `
 ${importLines.join('\n')}
@@ -225,9 +134,115 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     return `new NeoContainer(${buildArgs}, ${legacyArgs}, ${nameArg})`;
   }
 
+  // ---------------------------------------------------------------------------
+  // Private generation helpers
+  // ---------------------------------------------------------------------------
+
+  /** Generates a factory method for each service in topological order. */
+  private generateFactories(sorted: TokenId[], getImport: (s: ts.Symbol) => string): string[] {
+    const factories: string[] = [];
+
+    for (const tokenId of sorted) {
+      const node = this.graph.nodes.get(tokenId);
+      if (!node) continue;
+      if (node.service.type === 'parent') continue;
+
+      const factoryId = this.getFactoryName(tokenId);
+
+      if (node.service.isFactory && node.service.factorySource) {
+        const userFactory = node.service.factorySource;
+        factories.push(`
+  private ${factoryId}(): any {
+    const userFactory = ${userFactory};
+    return userFactory(this);
+  }`);
+      } else {
+        if (!node.service.implementationSymbol) {
+          throw new Error(
+            `[Generator] No implementation symbol for token '${tokenId}'. ` +
+            `This is likely a bug — ensure all non-factory registrations have a provider class.`
+          );
+        }
+        const className = getImport(node.service.implementationSymbol);
+        const args = this.resolveConstructorArgs(node.dependencies, getImport);
+
+        factories.push(`
+  private ${factoryId}(): any {
+    return new ${className}(${args});
+  }`);
+      }
+    }
+
+    return factories;
+  }
+
+  /** Resolves constructor argument expressions for a list of dependency token IDs. */
+  private resolveConstructorArgs(dependencies: TokenId[], getImport: (s: ts.Symbol) => string): string {
+    return dependencies.map(depId => {
+      const depNode = this.graph.nodes.get(depId);
+      if (!depNode) return 'undefined';
+
+      if (depNode.service.isInterfaceToken) {
+        return `this.resolve("${depNode.service.tokenId}")`;
+      } else if (depNode.service.tokenSymbol) {
+        return `this.resolve(${getImport(depNode.service.tokenSymbol)})`;
+      } else if (depNode.service.implementationSymbol) {
+        return `this.resolve(${getImport(depNode.service.implementationSymbol)})`;
+      }
+      return 'undefined';
+    }).join(', ');
+  }
+
+  /** Generates resolve switch cases for each service in topological order. */
+  private generateResolveCases(sorted: TokenId[], getImport: (s: ts.Symbol) => string): string[] {
+    const resolveCases: string[] = [];
+
+    for (const tokenId of sorted) {
+      const node = this.graph.nodes.get(tokenId);
+      if (!node) continue;
+      if (node.service.type === 'parent') continue;
+
+      const factoryId = this.getFactoryName(tokenId);
+      const isTransient = node.service.lifecycle === 'transient';
+
+      let tokenKey: string;
+      let tokenCheck: string;
+
+      if (node.service.isInterfaceToken) {
+        tokenKey = `"${node.service.tokenId}"`;
+        tokenCheck = `if (token === "${node.service.tokenId}")`;
+      } else if (node.service.tokenSymbol) {
+        const tokenClass = getImport(node.service.tokenSymbol);
+        tokenKey = tokenClass;
+        tokenCheck = `if (token === ${tokenClass})`;
+      } else if (node.service.implementationSymbol) {
+        const className = getImport(node.service.implementationSymbol);
+        tokenKey = className;
+        tokenCheck = `if (token === ${className})`;
+      } else {
+        tokenKey = `"${node.service.tokenId}"`;
+        tokenCheck = `if (token === "${node.service.tokenId}")`;
+      }
+
+      const creationLogic = isTransient
+        ? `return this.${factoryId}();`
+        : `
+            if (!this.instances.has(${tokenKey})) {
+                const instance = this.${factoryId}();
+                this.instances.set(${tokenKey}, instance);
+                return instance;
+            }
+            return this.instances.get(${tokenKey});
+          `;
+
+      resolveCases.push(`${tokenCheck} { ${creationLogic} }`);
+    }
+
+    return resolveCases;
+  }
+
   /**
    * Generates the container variable declaration with the user's export modifier.
-   * This respects whether the user used 'export', 'export default', or no export at all.
    * If no modifier is specified (undefined), defaults to 'export' for backward compatibility.
    */
   private generateContainerVariable(): string {
@@ -236,7 +251,6 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     const exportModifier = this.graph.variableExportModifier;
 
     if (exportModifier === 'export default') {
-      // Support both: export default defineBuilderConfig() and const x = defineBuilderConfig(); export default x;
       if (variableName) {
         return `
 // -- Container Instance --
@@ -244,21 +258,18 @@ const ${variableName} = ${instantiation};
 export default ${variableName};
 `;
       } else {
-        // Direct export default without variable
         return `
 // -- Container Instance --
 export default ${instantiation};
 `;
       }
     } else if (exportModifier === 'none') {
-      // User explicitly did not export the variable
       return `
 // -- Container Instance --
 const ${variableName || 'container'} = ${instantiation};
 `;
     } else {
-      // 'export' or undefined (backward compatibility)
-      // Default to 'export' for backward compatibility when modifier is not set
+      // 'export' or undefined — default to 'export' for backward compatibility
       return `
 // -- Container Instance --
 export const ${variableName || 'container'} = ${instantiation};
@@ -277,7 +288,6 @@ export const ${variableName || 'container'} = ${instantiation};
     const visit = (id: TokenId) => {
       if (visited.has(id)) return;
       visited.add(id);
-
       const node = this.graph.nodes.get(id);
       if (node) {
         for (const depId of node.dependencies) {

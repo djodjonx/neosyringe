@@ -269,7 +269,12 @@ export class TokenResolverService {
    */
   extractInterfaceTokenId(node: ts.CallExpression): TokenId {
     if (!node.typeArguments || node.typeArguments.length === 0) {
-      throw new Error('useInterface must have a type argument.');
+      const sf = node.getSourceFile();
+      const { line, character } = sf.getLineAndCharacterOfPosition(node.getStart());
+      throw new Error(
+        `useInterface() must have a type argument — e.g. useInterface<IMyService>(). ` +
+        `Found at ${sf.fileName}:${line + 1}:${character + 1}`
+      );
     }
 
     const typeNode = node.typeArguments[0];

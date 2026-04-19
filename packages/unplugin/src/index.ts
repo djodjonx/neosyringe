@@ -132,10 +132,15 @@ export const neoSyringePlugin = createUnplugin(() => {
   // Cache tsconfig parsing — tsconfig doesn't change during a build
   let compilerOptions: ts.CompilerOptions | undefined;
 
-  function getCompilerOptions(): ts.CompilerOptions | undefined {
+  function getCompilerOptions(): ts.CompilerOptions {
     if (compilerOptions) return compilerOptions;
     const configFile = ts.findConfigFile(process.cwd(), ts.sys.fileExists, 'tsconfig.json');
-    if (!configFile) return undefined;
+    if (!configFile) {
+      throw new Error(
+        '[NeoSyringe] Could not find tsconfig.json. ' +
+        'Make sure a tsconfig.json exists in your project root.'
+      );
+    }
     const { config } = ts.readConfigFile(configFile, ts.sys.readFile);
     compilerOptions = ts.parseJsonConfigFileContent(config, ts.sys, process.cwd()).options;
     return compilerOptions;
@@ -154,8 +159,10 @@ export const neoSyringePlugin = createUnplugin(() => {
     },
 
     transform(code, id) {
+      // Quick exit for files that don't reference NeoSyringe APIs — avoids tsconfig load
+      if (!code.includes('defineBuilderConfig') && !code.includes('useInterface')) return;
+
       const options = getCompilerOptions();
-      if (!options) return;
 
       // 1. If file contains defineBuilderConfig, handle it specially
       if (code.includes('defineBuilderConfig')) {
