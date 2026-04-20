@@ -79,6 +79,17 @@ export interface Injection<T = any> {
    */
   useFactory?: boolean;
   /**
+   * Register a pre-built value directly, without a class or factory.
+   * The value is embedded in the generated container as-is.
+   *
+   * Use for config objects, environment variables, or any pre-created instance.
+   * For primitives (string, number, boolean), use useProperty() instead.
+   *
+   * @example
+   * { token: useInterface<DatabaseConfig>(), useValue: { url: process.env.DB_URL } }
+   */
+  useValue?: T;
+  /**
    * Lifecycle of the service.
    * - `singleton`: One instance per container (default).
    * - `transient`: A new instance every time it is resolved.
