@@ -105,7 +105,7 @@ export class GraphValidator {
         if (!isProvidedLocally && !isProvidedByParent) {
           errors.push({
             type: 'missing',
-            message: `Missing binding: Service '${getSimpleName(nodeId)}' depends on '${getSimpleName(depId)}', but no provider was registered.`,
+            message: `Missing injection: '${getSimpleName(depId)}' required by '${getSimpleName(nodeId)}' is not registered.`,
             node: node.service.registrationNode,
             sourceFile: node.service.registrationNode.getSourceFile(),
             tokenId: nodeId,
