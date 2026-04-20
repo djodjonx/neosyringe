@@ -57,6 +57,9 @@ export interface ServiceDefinition {
 
   /** True if this injection is scoped to the local container. */
   isScoped?: boolean;
+
+  /** True if the factory function is async (requires initialize() before resolve()). */
+  isAsync?: boolean;
 }
 
 // ============================================================================

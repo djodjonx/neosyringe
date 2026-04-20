@@ -155,6 +155,30 @@ export interface BuilderConfig extends PartialConfig {
 }
 
 /**
+ * Container with async-initialized services.
+ * Call `await container.initialize()` once at app startup before any `resolve()`.
+ *
+ * Generated automatically when at least one injection uses an async factory.
+ *
+ * @example
+ * ```typescript
+ * // main.ts — only place with await
+ * const container: AsyncContainer = defineBuilderConfig({ ... });
+ * await container.initialize();
+ *
+ * // Everywhere else — stays sync
+ * const db = container.resolve(useInterface<IDatabase>());
+ * ```
+ */
+export interface AsyncContainer extends Container {
+  /**
+   * Pre-creates all async singleton services in dependency order.
+   * Must be called before the first resolve() when async services are present.
+   */
+  initialize(): Promise<void>;
+}
+
+/**
  * Runtime helper to define a partial configuration.
  */
 export function definePartialConfig(config: PartialConfig): PartialConfig {
