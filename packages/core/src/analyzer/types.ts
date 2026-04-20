@@ -11,8 +11,9 @@ export type TokenId = string;
  * - `autowire`: Token is both the token and provider (self-binding).
  * - `parent`: Inherited from parent container.
  * - `factory`: Provider is a factory function.
+ * - `value`: A pre-built value registered directly.
  */
-export type RegistrationType = 'explicit' | 'autowire' | 'parent' | 'factory';
+export type RegistrationType = 'explicit' | 'autowire' | 'parent' | 'factory' | 'value';
 
 /**
  * Represents a single service definition in the dependency graph.
@@ -50,6 +51,9 @@ export interface ServiceDefinition {
 
   /** The raw source text of the factory function (for code generation). */
   factorySource?: string;
+
+  /** The raw source text of the value expression (for 'value' type). */
+  valueSource?: string;
 
   /** True if this injection is scoped to the local container. */
   isScoped?: boolean;
@@ -100,6 +104,9 @@ export interface ConfigGraph {
 
   /** Container name from config */
   containerName?: string;
+
+  /** Errors from useValue primitive type violations */
+  valueErrors?: AnalysisError[];
 }
 
 /**
