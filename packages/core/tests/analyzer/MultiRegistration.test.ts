@@ -63,6 +63,34 @@ describe('Analyzer - multi registrations', () => {
     expect(graph.errors![0].message).toContain('multi');
   });
 
+  it('should route useValue multi-registrations to multiNodes', () => {
+    const program = createProgram('test.ts', `
+      function defineBuilderConfig(c: any) { return c; }
+      function useInterface<T>(): any { return null; }
+
+      interface IConfig { url: string; }
+
+      export const container = defineBuilderConfig({
+        injections: [
+          { token: useInterface<IConfig>(), useValue: { url: 'a' }, multi: true },
+          { token: useInterface<IConfig>(), useValue: { url: 'b' }, multi: true },
+        ]
+      });
+    `);
+
+    const graph = new Analyzer(program).extract();
+    expect(graph.errors ?? []).toHaveLength(0);
+
+    // Should NOT be in regular nodes
+    const inNodes = [...graph.nodes.keys()].some(k => k.includes('IConfig'));
+    expect(inNodes).toBe(false);
+
+    // Should be in multiNodes with 2 entries
+    const multiEntry = [...(graph.multiNodes ?? new Map()).entries()].find(([k]) => k.includes('IConfig'));
+    expect(multiEntry).toBeDefined();
+    expect(multiEntry![1]).toHaveLength(2);
+  });
+
   it('should not treat multi-registrations as duplicates', () => {
     const program = createProgram('test.ts', `
       function defineBuilderConfig(c: any) { return c; }

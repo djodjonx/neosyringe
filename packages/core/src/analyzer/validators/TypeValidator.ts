@@ -26,6 +26,7 @@ export class TypeValidator implements IValidator {
         errors.push(typeError);
       }
     }
+    // TODO: validate types for multi-registered tokens (config.multiInjections)
 
     return errors;
   }

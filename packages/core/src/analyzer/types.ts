@@ -129,7 +129,7 @@ export interface InjectionInfo {
   isScoped: boolean;
 
   /** True when registered with multi: true */
-  isMulti?: boolean;
+  isMulti: boolean;
 }
 
 // ============================================================================
