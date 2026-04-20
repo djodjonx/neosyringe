@@ -59,6 +59,8 @@ export class Generator {
     const resolveCases = this.generateResolveCases(sorted, getImport);
     const multiFactories = this.generateMultiFactories(getImport);
     const resolveAllMethod = this.generateResolveAllMethod(getImport);
+    const hasAsync = this.hasAsyncFactories();
+    const initializeMethod = hasAsync ? this.generateInitializeMethod(sorted) : '';
 
     const importLines: string[] = [];
     if (!this.useDirectSymbolNames) {
@@ -67,12 +69,19 @@ export class Generator {
       }
     }
 
+    const initializedField = hasAsync ? `private _initialized = false;` : '';
+    const resolveGuard = hasAsync
+      ? `if (!this._initialized) { throw new Error(\`[\${this.name}] This container has async services — call \\\`await container.initialize()\\\` before the first resolve().\`); }`
+      : '';
+    const destroyReset = hasAsync ? `this._initialized = false;` : '';
+
     return `
 ${importLines.join('\n')}
 
 // -- Container --
 class NeoContainer {
   private instances = new Map<any, any>();
+  ${initializedField}
 
   // -- Factories --
   ${[...factories, ...multiFactories].join('\n  ')}
@@ -83,7 +92,10 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
+  ${initializeMethod}
+
   public resolve<T>(token: any): T {
+    ${resolveGuard}
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
     if (result !== undefined) return result;
@@ -113,6 +125,7 @@ class NeoContainer {
   }
 
   public destroy(): void {
+    ${destroyReset}
     this.instances.clear();
   }
 
@@ -328,6 +341,36 @@ export const ${variableName || 'container'} = ${instantiation};
    */
   private getFactoryName(tokenId: TokenId): string {
     return `create_${tokenId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  }
+
+  /** Returns true if any node in the graph has an async factory. */
+  private hasAsyncFactories(): boolean {
+    for (const node of this.graph.nodes.values()) {
+      if (node.service.isAsync) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Generates the initialize() method that pre-creates all async singleton factories
+   * in topological order. Only called when hasAsyncFactories() is true.
+   */
+  private generateInitializeMethod(sorted: TokenId[]): string {
+    const asyncSingletons = sorted.filter(tokenId => {
+      const node = this.graph.nodes.get(tokenId);
+      return node?.service.isAsync && node.service.lifecycle === 'singleton';
+    });
+
+    const lines = asyncSingletons.map(tokenId => {
+      const factoryId = this.getFactoryName(tokenId);
+      return `this.instances.set("${tokenId}", await this.${factoryId}());`;
+    });
+
+    return `public async initialize(): Promise<void> {
+    if (this._initialized) return;
+    ${lines.join('\n    ')}
+    this._initialized = true;
+  }`;
   }
 
   /** Generates indexed factory methods for multi-registration nodes. */
