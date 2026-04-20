@@ -57,6 +57,8 @@ export class Generator {
 
     const factories = this.generateFactories(sorted, getImport);
     const resolveCases = this.generateResolveCases(sorted, getImport);
+    const multiFactories = this.generateMultiFactories(getImport);
+    const resolveAllMethod = this.generateResolveAllMethod();
 
     const importLines: string[] = [];
     if (!this.useDirectSymbolNames) {
@@ -73,7 +75,7 @@ class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --
-  ${factories.join('\n  ')}
+  ${[...factories, ...multiFactories].join('\n  ')}
 
   constructor(
     private parent?: any,
@@ -113,6 +115,8 @@ class NeoContainer {
   public destroy(): void {
     this.instances.clear();
   }
+
+  ${resolveAllMethod}
 
   private resolveLocal(token: any): any {
     ${resolveCases.join('\n    ')}
@@ -324,5 +328,70 @@ export const ${variableName || 'container'} = ${instantiation};
    */
   private getFactoryName(tokenId: TokenId): string {
     return `create_${tokenId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  }
+
+  /** Generates indexed factory methods for multi-registration nodes. */
+  private generateMultiFactories(getImport: (s: ts.Symbol) => string): string[] {
+    const factories: string[] = [];
+    if (!this.graph.multiNodes) return factories;
+
+    for (const [tokenId, nodes] of this.graph.multiNodes) {
+      nodes.forEach((node, index) => {
+        const factoryId = `${this.getFactoryName(tokenId)}_${index}`;
+
+        if (node.service.type === 'factory' && node.service.factorySource) {
+          factories.push(`
+  private ${factoryId}(): any {
+    const userFactory = ${node.service.factorySource};
+    return userFactory(this);
+  }`);
+        } else if (node.service.type === 'value' && node.service.valueSource !== undefined) {
+          factories.push(`
+  private ${factoryId}(): any {
+    return ${node.service.valueSource};
+  }`);
+        } else {
+          if (!node.service.implementationSymbol) return;
+          const className = getImport(node.service.implementationSymbol);
+          const args = this.resolveConstructorArgs(node.dependencies, getImport);
+          factories.push(`
+  private ${factoryId}(): any {
+    return new ${className}(${args});
+  }`);
+        }
+      });
+    }
+
+    return factories;
+  }
+
+  /** Generates the resolveAll() method with one branch per multi-token. */
+  private generateResolveAllMethod(): string {
+    if (!this.graph.multiNodes || this.graph.multiNodes.size === 0) {
+      return `public resolveAll<T>(token: any): T[] { return []; }`;
+    }
+
+    const cases: string[] = [];
+
+    for (const [tokenId, nodes] of this.graph.multiNodes) {
+      const firstNode = nodes[0];
+      let tokenCheck: string;
+
+      if (firstNode.service.isInterfaceToken) {
+        tokenCheck = `if (token === "${firstNode.service.tokenId}")`;
+      } else if (firstNode.service.tokenSymbol) {
+        tokenCheck = `if (token === ${firstNode.service.tokenSymbol.getName()})`;
+      } else {
+        tokenCheck = `if (token === "${firstNode.service.tokenId}")`;
+      }
+
+      const calls = nodes.map((_, i) => `this.${this.getFactoryName(tokenId)}_${i}()`).join(', ');
+      cases.push(`${tokenCheck} return [${calls}] as T[];`);
+    }
+
+    return `public resolveAll<T>(token: any): T[] {
+    ${cases.join('\n    ')}
+    return [];
+  }`;
   }
 }
