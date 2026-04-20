@@ -107,6 +107,9 @@ export interface ConfigGraph {
 
   /** Errors from useValue primitive type violations */
   valueErrors?: AnalysisError[];
+
+  /** Multi-registrations (token -> ordered list of injection infos) */
+  multiInjections?: Map<TokenId, InjectionInfo[]>;
 }
 
 /**
@@ -124,6 +127,9 @@ export interface InjectionInfo {
 
   /** Is this a scoped override? */
   isScoped: boolean;
+
+  /** True when registered with multi: true */
+  isMulti?: boolean;
 }
 
 // ============================================================================
@@ -215,6 +221,9 @@ export interface DependencyGraph {
 
   /** Analysis errors collected during extraction (duplicates, type mismatches, etc.). */
   errors?: AnalysisError[];
+
+  /** Multi-registration nodes (token -> ordered list of nodes) */
+  multiNodes?: Map<TokenId, DependencyNode[]>;
 }
 
 // ============================================================================

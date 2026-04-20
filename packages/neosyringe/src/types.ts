@@ -25,6 +25,12 @@ export interface Container {
    * @throws {Error} If the service is not found or not registered.
    */
   resolve<T>(token: Token<T>): T;
+
+  /**
+   * Resolves all registrations for a token registered with `multi: true`.
+   * Returns an empty array if no multi-registrations exist for the token.
+   */
+  resolveAll<T>(token: Token<T>): T[];
 }
 
 // ============================================================================
@@ -116,6 +122,17 @@ export interface Injection<T = any> {
    * ```
    */
   scoped?: boolean;
+  /**
+   * When true, multiple registrations for the same token are allowed.
+   * All multi-registrations for a token are resolved together via resolveAll().
+   *
+   * @example
+   * { token: useInterface<IMiddleware>(), provider: AuthMiddleware, multi: true }
+   * { token: useInterface<IMiddleware>(), provider: LogMiddleware, multi: true }
+   *
+   * const middlewares = container.resolveAll<IMiddleware>(useInterface<IMiddleware>());
+   */
+  multi?: boolean;
 }
 
 /**
