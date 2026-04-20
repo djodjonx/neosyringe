@@ -31,6 +31,9 @@ export interface Container {
    * Returns an empty array if no multi-registrations exist for the token.
    */
   resolveAll<T>(token: Token<T>): T[];
+
+  /** Disposes all singleton services that implement IDisposable/IAsyncDisposable, then clears the instance cache. */
+  destroy(): void | Promise<void>;
 }
 
 // ============================================================================
@@ -176,6 +179,16 @@ export interface AsyncContainer extends Container {
    * Must be called before the first resolve() when async services are present.
    */
   initialize(): Promise<void>;
+}
+
+/** A service that can release resources when the container is destroyed. */
+export interface IDisposable {
+  dispose(): void;
+}
+
+/** A service that releases resources asynchronously when the container is destroyed. */
+export interface IAsyncDisposable {
+  dispose(): Promise<void>;
 }
 
 /**

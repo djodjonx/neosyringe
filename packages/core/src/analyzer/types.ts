@@ -60,6 +60,12 @@ export interface ServiceDefinition {
 
   /** True if the factory function is async (requires initialize() before resolve()). */
   isAsync?: boolean;
+
+  /** True if the implementation class has dispose(): void */
+  isDisposable?: boolean;
+
+  /** True if the implementation class has dispose(): Promise<void> */
+  isAsyncDisposable?: boolean;
 }
 
 // ============================================================================
