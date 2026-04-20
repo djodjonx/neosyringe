@@ -90,24 +90,28 @@ class NeoContainer {
     if (this.parent) {
         try {
             return this.parent.resolve(token);
-        } catch (e) {
-            // Ignore error, try legacy
+        } catch (e: any) {
+            // Only fall through for "not found" — let real errors bubble
+            if (!e?.message?.includes('Service not found or token not registered')) throw e;
         }
     }
 
     // 3. Delegate to legacy
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
-            // Assume legacy container has resolve()
             try {
                 if (legacyContainer.resolve) return legacyContainer.resolve(token);
-            } catch (e) {
-                // Ignore
+            } catch (e: any) {
+                if (!e?.message?.includes('Service not found or token not registered')) throw e;
             }
         }
     }
 
     throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+  }
+
+  public destroy(): void {
+    this.instances.clear();
   }
 
   private resolveLocal(token: any): any {
@@ -130,7 +134,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   public generateInstantiation(): string {
     const buildArgs = (this.graph.buildArguments && this.graph.buildArguments.length > 0) ? this.graph.buildArguments[0] : 'undefined';
     const legacyArgs = this.graph.legacyContainers ? `[${this.graph.legacyContainers.join(', ')}]` : 'undefined';
-    const nameArg = this.graph.containerName ? `'${this.graph.containerName}'` : 'undefined';
+    const nameArg = this.graph.containerName ? JSON.stringify(this.graph.containerName) : 'undefined';
     return `new NeoContainer(${buildArgs}, ${legacyArgs}, ${nameArg})`;
   }
 
@@ -148,6 +152,15 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
       if (node.service.type === 'parent') continue;
 
       const factoryId = this.getFactoryName(tokenId);
+
+      if (node.service.type === 'value' && node.service.valueSource !== undefined) {
+        // Value provider: embed the source expression directly
+        factories.push(`
+  private ${factoryId}(): any {
+    return ${node.service.valueSource};
+  }`);
+        continue;
+      }
 
       if (node.service.type === 'factory' && node.service.factorySource) {
         const userFactory = node.service.factorySource;
