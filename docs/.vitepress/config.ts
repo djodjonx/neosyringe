@@ -65,7 +65,7 @@ export default defineConfig({
             { text: 'Multiple Containers', link: '/guide/multi-containers' },
             { text: 'Legacy Migration', link: '/guide/legacy-migration' },
             { text: 'Async Factories', link: '/guide/async-factories' },
-            { text: 'Generated Code', link: '/guide/generated-code' },
+            { text: 'How It Works', link: '/guide/generated-code' },
           ]
         },
         {
