@@ -61,6 +61,7 @@ export class Generator {
     const resolveAllMethod = this.generateResolveAllMethod(getImport);
     const hasAsync = this.hasAsyncFactories();
     const initializeMethod = hasAsync ? this.generateInitializeMethod(sorted) : '';
+    const destroyMethod = this.generateDestroyMethod(sorted, getImport);
 
     const importLines: string[] = [];
     if (!this.useDirectSymbolNames) {
@@ -73,7 +74,6 @@ export class Generator {
     const resolveGuard = hasAsync
       ? `if (!this._initialized) { throw new Error(\`[\${this.name}] This container has async services — call \\\`await container.initialize()\\\` before the first resolve().\`); }`
       : '';
-    const destroyReset = hasAsync ? `this._initialized = false;` : '';
 
     return `
 ${importLines.join('\n')}
@@ -124,10 +124,7 @@ class NeoContainer {
     throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
   }
 
-  public destroy(): void {
-    ${destroyReset}
-    this.instances.clear();
-  }
+  ${destroyMethod}
 
   ${resolveAllMethod}
 
@@ -341,6 +338,64 @@ export const ${variableName || 'container'} = ${instantiation};
    */
   private getFactoryName(tokenId: TokenId): string {
     return `create_${tokenId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  }
+
+  /** Returns true if any singleton in the graph has an async disposable implementation. */
+  private hasAsyncDisposables(sorted: TokenId[]): boolean {
+    for (const tokenId of sorted) {
+      const node = this.graph.nodes.get(tokenId);
+      if (node?.service.isAsyncDisposable && node.service.lifecycle === 'singleton') return true;
+    }
+    return false;
+  }
+
+  /**
+   * Generates the destroy() method.
+   * Calls dispose() on cached singleton services in reverse dependency order.
+   * Becomes async if any service has isAsyncDisposable.
+   */
+  private generateDestroyMethod(sorted: TokenId[], getImport: (s: ts.Symbol) => string): string {
+    const hasAsyncFactory = this.hasAsyncFactories();
+    const hasAsyncDisposable = this.hasAsyncDisposables(sorted);
+    const isAsyncDestroy = hasAsyncDisposable;
+
+    // Collect disposable singletons in reverse dependency order
+    const disposables: Array<{ tokenKey: string; isAsync: boolean }> = [];
+    for (const tokenId of [...sorted].reverse()) {
+      const node = this.graph.nodes.get(tokenId);
+      if (!node) continue;
+      if (node.service.lifecycle === 'transient') continue;
+      if (!node.service.isDisposable && !node.service.isAsyncDisposable) continue;
+
+      let tokenKey: string;
+      if (node.service.isInterfaceToken) {
+        tokenKey = `"${node.service.tokenId}"`;
+      } else if (node.service.tokenSymbol) {
+        tokenKey = getImport(node.service.tokenSymbol);
+      } else if (node.service.implementationSymbol) {
+        tokenKey = getImport(node.service.implementationSymbol);
+      } else {
+        tokenKey = `"${node.service.tokenId}"`;
+      }
+
+      disposables.push({ tokenKey, isAsync: !!node.service.isAsyncDisposable });
+    }
+
+    const lines: string[] = [];
+    if (hasAsyncFactory) lines.push('this._initialized = false;');
+    for (const { tokenKey, isAsync } of disposables) {
+      const call = isAsync
+        ? `await (this.instances.get(${tokenKey}) as any).dispose();`
+        : `(this.instances.get(${tokenKey}) as any).dispose();`;
+      lines.push(`if (this.instances.has(${tokenKey})) { ${call} }`);
+    }
+    lines.push('this.instances.clear();');
+
+    const asyncKw = isAsyncDestroy ? 'async ' : '';
+    const ret = isAsyncDestroy ? 'Promise<void>' : 'void';
+    return `public ${asyncKw}destroy(): ${ret} {
+    ${lines.join('\n    ')}
+  }`;
   }
 
   /** Returns true if any node in the graph has an async factory. */
