@@ -12,6 +12,7 @@ All the ways to define and inject dependencies in NeoSyringe.
 | **Factory** | `{ token: X, provider: (c) => ... }` | Dynamic creation |
 | **Value** | `{ token: X, useValue: myValue }` | Pre-built objects |
 | **Property** | `{ token: useProperty(Class, 'param') }` | Primitives |
+| **Multi** | `{ token: X, provider: Y, multi: true }` | Plugin / strategy lists |
 
 ## Class Token
 
@@ -265,6 +266,52 @@ The IDE plugin validates property names:
 const invalid = useProperty<string>(ApiService, 'invalidParam');
 // 🔴 Error: Parameter 'invalidParam' does not exist in ApiService constructor
 ```
+
+## Multi Registration
+
+Register multiple providers for the same token. Resolve them all at once with `resolveAll()`.
+
+```typescript
+import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
+
+interface IPlugin {
+  execute(): void;
+}
+
+class AuthPlugin implements IPlugin {
+  execute() { /* check auth */ }
+}
+
+class LogPlugin implements IPlugin {
+  execute() { /* log request */ }
+}
+
+class MetricsPlugin implements IPlugin {
+  execute() { /* record metrics */ }
+}
+
+export const container = defineBuilderConfig({
+  injections: [
+    { token: useInterface<IPlugin>(), provider: AuthPlugin,    multi: true },
+    { token: useInterface<IPlugin>(), provider: LogPlugin,     multi: true },
+    { token: useInterface<IPlugin>(), provider: MetricsPlugin, multi: true },
+  ]
+});
+
+// Resolve all registered providers
+const plugins = container.resolveAll(useInterface<IPlugin>());
+plugins.forEach(p => p.execute());
+```
+
+Use `multi: true` for plugin systems, middleware chains, and event handlers — anywhere you need an open-ended list of contributors for the same interface.
+
+::: tip Order Preserved
+Providers are resolved in registration order.
+:::
+
+::: warning Cannot Mix
+A token registered with `multi: true` cannot also be registered without it (and vice versa). NeoSyringe reports an error at build time.
+:::
 
 ## Combined Example
 

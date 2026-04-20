@@ -254,6 +254,7 @@ interface Injection<T> {
   useValue?: T;
   lifecycle?: 'singleton' | 'transient';
   scoped?: boolean;
+  multi?: boolean;
 }
 ```
 
@@ -291,6 +292,22 @@ Register a pre-built value directly. The value is embedded in the generated cont
 
 - Always singleton — `resolve()` always returns the same object
 - Cannot be used with primitive types (string, number, boolean) — use `useProperty` instead
+
+### multi
+
+Type: `boolean`
+
+Register multiple providers for the same token. Use `container.resolveAll(token)` to get all of them.
+
+```typescript
+{ token: useInterface<IPlugin>(), provider: AuthPlugin,    multi: true },
+{ token: useInterface<IPlugin>(), provider: LogPlugin,     multi: true },
+
+const plugins = container.resolveAll(useInterface<IPlugin>());
+```
+
+- A token cannot be registered both with and without `multi: true`
+- Providers are resolved in registration order
 
 ### useFactory
 
