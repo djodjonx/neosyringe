@@ -35,6 +35,7 @@ export class TypeValidator implements IValidator {
 
     if (!definition.implementationSymbol) return null;
     if (!definition.isInterfaceToken) return null;
+    if (definition.type === 'value') return null; // no class to type-check
 
     const tokenType = this.getTokenType(info);
     if (!tokenType) return null;
