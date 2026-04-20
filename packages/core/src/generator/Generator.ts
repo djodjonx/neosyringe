@@ -58,7 +58,7 @@ export class Generator {
     const factories = this.generateFactories(sorted, getImport);
     const resolveCases = this.generateResolveCases(sorted, getImport);
     const multiFactories = this.generateMultiFactories(getImport);
-    const resolveAllMethod = this.generateResolveAllMethod();
+    const resolveAllMethod = this.generateResolveAllMethod(getImport);
 
     const importLines: string[] = [];
     if (!this.useDirectSymbolNames) {
@@ -366,7 +366,7 @@ export const ${variableName || 'container'} = ${instantiation};
   }
 
   /** Generates the resolveAll() method with one branch per multi-token. */
-  private generateResolveAllMethod(): string {
+  private generateResolveAllMethod(getImport: (s: ts.Symbol) => string): string {
     if (!this.graph.multiNodes || this.graph.multiNodes.size === 0) {
       return `public resolveAll<T>(token: any): T[] { return []; }`;
     }
@@ -380,13 +380,25 @@ export const ${variableName || 'container'} = ${instantiation};
       if (firstNode.service.isInterfaceToken) {
         tokenCheck = `if (token === "${firstNode.service.tokenId}")`;
       } else if (firstNode.service.tokenSymbol) {
-        tokenCheck = `if (token === ${firstNode.service.tokenSymbol.getName()})`;
+        tokenCheck = `if (token === ${getImport(firstNode.service.tokenSymbol)})`;
       } else {
         tokenCheck = `if (token === "${firstNode.service.tokenId}")`;
       }
 
-      const calls = nodes.map((_, i) => `this.${this.getFactoryName(tokenId)}_${i}()`).join(', ');
-      cases.push(`${tokenCheck} return [${calls}] as T[];`);
+      const isTransient = firstNode.service.lifecycle === 'transient';
+      const factoryBase = this.getFactoryName(tokenId);
+
+      let callExprs: string[];
+      if (isTransient) {
+        callExprs = nodes.map((_, i) => `this.${factoryBase}_${i}()`);
+      } else {
+        callExprs = nodes.map((_, i) => {
+          const cacheKey = `"${tokenId}:${i}"`;
+          return `(() => { const k = ${cacheKey}; if (!this.instances.has(k)) { const inst = this.${factoryBase}_${i}(); this.instances.set(k, inst); return inst; } return this.instances.get(k); })()`;
+        });
+      }
+
+      cases.push(`${tokenCheck} return [${callExprs.join(', ')}] as T[];`);
     }
 
     return `public resolveAll<T>(token: any): T[] {
