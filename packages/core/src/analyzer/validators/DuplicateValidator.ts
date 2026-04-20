@@ -69,6 +69,7 @@ export class DuplicateValidator implements IValidator {
     config: ConfigGraph,
     inheritedTokens: Map<TokenId, InheritedToken>
   ): AnalysisError[] {
+    // TODO: also check multiInjections against inherited tokens
     const errors: AnalysisError[] = [];
 
     for (const [tokenId, info] of config.localInjections) {
