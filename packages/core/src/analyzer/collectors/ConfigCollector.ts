@@ -1,7 +1,7 @@
 import type * as ts from 'typescript';
 import { basename } from 'path';
 import { TSContext } from '../../TSContext';
-import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId } from '../types';
+import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError } from '../types';
 import { HashUtils, TokenResolverService } from '../shared';
 
 /**
@@ -171,7 +171,7 @@ export class ConfigCollector implements IConfigCollector {
     const containerId = this.generateContainerId(configArg, sourceFile, node.getStart());
 
     // Collect injections and detect internal duplicates
-    const { injections: localInjections, duplicates } = this.collectInjections(configArg, sourceFile);
+    const { injections: localInjections, duplicates, valueErrors } = this.collectInjections(configArg, sourceFile);
 
     // Get extends and useContainer (for builders only)
     const extendsRefs = type === 'builder' ? this.getExtendsRefs(configArg) : [];
@@ -197,6 +197,7 @@ export class ConfigCollector implements IConfigCollector {
       useContainerRef,
       legacyParentTokens,
       containerName,
+      valueErrors: valueErrors.length > 0 ? valueErrors : undefined,
     };
   }
 
@@ -219,14 +220,15 @@ export class ConfigCollector implements IConfigCollector {
   private collectInjections(
     configObj: ts.ObjectLiteralExpression,
     sourceFile: ts.SourceFile
-  ): { injections: Map<TokenId, InjectionInfo>; duplicates: InjectionInfo[] } {
+  ): { injections: Map<TokenId, InjectionInfo>; duplicates: InjectionInfo[]; valueErrors: AnalysisError[] } {
     const injections = new Map<TokenId, InjectionInfo>();
     const duplicates: InjectionInfo[] = [];
+    const valueErrors: AnalysisError[] = [];
 
     // Find the 'injections' property
     const injectionsProperty = this.findProperty(configObj, 'injections');
     if (!injectionsProperty || !TSContext.ts.isArrayLiteralExpression(injectionsProperty.initializer)) {
-      return { injections, duplicates };
+      return { injections, duplicates, valueErrors };
     }
 
     // Parse each injection
@@ -235,7 +237,10 @@ export class ConfigCollector implements IConfigCollector {
 
       const info = this.parseInjection(element, sourceFile);
       if (info) {
-        if (injections.has(info.definition.tokenId)) {
+        // Check if it's an AnalysisError (has type/message/node/sourceFile but not definition)
+        if (!('definition' in info)) {
+          valueErrors.push(info as unknown as AnalysisError);
+        } else if (injections.has(info.definition.tokenId)) {
           // This is a duplicate - store it for error reporting
           duplicates.push(info);
         } else {
@@ -244,18 +249,19 @@ export class ConfigCollector implements IConfigCollector {
       }
     }
 
-    return { injections, duplicates };
+    return { injections, duplicates, valueErrors };
   }
 
   private parseInjection(
     obj: ts.ObjectLiteralExpression,
     sourceFile: ts.SourceFile
-  ): InjectionInfo | null {
+  ): InjectionInfo | AnalysisError | null {
     let tokenNode: ts.Expression | undefined;
     let providerNode: ts.Expression | undefined;
     let lifecycle: 'singleton' | 'transient' = 'singleton';
     let useFactory = false;
     let isScoped = false;
+    let valueNode: ts.Expression | undefined;
 
     for (const prop of obj.properties) {
       if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
@@ -282,6 +288,9 @@ export class ConfigCollector implements IConfigCollector {
             isScoped = true;
           }
           break;
+        case 'useValue':
+          valueNode = prop.initializer;
+          break;
       }
     }
 
@@ -293,6 +302,27 @@ export class ConfigCollector implements IConfigCollector {
     // Resolve token ID
     const tokenId = this.resolveTokenId(tokenNode);
     if (!tokenId) return null;
+
+    // Determine if interface token
+    const isInterfaceToken = this.isUseInterfaceCall(tokenNode);
+
+    // --- useValue path ---
+    if (valueNode) {
+      if (this.isUseInterfaceCall(tokenNode)) {
+        const primitiveError = this.checkPrimitiveTokenForValue(tokenNode, obj, sourceFile);
+        if (primitiveError) return primitiveError as any;
+      }
+      const definition: ServiceDefinition = {
+        tokenId,
+        registrationNode: obj,
+        type: 'value',
+        lifecycle: 'singleton',
+        isInterfaceToken,
+        valueSource: valueNode.getText(sourceFile),
+        isScoped,
+      };
+      return { definition, node: obj, tokenText, isScoped };
+    }
 
     // Auto-detect factory
     if (providerNode && (TSContext.ts.isArrowFunction(providerNode) || TSContext.ts.isFunctionExpression(providerNode))) {
@@ -312,9 +342,6 @@ export class ConfigCollector implements IConfigCollector {
       ? this.getSymbolForNode(providerNode)
       : this.getSymbolForNode(tokenNode);
 
-    // Determine if interface token
-    const isInterfaceToken = this.isUseInterfaceCall(tokenNode);
-
     const definition: ServiceDefinition = {
       tokenId,
       implementationSymbol,
@@ -331,6 +358,32 @@ export class ConfigCollector implements IConfigCollector {
       node: obj,
       tokenText,
       isScoped,
+    };
+  }
+
+  private checkPrimitiveTokenForValue(
+    tokenNode: ts.Expression,
+    injectionObj: ts.ObjectLiteralExpression,
+    sourceFile: ts.SourceFile
+  ): AnalysisError | null {
+    if (!TSContext.ts.isCallExpression(tokenNode)) return null;
+    if (!tokenNode.typeArguments || tokenNode.typeArguments.length === 0) return null;
+
+    const typeArg = tokenNode.typeArguments[0];
+    const type = this.checker.getTypeFromTypeNode(typeArg);
+    const typeName = this.checker.typeToString(type);
+
+    const primitives = ['string', 'number', 'boolean', 'symbol', 'bigint'];
+    if (!primitives.includes(typeName)) return null;
+
+    return {
+      type: 'type-mismatch',
+      message:
+        `useValue cannot be used with primitive type '${typeName}'. ` +
+        `Use useProperty<${typeName}>(TargetClass, 'paramName') instead — ` +
+        `it creates a unique token bound to a specific constructor parameter.`,
+      node: injectionObj,
+      sourceFile,
     };
   }
 
