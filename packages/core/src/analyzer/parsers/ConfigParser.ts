@@ -226,7 +226,7 @@ export class ConfigParser {
         registrationNode: obj,
         type: 'value',
         lifecycle: 'singleton', // useValue is always singleton
-        isInterfaceToken: this.tokenResolverService.isUseInterfaceCall(resolvedTokenNode),
+        isInterfaceToken,
         valueSource: valueNode.getText(sourceFile),
         isScoped,
       };
