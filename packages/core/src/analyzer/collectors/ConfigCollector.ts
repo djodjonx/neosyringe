@@ -389,6 +389,10 @@ export class ConfigCollector implements IConfigCollector {
       ? this.getSymbolForNode(providerNode)
       : this.getSymbolForNode(tokenNode);
 
+    const { isDisposable, isAsyncDisposable } = implementationSymbol && registrationType !== 'factory'
+      ? this.detectDisposable(implementationSymbol)
+      : { isDisposable: false, isAsyncDisposable: false };
+
     const definition: ServiceDefinition = {
       tokenId,
       implementationSymbol,
@@ -399,6 +403,8 @@ export class ConfigCollector implements IConfigCollector {
       factorySource: registrationType === 'factory' && providerNode ? providerNode.getText(sourceFile) : undefined,
       isScoped,
       isAsync: isAsync || undefined,
+      isDisposable: isDisposable || undefined,
+      isAsyncDisposable: isAsyncDisposable || undefined,
     };
 
     return {
@@ -408,6 +414,22 @@ export class ConfigCollector implements IConfigCollector {
       isScoped,
       isMulti,
     };
+  }
+
+  /** Detects whether a class symbol implements dispose(): void or dispose(): Promise<void>. */
+  private detectDisposable(symbol: ts.Symbol): { isDisposable: boolean; isAsyncDisposable: boolean } {
+    const type = this.checker.getDeclaredTypeOfSymbol(symbol);
+    const disposeMember = type.getProperty('dispose');
+    if (!disposeMember) return { isDisposable: false, isAsyncDisposable: false };
+
+    const disposeType = this.checker.getTypeOfSymbol(disposeMember);
+    const signatures = disposeType.getCallSignatures();
+    if (signatures.length === 0) return { isDisposable: false, isAsyncDisposable: false };
+
+    const returnType = this.checker.getReturnTypeOfSignature(signatures[0]);
+    const isAsync = this.checker.typeToString(returnType).startsWith('Promise');
+
+    return { isDisposable: !isAsync, isAsyncDisposable: isAsync };
   }
 
   private isAsyncFunction(node: ts.Expression): boolean {

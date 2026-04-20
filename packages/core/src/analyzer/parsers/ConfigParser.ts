@@ -362,15 +362,19 @@ export class ConfigParser {
         this.validateTypeCompatibility(tokenNode, providerNode, obj, graph);
       }
 
+      const resolvedImpl = this.resolveSymbol(implementationSymbol);
+      const { isDisposable, isAsyncDisposable } = this.detectDisposable(resolvedImpl);
       const definition: ServiceDefinition = {
         tokenId,
-        implementationSymbol: this.resolveSymbol(implementationSymbol),
+        implementationSymbol: resolvedImpl,
         tokenSymbol: tokenSymbol ? this.resolveSymbol(tokenSymbol) : undefined,
         registrationNode: obj,
         type: type,
         lifecycle: lifecycle,
         isInterfaceToken: isInterfaceToken || this.tokenResolverService.isUseInterfaceCall(tokenNode),
-        isScoped
+        isScoped,
+        isDisposable: isDisposable || undefined,
+        isAsyncDisposable: isAsyncDisposable || undefined,
       };
       if (isMulti) {
         if (!graph.multiNodes) graph.multiNodes = new Map();
@@ -381,6 +385,22 @@ export class ConfigParser {
         graph.nodes.set(tokenId, { service: definition, dependencies: [] });
       }
     }
+  }
+
+  /** Detects whether a class symbol implements dispose(): void or dispose(): Promise<void>. */
+  private detectDisposable(symbol: ts.Symbol): { isDisposable: boolean; isAsyncDisposable: boolean } {
+    const type = this.checker.getDeclaredTypeOfSymbol(symbol);
+    const disposeMember = type.getProperty('dispose');
+    if (!disposeMember) return { isDisposable: false, isAsyncDisposable: false };
+
+    const disposeType = this.checker.getTypeOfSymbol(disposeMember);
+    const signatures = disposeType.getCallSignatures();
+    if (signatures.length === 0) return { isDisposable: false, isAsyncDisposable: false };
+
+    const returnType = this.checker.getReturnTypeOfSignature(signatures[0]);
+    const isAsync = this.checker.typeToString(returnType).startsWith('Promise');
+
+    return { isDisposable: !isAsync, isAsyncDisposable: isAsync };
   }
 
   /** Returns true if the expression is an async arrow function or async function expression. */
