@@ -178,7 +178,7 @@ describe('Legacy Container Integration', () => {
 
       // Should include legacy container in constructor
       expect(code).toContain('[legacy]');
-      expect(code).toContain("'MyApp'");
+      expect(code).toContain('"MyApp"');
 
       // Should have resolve logic for legacy delegation
       expect(code).toContain('this.legacy');
