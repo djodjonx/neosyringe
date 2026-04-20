@@ -19,7 +19,6 @@ function classNode(tokenId: string, implName: string, filePath: string): Depende
       type: 'explicit',
       lifecycle: 'singleton',
       isInterfaceToken: true,
-      isMulti: true,
     } as ServiceDefinition,
     dependencies: [],
   };
@@ -68,6 +67,28 @@ describe('Generator - resolveAll', () => {
     expect(code).toContain('"IPlugin_def"');
     expect(code).toContain('this.create_IPlugin_def_0()');
     expect(code).toContain('this.create_IPlugin_def_1()');
+  });
+
+  it('should cache singleton multi-node instances across resolveAll calls', () => {
+    const tokenId = 'IService_ghi';
+    const graph: DependencyGraph = {
+      containerId: 'Test',
+      nodes: new Map(),
+      roots: [],
+      multiNodes: new Map([
+        [tokenId, [
+          classNode(tokenId, 'ServiceA', '/src/a.ts'),
+          classNode(tokenId, 'ServiceB', '/src/b.ts'),
+        ]],
+      ]),
+    };
+
+    const code = new Generator(graph).generate();
+
+    // Singleton: should use instance cache with composite key
+    expect(code).toContain('"IService_ghi:0"');
+    expect(code).toContain('"IService_ghi:1"');
+    expect(code).toContain('this.instances.has(k)');
   });
 
   it('should return empty array for unknown token in resolveAll', () => {
