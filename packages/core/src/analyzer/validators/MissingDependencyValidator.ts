@@ -20,37 +20,33 @@ export class MissingDependencyValidator implements IValidator {
   validate(config: ConfigGraph, context: ValidationContext): AnalysisError[] {
     const errors: AnalysisError[] = [];
 
-    // Collect all available tokens in this context
     const availableTokens = this.collectAvailableTokens(config, context);
 
-    // Check each local injection for missing dependencies
-    for (const [_tokenId, info] of config.localInjections) {
+    const checkInfo = (info: import('../types').InjectionInfo) => {
       const requiredDeps = this.dependencyAnalyzer.getRequiredDependencies(info.definition);
-
       for (const depTokenId of requiredDeps) {
-        // Check if the dependency is available
-        const isAvailable = availableTokens.has(depTokenId);
-
-        if (!isAvailable) {
-          // Find the token node for better error positioning
-          // Use info.node (the injection object) as fallback
+        if (!availableTokens.has(depTokenId)) {
           const tokenNode = PropertyFinder.findTokenAssignment(info.node);
-
-          // IMPORTANT: We must use the config's sourceFile because the node
-          // comes from parsing that file. Using node.getSourceFile() can fail
-          // if the node doesn't have proper parent references.
           const errorNode = tokenNode || info.node;
-          const sourceFile = config.sourceFile;
-
           errors.push({
             type: 'missing',
             message: `Missing injection: '${depTokenId}' required by '${info.tokenText}' is not registered in this ${config.type === 'builder' ? 'builder nor its parents/extends' : 'partial config'}`,
             node: errorNode,
-            sourceFile: sourceFile,
-            context: {
-              tokenText: depTokenId,
-            },
+            sourceFile: config.sourceFile,
+            context: { tokenText: depTokenId },
           });
+        }
+      }
+    };
+
+    for (const [_tokenId, info] of config.localInjections) {
+      checkInfo(info);
+    }
+
+    if (config.multiInjections) {
+      for (const [_tokenId, infos] of config.multiInjections) {
+        for (const info of infos) {
+          checkInfo(info);
         }
       }
     }

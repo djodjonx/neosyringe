@@ -22,11 +22,17 @@ export class TypeValidator implements IValidator {
 
     for (const [_tokenId, info] of config.localInjections) {
       const typeError = this.checkTypeCompatibility(info);
-      if (typeError) {
-        errors.push(typeError);
+      if (typeError) errors.push(typeError);
+    }
+
+    if (config.multiInjections) {
+      for (const [_tokenId, infos] of config.multiInjections) {
+        for (const info of infos) {
+          const typeError = this.checkTypeCompatibility(info);
+          if (typeError) errors.push(typeError);
+        }
       }
     }
-    // TODO: validate types for multi-registered tokens (config.multiInjections)
 
     return errors;
   }

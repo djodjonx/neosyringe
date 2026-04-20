@@ -69,16 +69,26 @@ export class DuplicateValidator implements IValidator {
     config: ConfigGraph,
     inheritedTokens: Map<TokenId, InheritedToken>
   ): AnalysisError[] {
-    // TODO: also check multiInjections against inherited tokens
     const errors: AnalysisError[] = [];
 
     for (const [tokenId, info] of config.localInjections) {
-      // Skip if scoped: true (intentional override)
       if (info.isScoped) continue;
-
       const inherited = inheritedTokens.get(tokenId);
       if (inherited) {
         errors.push(this.errorFormatter.formatDuplicateError(info, inherited.source));
+      }
+    }
+
+    // Check multi-registrations against inherited tokens
+    if (config.multiInjections) {
+      for (const [tokenId, infos] of config.multiInjections) {
+        const inherited = inheritedTokens.get(tokenId);
+        if (inherited) {
+          for (const info of infos) {
+            if (info.isScoped) continue;
+            errors.push(this.errorFormatter.formatDuplicateError(info, inherited.source));
+          }
+        }
       }
     }
 
