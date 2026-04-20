@@ -273,6 +273,12 @@ export class Analyzer {
         }
       }
 
+      // valueErrors holds type-mismatch errors produced during collection
+      // (useValue+primitive, async+transient, mixed multi/non-multi)
+      if (config.valueErrors) {
+        errors.push(...config.valueErrors);
+      }
+
       errors.push(...this.validator!.validate(config, context));
     }
 
