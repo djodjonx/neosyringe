@@ -266,6 +266,23 @@ export class ConfigParser {
       factorySource = providerNode.getText();
       type = 'factory';
 
+      // Detect async factory
+      const isAsync = this.isAsyncFunction(providerNode);
+
+      // Validate: async factory cannot be transient
+      if (isAsync && lifecycle === 'transient') {
+        const sourceFile = obj.getSourceFile();
+        const tokenText = tokenNode.getText(sourceFile);
+        if (!graph.errors) graph.errors = [];
+        graph.errors.push({
+          type: 'type-mismatch',
+          message: `Async factory for '${tokenText}' cannot use lifecycle: 'transient'. Async factories are pre-initialized once in initialize() and must be singletons. Remove lifecycle: 'transient' or make the factory synchronous.`,
+          node: obj,
+          sourceFile,
+        });
+        return;
+      }
+
       if (tokenId) {
         // Reject mixed multi/non-multi for same token
         const tokenText = tokenNode.getText(obj.getSourceFile());
@@ -294,7 +311,8 @@ export class ConfigParser {
           isInterfaceToken,
           isValueToken,
           factorySource,
-          isScoped
+          isScoped,
+          isAsync: isAsync || undefined,
         };
         if (isMulti) {
           if (!graph.multiNodes) graph.multiNodes = new Map();
@@ -363,6 +381,15 @@ export class ConfigParser {
         graph.nodes.set(tokenId, { service: definition, dependencies: [] });
       }
     }
+  }
+
+  /** Returns true if the expression is an async arrow function or async function expression. */
+  private isAsyncFunction(node: ts.Expression): boolean {
+    if (!TSContext.ts.isArrowFunction(node) && !TSContext.ts.isFunctionExpression(node)) {
+      return false;
+    }
+    const fn = node as ts.ArrowFunction | ts.FunctionExpression;
+    return fn.modifiers?.some(m => m.kind === TSContext.ts.SyntaxKind.AsyncKeyword) ?? false;
   }
 
   /**
