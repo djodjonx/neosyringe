@@ -47,7 +47,8 @@ The build plugin replaces the entire file:
 // container.ts (after build)
 import * as Import_0 from './container';
 
-export class NeoContainer {
+// -- Container --
+class NeoContainer {
   private instances = new Map<any, any>();
 
   // -- Factories --
@@ -74,7 +75,7 @@ export class NeoContainer {
     private name: string = 'AppContainer'
   ) {}
 
-  public resolve(token: any): any {
+  public resolve<T>(token: any): T {
     // 1. Try local resolution
     const result = this.resolveLocal(token);
     if (result !== undefined) return result;
@@ -83,8 +84,8 @@ export class NeoContainer {
     if (this.parent) {
       try {
         return this.parent.resolve(token);
-      } catch (e) {
-        // Continue to legacy
+      } catch (e: any) {
+        if (!e?.message?.includes('Service not found or token not registered')) throw e;
       }
     }
 
@@ -92,23 +93,27 @@ export class NeoContainer {
     if (this.legacy) {
       for (const legacyContainer of this.legacy) {
         try {
-          if (legacyContainer.resolve) {
-            return legacyContainer.resolve(token);
-          }
-        } catch (e) {
-          // Try next
+          if (legacyContainer.resolve) return legacyContainer.resolve(token);
+        } catch (e: any) {
+          if (!e?.message?.includes('Service not found or token not registered')) throw e;
         }
       }
     }
 
-    throw new Error(`[${this.name}] Service not found: ${token}`);
+    throw new Error(`[${this.name}] Service not found or token not registered: ${token}`);
+  }
+
+  public destroy(): void {
+    this.instances.clear();
   }
 
   private resolveLocal(token: any): any {
     // Interface token (string-based)
     if (token === "ILogger") {
       if (!this.instances.has("ILogger")) {
-        this.instances.set("ILogger", this.create_ILogger());
+        const instance = this.create_ILogger();
+        this.instances.set("ILogger", instance);
+        return instance;
       }
       return this.instances.get("ILogger");
     }
@@ -116,7 +121,9 @@ export class NeoContainer {
     // Property token (string-based)
     if (token === "PropertyToken:ApiService.apiUrl") {
       if (!this.instances.has("PropertyToken:ApiService.apiUrl")) {
-        this.instances.set("PropertyToken:ApiService.apiUrl", this.create_ApiService_apiUrl());
+        const instance = this.create_ApiService_apiUrl();
+        this.instances.set("PropertyToken:ApiService.apiUrl", instance);
+        return instance;
       }
       return this.instances.get("PropertyToken:ApiService.apiUrl");
     }
@@ -124,7 +131,9 @@ export class NeoContainer {
     // Class token (reference-based)
     if (token === Import_0.ApiService) {
       if (!this.instances.has(Import_0.ApiService)) {
-        this.instances.set(Import_0.ApiService, this.create_ApiService());
+        const instance = this.create_ApiService();
+        this.instances.set(Import_0.ApiService, instance);
+        return instance;
       }
       return this.instances.get(Import_0.ApiService);
     }
@@ -132,13 +141,12 @@ export class NeoContainer {
     return undefined;
   }
 
-  // For debugging
   public get _graph() {
     return ["ILogger", "PropertyToken:ApiService.apiUrl", "ApiService"];
   }
 }
 
-export const container = new NeoContainer();
+export const container = new NeoContainer(undefined, undefined, "AppContainer");
 ```
 
 ## Key Observations
@@ -272,7 +280,6 @@ export const productContainer = defineBuilderConfig({
 // containers.ts (after build)
 import * as Import_0 from './containers';
 
-// Class for UserModule
 class NeoContainer_UserModule {
   private instances = new Map<any, any>();
 
@@ -282,17 +289,15 @@ class NeoContainer_UserModule {
 
   constructor(
     private parent?: any,
+    private legacy?: any[],
     private name: string = 'UserModule'
   ) {}
 
-  public resolve(token: any): any {
-    // ... resolution logic
-  }
+  // resolve, destroy, resolveLocal...
 }
 
-export const userContainer = new NeoContainer_UserModule();
+export const userContainer = new NeoContainer_UserModule(undefined, undefined, "UserModule");
 
-// Class for ProductModule
 class NeoContainer_ProductModule {
   private instances = new Map<any, any>();
 
@@ -302,15 +307,14 @@ class NeoContainer_ProductModule {
 
   constructor(
     private parent?: any,
+    private legacy?: any[],
     private name: string = 'ProductModule'
   ) {}
 
-  public resolve(token: any): any {
-    // ... resolution logic
-  }
+  // resolve, destroy, resolveLocal...
 }
 
-export const productContainer = new NeoContainer_ProductModule();
+export const productContainer = new NeoContainer_ProductModule(undefined, undefined, "ProductModule");
 ```
 
 **Key points**:
@@ -346,5 +350,5 @@ console.log(container._graph);
 Each container also has a `name` for error messages:
 
 ```typescript
-// Error: [AppContainer] Service not found: UnknownToken
+// Error: [AppContainer] Service not found or token not registered: UnknownToken
 ```

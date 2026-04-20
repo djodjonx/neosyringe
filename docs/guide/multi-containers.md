@@ -95,15 +95,14 @@ class NeoContainer_UserModule {
 
   constructor(
     private parent?: any,
+    private legacy?: any[],
     private name: string = 'UserModule'
   ) {}
 
-  public resolve(token: any): any {
-    // ... resolution logic
-  }
+  // resolve, destroy, resolveLocal...
 }
 
-export const userContainer = new NeoContainer_UserModule();
+export const userContainer = new NeoContainer_UserModule(undefined, undefined, "UserModule");
 
 // ✨ Unique class for ProductModule
 class NeoContainer_ProductModule {
@@ -115,15 +114,14 @@ class NeoContainer_ProductModule {
 
   constructor(
     private parent?: any,
+    private legacy?: any[],
     private name: string = 'ProductModule'
   ) {}
 
-  public resolve(token: any): any {
-    // ... resolution logic
-  }
+  // resolve, destroy, resolveLocal...
 }
 
-export const productContainer = new NeoContainer_ProductModule();
+export const productContainer = new NeoContainer_ProductModule(undefined, undefined, "ProductModule");
 ```
 
 ## Validation Rules

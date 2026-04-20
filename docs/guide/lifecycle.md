@@ -138,11 +138,13 @@ Understanding how lifecycle affects the generated code:
 ```typescript
 // Generated for singleton
 private resolveLocal(token: any): any {
-  if (token === UserService) {
-    if (!this.instances.has(UserService)) {
-      this.instances.set(UserService, create_UserService(this));
+  if (token === Import_0.UserService) {
+    if (!this.instances.has(Import_0.UserService)) {
+      const instance = this.create_UserService();
+      this.instances.set(Import_0.UserService, instance);
+      return instance;
     }
-    return this.instances.get(UserService);
+    return this.instances.get(Import_0.UserService);
   }
 }
 ```
@@ -152,8 +154,8 @@ private resolveLocal(token: any): any {
 ```typescript
 // Generated for transient
 private resolveLocal(token: any): any {
-  if (token === RequestContext) {
-    return create_RequestContext(this);  // No caching!
+  if (token === Import_0.RequestContext) {
+    return this.create_RequestContext();  // No caching!
   }
 }
 ```

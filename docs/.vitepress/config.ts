@@ -62,6 +62,7 @@ export default defineConfig({
           text: 'Advanced',
           items: [
             { text: 'Parent Container', link: '/guide/parent-container' },
+            { text: 'Multiple Containers', link: '/guide/multi-containers' },
             { text: 'Legacy Migration', link: '/guide/legacy-migration' },
             { text: 'Generated Code', link: '/guide/generated-code' },
           ]

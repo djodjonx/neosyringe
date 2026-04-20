@@ -13,4 +13,16 @@ export default defineNuxtConfig({
   nitro: {
     minify: false,
   },
+  typescript: {
+    tsConfig: {
+      compilerOptions: {
+        plugins: [
+          {
+            name: "@djodjonx/neosyringe-lsp",
+            verbose: true
+          }
+        ]
+      }
+    }
+  }
 })

@@ -127,6 +127,35 @@ Use factory functions for dynamic instantiation:
 }
 ```
 
+### Value Provider
+
+Register a pre-built object directly — no class, no factory function:
+
+```typescript
+import { useInterface } from '@djodjonx/neosyringe';
+
+interface AppConfig {
+  apiUrl: string;
+  debug: boolean;
+}
+
+export const container = defineBuilderConfig({
+  injections: [
+    {
+      token: useInterface<AppConfig>(),
+      useValue: {
+        apiUrl: process.env.API_URL ?? 'http://localhost',
+        debug: process.env.NODE_ENV === 'development'
+      }
+    }
+  ]
+});
+```
+
+::: tip
+Use `useValue` for config objects and pre-created instances. For primitive values (string, number, boolean), use `useProperty` instead.
+:::
+
 ### Property Token
 
 Inject primitive values (string, number, boolean) while keeping classes pure:

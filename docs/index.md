@@ -97,32 +97,7 @@ const userService = container.resolve(UserService);
 // Type: UserService ✅ - Full auto-completion!
 ```
 
-## Generated Output
-
-The build plugin transforms your configuration into optimized code:
-
-```typescript
-// Generated at build time
-function create_ILogger() {
-  return new ConsoleLogger();
-}
-
-function create_UserService(container) {
-  return new UserService(container.resolve("ILogger"));
-}
-
-class NeoContainer {
-  resolve<T>(token: any): T {  // ✨ Fully typed!
-    if (token === "ILogger") return this.getInstance("ILogger", create_ILogger);
-    if (token === UserService) return this.getInstance(UserService, create_UserService);
-    throw new Error(`Service not found: ${token}`);
-  }
-}
-
-export const container = new NeoContainer();
-```
-
-**Zero DI library shipped to production!**
+**Zero DI library shipped to production!** The build plugin replaces your `defineBuilderConfig(...)` with an optimized container class — no runtime overhead, no reflection, no magic.
 
 <div style="text-align: center; margin-top: 3rem;">
   <a href="./guide/getting-started" style="

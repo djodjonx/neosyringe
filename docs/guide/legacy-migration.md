@@ -206,18 +206,22 @@ class NeoContainer {
     // 2. Delegate to parent (NeoSyringe container)
     if (this.parent) {
       try { return this.parent.resolve(token); }
-      catch { /* continue */ }
+      catch (e: any) {
+        if (!e?.message?.includes('Service not found or token not registered')) throw e;
+      }
     }
 
     // 3. Delegate to legacy containers
     if (this.legacy) {
       for (const container of this.legacy) {
-        try { return container.resolve(token); }  // ← Calls tsyringe!
-        catch { /* try next */ }
+        try { if (container.resolve) return container.resolve(token); }  // ← Calls tsyringe!
+        catch (e: any) {
+          if (!e?.message?.includes('Service not found or token not registered')) throw e;
+        }
       }
     }
 
-    throw new Error(`Service not found: ${token}`);
+    throw new Error(`[${this.name}] Service not found or token not registered: ${token}`);
   }
 }
 ```
