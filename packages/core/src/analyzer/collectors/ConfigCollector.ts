@@ -365,6 +365,17 @@ export class ConfigCollector implements IConfigCollector {
       useFactory = true;
     }
 
+    // Detect async factory and validate constraint
+    const isAsync = useFactory && providerNode ? this.isAsyncFunction(providerNode) : false;
+    if (isAsync && lifecycle === 'transient') {
+      return {
+        type: 'type-mismatch' as const,
+        message: `Async factory for '${tokenText}' cannot use lifecycle: 'transient'. Async factories are pre-initialized once in initialize() and must be singletons. Remove lifecycle: 'transient' or make the factory synchronous.`,
+        node: obj,
+        sourceFile,
+      } as any;
+    }
+
     // Determine registration type
     let registrationType: 'explicit' | 'autowire' | 'factory' = 'autowire';
     if (useFactory) {
@@ -387,6 +398,7 @@ export class ConfigCollector implements IConfigCollector {
       isInterfaceToken,
       factorySource: registrationType === 'factory' && providerNode ? providerNode.getText(sourceFile) : undefined,
       isScoped,
+      isAsync: isAsync || undefined,
     };
 
     return {
@@ -396,6 +408,14 @@ export class ConfigCollector implements IConfigCollector {
       isScoped,
       isMulti,
     };
+  }
+
+  private isAsyncFunction(node: ts.Expression): boolean {
+    if (!TSContext.ts.isArrowFunction(node) && !TSContext.ts.isFunctionExpression(node)) {
+      return false;
+    }
+    const fn = node as ts.ArrowFunction | ts.FunctionExpression;
+    return fn.modifiers?.some(m => m.kind === TSContext.ts.SyntaxKind.AsyncKeyword) ?? false;
   }
 
   private checkPrimitiveTokenForValue(
