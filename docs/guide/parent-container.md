@@ -254,24 +254,35 @@ export const child = defineBuilderConfig({
 import { parent } from './parent';
 
 class NeoContainer {
+  private instances = new Map<any, any>();
+
+  // ... factories
+
   constructor(
-    private parent = parent  // 👈 Reference to parent
+    private parent?: any,
+    private legacy?: any[],
+    private name: string = 'ChildContainer'
   ) {}
 
-  resolve(token) {
-    const local = this.resolveLocal(token);
-    if (local !== undefined) return local;
+  public resolve<T>(token: any): T {
+    const result = this.resolveLocal(token);
+    if (result !== undefined) return result;
 
-    // Delegate to parent
     if (this.parent) {
-      return this.parent.resolve(token);
+      try {
+        return this.parent.resolve(token);
+      } catch (e: any) {
+        if (!e?.message?.includes('Service not found or token not registered')) throw e;
+      }
     }
 
-    throw new Error('Service not found');
+    throw new Error(`[${this.name}] Service not found or token not registered: ${token}`);
   }
+
+  // resolveLocal, destroy...
 }
 
-export const child = new NeoContainer();
+export const child = new NeoContainer(parent, undefined, "ChildContainer");
 ```
 
 ## Best Practices

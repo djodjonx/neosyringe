@@ -123,7 +123,7 @@ defineBuilderConfig({
   name: 'UserModule'
 });
 
-// Error: [UserModule] Service not found: XYZ
+// Error: [UserModule] Service not found or token not registered: XYZ
 ```
 
 **Multiple containers per file**:
@@ -190,6 +190,9 @@ defineBuilderConfig({
     // Property token
     { token: useProperty<string>(ApiService, 'apiUrl'), provider: () => 'http://...' },
     
+    // Pre-built value
+    { token: useInterface<AppConfig>(), useValue: { apiUrl: '...', timeout: 5000 } },
+    
     // With lifecycle
     { token: RequestContext, lifecycle: 'transient' },
     
@@ -248,6 +251,7 @@ interface Injection<T> {
   token: Token<T>;
   provider?: Provider<T>;
   useFactory?: boolean;
+  useValue?: T;
   lifecycle?: 'singleton' | 'transient';
   scoped?: boolean;
 }
@@ -273,6 +277,20 @@ What provides the instance. Can be:
 - Factory function: `(container) => new Service()`
 
 If omitted, the token itself is used (autowiring).
+
+### useValue
+
+Type: `T`
+
+Register a pre-built value directly. The value is embedded in the generated container as-is.
+
+```typescript
+// Register a config object
+{ token: useInterface<AppConfig>(), useValue: { apiUrl: '...', timeout: 5000 } }
+```
+
+- Always singleton — `resolve()` always returns the same object
+- Cannot be used with primitive types (string, number, boolean) — use `useProperty` instead
 
 ### useFactory
 

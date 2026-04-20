@@ -10,6 +10,7 @@ All the ways to define and inject dependencies in NeoSyringe.
 | **Interface** | `{ token: useInterface<IFoo>(), provider: Foo }` | Abstraction |
 | **Explicit** | `{ token: MyClass, provider: OtherClass }` | Override default |
 | **Factory** | `{ token: X, provider: (c) => ... }` | Dynamic creation |
+| **Value** | `{ token: X, useValue: myValue }` | Pre-built objects |
 | **Property** | `{ token: useProperty(Class, 'param') }` | Primitives |
 
 ## Class Token
@@ -160,6 +161,39 @@ function createDatabaseConnection(container: Container) {
   useFactory: true  // Required for non-arrow functions
 }
 ```
+
+## Value Provider
+
+Register a pre-built value directly — no class, no factory. The value is embedded in the generated container as-is.
+
+```typescript
+interface DatabaseConfig {
+  url: string;
+  poolSize: number;
+}
+
+const dbConfig: DatabaseConfig = {
+  url: process.env.DB_URL ?? 'localhost:5432',
+  poolSize: 10
+};
+
+export const container = defineBuilderConfig({
+  injections: [
+    { token: useInterface<DatabaseConfig>(), useValue: dbConfig }
+  ]
+});
+
+const config = container.resolve(useInterface<DatabaseConfig>());
+// Returns the exact dbConfig object — always the same instance
+```
+
+::: tip Always Singleton
+Values are always singletons. Each `resolve()` call returns the same object.
+:::
+
+::: warning Primitives Not Supported
+`useValue` does not accept primitive types (string, number, boolean). Use [`useProperty`](#property-token) for injecting primitive configuration values into class constructors.
+:::
 
 ## Property Token
 

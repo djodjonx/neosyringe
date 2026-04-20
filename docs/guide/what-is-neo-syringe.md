@@ -50,23 +50,7 @@ export const container = defineBuilderConfig({
 });
 ```
 
-At build time, this becomes:
-
-```typescript
-// Generated code (no DI library!)
-function create_UserService(container) {
-  return new UserService(container.resolve("ILogger"));
-}
-
-class NeoContainer {
-  resolve(token) {
-    if (token === "ILogger") return new ConsoleLogger();
-    if (token === UserService) return create_UserService(this);
-  }
-}
-
-export const container = new NeoContainer();
-```
+At build time, the build plugin replaces the `defineBuilderConfig(...)` call with a generated container — just plain TypeScript, no DI library included.
 
 ## Key Advantages
 
@@ -145,11 +129,12 @@ export const container = defineBuilderConfig({
 │  container.resolve(UserService)                             │
 │              │                                               │
 │              ▼                                               │
-│  Direct new UserService(new ConsoleLogger())                │
+│  Generated factory creates UserService with                 │
+│  all dependencies resolved recursively                      │
 │                                                              │
 │  ✅ No reflection                                            │
-│  ✅ No container lookup                                      │
-│  ✅ Just function calls                                      │
+│  ✅ No DI library in your bundle                             │
+│  ✅ Errors caught at compile-time                            │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
