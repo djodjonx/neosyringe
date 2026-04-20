@@ -129,13 +129,14 @@ export class ConfigParser {
    * @param graph - The dependency graph to populate
    */
   parseInjectionObject(obj: ts.ObjectLiteralExpression, graph: DependencyGraph): void {
-    // Extract properties: token, provider, lifecycle, useFactory, scoped, useValue
+    // Extract properties: token, provider, lifecycle, useFactory, scoped, useValue, multi
     let tokenNode: ts.Expression | undefined;
     let providerNode: ts.Expression | undefined;
     let lifecycle: 'singleton' | 'transient' = 'singleton';
     let useFactory = false;
     let isScoped = false;
     let valueNode: ts.Expression | undefined;
+    let isMulti = false;
 
     for (const prop of obj.properties) {
       if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
@@ -156,6 +157,10 @@ export class ConfigParser {
         }
       } else if (prop.name.text === 'useValue') {
         valueNode = prop.initializer;
+      } else if (prop.name.text === 'multi') {
+        if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
+          isMulti = true;
+        }
       }
     }
 
@@ -252,6 +257,32 @@ export class ConfigParser {
       type = 'factory';
 
       if (tokenId) {
+        // Reject mixed multi/non-multi for same token
+        if (isMulti && graph.nodes.has(tokenId)) {
+          const sourceFile = obj.getSourceFile();
+          const tokenText = tokenNode.getText(sourceFile);
+          if (!graph.errors) graph.errors = [];
+          graph.errors.push({
+            type: 'duplicate',
+            message: `Token '${tokenText}' is registered both with and without 'multi: true'. All registrations for a token must consistently use multi: true or not at all.`,
+            node: obj,
+            sourceFile,
+          });
+          return;
+        }
+        if (!isMulti && graph.multiNodes?.has(tokenId)) {
+          const sourceFile = obj.getSourceFile();
+          const tokenText = tokenNode.getText(sourceFile);
+          if (!graph.errors) graph.errors = [];
+          graph.errors.push({
+            type: 'duplicate',
+            message: `Token '${tokenText}' is registered both with and without 'multi: true'. All registrations for a token must consistently use multi: true or not at all.`,
+            node: obj,
+            sourceFile,
+          });
+          return;
+        }
+
         // Check for duplicate - allow if scoped: true (intentional override)
         if (graph.nodes.has(tokenId) && !isScoped) {
           const sourceFile = obj.getSourceFile();
@@ -278,7 +309,14 @@ export class ConfigParser {
           factorySource,
           isScoped
         };
-        graph.nodes.set(tokenId, { service: definition, dependencies: [] });
+        if (isMulti) {
+          if (!graph.multiNodes) graph.multiNodes = new Map();
+          const existing = graph.multiNodes.get(tokenId) ?? [];
+          existing.push({ service: definition, dependencies: [] });
+          graph.multiNodes.set(tokenId, existing);
+        } else {
+          graph.nodes.set(tokenId, { service: definition, dependencies: [] });
+        }
       }
       return;
     }
@@ -296,6 +334,32 @@ export class ConfigParser {
     }
 
     if (tokenId && implementationSymbol) {
+      // Reject mixed multi/non-multi for same token
+      if (isMulti && graph.nodes.has(tokenId)) {
+        const sourceFile = obj.getSourceFile();
+        const tokenText = tokenNode.getText(sourceFile);
+        if (!graph.errors) graph.errors = [];
+        graph.errors.push({
+          type: 'duplicate',
+          message: `Token '${tokenText}' is registered both with and without 'multi: true'. All registrations for a token must consistently use multi: true or not at all.`,
+          node: obj,
+          sourceFile,
+        });
+        return;
+      }
+      if (!isMulti && graph.multiNodes?.has(tokenId)) {
+        const sourceFile = obj.getSourceFile();
+        const tokenText = tokenNode.getText(sourceFile);
+        if (!graph.errors) graph.errors = [];
+        graph.errors.push({
+          type: 'duplicate',
+          message: `Token '${tokenText}' is registered both with and without 'multi: true'. All registrations for a token must consistently use multi: true or not at all.`,
+          node: obj,
+          sourceFile,
+        });
+        return;
+      }
+
       // Check for duplicate - allow if scoped: true
       if (graph.nodes.has(tokenId) && !isScoped) {
         const sourceFile = obj.getSourceFile();
@@ -326,7 +390,14 @@ export class ConfigParser {
         isInterfaceToken: isInterfaceToken || this.tokenResolverService.isUseInterfaceCall(tokenNode),
         isScoped
       };
-      graph.nodes.set(tokenId, { service: definition, dependencies: [] });
+      if (isMulti) {
+        if (!graph.multiNodes) graph.multiNodes = new Map();
+        const existing = graph.multiNodes.get(tokenId) ?? [];
+        existing.push({ service: definition, dependencies: [] });
+        graph.multiNodes.set(tokenId, existing);
+      } else {
+        graph.nodes.set(tokenId, { service: definition, dependencies: [] });
+      }
     }
   }
 

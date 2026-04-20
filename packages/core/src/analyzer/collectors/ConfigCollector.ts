@@ -171,7 +171,7 @@ export class ConfigCollector implements IConfigCollector {
     const containerId = this.generateContainerId(configArg, sourceFile, node.getStart());
 
     // Collect injections and detect internal duplicates
-    const { injections: localInjections, duplicates, valueErrors } = this.collectInjections(configArg, sourceFile);
+    const { injections: localInjections, duplicates, valueErrors, multiInjections } = this.collectInjections(configArg, sourceFile);
 
     // Get extends and useContainer (for builders only)
     const extendsRefs = type === 'builder' ? this.getExtendsRefs(configArg) : [];
@@ -198,6 +198,7 @@ export class ConfigCollector implements IConfigCollector {
       legacyParentTokens,
       containerName,
       valueErrors: valueErrors.length > 0 ? valueErrors : undefined,
+      multiInjections: multiInjections && multiInjections.size > 0 ? multiInjections : undefined,
     };
   }
 
@@ -220,10 +221,11 @@ export class ConfigCollector implements IConfigCollector {
   private collectInjections(
     configObj: ts.ObjectLiteralExpression,
     sourceFile: ts.SourceFile
-  ): { injections: Map<TokenId, InjectionInfo>; duplicates: InjectionInfo[]; valueErrors: AnalysisError[] } {
+  ): { injections: Map<TokenId, InjectionInfo>; duplicates: InjectionInfo[]; valueErrors: AnalysisError[]; multiInjections?: Map<TokenId, InjectionInfo[]> } {
     const injections = new Map<TokenId, InjectionInfo>();
     const duplicates: InjectionInfo[] = [];
     const valueErrors: AnalysisError[] = [];
+    let multiInjections: Map<TokenId, InjectionInfo[]> | undefined;
 
     // Find the 'injections' property
     const injectionsProperty = this.findProperty(configObj, 'injections');
@@ -240,6 +242,34 @@ export class ConfigCollector implements IConfigCollector {
         // Check if it's an AnalysisError (has type/message/node/sourceFile but not definition)
         if (!('definition' in info)) {
           valueErrors.push(info as unknown as AnalysisError);
+          continue;
+        }
+
+        // Check for mixed multi/non-multi
+        if (info.isMulti && injections.has(info.definition.tokenId)) {
+          valueErrors.push({
+            type: 'duplicate',
+            message: `Token '${info.tokenText}' is registered both with and without 'multi: true'. All registrations for a token must consistently use multi: true or not at all.`,
+            node: info.node,
+            sourceFile,
+          });
+          continue;
+        }
+        if (!info.isMulti && multiInjections?.has(info.definition.tokenId)) {
+          valueErrors.push({
+            type: 'duplicate',
+            message: `Token '${info.tokenText}' is registered both with and without 'multi: true'. All registrations for a token must consistently use multi: true or not at all.`,
+            node: info.node,
+            sourceFile,
+          });
+          continue;
+        }
+
+        if (info.isMulti) {
+          if (!multiInjections) multiInjections = new Map();
+          const existing = multiInjections.get(info.definition.tokenId) ?? [];
+          existing.push(info);
+          multiInjections.set(info.definition.tokenId, existing);
         } else if (injections.has(info.definition.tokenId)) {
           // This is a duplicate - store it for error reporting
           duplicates.push(info);
@@ -249,7 +279,7 @@ export class ConfigCollector implements IConfigCollector {
       }
     }
 
-    return { injections, duplicates, valueErrors };
+    return { injections, duplicates, valueErrors, multiInjections };
   }
 
   private parseInjection(
@@ -262,6 +292,7 @@ export class ConfigCollector implements IConfigCollector {
     let useFactory = false;
     let isScoped = false;
     let valueNode: ts.Expression | undefined;
+    let isMulti = false;
 
     for (const prop of obj.properties) {
       if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
@@ -290,6 +321,11 @@ export class ConfigCollector implements IConfigCollector {
           break;
         case 'useValue':
           valueNode = prop.initializer;
+          break;
+        case 'multi':
+          if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
+            isMulti = true;
+          }
           break;
       }
     }
@@ -321,7 +357,7 @@ export class ConfigCollector implements IConfigCollector {
         valueSource: valueNode.getText(sourceFile),
         isScoped,
       };
-      return { definition, node: obj, tokenText, isScoped };
+      return { definition, node: obj, tokenText, isScoped, isMulti };
     }
 
     // Auto-detect factory
@@ -358,6 +394,7 @@ export class ConfigCollector implements IConfigCollector {
       node: obj,
       tokenText,
       isScoped,
+      isMulti,
     };
   }
 

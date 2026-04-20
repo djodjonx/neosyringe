@@ -416,6 +416,15 @@ export class Analyzer {
    */
   private resolveAllDependencies(graph: DependencyGraph): void {
     this.dependencyResolver.resolveAll(graph);
+
+    // Resolve dependencies for multi-nodes
+    if (graph.multiNodes) {
+      for (const nodes of graph.multiNodes.values()) {
+        for (const node of nodes) {
+          this.dependencyResolver.resolve(node, graph);
+        }
+      }
+    }
   }
 
 
