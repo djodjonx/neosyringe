@@ -35,7 +35,7 @@ describe('GraphValidator Safety', () => {
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBe(1);
     expect(result.errors[0].type).toBe('missing');
-    expect(result.errors[0].message).toContain("Service 'A' depends on 'B'");
+    expect(result.errors[0].message).toContain("'B' required by 'A'");
   });
 
   it('should detect multiple missing bindings', () => {

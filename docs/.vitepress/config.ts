@@ -83,6 +83,7 @@ export default defineConfig({
             { text: 'Types', link: '/api/types' },
             { text: 'Functions', link: '/api/functions' },
             { text: 'Configuration', link: '/api/configuration' },
+            { text: 'Error Reference', link: '/api/errors' },
           ]
         }
       ]

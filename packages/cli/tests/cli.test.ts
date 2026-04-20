@@ -100,7 +100,7 @@ describe('CLI - Validation Logic', () => {
       const graph = analyzer.extract();
       const validator = new GraphValidator();
 
-      expect(() => validator.validate(graph)).toThrow(/Missing binding.*Missing/);
+      expect(() => validator.validate(graph)).toThrow(/Missing injection.*Missing/);
     });
 
     it('should detect duplicate registration', () => {

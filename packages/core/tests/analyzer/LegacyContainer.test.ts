@@ -108,7 +108,7 @@ describe('Legacy Container Integration', () => {
       const graph = analyzer.extract();
 
       const validator = new GraphValidator();
-      expect(() => validator.validate(graph)).toThrow(/Missing binding.*MissingService/);
+      expect(() => validator.validate(graph)).toThrow(/Missing injection.*MissingService/);
     });
 
     it('should prevent duplicate registration of legacy tokens', () => {
