@@ -129,12 +129,13 @@ export class ConfigParser {
    * @param graph - The dependency graph to populate
    */
   parseInjectionObject(obj: ts.ObjectLiteralExpression, graph: DependencyGraph): void {
-    // Extract properties: token, provider, lifecycle, useFactory, scoped
+    // Extract properties: token, provider, lifecycle, useFactory, scoped, useValue
     let tokenNode: ts.Expression | undefined;
     let providerNode: ts.Expression | undefined;
     let lifecycle: 'singleton' | 'transient' = 'singleton';
     let useFactory = false;
     let isScoped = false;
+    let valueNode: ts.Expression | undefined;
 
     for (const prop of obj.properties) {
       if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
@@ -153,6 +154,8 @@ export class ConfigParser {
         if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
           isScoped = true;
         }
+      } else if (prop.name.text === 'useValue') {
+        valueNode = prop.initializer;
       }
     }
 
@@ -203,6 +206,32 @@ export class ConfigParser {
       if (TSContext.ts.isIdentifier(tokenNode)) {
         tokenSymbol = this.checker.getSymbolAtLocation(tokenNode);
       }
+    }
+
+    // 2a. Handle useValue
+    if (valueNode) {
+      // Reject primitive tokens — they should use useProperty instead
+      if (this.tokenResolverService.isUseInterfaceCall(resolvedTokenNode)) {
+        const primitiveError = this.checkPrimitiveTokenForValue(resolvedTokenNode, obj);
+        if (primitiveError) {
+          if (!graph.errors) graph.errors = [];
+          graph.errors.push(primitiveError);
+          return;
+        }
+      }
+
+      const sourceFile = obj.getSourceFile();
+      const definition: ServiceDefinition = {
+        tokenId,
+        registrationNode: obj,
+        type: 'value',
+        lifecycle: 'singleton', // useValue is always singleton
+        isInterfaceToken: this.tokenResolverService.isUseInterfaceCall(resolvedTokenNode),
+        valueSource: valueNode.getText(sourceFile),
+        isScoped,
+      };
+      graph.nodes.set(tokenId, { service: definition, dependencies: [] });
+      return;
     }
 
     // 2. Handle Factory
@@ -287,6 +316,40 @@ export class ConfigParser {
       };
       graph.nodes.set(tokenId, { service: definition, dependencies: [] });
     }
+  }
+
+  /**
+   * Checks whether a useInterface<T>() token uses a primitive type with useValue.
+   * Primitive types (string, number, boolean, etc.) must use useProperty instead.
+   *
+   * @param tokenNode - The resolved useInterface<T>() call expression
+   * @param registrationNode - The injection object for error positioning
+   * @returns An AnalysisError if the type is primitive, null otherwise
+   */
+  private checkPrimitiveTokenForValue(
+    tokenNode: ts.Expression,
+    registrationNode: ts.ObjectLiteralExpression
+  ): import('../types').AnalysisError | null {
+    if (!TSContext.ts.isCallExpression(tokenNode)) return null;
+    if (!tokenNode.typeArguments || tokenNode.typeArguments.length === 0) return null;
+
+    const typeArg = tokenNode.typeArguments[0];
+    const type = this.checker.getTypeFromTypeNode(typeArg);
+    const typeName = this.checker.typeToString(type);
+
+    const primitives = ['string', 'number', 'boolean', 'symbol', 'bigint'];
+    if (!primitives.includes(typeName)) return null;
+
+    const sourceFile = registrationNode.getSourceFile();
+    return {
+      type: 'type-mismatch',
+      message:
+        `useValue cannot be used with primitive type '${typeName}'. ` +
+        `Use useProperty<${typeName}>(TargetClass, 'paramName') instead — ` +
+        `it creates a unique token bound to a specific constructor parameter.`,
+      node: registrationNode,
+      sourceFile,
+    };
   }
 
   /**
