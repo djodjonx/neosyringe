@@ -210,14 +210,26 @@ export class ConfigParser {
 
     // 2a. Handle useValue
     if (valueNode) {
-      // Reject primitive tokens — they should use useProperty instead
-      if (this.tokenResolverService.isUseInterfaceCall(resolvedTokenNode)) {
+      if (isInterfaceToken) {
+        // Reject primitive tokens — they should use useProperty instead
         const primitiveError = this.checkPrimitiveTokenForValue(resolvedTokenNode, obj);
         if (primitiveError) {
           if (!graph.errors) graph.errors = [];
           graph.errors.push(primitiveError);
           return;
         }
+      } else {
+        // useValue with a class token is not supported — provider: ClassName handles that case
+        const sourceFile = obj.getSourceFile();
+        const tokenText = tokenNode.getText(sourceFile);
+        if (!graph.errors) graph.errors = [];
+        graph.errors.push({
+          type: 'type-mismatch',
+          message: `useValue cannot be used with a class token. Use provider: ${tokenText} to register a class, or useInterface<T>() with useValue for an interface token.`,
+          node: obj,
+          sourceFile: sourceFile,
+        });
+        return;
       }
 
       const sourceFile = obj.getSourceFile();
