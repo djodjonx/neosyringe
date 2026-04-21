@@ -15,6 +15,7 @@ A detailed comparison with other dependency injection solutions.
 | **IDE error detection** | ✅ | ❌ | ❌ | ❌ |
 | **Tree-shakeable** | ✅ | ❌ | ❌ | ❌ |
 | **Works in Edge/Workers** | ✅ | ⚠️ | ⚠️ | ✅ |
+| **TypeScript 6 compatible** | ✅ | ⚠️ | ⚠️ | ✅ |
 
 ## The Cost of Runtime DI
 
