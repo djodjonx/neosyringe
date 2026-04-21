@@ -418,6 +418,9 @@ export class ConfigCollector implements IConfigCollector {
 
   /** Detects whether a class symbol implements dispose(): void or dispose(): Promise<void>. */
   private detectDisposable(symbol: ts.Symbol): { isDisposable: boolean; isAsyncDisposable: boolean } {
+    if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
+      symbol = this.checker.getAliasedSymbol(symbol);
+    }
     const type = this.checker.getDeclaredTypeOfSymbol(symbol);
     const disposeMember = type.getProperty('dispose');
     if (!disposeMember) return { isDisposable: false, isAsyncDisposable: false };
