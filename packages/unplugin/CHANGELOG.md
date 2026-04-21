@@ -1,5 +1,20 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.1.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.0.7...neosyringe-plugin-v0.1.0) (2026-04-21)
+
+
+### Features
+
+* **unplugin:** init @djodjonx/neosyringe-plugin ([ff89e74](https://github.com/djodjonx/neosyringe/commit/ff89e744255f248638de4998eb9ab819ff80514b))
+
+
+### Bug Fixes
+
+* **cli,unplugin,core:** remove deprecated GraphValidator.validate() and report all errors ([30b7c4d](https://github.com/djodjonx/neosyringe/commit/30b7c4dead1fb92d192f29ec60b652819514e0a6))
+* **core,lsp,unplugin:** fix type validation bugs and eliminate code duplication ([92fa8cd](https://github.com/djodjonx/neosyringe/commit/92fa8cd68debfcdcebb791e0e9c9165d628dba86))
+* **tests:** use source imports instead of published packages ([0f92646](https://github.com/djodjonx/neosyringe/commit/0f926468cc75aaa03eb53242c2eaa187aa9ce269))
+* **unplugin:** update to use new Analyzer APIs ([0c6aab6](https://github.com/djodjonx/neosyringe/commit/0c6aab6b36eabe82dfed158e1a03c71fdcec26ba))
+
 ## 0.0.7
 
 ### Patch Changes
