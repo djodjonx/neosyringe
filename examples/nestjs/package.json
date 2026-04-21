@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@djodjonx/neosyringe-cli": "workspace:*",
+    "@djodjonx/neosyringe-lsp": "workspace:*",
     "@djodjonx/neosyringe-plugin": "workspace:*",
     "@nestjs/cli": "^10.4.9",
     "@nestjs/schematics": "^10.2.3",

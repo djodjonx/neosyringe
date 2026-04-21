@@ -69,6 +69,9 @@ importers:
       '@djodjonx/neosyringe-cli':
         specifier: workspace:*
         version: link:../../packages/cli
+      '@djodjonx/neosyringe-lsp':
+        specifier: workspace:*
+        version: link:../../packages/lsp
       '@djodjonx/neosyringe-plugin':
         specifier: workspace:*
         version: link:../../packages/unplugin
