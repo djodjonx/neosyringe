@@ -135,4 +135,31 @@ describe('Generator - disposable', () => {
     expect(code).not.toContain('.dispose()');
     expect(code).not.toContain('async destroy()');
   });
+
+  it('should emit _initialized = false in sync destroy() when async factories are present', () => {
+    const graph: DependencyGraph = {
+      containerId: 'Test',
+      nodes: new Map([
+        ['AsyncDep', {
+          service: {
+            tokenId: 'AsyncDep',
+            registrationNode: mockNode(),
+            type: 'factory',
+            lifecycle: 'singleton',
+            isAsync: true,
+            factorySource: 'async () => ({})',
+          } as ServiceDefinition,
+          dependencies: [],
+        }],
+        ['SyncDisposable', classNode('SyncDisposable', { isDisposable: true })],
+      ]),
+      roots: [],
+    };
+
+    const code = new Generator(graph, true).generate();
+
+    expect(code).not.toContain('async destroy()');
+    expect(code).toContain('this._initialized = false');
+    expect(code).toContain('.dispose()');
+  });
 });
