@@ -24,8 +24,10 @@ yarn add -D @djodjonx/neosyringe-plugin
 :::
 
 ::: info Peer Dependencies
-- `typescript` >= 5.0.0
+- `typescript` >= 5.0 — including **TypeScript 6**
 - `unplugin` (required for build plugin)
+
+NeoSyringe is fully compatible with TypeScript 6. No changes needed in your `tsconfig.json`.
 :::
 
 ## Configure Your Bundler

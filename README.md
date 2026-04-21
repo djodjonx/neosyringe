@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@djodjonx/neosyringe"><img src="https://img.shields.io/npm/v/@djodjonx/neosyringe.svg?style=flat-square" alt="npm version"></a>
   <a href="https://github.com/djodjonx/neosyringe/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/djodjonx/neosyringe/ci.yml?style=flat-square&label=tests" alt="Tests"></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0+-blue.svg?style=flat-square" alt="TypeScript"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0%20|%206-blue.svg?style=flat-square" alt="TypeScript"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" alt="License: MIT"></a>
   <a href="https://djodjonx.github.io/neosyringe/"><img src="https://img.shields.io/badge/docs-VitePress-0d9488.svg?style=flat-square" alt="Documentation"></a>
 </p>
