@@ -6,10 +6,6 @@ inputs:
     description: Node.js version
     required: false
     default: '22'
-  pnpm-version:
-    description: pnpm version
-    required: false
-    default: '10.19'
   registry-url:
     description: npm registry URL
     required: false
@@ -20,8 +16,6 @@ runs:
   steps:
     - name: Setup pnpm
       uses: pnpm/action-setup@v5
-      with:
-        version: ${{ inputs.pnpm-version }}
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
