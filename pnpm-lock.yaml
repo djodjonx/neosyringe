@@ -84,6 +84,9 @@ importers:
       '@types/node':
         specifier: ^22.15.3
         version: 22.19.17
+      ts-loader:
+        specifier: ^9.5.2
+        version: 9.5.7(typescript@5.9.3)(webpack@5.97.1)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -5153,6 +5156,13 @@ packages:
 
   trim-lines@3.0.1:
     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}
+
+  ts-loader@9.5.7:
+    resolution: {integrity: sha512-/ZNrKgA3K3PtpMYOC71EeMWIloGw3IYEa5/t1cyz2r5/PyUwTXGzYJvcD3kfUvmhlfpz1rhV8B2O6IVTQ0avsg==}
+    engines: {node: '>=12.0.0'}
+    peerDependencies:
+      typescript: '*'
+      webpack: ^5.0.0
 
   tsconfig-paths-webpack-plugin@4.2.0:
     resolution: {integrity: sha512-zbem3rfRS8BgeNK50Zz5SIQgXzLafiHjOwUAvk/38/o1jHn/V5QAgVUcz884or7WYcPaH3N2CIfUc2u0ul7UcA==}
@@ -11301,6 +11311,16 @@ snapshots:
   tree-kill@1.2.2: {}
 
   trim-lines@3.0.1: {}
+
+  ts-loader@9.5.7(typescript@5.9.3)(webpack@5.97.1):
+    dependencies:
+      chalk: 4.1.2
+      enhanced-resolve: 5.20.1
+      micromatch: 4.0.8
+      semver: 7.7.3
+      source-map: 0.7.6
+      typescript: 5.9.3
+      webpack: 5.97.1
 
   tsconfig-paths-webpack-plugin@4.2.0:
     dependencies:
