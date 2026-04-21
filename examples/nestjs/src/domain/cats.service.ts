@@ -1,5 +1,4 @@
-import type { Cat } from './cat.entity';
-import { Cat as CatClass } from './cat.entity';
+import { Cat } from './cat.entity';
 import type { CreateCatInput } from './cat.entity';
 import type { ICatRepository } from './i-cat-repository';
 
@@ -15,7 +14,7 @@ export class CatsService {
   }
 
   async create(input: CreateCatInput): Promise<Cat> {
-    const cat = CatClass.create(input);
+    const cat = Cat.create(input);
     await this.repository.save(cat);
     return cat;
   }
