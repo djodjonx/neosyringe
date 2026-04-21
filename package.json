@@ -1,6 +1,8 @@
 {
   "name": "neosyringe-monorepo",
-  "private": true,
+  "version": "0.0.1",
+  "description": "A monorepo for Neosyringe packages",
+  "private": false,
   "type": "module",
   "license": "MIT",
   "scripts": {
