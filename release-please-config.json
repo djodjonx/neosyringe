@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "packages": {
+    "packages/neosyringe": {
+      "package-name": "@djodjonx/neosyringe",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/core": {
+      "package-name": "@djodjonx/neosyringe-core",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/lsp": {
+      "package-name": "@djodjonx/neosyringe-lsp",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/cli": {
+      "package-name": "@djodjonx/neosyringe-cli",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/unplugin": {
+      "package-name": "@djodjonx/neosyringe-plugin",
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}
