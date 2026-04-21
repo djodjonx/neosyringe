@@ -97,7 +97,7 @@ describe('GraphValidator - Parent Container Support', () => {
     const graph = analyzer.extract();
 
     const validator = new GraphValidator();
-    expect(() => validator.validate(graph)).toThrow(/Missing binding.*IDatabase/);
+    expect(() => validator.validate(graph)).toThrow(/Missing injection.*IDatabase/);
   });
 
   it('should extract tokens from declareContainerTokens', () => {
