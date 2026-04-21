@@ -1,115 +1,53 @@
 name: Release
 
 on:
-  # Permet de lancer manuellement pour tester (très utile pour debug)
-  workflow_dispatch:
-    inputs:
-      tag_name:
-        description: 'Tag to simulate (ex: @djodjonx/neosyringe@0.0.6)'
-        required: true
-        default: '@djodjonx/neosyringe@0.0.6'
-  push:
-    tags:
-      # Guillemets simples pour éviter l'interprétation YAML
-      - '@djodjonx/*@*'
-
-permissions:
-  contents: write
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
 
 jobs:
-  github-release:
+  release-please:
+    name: Release Please
     runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: googleapis/release-please-action@v4
+        id: release
         with:
-          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
-      - name: Parse tag
-        id: parse_tag
-        run: |
-          # Gestion du cas manuel (workflow_dispatch) vs push de tag réel
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag_name }}"
-          else
-            TAG=${GITHUB_REF#refs/tags/}
-          fi
-
-          echo "Processing Tag: $TAG"
-
-          # Extract package name (everything before the last @)
-          PACKAGE_NAME="${TAG%@*}"
-          # Extract version (everything after the last @)
-          VERSION="${TAG##*@}"
-          # Extract package short name (after the last /)
-          PACKAGE_SHORT_NAME="${PACKAGE_NAME##*/}"
-
-          echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "package_short_name=$PACKAGE_SHORT_NAME" >> $GITHUB_OUTPUT
-
-          echo "✅ Parsed: Package=$PACKAGE_NAME | Short=$PACKAGE_SHORT_NAME | Version=$VERSION"
-
-      - name: Find package directory
-        id: find_package
-        run: |
-          PACKAGE_SHORT_NAME="${{ steps.parse_tag.outputs.package_short_name }}"
-
-          # Map package names to directories
-          case "$PACKAGE_SHORT_NAME" in
-            "neosyringe") PACKAGE_DIR="packages/neosyringe" ;;
-            "neosyringe-cli") PACKAGE_DIR="packages/cli" ;;
-            "neosyringe-core") PACKAGE_DIR="packages/core" ;;
-            "neosyringe-lsp") PACKAGE_DIR="packages/lsp" ;;
-            "neosyringe-plugin") PACKAGE_DIR="packages/unplugin" ;;
-            *)
-              echo "❌ Unknown package: $PACKAGE_SHORT_NAME"
-              exit 1
-              ;;
-          esac
-
-          echo "package_dir=$PACKAGE_DIR" >> $GITHUB_OUTPUT
-          echo "✅ Package directory: $PACKAGE_DIR"
-
-      - name: Extract release notes
-        id: extract_release_notes
-        run: |
-          VERSION="${{ steps.parse_tag.outputs.version }}"
-          PACKAGE_DIR="${{ steps.find_package.outputs.package_dir }}"
-          CHANGELOG_PATH="${PACKAGE_DIR}/CHANGELOG.md"
-
-          echo "Extracting release notes for version $VERSION from $CHANGELOG_PATH"
-
-          if [ ! -f "$CHANGELOG_PATH" ]; then
-            echo "Warning: No CHANGELOG.md found at $CHANGELOG_PATH"
-            echo "## Release $VERSION" > RELEASE_BODY.md
-            echo "" >> RELEASE_BODY.md
-            echo "See the [full changelog](https://github.com/${{ github.repository }}/blob/main/$CHANGELOG_PATH) for details." >> RELEASE_BODY.md
-          else
-            # Extract notes for this version from CHANGELOG.md
-            # Changesets format: ## VERSION or ## VERSION (YYYY-MM-DD)
-            sed -n "/^## ${VERSION}/,/^## /p" "$CHANGELOG_PATH" | sed '1d' | sed '$d' > RELEASE_BODY.md
-
-            # If extraction failed or is empty, create a default message
-            if [ ! -s RELEASE_BODY.md ]; then
-              echo "## Changes" > RELEASE_BODY.md
-              echo "" >> RELEASE_BODY.md
-              echo "See the [full changelog](https://github.com/${{ github.repository }}/blob/main/$CHANGELOG_PATH) for details." >> RELEASE_BODY.md
-            fi
-          fi
-
-          echo "Release notes content:"
-          cat RELEASE_BODY.md
-
-      - name: Create GitHub Release
-        # Ne créer la release que si c'est un vrai tag, pas un test manuel
-        if: github.event_name == 'push'
-        uses: softprops/action-gh-release@v2
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: [release-please]
+    if: needs.release-please.outputs.releases_created == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
         with:
-          body_path: RELEASE_BODY.md
-          name: "${{ steps.parse_tag.outputs.package_name }}@${{ steps.parse_tag.outputs.version }}"
-          tag_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: ${{ contains(steps.parse_tag.outputs.version, '-alpha') || contains(steps.parse_tag.outputs.version, '-beta') || contains(steps.parse_tag.outputs.version, '-rc') }}
-          generate_release_notes: false
+          ref: ${{ github.event.workflow_run.head_sha }}
 
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build
+        run: pnpm build
+
+      - name: Sync README to neosyringe package
+        run: pnpm sync-readme
+
+      - name: Publish to npm
+        run: pnpm -r publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
