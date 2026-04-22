@@ -93,10 +93,10 @@ function init(modules: { typescript: typeof import('typescript') }) {
             prior.push(makeDiagnostic(ts, error.node, error.sourceFile, error.message, error.type));
           }
 
-          // Only cycles — missing/duplicate are already covered by extractForFile above
+          // Cycles and missing deps — duplicates are already covered above
           const { errors: validationErrors } = new GraphValidator().validateAll(graph);
           for (const error of validationErrors) {
-            if (error.type !== 'cycle') continue;
+            if (error.type === 'duplicate') continue;
             if (error.sourceFile.fileName !== fileName) continue;
             prior.push(makeDiagnostic(ts, error.node, error.sourceFile, error.message, error.type));
           }
