@@ -3,6 +3,7 @@ import { basename } from 'path';
 import { TSContext } from '../../TSContext';
 import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError } from '../types';
 import { HashUtils, TokenResolverService } from '../shared';
+import { InjectionParser } from '../parsers/InjectionParser';
 
 /**
  * Interface for collecting configurations from source files.
@@ -31,13 +32,15 @@ export interface IConfigCollector {
  * ```
  */
 export class ConfigCollector implements IConfigCollector {
-  private tokenResolverService: TokenResolverService;
+  private readonly tokenResolverService: TokenResolverService;
+  private readonly injectionParser: InjectionParser;
 
   constructor(
     private program: ts.Program,
     private checker: ts.TypeChecker
   ) {
     this.tokenResolverService = new TokenResolverService(checker);
+    this.injectionParser = new InjectionParser(checker, this.tokenResolverService);
   }
 
   collect(): Map<string, ConfigGraph> {
@@ -286,211 +289,36 @@ export class ConfigCollector implements IConfigCollector {
     obj: ts.ObjectLiteralExpression,
     sourceFile: ts.SourceFile
   ): InjectionInfo | AnalysisError | null {
-    let tokenNode: ts.Expression | undefined;
-    let providerNode: ts.Expression | undefined;
-    let lifecycle: 'singleton' | 'transient' = 'singleton';
-    let useFactory = false;
-    let isScoped = false;
-    let valueNode: ts.Expression | undefined;
-    let isMulti = false;
+    const result = this.injectionParser.parse(obj, sourceFile);
+    if (result === null) return null;
 
-    for (const prop of obj.properties) {
-      if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
+    // AnalysisError has a `message` field; InjectionInfo (ParsedInjection) does not
+    if ('message' in result) return result as AnalysisError;
 
-      switch (prop.name.text) {
-        case 'token':
-          tokenNode = prop.initializer;
-          break;
-        case 'provider':
-          providerNode = prop.initializer;
-          break;
-        case 'lifecycle':
-          if (TSContext.ts.isStringLiteral(prop.initializer) && prop.initializer.text === 'transient') {
-            lifecycle = 'transient';
-          }
-          break;
-        case 'useFactory':
-          if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
-            useFactory = true;
-          }
-          break;
-        case 'scoped':
-          if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
-            isScoped = true;
-          }
-          break;
-        case 'useValue':
-          valueNode = prop.initializer;
-          break;
-        case 'multi':
-          if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
-            isMulti = true;
-          }
-          break;
-      }
-    }
-
-    if (!tokenNode) return null;
-
-    // Get token text for error messages
-    const tokenText = tokenNode.getText(sourceFile);
-
-    // Resolve token ID
-    const tokenId = this.resolveTokenId(tokenNode);
-    if (!tokenId) return null;
-
-    // Determine if interface token
-    const isInterfaceToken = this.isUseInterfaceCall(tokenNode);
-
-    // --- useValue path ---
-    if (valueNode) {
-      if (this.isUseInterfaceCall(tokenNode)) {
-        const primitiveError = this.checkPrimitiveTokenForValue(tokenNode, obj, sourceFile);
-        if (primitiveError) return primitiveError as any;
-      }
-      const definition: ServiceDefinition = {
-        tokenId,
-        registrationNode: obj,
-        type: 'value',
-        lifecycle: 'singleton',
-        isInterfaceToken,
-        valueSource: valueNode.getText(sourceFile),
-        isScoped,
-      };
-      return { definition, node: obj, tokenText, isScoped, isMulti };
-    }
-
-    // Auto-detect factory
-    if (providerNode && (TSContext.ts.isArrowFunction(providerNode) || TSContext.ts.isFunctionExpression(providerNode))) {
-      useFactory = true;
-    }
-
-    // Detect async factory and validate constraint
-    const isAsync = useFactory && providerNode ? this.isAsyncFunction(providerNode) : false;
-    if (isAsync && lifecycle === 'transient') {
-      return {
-        type: 'type-mismatch' as const,
-        message: `Async factory for '${tokenText}' cannot use lifecycle: 'transient'. Async factories are pre-initialized once in initialize() and must be singletons. Remove lifecycle: 'transient' or make the factory synchronous.`,
-        node: obj,
-        sourceFile,
-      } as any;
-    }
-
-    // Determine registration type
-    let registrationType: 'explicit' | 'autowire' | 'factory' = 'autowire';
-    if (useFactory) {
-      registrationType = 'factory';
-    } else if (providerNode) {
-      registrationType = 'explicit';
-    }
-
-    // Get implementation symbol
-    const implementationSymbol = providerNode
-      ? this.getSymbolForNode(providerNode)
-      : this.getSymbolForNode(tokenNode);
-
-    const { isDisposable, isAsyncDisposable } = implementationSymbol && registrationType !== 'factory'
-      ? this.detectDisposable(implementationSymbol)
-      : { isDisposable: false, isAsyncDisposable: false };
-
+    const parsed = result;
     const definition: ServiceDefinition = {
-      tokenId,
-      implementationSymbol,
+      tokenId: parsed.tokenId,
+      implementationSymbol: parsed.implementationSymbol,
+      tokenSymbol: parsed.tokenSymbol,
       registrationNode: obj,
-      type: registrationType,
-      lifecycle,
-      isInterfaceToken,
-      factorySource: registrationType === 'factory' && providerNode ? providerNode.getText(sourceFile) : undefined,
-      isScoped,
-      isAsync: isAsync || undefined,
-      isDisposable: isDisposable || undefined,
-      isAsyncDisposable: isAsyncDisposable || undefined,
+      type: parsed.registrationType,
+      lifecycle: parsed.lifecycle,
+      isInterfaceToken: parsed.isInterfaceToken || undefined,
+      isValueToken: parsed.isValueToken || undefined,
+      valueSource: parsed.valueSource,
+      factorySource: parsed.factorySource,
+      isScoped: parsed.isScoped,
+      isAsync: parsed.isAsync || undefined,
+      isDisposable: parsed.isDisposable || undefined,
+      isAsyncDisposable: parsed.isAsyncDisposable || undefined,
     };
-
     return {
       definition,
       node: obj,
-      tokenText,
-      isScoped,
-      isMulti,
+      tokenText: parsed.tokenText,
+      isScoped: parsed.isScoped,
+      isMulti: parsed.isMulti,
     };
-  }
-
-  /** Detects whether a class symbol implements dispose(): void or dispose(): Promise<void>. */
-  private detectDisposable(symbol: ts.Symbol): { isDisposable: boolean; isAsyncDisposable: boolean } {
-    if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
-      symbol = this.checker.getAliasedSymbol(symbol);
-    }
-    const type = this.checker.getDeclaredTypeOfSymbol(symbol);
-    const disposeMember = type.getProperty('dispose');
-    if (!disposeMember) return { isDisposable: false, isAsyncDisposable: false };
-
-    const disposeType = this.checker.getTypeOfSymbol(disposeMember);
-    const signatures = disposeType.getCallSignatures();
-    if (signatures.length === 0) return { isDisposable: false, isAsyncDisposable: false };
-
-    const returnType = this.checker.getReturnTypeOfSignature(signatures[0]);
-    const isAsync = this.checker.typeToString(returnType).startsWith('Promise');
-
-    return { isDisposable: !isAsync, isAsyncDisposable: isAsync };
-  }
-
-  private isAsyncFunction(node: ts.Expression): boolean {
-    if (!TSContext.ts.isArrowFunction(node) && !TSContext.ts.isFunctionExpression(node)) {
-      return false;
-    }
-    const fn = node as ts.ArrowFunction | ts.FunctionExpression;
-    return fn.modifiers?.some(m => m.kind === TSContext.ts.SyntaxKind.AsyncKeyword) ?? false;
-  }
-
-  private checkPrimitiveTokenForValue(
-    tokenNode: ts.Expression,
-    injectionObj: ts.ObjectLiteralExpression,
-    sourceFile: ts.SourceFile
-  ): AnalysisError | null {
-    if (!TSContext.ts.isCallExpression(tokenNode)) return null;
-    if (!tokenNode.typeArguments || tokenNode.typeArguments.length === 0) return null;
-
-    const typeArg = tokenNode.typeArguments[0];
-    const type = this.checker.getTypeFromTypeNode(typeArg);
-    const typeName = this.checker.typeToString(type);
-
-    const primitives = ['string', 'number', 'boolean', 'symbol', 'bigint'];
-    if (!primitives.includes(typeName)) return null;
-
-    return {
-      type: 'type-mismatch',
-      message:
-        `useValue cannot be used with primitive type '${typeName}'. ` +
-        `Use useProperty<${typeName}>(TargetClass, 'paramName') instead — ` +
-        `it creates a unique token bound to a specific constructor parameter.`,
-      node: injectionObj,
-      sourceFile,
-    };
-  }
-
-  /**
-   * Resolves a token ID from an expression node.
-   *
-   * Uses the TokenResolverService for consistent token ID generation.
-   * This ensures tokens are resolved the same way across the analyzer.
-   *
-   * @param tokenNode - Expression node to resolve
-   * @returns Token ID or null if not resolvable
-   */
-  private resolveTokenId(tokenNode: ts.Expression): TokenId | null {
-    return this.tokenResolverService.resolveTokenId(tokenNode);
-  }
-
-  /**
-   * Checks if a node is a useInterface call expression.
-   */
-  private isUseInterfaceCall(node: ts.Expression): boolean {
-    return this.tokenResolverService.isUseInterfaceCall(node);
-  }
-
-  private getSymbolForNode(node: ts.Node): ts.Symbol | undefined {
-    return this.checker.getSymbolAtLocation(node);
   }
 
   private getExtendsRefs(configObj: ts.ObjectLiteralExpression): string[] {

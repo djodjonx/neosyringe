@@ -55,11 +55,15 @@ export class Generator {
       return `${imports.get(filePath)}.${symbol.getName()}`;
     };
 
+    const hasAsync = this.hasAsyncFactories();
+    const resolveGuard = hasAsync
+      ? `if (!this._initialized) { throw new Error(\`[\${this.name}] This container has async services — call \\\`await container.initialize()\\\` before the first resolve().\`); }`
+      : '';
+
     const factories = this.generateFactories(sorted, getImport);
     const resolveCases = this.generateResolveCases(sorted, getImport);
     const multiFactories = this.generateMultiFactories(getImport);
-    const resolveAllMethod = this.generateResolveAllMethod(getImport);
-    const hasAsync = this.hasAsyncFactories();
+    const resolveAllMethod = this.generateResolveAllMethod(getImport, resolveGuard);
     const initializeMethod = hasAsync ? this.generateInitializeMethod(sorted) : '';
     const destroyMethod = this.generateDestroyMethod(sorted, getImport);
 
@@ -71,12 +75,13 @@ export class Generator {
     }
 
     const initializedField = hasAsync ? `private _initialized = false;` : '';
-    const resolveGuard = hasAsync
-      ? `if (!this._initialized) { throw new Error(\`[\${this.name}] This container has async services — call \\\`await container.initialize()\\\` before the first resolve().\`); }`
-      : '';
 
     return `
 ${importLines.join('\n')}
+
+class NeoServiceNotFoundError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
 
 // -- Container --
 class NeoContainer {
@@ -106,7 +111,7 @@ class NeoContainer {
             return this.parent.resolve(token);
         } catch (e: any) {
             // Only fall through for "not found" — let real errors bubble
-            if (!e?.message?.includes('Service not found or token not registered')) throw e;
+            if (!(e instanceof NeoServiceNotFoundError)) throw e;
         }
     }
 
@@ -116,12 +121,12 @@ class NeoContainer {
             try {
                 if (legacyContainer.resolve) return legacyContainer.resolve(token);
             } catch (e: any) {
-                if (!e?.message?.includes('Service not found or token not registered')) throw e;
+                if (!(e instanceof NeoServiceNotFoundError)) throw e;
             }
         }
     }
 
-    throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${token}\`);
   }
 
   ${destroyMethod}
@@ -210,7 +215,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
       if (!depNode) return 'undefined';
 
       if (depNode.service.isInterfaceToken) {
-        return `this.resolve("${depNode.service.tokenId}")`;
+        return `this.resolve(${JSON.stringify(depNode.service.tokenId)})`;
       } else if (depNode.service.tokenSymbol) {
         return `this.resolve(${getImport(depNode.service.tokenSymbol)})`;
       } else if (depNode.service.implementationSymbol) {
@@ -236,8 +241,8 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
       let tokenCheck: string;
 
       if (node.service.isInterfaceToken) {
-        tokenKey = `"${node.service.tokenId}"`;
-        tokenCheck = `if (token === "${node.service.tokenId}")`;
+        tokenKey = JSON.stringify(node.service.tokenId);
+        tokenCheck = `if (token === ${JSON.stringify(node.service.tokenId)})`;
       } else if (node.service.tokenSymbol) {
         const tokenClass = getImport(node.service.tokenSymbol);
         tokenKey = tokenClass;
@@ -247,8 +252,8 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
         tokenKey = className;
         tokenCheck = `if (token === ${className})`;
       } else {
-        tokenKey = `"${node.service.tokenId}"`;
-        tokenCheck = `if (token === "${node.service.tokenId}")`;
+        tokenKey = JSON.stringify(node.service.tokenId);
+        tokenCheck = `if (token === ${JSON.stringify(node.service.tokenId)})`;
       }
 
       const creationLogic = isTransient
@@ -369,13 +374,13 @@ export const ${variableName || 'container'} = ${instantiation};
 
       let tokenKey: string;
       if (node.service.isInterfaceToken) {
-        tokenKey = `"${node.service.tokenId}"`;
+        tokenKey = JSON.stringify(node.service.tokenId);
       } else if (node.service.tokenSymbol) {
         tokenKey = getImport(node.service.tokenSymbol);
       } else if (node.service.implementationSymbol) {
         tokenKey = getImport(node.service.implementationSymbol);
       } else {
-        tokenKey = `"${node.service.tokenId}"`;
+        tokenKey = JSON.stringify(node.service.tokenId);
       }
 
       disposables.push({ tokenKey, isAsync: !!node.service.isAsyncDisposable });
@@ -418,7 +423,7 @@ export const ${variableName || 'container'} = ${instantiation};
 
     const lines = asyncSingletons.map(tokenId => {
       const factoryId = this.getFactoryName(tokenId);
-      return `this.instances.set("${tokenId}", await this.${factoryId}());`;
+      return `this.instances.set(${JSON.stringify(tokenId)}, await this.${factoryId}());`;
     });
 
     return `public async initialize(): Promise<void> {
@@ -464,7 +469,7 @@ export const ${variableName || 'container'} = ${instantiation};
   }
 
   /** Generates the resolveAll() method with one branch per multi-token. */
-  private generateResolveAllMethod(getImport: (s: ts.Symbol) => string): string {
+  private generateResolveAllMethod(getImport: (s: ts.Symbol) => string, resolveGuard: string): string {
     if (!this.graph.multiNodes || this.graph.multiNodes.size === 0) {
       return `public resolveAll<T>(token: any): T[] { return []; }`;
     }
@@ -476,11 +481,11 @@ export const ${variableName || 'container'} = ${instantiation};
       let tokenCheck: string;
 
       if (firstNode.service.isInterfaceToken) {
-        tokenCheck = `if (token === "${firstNode.service.tokenId}")`;
+        tokenCheck = `if (token === ${JSON.stringify(firstNode.service.tokenId)})`;
       } else if (firstNode.service.tokenSymbol) {
         tokenCheck = `if (token === ${getImport(firstNode.service.tokenSymbol)})`;
       } else {
-        tokenCheck = `if (token === "${firstNode.service.tokenId}")`;
+        tokenCheck = `if (token === ${JSON.stringify(firstNode.service.tokenId)})`;
       }
 
       const isTransient = firstNode.service.lifecycle === 'transient';
@@ -491,7 +496,7 @@ export const ${variableName || 'container'} = ${instantiation};
         callExprs = nodes.map((_, i) => `this.${factoryBase}_${i}()`);
       } else {
         callExprs = nodes.map((_, i) => {
-          const cacheKey = `"${tokenId}:${i}"`;
+          const cacheKey = JSON.stringify(`${tokenId}:${i}`);
           return `(() => { const k = ${cacheKey}; if (!this.instances.has(k)) { const inst = this.${factoryBase}_${i}(); this.instances.set(k, inst); return inst; } return this.instances.get(k); })()`;
         });
       }
@@ -500,6 +505,7 @@ export const ${variableName || 'container'} = ${instantiation};
     }
 
     return `public resolveAll<T>(token: any): T[] {
+    ${resolveGuard}
     ${cases.join('\n    ')}
     return [];
   }`;

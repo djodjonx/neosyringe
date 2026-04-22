@@ -17,6 +17,7 @@ import {
   TypeValidator,
   MissingDependencyValidator,
   DependencyAnalyzer,
+  CycleValidator,
   type IValidator,
   type ValidationContext
 } from './validators';
@@ -173,7 +174,6 @@ export class Analyzer {
       containerId: 'DefaultContainer', // Will be set by parseBuilderConfig
       nodes: new Map(),
       roots: [],
-      buildArguments: [],
       errors: [], // Initialize error collection
     };
 
@@ -225,6 +225,7 @@ export class Analyzer {
       new DuplicateValidator(errorFormatter),
       new TypeValidator(this.checker, errorFormatter),
       new MissingDependencyValidator(errorFormatter, dependencyAnalyzer),
+      new CycleValidator(dependencyAnalyzer),
     ]);
   }
 

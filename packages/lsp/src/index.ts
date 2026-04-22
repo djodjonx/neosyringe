@@ -1,6 +1,5 @@
 import type * as ts from 'typescript';
 import { Analyzer, DuplicateRegistrationError, TypeMismatchError, type AnalysisErrorType } from '../../core/src/analyzer/index';
-import { GraphValidator } from '../../core/src/generator/index';
 import { LSPLogger } from './logger';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 
@@ -106,31 +105,12 @@ function init(modules: { typescript: typeof import('typescript') }) {
       try {
         const analyzer = getAnalyzer(program);
 
-        // Modular validation: duplicates, type mismatches, missing dependencies
+        // Modular validation: duplicates, type mismatches, missing dependencies, cycles
         const result = analyzer.extractForFile(fileName);
         for (const error of result.errors) {
           const nodeFile = error.node.getSourceFile();
           const targetFile = nodeFile?.fileName === fileName ? nodeFile : sourceFile;
           prior.push(makeDiagnostic(ts, error.node, targetFile, error.message, error.type));
-        }
-
-        // Graph validation: constructor-level cycles (not covered by extractForFile)
-        if (text.includes('defineBuilderConfig')) {
-          const graph = analyzer.extract();
-
-          for (const error of (graph.errors ?? [])) {
-            if (error.type === 'duplicate') continue;
-            if (error.sourceFile.fileName !== fileName) continue;
-            prior.push(makeDiagnostic(ts, error.node, error.sourceFile, error.message, error.type));
-          }
-
-          // Cycles and missing deps — duplicates are already covered above
-          const { errors: validationErrors } = new GraphValidator().validateAll(graph);
-          for (const error of validationErrors) {
-            if (error.type === 'duplicate') continue;
-            if (error.sourceFile.fileName !== fileName) continue;
-            prior.push(makeDiagnostic(ts, error.node, error.sourceFile, error.message, error.type));
-          }
         }
       } catch (e: unknown) {
         if (e instanceof DuplicateRegistrationError || e instanceof TypeMismatchError) {
