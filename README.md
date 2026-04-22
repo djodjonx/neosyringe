@@ -39,6 +39,7 @@
 - **Comprehensive Validation** - Validates across parent containers, extends, and partialConfigs
 - **Gradual Migration** - Bridge existing containers (tsyringe, InversifyJS)
 - **CI Validation** - CLI to verify your dependency graph
+- **ts-patch support** - Works with plain `tsc`, no bundler required
 
 ## 📦 Installation
 
@@ -66,6 +67,7 @@ class ConsoleLogger implements ILogger {
 
 class UserService {
   constructor(private logger: ILogger) {}
+  greet(name: string) { this.logger.log(`Hello, ${name}`); }
 }
 ```
 
@@ -75,16 +77,14 @@ import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
 
 export const container = defineBuilderConfig({
   injections: [
-    // Bind interface to implementation
     { token: useInterface<ILogger>(), provider: ConsoleLogger },
-    
-    // Autowire class (dependencies resolved automatically)
-    { token: UserService }
+    { token: UserService },
   ]
 });
 
-// Use it
-const userService = container.resolve(UserService);
+// main.ts — full type safety, no assertions
+const userService = container.resolve(UserService); // Type: UserService ✅
+userService.greet('World');
 ```
 
 At build time, this generates optimized factory functions. **Zero DI library shipped to production!**
@@ -180,6 +180,10 @@ Add to `package.json` scripts so ts-patch patches TypeScript on install:
 
 Get **comprehensive real-time validation** in your editor:
 
+```bash
+pnpm add -D @djodjonx/neosyringe-lsp
+```
+
 ```json
 {
   "compilerOptions": {
@@ -198,6 +202,17 @@ Get **comprehensive real-time validation** in your editor:
 - ✅ **Context-aware** validates across parent containers and extends
 
 See [IDE Plugin Guide](https://djodjonx.github.io/neosyringe/guide/ide-plugin) for setup details.
+
+## 🔍 CLI Validator
+
+Validate your dependency graph in CI/CD:
+
+```bash
+pnpm add -D @djodjonx/neosyringe-cli
+npx neosyringe validate --project tsconfig.json
+```
+
+See [CLI Guide](https://djodjonx.github.io/neosyringe/guide/cli) for all options.
 
 ## 📄 License
 
