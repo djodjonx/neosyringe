@@ -12,7 +12,7 @@ echo "→ Publishing to Verdaccio ($REGISTRY)..."
 pnpm -r --filter './packages/**' publish \
   --registry "$REGISTRY" \
   --no-git-checks \
-  --force 2>/dev/null || true
+  --force
 
 echo "✅ Packages published to $REGISTRY"
 echo ""

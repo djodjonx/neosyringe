@@ -7,7 +7,7 @@ STORAGE=".verdaccio-storage"
 
 if [ -d "$STORAGE" ]; then
   if [ -n "${1:-}" ]; then
-    PKG_PATH="$STORAGE/${1/\//\/}"
+    PKG_PATH="$STORAGE/$1"
     if [ -d "$PKG_PATH" ]; then
       rm -rf "$PKG_PATH"
       echo "✅ Package $1 invalidated from $STORAGE"

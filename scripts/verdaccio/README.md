@@ -37,8 +37,8 @@ To force Verdaccio to re-fetch or re-publish a new version:
 # Invalidate all @djodjonx packages
 pnpm verdaccio:invalidate
 
-# Invalidate a specific package
-pnpm verdaccio:invalidate @djodjonx/neosyringe-plugin
+# Invalidate a specific package (note the -- to pass the argument)
+pnpm verdaccio:invalidate -- @djodjonx/neosyringe-plugin
 ```
 
 Then republish: `pnpm verdaccio:publish`

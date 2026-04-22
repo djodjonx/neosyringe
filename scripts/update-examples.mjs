@@ -20,6 +20,10 @@ const VERSION_MAP = {
   '@djodjonx/neosyringe-cli':    manifest['packages/cli'],
 };
 
+for (const [pkg, ver] of Object.entries(VERSION_MAP)) {
+  if (!ver) throw new Error(`Missing version for ${pkg} in .release-please-manifest.json`);
+}
+
 const EXAMPLES = [
   resolve(root, 'examples/nuxt/package.json'),
   resolve(root, 'examples/nestjs/package.json'),
