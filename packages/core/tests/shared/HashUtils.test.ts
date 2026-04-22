@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { HashUtils } from '../../src/analyzer/shared/HashUtils';
 import * as ts from 'typescript';
+import * as crypto from 'node:crypto';
+import * as path from 'node:path';
+import { TSContext } from '../../src/TSContext';
 
 /**
  * Helper to create a TypeScript program from source code
@@ -154,6 +157,34 @@ describe('HashUtils', () => {
       const id1 = HashUtils.generateContainerId('myFile', 100, '{ injections: [a] }');
       const id2 = HashUtils.generateContainerId('myFile', 100, '{ injections: [b] }');
       expect(id1).not.toBe(id2);
+    });
+  });
+
+  describe('hashFilePath - TSContext.projectRoot consistency', () => {
+    afterEach(() => {
+      (TSContext as any)._projectRoot = undefined;
+    });
+
+    it('should use TSContext.projectRoot as the base for relative path computation', () => {
+      const absolutePath = path.join('/custom/project/root', 'src/Logger.ts');
+
+      TSContext.projectRoot = '/custom/project/root';
+      const hashWithProjectRoot = HashUtils.hashFilePath(absolutePath);
+
+      const expectedRelative = 'src/Logger.ts';
+      const expectedHash = crypto.createHash('md5')
+        .update(expectedRelative)
+        .digest('hex')
+        .substring(0, 8);
+
+      expect(hashWithProjectRoot).toBe(expectedHash);
+
+      // Verify the contrast: a different root yields a different hash
+      const wrongHash = crypto.createHash('md5')
+        .update(path.relative('/some/other/root', absolutePath))
+        .digest('hex')
+        .substring(0, 8);
+      expect(hashWithProjectRoot).not.toBe(wrongHash);
     });
   });
 });
