@@ -30,9 +30,9 @@ yarn add -D @djodjonx/neosyringe-plugin
 NeoSyringe is fully compatible with TypeScript 6. No changes needed in your `tsconfig.json`.
 :::
 
-## Configure Your Bundler
+## Configure Your Build
 
-NeoSyringe works with all major bundlers through `unplugin`.
+NeoSyringe works with all major bundlers via `unplugin`, or directly with `tsc` via ts-patch — no bundler required.
 
 ::: code-group
 
@@ -71,6 +71,36 @@ await esbuild.build({
 });
 ```
 
+```json [tsc + ts-patch]
+// tsconfig.json — no bundler needed, works with plain tsc
+{
+  "compilerOptions": {
+    "plugins": [
+      { "transform": "@djodjonx/neosyringe-plugin/transformer", "transformProgram": true }
+    ]
+  }
+}
+```
+
+:::
+
+::: details ts-patch setup
+Install ts-patch and add a `prepare` script so it patches TypeScript automatically after `npm/pnpm install`:
+
+```bash
+pnpm add -D ts-patch @djodjonx/neosyringe-plugin
+```
+
+```json
+// package.json
+{
+  "scripts": {
+    "prepare": "ts-patch install -s"
+  }
+}
+```
+
+`tsc` and any tool that delegates to it (NestJS CLI's `nest build`, `ts-node`, etc.) will then pick up the transformer automatically.
 :::
 
 ## Create Your First Container

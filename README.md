@@ -144,6 +144,38 @@ module.exports = {
 ```
 </details>
 
+<details>
+<summary><strong>TypeScript compiler (ts-patch) — no bundler needed</strong></summary>
+
+Install ts-patch and add the transformer to your `tsconfig.json`:
+
+```bash
+pnpm add -D ts-patch @djodjonx/neosyringe-plugin
+```
+
+```json
+{
+  "compilerOptions": {
+    "plugins": [
+      { "transform": "@djodjonx/neosyringe-plugin/transformer", "transformProgram": true }
+    ]
+  }
+}
+```
+
+Add to `package.json` scripts so ts-patch patches TypeScript on install:
+
+```json
+{
+  "scripts": {
+    "prepare": "ts-patch install -s"
+  }
+}
+```
+
+`tsc` (and any CLI that uses it, like `nest build`) will then run the NeoSyringe transformer automatically.
+</details>
+
 ## 🛡️ IDE Support
 
 Get **comprehensive real-time validation** in your editor:
