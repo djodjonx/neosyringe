@@ -22,6 +22,11 @@
       "types": "./dist/generator/index.d.mts",
       "import": "./dist/generator/index.mjs",
       "require": "./dist/generator/index.cjs"
+    },
+    "./context": {
+      "types": "./dist/TSContext.d.mts",
+      "import": "./dist/TSContext.mjs",
+      "require": "./dist/TSContext.cjs"
     }
   },
   "files": [

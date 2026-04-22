@@ -2,7 +2,7 @@ import type * as ts from 'typescript';
 import { Analyzer, DuplicateRegistrationError, TypeMismatchError, type AnalysisErrorType } from '../../core/src/analyzer/index';
 import { GraphValidator } from '../../core/src/generator/index';
 import { LSPLogger } from './logger';
-import { TSContext } from '../../core/src/TSContext';
+import { TSContext } from '@djodjonx/neosyringe-core/context';
 
 const ERROR_CODES: Record<AnalysisErrorType | string, number> = {
   missing: 9995,

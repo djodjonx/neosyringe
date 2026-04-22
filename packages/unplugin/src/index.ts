@@ -4,7 +4,7 @@ import * as path from 'path';
 import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
 import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
 import { Generator } from '@djodjonx/neosyringe-core/generator';
-import { TSContext } from '../../core/src/TSContext';
+import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { transformUseInterfaceCalls, type UsedTokenEntry } from './useInterfaceTransform';
 
 /**
