@@ -89,6 +89,13 @@ userService.greet('World');
 
 At build time, this generates optimized factory functions. **Zero DI library shipped to production!**
 
+## 🧪 Live Examples
+
+| Example | StackBlitz | CodeSandbox |
+|---------|-----------|-------------|
+| Nuxt 4 — DDD | [![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz_small.svg)](https://stackblitz.com/github/djodjonx/neosyringe/tree/main/examples/nuxt) | [![Open in CodeSandbox](https://codesandbox.io/static/img/play-codesandbox.svg)](https://codesandbox.io/p/github/djodjonx/neosyringe/main?file=/examples/nuxt/nuxt.config.ts) |
+| NestJS — REST API | [![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz_small.svg)](https://stackblitz.com/github/djodjonx/neosyringe/tree/main/examples/nestjs) | [![Open in CodeSandbox](https://codesandbox.io/static/img/play-codesandbox.svg)](https://codesandbox.io/p/github/djodjonx/neosyringe/main?file=/examples/nestjs/src/main.ts) |
+
 ## 📖 Documentation
 
 For complete documentation, visit **[djodjonx.github.io/neosyringe](https://djodjonx.github.io/neosyringe/)**
