@@ -1,8 +1,9 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { DependencyGraph, ServiceDefinition, TokenId } from '../types';
+import type { AnalysisError, DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../types';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { HashUtils } from '../shared/HashUtils';
+import { InjectionParser, type ParsedInjection } from './InjectionParser';
 
 /**
  * Service responsible for parsing defineBuilderConfig and definePartialConfig calls.
@@ -24,10 +25,14 @@ import { HashUtils } from '../shared/HashUtils';
  * ```
  */
 export class ConfigParser {
+  private readonly injectionParser: InjectionParser;
+
   constructor(
     private checker: ts.TypeChecker,
     private tokenResolverService: TokenResolverService
-  ) {}
+  ) {
+    this.injectionParser = new InjectionParser(checker, tokenResolverService);
+  }
 
   /**
    * Parses a defineBuilderConfig or definePartialConfig call expression.
@@ -129,287 +134,118 @@ export class ConfigParser {
    * @param graph - The dependency graph to populate
    */
   parseInjectionObject(obj: ts.ObjectLiteralExpression, graph: DependencyGraph): void {
-    // Extract properties: token, provider, lifecycle, useFactory, scoped, useValue, multi
-    let tokenNode: ts.Expression | undefined;
-    let providerNode: ts.Expression | undefined;
-    let lifecycle: 'singleton' | 'transient' = 'singleton';
-    let useFactory = false;
-    let isScoped = false;
-    let valueNode: ts.Expression | undefined;
-    let isMulti = false;
+    const sourceFile = obj.getSourceFile();
+    const result = this.injectionParser.parse(obj, sourceFile);
 
-    for (const prop of obj.properties) {
-      if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
+    if (result === null) return;
 
-      if (prop.name.text === 'token') {
-        tokenNode = prop.initializer;
-      } else if (prop.name.text === 'provider') {
-        providerNode = prop.initializer;
-      } else if (prop.name.text === 'lifecycle' && TSContext.ts.isStringLiteral(prop.initializer)) {
-        if (prop.initializer.text === 'transient') lifecycle = 'transient';
-      } else if (prop.name.text === 'useFactory') {
-        if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
-          useFactory = true;
-        }
-      } else if (prop.name.text === 'scoped') {
-        if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
-          isScoped = true;
-        }
-      } else if (prop.name.text === 'useValue') {
-        valueNode = prop.initializer;
-      } else if (prop.name.text === 'multi') {
-        if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) {
-          isMulti = true;
-        }
-      }
+    if (this.isAnalysisError(result)) {
+      if (!graph.errors) graph.errors = [];
+      graph.errors.push(result);
+      return;
     }
 
-    if (!tokenNode) return;
+    const parsed = result;
+    const { tokenId, tokenNode, tokenSymbol, isInterfaceToken, isValueToken,
+            isMulti, isScoped, lifecycle, valueSource, factorySource, isAsync,
+            implementationSymbol, registrationType } = parsed;
+    const tokenText = parsed.tokenText;
 
-    // Auto-detect factory if provider is an arrow function or function expression
-    if (providerNode && (TSContext.ts.isArrowFunction(providerNode) || TSContext.ts.isFunctionExpression(providerNode))) {
-      useFactory = true;
-    }
-
-    let tokenId: TokenId;
-    let implementationSymbol: ts.Symbol | undefined;
-    let tokenSymbol: ts.Symbol | undefined;
-    let type: 'explicit' | 'autowire' | 'factory' = 'autowire';
-    let isInterfaceToken = false;
-    let isValueToken = false;
-    let factorySource: string | undefined;
-
-    // Resolve variable references to their initializers
-    let resolvedTokenNode = tokenNode;
-    const resolved = this.tokenResolverService.resolveToInitializer(tokenNode);
-    if (resolved) {
-      resolvedTokenNode = resolved;
-    }
-
-    // 1. Resolve Token ID
-    if (this.tokenResolverService.isUseInterfaceCall(resolvedTokenNode)) {
-      // Case: token: useInterface<I>()
-      tokenId = this.tokenResolverService.extractInterfaceTokenId(resolvedTokenNode);
-      type = 'explicit';
-      isInterfaceToken = true;
-    } else if (this.tokenResolverService.isUsePropertyCall(resolvedTokenNode)) {
-      // Case: token: useProperty<T>(Class, 'paramName')
-      const propertyTokenId = this.tokenResolverService.extractPropertyTokenId(resolvedTokenNode);
-      tokenId = propertyTokenId;
-      type = 'explicit';
-      isValueToken = true;
-
-      // Property tokens MUST have a factory provider
-      if (!providerNode) {
-        throw new Error(`useProperty requires a provider (factory).`);
-      }
-      useFactory = true;
-    } else {
-      // Case: token: Class
-      const tokenType = this.checker.getTypeAtLocation(tokenNode);
-      tokenId = this.tokenResolverService.getTypeIdFromConstructor(tokenType);
-      if (TSContext.ts.isIdentifier(tokenNode)) {
-        tokenSymbol = this.checker.getSymbolAtLocation(tokenNode);
-      }
-    }
-
-    // 2a. Handle useValue
-    if (valueNode) {
-      if (isInterfaceToken) {
-        // Reject primitive tokens — they should use useProperty instead
-        const primitiveError = this.checkPrimitiveTokenForValue(resolvedTokenNode, obj);
-        if (primitiveError) {
-          if (!graph.errors) graph.errors = [];
-          graph.errors.push(primitiveError);
-          return;
-        }
-      } else {
-        // useValue with a class token is not supported — provider: ClassName handles that case
-        const sourceFile = obj.getSourceFile();
-        const tokenText = tokenNode.getText(sourceFile);
-        if (!graph.errors) graph.errors = [];
-        graph.errors.push({
-          type: 'type-mismatch',
-          message: `useValue cannot be used with a class token. Use provider: ${tokenText} to register a class, or useInterface<T>() with useValue for an interface token.`,
-          node: obj,
-          sourceFile: sourceFile,
-        });
-        return;
-      }
-
-      const tokenText = tokenNode.getText(obj.getSourceFile());
+    if (registrationType === 'value') {
       if (this.emitMixedMultiError(isMulti, tokenId, tokenText, obj, graph)) return;
-
-      const sourceFile = obj.getSourceFile();
       const definition: ServiceDefinition = {
         tokenId,
         registrationNode: obj,
         type: 'value',
-        lifecycle: 'singleton', // useValue is always singleton
+        lifecycle: 'singleton',
         isInterfaceToken,
-        valueSource: valueNode.getText(sourceFile),
+        valueSource: valueSource!,
         isScoped,
       };
-      if (isMulti) {
-        if (!graph.multiNodes) graph.multiNodes = new Map();
-        const existing = graph.multiNodes.get(tokenId) ?? [];
-        existing.push({ service: definition, dependencies: [] });
-        graph.multiNodes.set(tokenId, existing);
-      } else {
-        graph.nodes.set(tokenId, { service: definition, dependencies: [] });
-      }
+      this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
       return;
     }
 
-    // 2. Handle Factory
-    if (useFactory && providerNode) {
-      factorySource = providerNode.getText();
-      type = 'factory';
-
-      // Detect async factory
-      const isAsync = this.isAsyncFunction(providerNode);
-
-      // Validate: async factory cannot be transient
-      if (isAsync && lifecycle === 'transient') {
-        const sourceFile = obj.getSourceFile();
-        const tokenText = tokenNode.getText(sourceFile);
-        if (!graph.errors) graph.errors = [];
-        graph.errors.push({
-          type: 'type-mismatch',
-          message: `Async factory for '${tokenText}' cannot use lifecycle: 'transient'. Async factories are pre-initialized once in initialize() and must be singletons. Remove lifecycle: 'transient' or make the factory synchronous.`,
-          node: obj,
-          sourceFile,
-        });
-        return;
-      }
-
-      if (tokenId) {
-        // Reject mixed multi/non-multi for same token
-        const tokenText = tokenNode.getText(obj.getSourceFile());
-        if (this.emitMixedMultiError(isMulti, tokenId, tokenText, obj, graph)) return;
-
-        // Check for duplicate - allow if scoped: true (intentional override)
-        if (graph.nodes.has(tokenId) && !isScoped) {
-          const sourceFile = obj.getSourceFile();
-
-          if (!graph.errors) graph.errors = [];
-          graph.errors.push({
-            type: 'duplicate',
-            message: `Duplicate registration: '${tokenText}' is already registered.`,
-            node: obj,
-            sourceFile: sourceFile
-          });
-          return;
-        }
-
-        const definition: ServiceDefinition = {
-          tokenId,
-          tokenSymbol: tokenSymbol ? this.resolveSymbol(tokenSymbol) : undefined,
-          registrationNode: obj,
-          type: 'factory',
-          lifecycle: lifecycle,
-          isInterfaceToken,
-          isValueToken,
-          factorySource,
-          isScoped,
-          isAsync: isAsync || undefined,
-        };
-        if (isMulti) {
-          if (!graph.multiNodes) graph.multiNodes = new Map();
-          const existing = graph.multiNodes.get(tokenId) ?? [];
-          existing.push({ service: definition, dependencies: [] });
-          graph.multiNodes.set(tokenId, existing);
-        } else {
-          graph.nodes.set(tokenId, { service: definition, dependencies: [] });
-        }
-      }
-      return;
-    }
-
-    // 3. Resolve Implementation (non-factory)
-    if (providerNode) {
-      implementationSymbol = this.checker.getSymbolAtLocation(providerNode);
-      type = 'explicit';
-    } else {
-      // Autowiring: Provider is the Token Class itself
-      if (TSContext.ts.isIdentifier(tokenNode)) {
-        implementationSymbol = this.checker.getSymbolAtLocation(tokenNode);
-        type = 'autowire';
-      }
-    }
-
-    if (tokenId && implementationSymbol) {
-      // Reject mixed multi/non-multi for same token
-      const tokenText = tokenNode.getText(obj.getSourceFile());
+    if (registrationType === 'factory') {
       if (this.emitMixedMultiError(isMulti, tokenId, tokenText, obj, graph)) return;
-
-      // Check for duplicate - allow if scoped: true
       if (graph.nodes.has(tokenId) && !isScoped) {
-        const sourceFile = obj.getSourceFile();
-
         if (!graph.errors) graph.errors = [];
         graph.errors.push({
           type: 'duplicate',
           message: `Duplicate registration: '${tokenText}' is already registered.`,
           node: obj,
-          sourceFile: sourceFile
+          sourceFile,
         });
         return;
       }
-
-      // Type validation for explicit interface registrations
-      if (type === 'explicit' && isInterfaceToken && providerNode) {
-        this.validateTypeCompatibility(tokenNode, providerNode, obj, graph);
-      }
-
-      const resolvedImpl = this.resolveSymbol(implementationSymbol);
-      const { isDisposable, isAsyncDisposable } = this.detectDisposable(resolvedImpl);
       const definition: ServiceDefinition = {
         tokenId,
-        implementationSymbol: resolvedImpl,
         tokenSymbol: tokenSymbol ? this.resolveSymbol(tokenSymbol) : undefined,
         registrationNode: obj,
-        type: type,
-        lifecycle: lifecycle,
-        isInterfaceToken: isInterfaceToken || this.tokenResolverService.isUseInterfaceCall(tokenNode),
+        type: 'factory',
+        lifecycle,
+        isInterfaceToken,
+        isValueToken,
+        factorySource: factorySource!,
         isScoped,
-        isDisposable: isDisposable || undefined,
-        isAsyncDisposable: isAsyncDisposable || undefined,
+        isAsync: isAsync || undefined,
       };
-      if (isMulti) {
-        if (!graph.multiNodes) graph.multiNodes = new Map();
-        const existing = graph.multiNodes.get(tokenId) ?? [];
-        existing.push({ service: definition, dependencies: [] });
-        graph.multiNodes.set(tokenId, existing);
-      } else {
-        graph.nodes.set(tokenId, { service: definition, dependencies: [] });
-      }
+      this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
+      return;
+    }
+
+    // explicit / autowire
+    if (!implementationSymbol) return;
+    if (this.emitMixedMultiError(isMulti, tokenId, tokenText, obj, graph)) return;
+    if (graph.nodes.has(tokenId) && !isScoped) {
+      if (!graph.errors) graph.errors = [];
+      graph.errors.push({
+        type: 'duplicate',
+        message: `Duplicate registration: '${tokenText}' is already registered.`,
+        node: obj,
+        sourceFile,
+      });
+      return;
+    }
+
+    if (registrationType === 'explicit' && isInterfaceToken && parsed.providerNode) {
+      this.validateTypeCompatibility(tokenNode, parsed.providerNode, obj, graph);
+    }
+
+    const resolvedImpl = this.resolveSymbol(implementationSymbol);
+    const definition: ServiceDefinition = {
+      tokenId,
+      implementationSymbol: resolvedImpl,
+      tokenSymbol: tokenSymbol ? this.resolveSymbol(tokenSymbol) : undefined,
+      registrationNode: obj,
+      type: registrationType,
+      lifecycle,
+      isInterfaceToken,
+      isScoped,
+      isDisposable: parsed.isDisposable || undefined,
+      isAsyncDisposable: parsed.isAsyncDisposable || undefined,
+    };
+    this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
+  }
+
+  private addToGraph(
+    isMulti: boolean,
+    tokenId: TokenId,
+    node: DependencyNode,
+    graph: DependencyGraph
+  ): void {
+    if (isMulti) {
+      if (!graph.multiNodes) graph.multiNodes = new Map();
+      const existing = graph.multiNodes.get(tokenId) ?? [];
+      existing.push(node);
+      graph.multiNodes.set(tokenId, existing);
+    } else {
+      graph.nodes.set(tokenId, node);
     }
   }
 
-  /** Detects whether a class symbol implements dispose(): void or dispose(): Promise<void>. */
-  private detectDisposable(symbol: ts.Symbol): { isDisposable: boolean; isAsyncDisposable: boolean } {
-    const type = this.checker.getDeclaredTypeOfSymbol(symbol);
-    const disposeMember = type.getProperty('dispose');
-    if (!disposeMember) return { isDisposable: false, isAsyncDisposable: false };
-
-    const disposeType = this.checker.getTypeOfSymbol(disposeMember);
-    const signatures = disposeType.getCallSignatures();
-    if (signatures.length === 0) return { isDisposable: false, isAsyncDisposable: false };
-
-    const returnType = this.checker.getReturnTypeOfSignature(signatures[0]);
-    const isAsync = this.checker.typeToString(returnType).startsWith('Promise');
-
-    return { isDisposable: !isAsync, isAsyncDisposable: isAsync };
-  }
-
-  /** Returns true if the expression is an async arrow function or async function expression. */
-  private isAsyncFunction(node: ts.Expression): boolean {
-    if (!TSContext.ts.isArrowFunction(node) && !TSContext.ts.isFunctionExpression(node)) {
-      return false;
-    }
-    const fn = node as ts.ArrowFunction | ts.FunctionExpression;
-    return fn.modifiers?.some(m => m.kind === TSContext.ts.SyntaxKind.AsyncKeyword) ?? false;
+  private isAnalysisError(result: ParsedInjection | AnalysisError): result is AnalysisError {
+    return 'message' in result;
   }
 
   /**
@@ -437,40 +273,6 @@ export class ConfigParser {
       return true;
     }
     return false;
-  }
-
-  /**
-   * Checks whether a useInterface<T>() token uses a primitive type with useValue.
-   * Primitive types (string, number, boolean, etc.) must use useProperty instead.
-   *
-   * @param tokenNode - The resolved useInterface<T>() call expression
-   * @param registrationNode - The injection object for error positioning
-   * @returns An AnalysisError if the type is primitive, null otherwise
-   */
-  private checkPrimitiveTokenForValue(
-    tokenNode: ts.Expression,
-    registrationNode: ts.ObjectLiteralExpression
-  ): import('../types').AnalysisError | null {
-    if (!TSContext.ts.isCallExpression(tokenNode)) return null;
-    if (!tokenNode.typeArguments || tokenNode.typeArguments.length === 0) return null;
-
-    const typeArg = tokenNode.typeArguments[0];
-    const type = this.checker.getTypeFromTypeNode(typeArg);
-    const typeName = this.checker.typeToString(type);
-
-    const primitives = ['string', 'number', 'boolean', 'symbol', 'bigint'];
-    if (!primitives.includes(typeName)) return null;
-
-    const sourceFile = registrationNode.getSourceFile();
-    return {
-      type: 'type-mismatch',
-      message:
-        `useValue cannot be used with primitive type '${typeName}'. ` +
-        `Use useProperty<${typeName}>(TargetClass, 'paramName') instead — ` +
-        `it creates a unique token bound to a specific constructor parameter.`,
-      node: registrationNode,
-      sourceFile,
-    };
   }
 
   /**
@@ -616,12 +418,9 @@ export class ConfigParser {
   }
 
   /**
-   * Resolves a symbol, following aliases.
+   * Resolves a symbol, following aliases. Delegates to the shared TokenResolverService.
    */
   private resolveSymbol(symbol: ts.Symbol): ts.Symbol {
-    if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
-      return this.resolveSymbol(this.checker.getAliasedSymbol(symbol));
-    }
-    return symbol;
+    return this.tokenResolverService.resolveSymbol(symbol);
   }
 }

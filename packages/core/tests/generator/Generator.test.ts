@@ -61,7 +61,7 @@ describe('Generator', () => {
     expect(code).not.toContain('export class NeoContainer {');
     expect(code).toContain('constructor(');
     expect(code).toContain('private name: string = \'NeoContainer\'');
-    expect(code).toContain('throw new Error(`[${this.name}] Service not found');
+    expect(code).toContain('throw new NeoServiceNotFoundError(`[${this.name}] Service not found');
   });
 
   it('should handle scopes correctly', () => {

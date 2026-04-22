@@ -3,3 +3,4 @@ export { DuplicateValidator } from './DuplicateValidator';
 export { TypeValidator } from './TypeValidator';
 export { MissingDependencyValidator } from './MissingDependencyValidator';
 export { DependencyAnalyzer } from './DependencyAnalyzer';
+export { CycleValidator } from './CycleValidator';
