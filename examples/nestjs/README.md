@@ -135,6 +135,7 @@ NeoSyringe hooks into the TypeScript compiler via [ts-patch](https://github.com/
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET` | `/` | Interactive UI (HTML + AJAX) |
 | `GET` | `/cats` | List all cats |
 | `GET` | `/cats/:id` | Find cat by id |
 | `POST` | `/cats` | Create cat `{name, age, breed}` |

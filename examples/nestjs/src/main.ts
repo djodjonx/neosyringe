@@ -6,7 +6,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   await app.listen(3000);
   console.log('NeoSyringe + NestJS running on http://localhost:3000');
-  console.log('Try: curl http://localhost:3000/cats');
+  console.log('Open http://localhost:3000 in your browser for the interactive UI');
 }
 
 bootstrap();
