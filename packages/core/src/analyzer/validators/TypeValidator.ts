@@ -3,7 +3,7 @@ import { TSContext } from '../../TSContext';
 import type { AnalysisError, ConfigGraph, InjectionInfo } from '../types';
 import type { IValidator, ValidationContext } from './Validator';
 import type { IErrorFormatter } from '../errors/ErrorFormatter';
-import { PropertyFinder } from '../utils/PropertyFinder';
+import { findTokenAssignment } from '../utils/PropertyFinder';
 
 /**
  * Validates type compatibility between tokens and providers.
@@ -64,7 +64,7 @@ export class TypeValidator implements IValidator {
    * The injection object is { token: useInterface<T>(), provider: Impl }.
    */
   private getTokenType(info: InjectionInfo): ts.Type | null {
-    const tokenProp = PropertyFinder.findTokenAssignment(info.node);
+    const tokenProp = findTokenAssignment(info.node);
     if (!tokenProp) return null;
 
     const tokenExpr = tokenProp.initializer;
