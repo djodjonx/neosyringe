@@ -17,6 +17,10 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
+    "verdaccio:start": "verdaccio --config scripts/verdaccio/config.yml",
+    "verdaccio:publish": "bash scripts/verdaccio/publish.sh",
+    "verdaccio:invalidate": "bash scripts/verdaccio/invalidate.sh",
+    "examples:update": "node scripts/update-examples.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -30,6 +34,7 @@
     "reflect-metadata": "^0.2.2",
     "tsyringe": "^4.10.0",
     "typescript": "^5.9.3",
+    "verdaccio": "^6.5.2",
     "vitepress": "^1.6.4",
     "vitest": "^4.0.17"
   },
