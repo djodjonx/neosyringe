@@ -1,5 +1,23 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.1.0...neosyringe-plugin-v0.2.0) (2026-04-22)
+
+
+### Features
+
+* **example/nestjs:** replace webpack with ts-patch TypeScript transformer ([0891f3a](https://github.com/djodjonx/neosyringe/commit/0891f3a7970d760f4249759744a49e867b78ff76))
+* **unplugin:** add TypeScript compiler transformer for ts-patch ([fb54297](https://github.com/djodjonx/neosyringe/commit/fb54297a3f7fecadd283f18191917a980db7d8c1))
+* **unplugin:** expose ./transformer export path for ts-patch usage ([630c5b5](https://github.com/djodjonx/neosyringe/commit/630c5b5868e30d678c140aa8817c588c20bd8bcf))
+* **unplugin:** init @djodjonx/neosyringe-plugin ([ff89e74](https://github.com/djodjonx/neosyringe/commit/ff89e744255f248638de4998eb9ab819ff80514b))
+
+
+### Bug Fixes
+
+* **cli,unplugin,core:** remove deprecated GraphValidator.validate() and report all errors ([e29df2c](https://github.com/djodjonx/neosyringe/commit/e29df2c271df8e39faa84c4166b0ea51d8499151))
+* **core,lsp,unplugin:** fix type validation bugs and eliminate code duplication ([92fa8cd](https://github.com/djodjonx/neosyringe/commit/92fa8cd68debfcdcebb791e0e9c9165d628dba86))
+* **tests:** use source imports instead of published packages ([0f92646](https://github.com/djodjonx/neosyringe/commit/0f926468cc75aaa03eb53242c2eaa187aa9ce269))
+* **unplugin:** update to use new Analyzer APIs ([0c6aab6](https://github.com/djodjonx/neosyringe/commit/0c6aab6b36eabe82dfed158e1a03c71fdcec26ba))
+
 ## [0.1.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.0.7...neosyringe-plugin-v0.1.0) (2026-04-21)
 
 

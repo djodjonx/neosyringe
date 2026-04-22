@@ -1,5 +1,16 @@
 # @djodjonx/neosyringe
 
+## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.2.0...neosyringe-v0.3.0) (2026-04-22)
+
+
+### Features
+
+* **runtime:** init @djodjonx/neosyringe package ([a7d18a9](https://github.com/djodjonx/neosyringe/commit/a7d18a9eb36fa6029e2deebffef6ddab93bb5000))
+* **types:** add 'value' registration type and useValue to Injection ([a65d368](https://github.com/djodjonx/neosyringe/commit/a65d368a886c019d7bb15fea0fd74e90184d9699))
+* **types:** add AsyncContainer interface and isAsync to ServiceDefinition ([3149ebb](https://github.com/djodjonx/neosyringe/commit/3149ebbb5ad1606c518e3bf5b0c6d899ed356605))
+* **types:** add IDisposable, IAsyncDisposable and destroy() to Container ([f0eb00b](https://github.com/djodjonx/neosyringe/commit/f0eb00ba24fa6df1fe5b30a7b16c54125884a1a7))
+* **types:** add multi registration support to Injection and Container ([060b89b](https://github.com/djodjonx/neosyringe/commit/060b89b8da4f0dab9df066abb651384118b7c230))
+
 ## [0.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.1.2...neosyringe-v0.2.0) (2026-04-21)
 
 

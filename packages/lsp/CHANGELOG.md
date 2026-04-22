@@ -1,5 +1,23 @@
 # @djodjonx/neosyringe-lsp
 
+## [0.4.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.3.0...neosyringe-lsp-v0.4.0) (2026-04-22)
+
+
+### Features
+
+* **lsp:** add LSPLogger class with performance optimizations ([27f3397](https://github.com/djodjonx/neosyringe/commit/27f3397f225d4a19ff70b6c02fe7d4c8f1aaa753))
+* **lsp:** detect multiple errors simultaneously ([a54f7ad](https://github.com/djodjonx/neosyringe/commit/a54f7adb21b9f6802145a49b00ebd2a563506405))
+* **lsp:** init @djodjonx/neosyringe-lsp ([01f8e0b](https://github.com/djodjonx/neosyringe/commit/01f8e0b4e0df85340ad541ae29b26436f4fbfd8f))
+* **lsp:** integrate new validators for comprehensive error reporting ([1564bd9](https://github.com/djodjonx/neosyringe/commit/1564bd984706f142ee7ba22831e1c15748fea615))
+
+
+### Bug Fixes
+
+* **core,lsp,unplugin:** fix type validation bugs and eliminate code duplication ([92fa8cd](https://github.com/djodjonx/neosyringe/commit/92fa8cd68debfcdcebb791e0e9c9165d628dba86))
+* **lsp,validators:** extend validators to cover multiInjections and valueErrors ([6200608](https://github.com/djodjonx/neosyringe/commit/6200608824c834ace8e95be99153670cde7dd18f))
+* **lsp:** add IntelliJ IDEA compatibility ([4ca95c1](https://github.com/djodjonx/neosyringe/commit/4ca95c192c8caca893967365f17015c8ae9932d7))
+* **lsp:** report missing dependency errors in IDE diagnostics ([8f7165e](https://github.com/djodjonx/neosyringe/commit/8f7165e7329b95eb87b544edfb96ecbbb4a4263f))
+
 ## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.2.2...neosyringe-lsp-v0.3.0) (2026-04-21)
 
 
