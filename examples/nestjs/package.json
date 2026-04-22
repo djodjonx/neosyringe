@@ -20,8 +20,8 @@
   },
   "devDependencies": {
     "@djodjonx/neosyringe-cli": "0.1.0",
-    "@djodjonx/neosyringe-lsp": "0.3.0",
-    "@djodjonx/neosyringe-plugin": "0.1.0",
+    "@djodjonx/neosyringe-lsp": "0.3.1",
+    "@djodjonx/neosyringe-plugin": "0.2.0",
     "@nestjs/cli": "^10.4.9",
     "@nestjs/schematics": "^10.2.3",
     "@types/express": "^5.0.1",

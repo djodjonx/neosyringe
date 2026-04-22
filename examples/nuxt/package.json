@@ -18,8 +18,8 @@
   },
   "devDependencies": {
     "@djodjonx/neosyringe-cli": "0.1.0",
-    "@djodjonx/neosyringe-lsp": "0.3.0",
-    "@djodjonx/neosyringe-plugin": "0.1.0",
+    "@djodjonx/neosyringe-lsp": "0.3.1",
+    "@djodjonx/neosyringe-plugin": "0.2.0",
     "@nuxt/devtools": "^2.7.0",
     "typescript": "^5.9.3",
     "unplugin": "^2.3.11",
