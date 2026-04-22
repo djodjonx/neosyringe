@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-lsp
 
+## [0.3.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.3.1...neosyringe-lsp-v0.3.2) (2026-04-22)
+
+
+### Bug Fixes
+
+* address code review feedback ([75fe611](https://github.com/djodjonx/neosyringe/commit/75fe611c933e5ddce015a9c59296af85ea95a9ea))
+
 ## [0.3.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.3.0...neosyringe-lsp-v0.3.1) (2026-04-22)
 
 
