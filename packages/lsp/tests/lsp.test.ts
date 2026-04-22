@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import init from '../src/index';
 import * as ts from 'typescript';
+import { TSContext } from '../../core/src/TSContext';
 
 // Partial mocks
 vi.mock('../../core/src/analyzer/index.ts', () => {
@@ -113,6 +114,31 @@ describe('LSP Plugin', () => {
 
       // Should exit early
       expect(languageServiceMock.getSemanticDiagnostics).toHaveBeenCalled();
+  });
+
+  describe('TSContext.projectRoot wiring', () => {
+    const originalProjectRoot = (TSContext as any)._projectRoot;
+
+    afterEach(() => {
+      (TSContext as any)._projectRoot = originalProjectRoot;
+    });
+
+    it('should set TSContext.projectRoot from project.getCurrentDirectory()', () => {
+      pluginFactory.create({
+        languageService: languageServiceMock,
+        project: { getCurrentDirectory: () => '/my/project' },
+      } as any);
+
+      expect(TSContext.projectRoot).toBe('/my/project');
+    });
+
+    it('should not set TSContext.projectRoot when project is absent', () => {
+      (TSContext as any)._projectRoot = undefined;
+      pluginFactory.create({ languageService: languageServiceMock } as any);
+
+      // Falls back to process.cwd() — projectRoot must equal process.cwd()
+      expect(TSContext.projectRoot).toBe(process.cwd());
+    });
   });
 });
 
