@@ -1,4 +1,13 @@
-# NeoSyringe + NestJS Example
+# NeoSyringe — NestJS Example
+
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/djodjonx/neosyringe/tree/main/examples/nestjs)
+[![Open in CodeSandbox](https://codesandbox.io/static/img/play-codesandbox.svg)](https://codesandbox.io/p/github/djodjonx/neosyringe/main?file=/examples/nestjs/src/main.ts)
+
+A NestJS REST API example using NeoSyringe compile-time dependency injection with ts-patch.
+
+See the [NeoSyringe documentation](https://djodjonx.github.io/neosyringe/) for more details.
+
+## Background
 
 A full CRUD Cats API built with NestJS — where **all business logic is pure TypeScript** managed by NeoSyringe's compile-time DI.
 
