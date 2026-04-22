@@ -1,5 +1,14 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.1.0...neosyringe-plugin-v0.2.0) (2026-04-22)
+
+
+### Features
+
+* **example/nestjs:** replace webpack with ts-patch TypeScript transformer ([0891f3a](https://github.com/djodjonx/neosyringe/commit/0891f3a7970d760f4249759744a49e867b78ff76))
+* **unplugin:** add TypeScript compiler transformer for ts-patch ([fb54297](https://github.com/djodjonx/neosyringe/commit/fb54297a3f7fecadd283f18191917a980db7d8c1))
+* **unplugin:** expose ./transformer export path for ts-patch usage ([630c5b5](https://github.com/djodjonx/neosyringe/commit/630c5b5868e30d678c140aa8817c588c20bd8bcf))
+
 ## [0.1.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.0.7...neosyringe-plugin-v0.1.0) (2026-04-21)
 
 
