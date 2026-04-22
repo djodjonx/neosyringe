@@ -1,0 +1,22 @@
+{
+  "setupTasks": [
+    {
+      "name": "Install dependencies",
+      "command": "pnpm install"
+    }
+  ],
+  "tasks": {
+    "dev": {
+      "name": "Dev Server",
+      "command": "pnpm dev",
+      "runAtStart": true,
+      "preview": {
+        "port": 3000
+      }
+    },
+    "build": {
+      "name": "Build",
+      "command": "pnpm build"
+    }
+  }
+}
