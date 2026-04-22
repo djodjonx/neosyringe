@@ -1,8 +1,10 @@
 import { createUnplugin } from 'unplugin';
 import * as ts from 'typescript';
+import * as path from 'path';
 import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
 import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
 import { Generator } from '@djodjonx/neosyringe-core/generator';
+import { TSContext } from '../../core/src/TSContext';
 import { transformUseInterfaceCalls, type UsedTokenEntry } from './useInterfaceTransform';
 
 /**
@@ -39,6 +41,8 @@ export const neoSyringePlugin = createUnplugin(() => {
         'Make sure a tsconfig.json exists in your project root.'
       );
     }
+    // Set the stable project root so HashUtils produces the same token IDs as the LSP plugin.
+    TSContext.projectRoot = path.dirname(configFile);
     const { config } = ts.readConfigFile(configFile, ts.sys.readFile);
     compilerOptions = ts.parseJsonConfigFileContent(config, ts.sys, process.cwd()).options;
     return compilerOptions;

@@ -7,6 +7,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'clover'],
+      // Thresholds are only enforced when running with --coverage (e.g. `pnpm test:coverage`).
+      // They prevent silent coverage regression in CI — do not lower without justification.
       thresholds: {
         statements: 35,
         branches: 40,

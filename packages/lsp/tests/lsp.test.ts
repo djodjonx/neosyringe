@@ -5,16 +5,32 @@ import * as ts from 'typescript';
 // Partial mocks
 vi.mock('../../core/src/analyzer/index.ts', () => {
   class DuplicateRegistrationError extends Error {
-    constructor(message: string, public readonly node: any, public readonly sourceFile: any) {
+    fileName: string;
+    line: number;
+    character: number;
+    endOffset: number;
+    constructor(message: string, node: any, sourceFile: any) {
       super(message);
       this.name = 'DuplicateRegistrationError';
+      this.fileName = sourceFile?.fileName ?? '';
+      this.line = 0;
+      this.character = 0;
+      this.endOffset = node?.getEnd?.() ?? 0;
     }
   }
 
   class TypeMismatchError extends Error {
-    constructor(message: string, public readonly node: any, public readonly sourceFile: any) {
+    fileName: string;
+    line: number;
+    character: number;
+    endOffset: number;
+    constructor(message: string, node: any, sourceFile: any) {
       super(message);
       this.name = 'TypeMismatchError';
+      this.fileName = sourceFile?.fileName ?? '';
+      this.line = 0;
+      this.character = 0;
+      this.endOffset = node?.getEnd?.() ?? 0;
     }
   }
 
