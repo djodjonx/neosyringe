@@ -1,6 +1,6 @@
 import type { SourceFile, Node } from 'typescript';
 import type { AnalysisError, InjectionInfo, TokenSource } from '../types';
-import { PropertyFinder } from '../utils/PropertyFinder';
+import { findTokenAssignment } from '../utils/PropertyFinder';
 
 /**
  * Interface for error formatting.
@@ -44,7 +44,7 @@ export class ErrorFormatter implements IErrorFormatter {
     }
 
     // Use the token node for precise error positioning
-    const errorNode = PropertyFinder.findTokenAssignment(injection.node) ?? injection.node;
+    const errorNode = findTokenAssignment(injection.node) ?? injection.node;
 
     return {
       type: 'duplicate',

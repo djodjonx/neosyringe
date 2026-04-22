@@ -1,2 +1,2 @@
 export { CallExpressionUtils } from './CallExpressionUtils';
-export { PropertyFinder } from './PropertyFinder';
+export { findProperty, hasProperty, findTokenAssignment } from './PropertyFinder';

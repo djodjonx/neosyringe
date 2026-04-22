@@ -2,7 +2,7 @@ import type { AnalysisError, ConfigGraph, TokenId } from '../types';
 import type { IValidator, ValidationContext } from './Validator';
 import type { IErrorFormatter } from '../errors/ErrorFormatter';
 import { DependencyAnalyzer } from './DependencyAnalyzer';
-import { PropertyFinder } from '../utils/PropertyFinder';
+import { findTokenAssignment } from '../utils/PropertyFinder';
 
 /**
  * Validates that all required dependencies are available in the container.
@@ -26,7 +26,7 @@ export class MissingDependencyValidator implements IValidator {
       const requiredDeps = this.dependencyAnalyzer.getRequiredDependencies(info.definition);
       for (const depTokenId of requiredDeps) {
         if (!availableTokens.has(depTokenId)) {
-          const tokenNode = PropertyFinder.findTokenAssignment(info.node);
+          const tokenNode = findTokenAssignment(info.node);
           const errorNode = tokenNode || info.node;
           errors.push({
             type: 'missing',
