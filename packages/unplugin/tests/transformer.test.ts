@@ -30,16 +30,31 @@ vi.mock('typescript', async (importOriginal) => {
   };
 });
 
-function makeProgram(): ts.Program {
+function makeSourceFile(text: string, fileName = '/test/container.ts'): ts.SourceFile {
+  return ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2021, true, ts.ScriptKind.TS);
+}
+
+function makeProgram(sourceFiles: ts.SourceFile[] = []): ts.Program {
   return {
     getCompilerOptions: () => ({ target: ts.ScriptTarget.ES2021 }),
-    getSourceFiles: () => [],
+    getSourceFiles: () => sourceFiles,
     getTypeChecker: () => ({} as ts.TypeChecker),
+    getRootFileNames: () => sourceFiles.map(sf => sf.fileName),
+    emit: vi.fn(),
   } as unknown as ts.Program;
 }
 
-function makeSourceFile(text: string, fileName = '/test/container.ts'): ts.SourceFile {
-  return ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2021, true, ts.ScriptKind.TS);
+/**
+ * Helper to call the program transformer with ts-patch-like extras
+ */
+async function callTransformer(program: ts.Program, host?: ts.CompilerHost) {
+  const { default: neoSyringeTransformer } = await import('../src/transformer');
+  return neoSyringeTransformer(
+    program,
+    host,
+    {},
+    { ts } as any,
+  );
 }
 
 describe('neoSyringeTransformer', () => {
@@ -63,38 +78,30 @@ describe('neoSyringeTransformer', () => {
     } as any);
   });
 
-  it('returns source file unchanged for files with no NeoSyringe APIs', async () => {
-    const { default: neoSyringeTransformer } = await import('../src/transformer');
+  it('returns the same program when no source files contain NeoSyringe APIs', async () => {
+    const sf = makeSourceFile('const x = 1;');
+    const program = makeProgram([sf]);
 
-    const program = makeProgram();
-    const factory = neoSyringeTransformer(program);
-    const transform = factory({} as ts.TransformationContext);
-    const sourceFile = makeSourceFile('const x = 1;');
+    const result = await callTransformer(program);
 
-    const result = transform(sourceFile);
-
-    expect(result).toBe(sourceFile);
+    // No transformation needed → same program returned
+    expect(result).toBe(program);
   });
 
-  it('returns source file unchanged when defineBuilderConfig produces empty graph', async () => {
-    const { default: neoSyringeTransformer } = await import('../src/transformer');
-
+  it('returns the same program when defineBuilderConfig produces empty graph', async () => {
     vi.mocked(ts.createProgram).mockReturnValue(makeProgram());
 
-    const program = makeProgram();
-    const factory = neoSyringeTransformer(program);
-    const transform = factory({} as ts.TransformationContext);
-
     const code = 'export const container = defineBuilderConfig({ name: "C", injections: [] });';
-    const sourceFile = makeSourceFile(code);
-    const result = transform(sourceFile);
+    const sf = makeSourceFile(code);
+    const program = makeProgram([sf]);
 
-    expect(result).toBe(sourceFile);
+    const result = await callTransformer(program);
+
+    // Empty graph → no transform → same program
+    expect(result).toBe(program);
   });
 
-  it('transforms a container file when graph is non-empty', async () => {
-    const { default: neoSyringeTransformer } = await import('../src/transformer');
-
+  it('returns a new program when a container file is transformed', async () => {
     const code = 'export const container = defineBuilderConfig({ name: "C", injections: [] });';
 
     vi.mocked(Analyzer).mockImplementation(function () {
@@ -111,20 +118,24 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(ts.createProgram).mockReturnValue(makeProgram());
 
-    const program = makeProgram();
-    const factory = neoSyringeTransformer(program);
-    const transform = factory({} as ts.TransformationContext);
+    const sf = makeSourceFile(code);
+    const originalProgram = makeProgram([sf]);
 
-    const sourceFile = makeSourceFile(code);
-    const result = transform(sourceFile);
+    // The final createProgram call (to create the new program with transformed sources)
+    // should return a distinct program object
+    const newProgram = makeProgram([]);
+    let createProgramCallCount = 0;
+    vi.mocked(ts.createProgram).mockImplementation(() => {
+      createProgramCallCount++;
+      return createProgramCallCount === 1 ? makeProgram() : newProgram;
+    });
 
-    expect(result).not.toBe(sourceFile);
-    expect(result.text).toContain('__CatsContainer__');
+    const result = await callTransformer(originalProgram);
+
+    expect(result).toBe(newProgram);
   });
 
   it('throws when graph validation fails', async () => {
-    const { default: neoSyringeTransformer } = await import('../src/transformer');
-
     const code = 'export const container = defineBuilderConfig({ name: "C", injections: [] });';
 
     vi.mocked(Analyzer).mockImplementation(function () {
@@ -147,12 +158,10 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(ts.createProgram).mockReturnValue(makeProgram());
 
-    const program = makeProgram();
-    const factory = neoSyringeTransformer(program);
-    const transform = factory({} as ts.TransformationContext);
-    const sourceFile = makeSourceFile(code);
+    const sf = makeSourceFile(code);
+    const program = makeProgram([sf]);
 
-    expect(() => transform(sourceFile)).toThrow('[neosyringe-transformer]');
-    expect(() => transform(sourceFile)).toThrow('Missing dep');
+    await expect(callTransformer(program)).rejects.toThrow('[neosyringe-transformer]');
+    await expect(callTransformer(program)).rejects.toThrow('Missing dep');
   });
 });

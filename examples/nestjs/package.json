@@ -4,6 +4,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
+    "prepare": "ts-patch install -s",
     "build": "nest build",
     "start": "node dist/main",
     "start:dev": "nest start --watch",
@@ -25,8 +26,8 @@
     "@nestjs/schematics": "^10.2.3",
     "@types/express": "^5.0.1",
     "@types/node": "^22.15.3",
+    "ts-patch": "^3.3.0",
     "typescript": "^5.9.3",
-    "ts-loader": "^9.5.2",
     "vitest": "^4.0.17"
   }
 }

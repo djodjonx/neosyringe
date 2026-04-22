@@ -34,9 +34,16 @@
     "unplugin": "^2.0.0"
   },
   "peerDependencies": {
+    "ts-patch": ">=3.0.0",
     "typescript": ">=5.0.0"
   },
+  "peerDependenciesMeta": {
+    "ts-patch": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "ts-patch": "^3.3.0",
     "tsdown": "0.20.0-beta.3",
     "typescript": "^5.9.3",
     "vitest": "^4.0.17"
