@@ -95,14 +95,33 @@ No `TestingModule`. No `@nestjs/testing`. No waiting for NestJS to initialize.
 ## Getting Started
 
 ```bash
-pnpm install
-pnpm build    # NeoSyringe generates the container, NestJS compiles
-pnpm start    # http://localhost:3000
+pnpm install          # Also runs ts-patch install via "prepare" script
+pnpm build            # tsc + NeoSyringe transformer → dist/main.js
+pnpm start            # http://localhost:3000
 ```
 
 ```bash
-pnpm test     # 6 unit tests — no NestJS bootstrap needed
+pnpm test             # 6 unit tests — no NestJS bootstrap needed
 ```
+
+## How It Works
+
+NeoSyringe hooks into the TypeScript compiler via [ts-patch](https://github.com/nonara/ts-patch). No webpack, no Vite — just `tsc`.
+
+```json
+// tsconfig.json
+{
+  "compilerOptions": {
+    "plugins": [
+      { "name": "@djodjonx/neosyringe-lsp" },
+      { "transform": "@djodjonx/neosyringe-plugin/transformer", "transformProgram": true }
+    ]
+  }
+}
+```
+
+- `"name"` → IDE diagnostics (missing deps, type errors at design time)
+- `"transform"` → Build-time transformation: replaces `defineBuilderConfig(...)` with generated factory code
 
 ## API
 
