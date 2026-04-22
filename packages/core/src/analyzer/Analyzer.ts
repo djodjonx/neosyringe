@@ -33,6 +33,8 @@ export class DuplicateRegistrationError extends Error {
   public readonly fileName: string;
   public readonly line: number;
   public readonly character: number;
+  /** Byte offset of the end of the offending node (for diagnostic span width). */
+  public readonly endOffset: number;
 
   constructor(
     message: string,
@@ -45,6 +47,7 @@ export class DuplicateRegistrationError extends Error {
     const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
     this.line = pos.line;
     this.character = pos.character;
+    this.endOffset = node.getEnd();
   }
 }
 
@@ -56,6 +59,8 @@ export class TypeMismatchError extends Error {
   public readonly fileName: string;
   public readonly line: number;
   public readonly character: number;
+  /** Byte offset of the end of the offending node (for diagnostic span width). */
+  public readonly endOffset: number;
 
   constructor(
     message: string,
@@ -68,6 +73,7 @@ export class TypeMismatchError extends Error {
     const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
     this.line = pos.line;
     this.character = pos.character;
+    this.endOffset = node.getEnd();
   }
 }
 

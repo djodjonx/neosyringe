@@ -39,17 +39,20 @@ function makeDiagnosticFromPosition(
   fileName: string,
   line: number,
   character: number,
+  endOffset: number,
   message: string,
   type: string
 ): ts.Diagnostic | undefined {
   const sourceFile = program.getSourceFile(fileName);
-  if (!sourceFile) return undefined;
-  
+  if (!sourceFile) {
+    return undefined;
+  }
+
   const start = sourceFile.getPositionOfLineAndCharacter(line, character);
   return {
     file: sourceFile,
     start,
-    length: 1,
+    length: endOffset - start,
     messageText: `[NeoSyringe] ${message}`,
     category: ts.DiagnosticCategory.Error,
     code: getErrorCode(type),
@@ -61,6 +64,11 @@ function init(modules: { typescript: typeof import('typescript') }) {
   TSContext.ts = ts;
 
   function create(info: ts.server.PluginCreateInfo) {
+    // Set the project root so HashUtils produces identical token IDs to the build plugin.
+    const projectRoot = info.project?.getCurrentDirectory?.();
+    if (projectRoot) {
+      TSContext.projectRoot = projectRoot;
+    }
     const logger = new LSPLogger(info.project?.projectService?.logger);
 
     // Cache the Analyzer per program instance — programs change when files are modified,
@@ -132,6 +140,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
             e.fileName,
             e.line,
             e.character,
+            e.endOffset,
             e.message,
             e instanceof DuplicateRegistrationError ? 'duplicate' : 'type-mismatch'
           );

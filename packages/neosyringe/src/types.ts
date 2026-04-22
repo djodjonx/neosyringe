@@ -153,9 +153,10 @@ export interface BuilderConfig extends PartialConfig {
   extends?: PartialConfig[];
   /**
    * Parent container instance to bridge with this container.
-   * Accepts any NeoSyringe container (sync or async).
+   * Accepts any NeoSyringe container (sync or async) or a legacy token map
+   * produced by `declareContainerTokens`.
    */
-  useContainer?: Container | AsyncContainer;
+  useContainer?: Container | AsyncContainer | Record<string, unknown>;
 }
 
 /**
