@@ -1,7 +1,6 @@
 # NeoSyringe — Nuxt DDD Example
 
 [![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/djodjonx/neosyringe/tree/main/examples/nuxt)
-[![Open in CodeSandbox](https://codesandbox.io/static/img/play-codesandbox.svg)](https://codesandbox.io/p/github/djodjonx/neosyringe/main?file=/examples/nuxt/nuxt.config.ts)
 
 A Domain-Driven Design example using NeoSyringe compile-time dependency injection with Nuxt 4.
 
