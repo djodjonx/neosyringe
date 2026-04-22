@@ -12,6 +12,11 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
+    },
+    "./transformer": {
+      "types": "./dist/transformer.d.mts",
+      "import": "./dist/transformer.mjs",
+      "require": "./dist/transformer.cjs"
     }
   },
   "files": [
