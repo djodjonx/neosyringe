@@ -44,7 +44,7 @@ export class DuplicateRegistrationError extends Error {
     super(message);
     this.name = 'DuplicateRegistrationError';
     this.fileName = sourceFile.fileName;
-    const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+    const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
     this.line = pos.line;
     this.character = pos.character;
     this.endOffset = node.getEnd();
@@ -70,7 +70,7 @@ export class TypeMismatchError extends Error {
     super(message);
     this.name = 'TypeMismatchError';
     this.fileName = sourceFile.fileName;
-    const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+    const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
     this.line = pos.line;
     this.character = pos.character;
     this.endOffset = node.getEnd();

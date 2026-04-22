@@ -162,16 +162,17 @@ describe('HashUtils', () => {
 
   describe('hashFilePath - TSContext.projectRoot consistency', () => {
     afterEach(() => {
-      (TSContext as any)._projectRoot = undefined;
+      TSContext.projectRoot = process.cwd();
     });
 
     it('should use TSContext.projectRoot as the base for relative path computation', () => {
-      const absolutePath = path.join('/custom/project/root', 'src/Logger.ts');
+      const projectRoot = path.resolve('custom', 'project', 'root');
+      const absolutePath = path.join(projectRoot, 'src', 'Logger.ts');
 
-      TSContext.projectRoot = '/custom/project/root';
+      TSContext.projectRoot = projectRoot;
       const hashWithProjectRoot = HashUtils.hashFilePath(absolutePath);
 
-      const expectedRelative = 'src/Logger.ts';
+      const expectedRelative = path.relative(projectRoot, absolutePath).split(path.sep).join('/');
       const expectedHash = crypto.createHash('md5')
         .update(expectedRelative)
         .digest('hex')
@@ -180,8 +181,9 @@ describe('HashUtils', () => {
       expect(hashWithProjectRoot).toBe(expectedHash);
 
       // Verify the contrast: a different root yields a different hash
+      const wrongRoot = path.resolve('some', 'other', 'root');
       const wrongHash = crypto.createHash('md5')
-        .update(path.relative('/some/other/root', absolutePath))
+        .update(path.relative(wrongRoot, absolutePath).split(path.sep).join('/'))
         .digest('hex')
         .substring(0, 8);
       expect(hashWithProjectRoot).not.toBe(wrongHash);

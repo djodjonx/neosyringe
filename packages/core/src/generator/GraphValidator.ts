@@ -13,7 +13,7 @@ function getSimpleName(tokenId: TokenId): string {
   const parts = tokenId.split('_');
   if (parts.length > 1) {
     const lastPart = parts[parts.length - 1];
-    if (/^[a-f0-9]{6,12}$/i.test(lastPart)) {
+    if (/^[a-f0-9]{8}$/i.test(lastPart)) {
       return parts.slice(0, -1).join('_');
     }
   }
