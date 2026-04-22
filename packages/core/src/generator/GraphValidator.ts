@@ -3,30 +3,20 @@ import { DependencyGraph, TokenId } from '../analyzer/types';
 
 /**
  * Extracts the simple name from a token ID (removes the hash suffix).
+ * Token IDs use the format `Name_hash8chars`.
  * Examples:
  * - "IEventBus_714d1af6" -> "IEventBus"
- * - "useInterface<ILogger>()" -> "ILogger"
- * - "UserService" -> "UserService"
+ * - "UserService_a1b2c3d4" -> "UserService"
+ * - "UserService" -> "UserService" (no hash suffix)
  */
 function getSimpleName(tokenId: TokenId): string {
-  // Handle useInterface<X>() format
-  const interfaceMatch = tokenId.match(/useInterface<([^>]+)>/);
-  if (interfaceMatch) {
-    const innerName = interfaceMatch[1];
-    // Remove hash if present
-    return innerName.split('_')[0];
-  }
-
-  // Handle Name_hash format
   const parts = tokenId.split('_');
   if (parts.length > 1) {
-    // Check if last part looks like a hash (alphanumeric, 6-12 chars)
     const lastPart = parts[parts.length - 1];
     if (/^[a-f0-9]{6,12}$/i.test(lastPart)) {
       return parts.slice(0, -1).join('_');
     }
   }
-
   return tokenId;
 }
 
