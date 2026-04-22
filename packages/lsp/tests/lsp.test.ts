@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import init from '../src/index';
 import * as ts from 'typescript';
-import { TSContext } from '../../core/src/TSContext';
+import { TSContext } from '@djodjonx/neosyringe-core/context';
 
 // Partial mocks
 vi.mock('../../core/src/analyzer/index.ts', () => {
