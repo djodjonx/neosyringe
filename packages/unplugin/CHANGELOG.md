@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.2.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.2.0...neosyringe-plugin-v0.2.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* address code review feedback ([75fe611](https://github.com/djodjonx/neosyringe/commit/75fe611c933e5ddce015a9c59296af85ea95a9ea))
+
 ## [0.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.1.0...neosyringe-plugin-v0.2.0) (2026-04-22)
 
 
