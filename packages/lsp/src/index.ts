@@ -33,6 +33,29 @@ function makeDiagnostic(
   };
 }
 
+function makeDiagnosticFromPosition(
+  ts: typeof import('typescript'),
+  program: ts.Program,
+  fileName: string,
+  line: number,
+  character: number,
+  message: string,
+  type: string
+): ts.Diagnostic | undefined {
+  const sourceFile = program.getSourceFile(fileName);
+  if (!sourceFile) return undefined;
+  
+  const start = sourceFile.getPositionOfLineAndCharacter(line, character);
+  return {
+    file: sourceFile,
+    start,
+    length: 1,
+    messageText: `[NeoSyringe] ${message}`,
+    category: ts.DiagnosticCategory.Error,
+    code: getErrorCode(type),
+  };
+}
+
 function init(modules: { typescript: typeof import('typescript') }) {
   const ts = modules.typescript;
   TSContext.ts = ts;
@@ -103,7 +126,16 @@ function init(modules: { typescript: typeof import('typescript') }) {
         }
       } catch (e: unknown) {
         if (e instanceof DuplicateRegistrationError || e instanceof TypeMismatchError) {
-          prior.push(makeDiagnostic(ts, e.node, e.sourceFile, e.message, e instanceof DuplicateRegistrationError ? 'duplicate' : 'type-mismatch'));
+          const diagnostic = makeDiagnosticFromPosition(
+            ts,
+            program,
+            e.fileName,
+            e.line,
+            e.character,
+            e.message,
+            e instanceof DuplicateRegistrationError ? 'duplicate' : 'type-mismatch'
+          );
+          if (diagnostic) prior.push(diagnostic);
         } else {
           logger.error(`NeoSyringe analysis failed: ${e instanceof Error ? e.message : String(e)}`);
         }

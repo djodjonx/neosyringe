@@ -30,13 +30,21 @@ import { ASTVisitor } from './visitors';
  * Includes the position of the duplicate registration node.
  */
 export class DuplicateRegistrationError extends Error {
+  public readonly fileName: string;
+  public readonly line: number;
+  public readonly character: number;
+
   constructor(
     message: string,
-    public readonly node: ts.Node,
-    public readonly sourceFile: ts.SourceFile
+    node: ts.Node,
+    sourceFile: ts.SourceFile
   ) {
     super(message);
     this.name = 'DuplicateRegistrationError';
+    this.fileName = sourceFile.fileName;
+    const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+    this.line = pos.line;
+    this.character = pos.character;
   }
 }
 
@@ -45,13 +53,21 @@ export class DuplicateRegistrationError extends Error {
  * Includes the position of the registration node.
  */
 export class TypeMismatchError extends Error {
+  public readonly fileName: string;
+  public readonly line: number;
+  public readonly character: number;
+
   constructor(
     message: string,
-    public readonly node: ts.Node,
-    public readonly sourceFile: ts.SourceFile
+    node: ts.Node,
+    sourceFile: ts.SourceFile
   ) {
     super(message);
     this.name = 'TypeMismatchError';
+    this.fileName = sourceFile.fileName;
+    const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+    this.line = pos.line;
+    this.character = pos.character;
   }
 }
 
