@@ -41,3 +41,4 @@ docs/superpowers/
 # Verdaccio local registry storage
 .verdaccio-storage/
 .verdaccio-htpasswd
+.worktrees/
