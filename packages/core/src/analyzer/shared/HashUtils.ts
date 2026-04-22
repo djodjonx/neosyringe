@@ -2,11 +2,14 @@ import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import type * as ts from 'typescript';
 
+import { TSContext } from '../../TSContext';
+
 /**
  * Utilities for generating deterministic hashes used in token ID generation.
  *
- * These utilities ensure consistency across different environments (CI vs Local)
- * and platforms (Windows vs Unix) by normalizing paths and using stable hash functions.
+ * These utilities ensure consistency across different execution contexts
+ * (LSP plugin vs build plugin) and platforms (Windows vs Unix) by normalizing
+ * paths and using stable hash functions.
  *
  * @example
  * ```typescript
@@ -23,8 +26,9 @@ export class HashUtils {
   /**
    * Generates an MD5 hash (8 characters) from a file path.
    *
-   * Ensures cross-platform consistency by:
-   * 1. Converting to relative path (CI vs Local)
+   * Ensures cross-environment consistency by:
+   * 1. Converting to relative path using `TSContext.projectRoot` (not `process.cwd()`)
+   *    so that the LSP plugin and the build plugin produce identical token IDs.
    * 2. Normalizing separators to POSIX style (Windows vs Unix)
    * 3. Using MD5 for deterministic output
    *
@@ -33,17 +37,20 @@ export class HashUtils {
    *
    * @example
    * ```typescript
+   * // In build plugin (TSContext.projectRoot set by the plugin):
+   * TSContext.projectRoot = '/Users/me/project';
    * HashUtils.hashFilePath('/Users/me/project/src/Logger.ts');
-   * // Returns: "a1b2c3d4"
+   * // Returns: "a1b2c3d4"  (relative: "src/Logger.ts")
    *
-   * // Same hash on CI:
-   * HashUtils.hashFilePath('/home/runner/project/src/Logger.ts');
-   * // Returns: "a1b2c3d4" (relative path is same: "src/Logger.ts")
+   * // In LSP plugin (TSContext.projectRoot set from tsserver project root):
+   * TSContext.projectRoot = '/Users/me/project';
+   * HashUtils.hashFilePath('/Users/me/project/src/Logger.ts');
+   * // Returns: "a1b2c3d4"  ← same, even though process.cwd() differs between contexts
    * ```
    */
   static hashFilePath(filePath: string): string {
     // Get relative path to ensure consistency across environments
-    let relativePath = path.relative(process.cwd(), filePath);
+    let relativePath = path.relative(TSContext.projectRoot, filePath);
 
     // Normalize to POSIX style (forward slashes) for Windows compatibility
     relativePath = relativePath.split(path.sep).join('/');
