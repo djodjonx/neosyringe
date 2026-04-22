@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-lsp
 
+## [0.3.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.3.0...neosyringe-lsp-v0.3.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* **lsp:** report missing dependency errors in IDE diagnostics ([8f7165e](https://github.com/djodjonx/neosyringe/commit/8f7165e7329b95eb87b544edfb96ecbbb4a4263f))
+
 ## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.2.2...neosyringe-lsp-v0.3.0) (2026-04-21)
 
 
