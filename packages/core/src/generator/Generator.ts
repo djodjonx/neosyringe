@@ -1,4 +1,5 @@
 import type * as ts from 'typescript';
+import { relative, isAbsolute } from 'node:path';
 import { TSContext } from '../TSContext';
 import { DependencyGraph, TokenId } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
@@ -21,8 +22,15 @@ export class Generator {
    *   Use true when the generated code is inlined inside the same file as the
    *   original definitions (unplugin transform); use false (default) when the
    *   generated code is written to a separate output file that needs explicit imports.
+   * @param outputDir - Directory where the generated file will be written. Used to
+   *   compute relative import paths when `useDirectSymbolNames` is false. Defaults
+   *   to `process.cwd()` when not provided.
    */
-  constructor(private graph: DependencyGraph, private useDirectSymbolNames: boolean = false) {
+  constructor(
+    private graph: DependencyGraph,
+    private useDirectSymbolNames: boolean = false,
+    private outputDir?: string
+  ) {
     // Check for analysis errors and throw the first one for CLI compatibility
     if (graph.errors && graph.errors.length > 0) {
       const firstError = graph.errors[0];
@@ -74,8 +82,16 @@ export class Generator {
 
     const importLines: string[] = [];
     if (!this.useDirectSymbolNames) {
+      const base = this.outputDir ?? process.cwd();
       for (const [filePath, alias] of imports) {
-        importLines.push(`import * as ${alias} from '${filePath}';`);
+        let importPath: string;
+        if (isAbsolute(filePath)) {
+          const rel = relative(base, filePath).replace(/\\/g, '/');
+          importPath = rel.startsWith('.') ? rel : `./${rel}`;
+        } else {
+          importPath = filePath;
+        }
+        importLines.push(`import * as ${alias} from '${importPath}';`);
       }
     }
 
@@ -115,8 +131,9 @@ class NeoContainer {
         try {
             return this.parent.resolve(token);
         } catch (e: any) {
-            // Only fall through for "not found" — let real errors bubble
-            if (!(e instanceof NeoServiceNotFoundError)) throw e;
+            // Only fall through for "not found" — let real errors bubble.
+            // Use e.name instead of instanceof to support cross-file generated containers.
+            if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
         }
     }
 
@@ -126,7 +143,7 @@ class NeoContainer {
             try {
                 if (legacyContainer.resolve) return legacyContainer.resolve(token);
             } catch (e: any) {
-                if (!(e instanceof NeoServiceNotFoundError)) throw e;
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
@@ -312,15 +329,22 @@ export const ${variableName || 'container'} = ${instantiation};
 
   /**
    * Sorts services in topological order (dependencies before dependents).
+   * @throws Error if a cycle is detected — callers must validate the graph before generating.
    * @returns Array of TokenIds in dependency order.
    */
   private topologicalSort(): TokenId[] {
     const visited = new Set<TokenId>();
+    const stack = new Set<TokenId>();
     const sorted: TokenId[] = [];
 
     const visit = (id: TokenId) => {
       if (visited.has(id)) return;
-      visited.add(id);
+      if (stack.has(id)) {
+        throw new Error(
+          `[Generator] Cycle detected involving '${id}'. Validate the graph before calling generate().`
+        );
+      }
+      stack.add(id);
       const node = this.graph.nodes.get(id);
       if (node) {
         for (const depId of node.dependencies) {
@@ -328,6 +352,8 @@ export const ${variableName || 'container'} = ${instantiation};
         }
         sorted.push(id);
       }
+      stack.delete(id);
+      visited.add(id);
     };
 
     for (const id of this.graph.nodes.keys()) {

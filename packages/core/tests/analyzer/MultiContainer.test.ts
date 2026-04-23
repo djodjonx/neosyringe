@@ -99,7 +99,7 @@ describe('Multi-Container per File', () => {
       expect(productConfig!.name).toBe('productContainer');
     });
 
-    it('should throw error on duplicate container names in same file', () => {
+    it('should report error on duplicate container names in same file', () => {
       const source = `
         import { defineBuilderConfig } from '@djodjonx/neosyringe';
 
@@ -117,9 +117,8 @@ describe('Multi-Container per File', () => {
       const program = createProgram(source);
       const analyzer = new Analyzer(program);
 
-      expect(() => {
-        analyzer.extractForFile('test.ts');
-      }).toThrow(/Duplicate container name 'MyContainer'/);
+      const result = analyzer.extractForFile('test.ts');
+      expect(result.errors.some(e => /Duplicate container name 'MyContainer'/.test(e.message))).toBe(true);
     });
 
     it('should allow same container name in different files', () => {

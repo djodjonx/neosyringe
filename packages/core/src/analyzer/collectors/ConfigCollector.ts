@@ -1,5 +1,5 @@
 import type * as ts from 'typescript';
-import { basename } from 'path';
+import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
 import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError } from '../types';
 import { HashUtils, TokenResolverService } from '../shared';
@@ -58,7 +58,8 @@ export class ConfigCollector implements IConfigCollector {
       }
     }
 
-    // Validate no duplicate containerIds in the same file
+    // Validate no duplicate containerIds in the same file; errors are attached
+    // to the offending config's valueErrors instead of thrown, so LSP keeps running.
     this.validateContainerIdCollisions(containerIdsByFile);
 
     return configs;
@@ -67,20 +68,30 @@ export class ConfigCollector implements IConfigCollector {
   private validateContainerIdCollisions(
     containerIdsByFile: Map<string, Map<string, ConfigGraph>>
   ): void {
-    for (const [fileName, fileConfigs] of containerIdsByFile) {
+    for (const [, fileConfigs] of containerIdsByFile) {
       const seenIds = new Map<string, ConfigGraph>();
 
       for (const config of fileConfigs.values()) {
         const existing = seenIds.get(config.containerId);
         if (existing) {
-          throw new Error(
-            `Duplicate container name '${config.containerId}' found in ${fileName}.\n` +
-            `Each container must have a unique 'name' field within the same file.\n` +
-            `First occurrence: line ${config.sourceFile.getLineAndCharacterOfPosition(existing.node.getStart()).line + 1}\n` +
-            `Second occurrence: line ${config.sourceFile.getLineAndCharacterOfPosition(config.node.getStart()).line + 1}`
-          );
+          const existingLine =
+            config.sourceFile.getLineAndCharacterOfPosition(existing.node.getStart()).line + 1;
+          const duplicateLine =
+            config.sourceFile.getLineAndCharacterOfPosition(config.node.getStart()).line + 1;
+          const error: AnalysisError = {
+            type: 'duplicate',
+            message:
+              `Duplicate container name '${config.containerId}' in this file.\n` +
+              `Each container must have a unique 'name' field within the same file.\n` +
+              `First occurrence: line ${existingLine}\n` +
+              `Second occurrence: line ${duplicateLine}`,
+            node: config.node,
+            sourceFile: config.sourceFile,
+          };
+          config.valueErrors = [...(config.valueErrors ?? []), error];
+        } else {
+          seenIds.set(config.containerId, config);
         }
-        seenIds.set(config.containerId, config);
       }
     }
   }

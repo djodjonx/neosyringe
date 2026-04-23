@@ -1,5 +1,5 @@
 import type * as ts from 'typescript';
-import { Analyzer, DuplicateRegistrationError, TypeMismatchError, type AnalysisErrorType } from '@djodjonx/neosyringe-core/analyzer';
+import { Analyzer, type AnalysisErrorType } from '@djodjonx/neosyringe-core/analyzer';
 import { LSPLogger } from './logger';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 
@@ -26,32 +26,6 @@ function makeDiagnostic(
     file: sourceFile,
     start,
     length: node.getEnd() - start,
-    messageText: `[NeoSyringe] ${message}`,
-    category: ts.DiagnosticCategory.Error,
-    code: getErrorCode(type),
-  };
-}
-
-function makeDiagnosticFromPosition(
-  ts: typeof import('typescript'),
-  program: ts.Program,
-  fileName: string,
-  line: number,
-  character: number,
-  endOffset: number,
-  message: string,
-  type: string
-): ts.Diagnostic | undefined {
-  const sourceFile = program.getSourceFile(fileName);
-  if (!sourceFile) {
-    return undefined;
-  }
-
-  const start = sourceFile.getPositionOfLineAndCharacter(line, character);
-  return {
-    file: sourceFile,
-    start,
-    length: endOffset - start,
     messageText: `[NeoSyringe] ${message}`,
     category: ts.DiagnosticCategory.Error,
     code: getErrorCode(type),
@@ -113,21 +87,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
           prior.push(makeDiagnostic(ts, error.node, targetFile, error.message, error.type));
         }
       } catch (e: unknown) {
-        if (e instanceof DuplicateRegistrationError || e instanceof TypeMismatchError) {
-          const diagnostic = makeDiagnosticFromPosition(
-            ts,
-            program,
-            e.fileName,
-            e.line,
-            e.character,
-            e.endOffset,
-            e.message,
-            e instanceof DuplicateRegistrationError ? 'duplicate' : 'type-mismatch'
-          );
-          if (diagnostic) prior.push(diagnostic);
-        } else {
-          logger.error(`NeoSyringe analysis failed: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        logger.error(`NeoSyringe analysis failed: ${e instanceof Error ? e.message : String(e)}`);
       }
 
       return prior;
