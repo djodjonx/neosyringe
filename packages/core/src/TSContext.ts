@@ -11,6 +11,11 @@ import * as defaultTs from 'typescript';
  *
  * In CLI/build-plugin context, the setter is never called and the local
  * TypeScript dependency is used as the default.
+ *
+ * @remarks
+ * **Test isolation:** Call `TSContext.reset()` in `afterEach` or `afterAll` to
+ * restore defaults between tests. This prevents cross-test pollution when tests
+ * set a custom TypeScript instance or project root.
  */
 export class TSContext {
   private static _ts: typeof ts | undefined;
@@ -30,5 +35,15 @@ export class TSContext {
 
   static set projectRoot(root: string) {
     this._projectRoot = root;
+  }
+
+  /**
+   * Resets the singleton to its default state.
+   * Clears any custom TypeScript instance and project root override.
+   * Use in `afterEach` / `afterAll` blocks to prevent cross-test pollution.
+   */
+  static reset(): void {
+    this._ts = undefined;
+    this._projectRoot = undefined;
   }
 }

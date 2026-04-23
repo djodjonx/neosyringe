@@ -10,10 +10,10 @@ export default defineConfig({
       // Thresholds are only enforced when running with --coverage (e.g. `pnpm test:coverage`).
       // They prevent silent coverage regression in CI — do not lower without justification.
       thresholds: {
-        statements: 35,
-        branches: 40,
-        functions: 35,
-        lines: 35,
+        statements: 60,
+        branches: 55,
+        functions: 60,
+        lines: 60,
       },
     },
   },

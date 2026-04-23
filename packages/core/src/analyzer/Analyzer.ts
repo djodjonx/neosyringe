@@ -254,6 +254,32 @@ export class Analyzer {
   }
 
   /**
+   * Analyzes all files in the program and returns all errors.
+   *
+   * Uses the modular architecture (same path as LSP) so every container
+   * configuration in the program is validated, not just the first one.
+   *
+   * @returns All analysis errors found across the entire program
+   */
+  public extractAllErrors(): AnalysisError[] {
+    this.initModularComponents();
+    const allConfigs = this.getCollectedConfigs();
+    const errors: AnalysisError[] = [];
+    const processedFiles = new Set<string>();
+
+    for (const config of allConfigs.values()) {
+      const fileName = config.sourceFile.fileName;
+      if (!processedFiles.has(fileName)) {
+        processedFiles.add(fileName);
+        const result = this.extractForFile(fileName);
+        errors.push(...result.errors);
+      }
+    }
+
+    return errors;
+  }
+
+  /**
    * Entry point for LSP - analyzes a specific file.
    * Uses the modular architecture for isolated validation.
    *

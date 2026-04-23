@@ -44,7 +44,6 @@ describe('Generator - External Bindings', () => {
         ['FeatureService', createMockNode('FeatureService', ['SharedKernel'], 'FeatureService', '/src/feature.ts', 'autowire')],
       ]),
       roots: ['FeatureService'],
-      buildArguments: ['rootContainer']
     };
 
     const generator = new Generator(graph);
@@ -70,8 +69,7 @@ describe('Generator - External Bindings', () => {
     // We check that "if (token === Import_0.SharedKernel)" is NOT present
     expect(code).not.toContain('if (token === Import_0.SharedKernel)');
 
-    // 5. Verify Container Instantiation with Parent
-    // It should be new NeoContainer(rootContainer, undefined, undefined) because legacy and name are missing
-    expect(code).toContain('export const container = new NeoContainer(rootContainer, undefined, undefined);');
+    // 5. Verify Container Instantiation (no parent/legacy/name args)
+    expect(code).toContain('export const container = new NeoContainer(undefined, undefined, undefined);');
   });
 });

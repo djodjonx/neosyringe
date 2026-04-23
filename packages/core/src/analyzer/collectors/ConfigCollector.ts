@@ -242,8 +242,8 @@ export class ConfigCollector implements IConfigCollector {
 
       const info = this.parseInjection(element, sourceFile);
       if (info) {
-        // Check if it's an AnalysisError (has type/message/node/sourceFile but not definition)
-        if (!('definition' in info)) {
+        // Check if it's an AnalysisError (ParsedInjection has __kind: 'info')
+        if (!('__kind' in info)) {
           valueErrors.push(info as unknown as AnalysisError);
           continue;
         }
@@ -292,8 +292,8 @@ export class ConfigCollector implements IConfigCollector {
     const result = this.injectionParser.parse(obj, sourceFile);
     if (result === null) return null;
 
-    // AnalysisError has a `message` field; InjectionInfo (ParsedInjection) does not
-    if ('message' in result) return result as AnalysisError;
+    // AnalysisError has a `message` field; ParsedInjection has __kind: 'parsed'
+    if (!('__kind' in result)) return result as AnalysisError;
 
     const parsed = result;
     const definition: ServiceDefinition = {
@@ -313,6 +313,7 @@ export class ConfigCollector implements IConfigCollector {
       isAsyncDisposable: parsed.isAsyncDisposable || undefined,
     };
     return {
+      __kind: 'info',
       definition,
       node: obj,
       tokenText: parsed.tokenText,

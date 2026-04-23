@@ -6,6 +6,7 @@ import { TokenResolverService } from '../shared/TokenResolverService';
 export type ParsedRegistrationType = 'explicit' | 'autowire' | 'factory' | 'value';
 
 export interface ParsedInjection {
+  readonly __kind: 'parsed';
   tokenNode: ts.Expression;
   resolvedTokenNode: ts.Expression;
   providerNode?: ts.Expression;
@@ -99,7 +100,12 @@ export class InjectionParser {
       tokenId = this.tokenResolverService.extractPropertyTokenId(resolvedTokenNode);
       isValueToken = true;
       if (!providerNode) {
-        throw new Error('useProperty requires a provider (factory).');
+        return {
+          type: 'type-mismatch',
+          message: `useProperty() requires a provider (factory). Add 'provider: () => ...' to the registration.`,
+          node: obj,
+          sourceFile,
+        };
       }
       useFactory = true;
     } else {
@@ -130,6 +136,7 @@ export class InjectionParser {
       }
 
       return {
+        __kind: 'parsed',
         tokenNode,
         resolvedTokenNode,
         tokenId,
@@ -189,6 +196,7 @@ export class InjectionParser {
       registrationType === 'factory' && providerNode ? providerNode.getText(sourceFile) : undefined;
 
     return {
+      __kind: 'parsed',
       tokenNode,
       resolvedTokenNode,
       providerNode,

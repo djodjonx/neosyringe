@@ -474,11 +474,17 @@ export class TokenResolverService {
   /**
    * Resolves a symbol, following import aliases until the original declaration.
    * Centralises the alias-unwrapping logic used across Analyzer and resolvers.
+   *
+   * Implemented as an iterative loop to prevent stack overflow on deeply nested
+   * re-exports (guarded at 20 hops to handle pathological cases).
    */
   resolveSymbol(symbol: ts.Symbol): ts.Symbol {
-    if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
-      return this.resolveSymbol(this.checker.getAliasedSymbol(symbol));
+    let current = symbol;
+    let depth = 0;
+    while (current.flags & TSContext.ts.SymbolFlags.Alias) {
+      if (depth++ > 20) break;
+      current = this.checker.getAliasedSymbol(current);
     }
-    return symbol;
+    return current;
   }
 }

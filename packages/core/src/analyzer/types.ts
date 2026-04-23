@@ -125,6 +125,8 @@ export interface ConfigGraph {
  * Information about a single injection.
  */
 export interface InjectionInfo {
+  readonly __kind: 'info';
+
   /** Service definition */
   definition: ServiceDefinition;
 
@@ -200,14 +202,6 @@ export interface DependencyGraph {
 
   /** Root services that are explicitly requested or exported. */
   roots: TokenId[];
-
-  /**
-   * Reserved for future use — currently unused and always empty.
-   * Intended to support a `.build(parentInstance)` API.
-   * The `parent` constructor argument of `NeoContainer` comes from
-   * `legacyContainers`/`useContainer` resolution instead.
-   */
-  buildArguments?: string[];
 
   /** Optional container name for debugging. */
   containerName?: string;

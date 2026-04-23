@@ -1,24 +1,6 @@
 import type { Node, SourceFile } from 'typescript';
 import { DependencyGraph, TokenId } from '../analyzer/types';
-
-/**
- * Extracts the simple name from a token ID (removes the hash suffix).
- * Token IDs use the format `Name_hash8chars`.
- * Examples:
- * - "IEventBus_714d1af6" -> "IEventBus"
- * - "UserService_a1b2c3d4" -> "UserService"
- * - "UserService" -> "UserService" (no hash suffix)
- */
-function getSimpleName(tokenId: TokenId): string {
-  const parts = tokenId.split('_');
-  if (parts.length > 1) {
-    const lastPart = parts[parts.length - 1];
-    if (/^[a-f0-9]{8}$/i.test(lastPart)) {
-      return parts.slice(0, -1).join('_');
-    }
-  }
-  return tokenId;
-}
+import { getSimpleName } from '../analyzer/utils/TokenUtils';
 
 /**
  * Represents a validation error found in the dependency graph.
@@ -101,6 +83,28 @@ export class GraphValidator {
             tokenId: nodeId,
             dependencyId: depId,
           });
+        }
+      }
+    }
+
+    // Also check multi-nodes for missing dependencies
+    if (graph.multiNodes) {
+      for (const [tokenId, nodes] of graph.multiNodes) {
+        for (const node of nodes) {
+          for (const depId of node.dependencies) {
+            const isProvidedLocally = graph.nodes.has(depId) || graph.multiNodes!.has(depId);
+            const isProvidedByParent = parentTokens.has(depId);
+            if (!isProvidedLocally && !isProvidedByParent) {
+              errors.push({
+                type: 'missing',
+                message: `Missing injection: '${getSimpleName(depId)}' required by multi-registration '${getSimpleName(tokenId)}' is not registered.`,
+                node: node.service.registrationNode,
+                sourceFile: node.service.registrationNode.getSourceFile(),
+                tokenId,
+                dependencyId: depId,
+              });
+            }
+          }
         }
       }
     }
