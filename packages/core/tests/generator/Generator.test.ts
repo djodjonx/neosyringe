@@ -40,12 +40,12 @@ describe('Generator', () => {
       roots: ['UserService'],
     };
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, '/src');
     const code = generator.generate();
 
-    // Verify Imports
-    expect(code).toContain(`import * as Import_0 from '/src/logger.ts';`);
-    expect(code).toContain(`import * as Import_1 from '/src/user.ts';`);
+    // Verify Imports — paths are relative to outputDir ('/src')
+    expect(code).toContain(`import * as Import_0 from './logger.ts';`);
+    expect(code).toContain(`import * as Import_1 from './user.ts';`);
 
     // Verify Factory Functions
     // C depends on nothing -> new Import_0.ConsoleLogger()

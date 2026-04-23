@@ -46,15 +46,15 @@ describe('Generator - External Bindings', () => {
       roots: ['FeatureService'],
     };
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, '/src');
     const code = generator.generate();
 
-    // 1. Verify Import
+    // 1. Verify Import — paths are relative to outputDir ('/src')
     // Aliases depend on traversal order. 
     // FeatureService is generated first (as factory), so it gets Import_0.
     // SharedKernel is resolved inside FeatureService, so it gets Import_1.
-    expect(code).toContain(`import * as Import_0 from '/src/feature.ts';`);
-    expect(code).toContain(`import * as Import_1 from '/src/shared.ts';`);
+    expect(code).toContain(`import * as Import_0 from './feature.ts';`);
+    expect(code).toContain(`import * as Import_1 from './shared.ts';`);
 
     // 2. Verify FeatureService Factory
     // Should resolve SharedKernel via this.resolve()

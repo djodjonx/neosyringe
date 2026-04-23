@@ -44,11 +44,11 @@ describe('Generator - Declarative Config', () => {
       containerName: 'TestContainer'
     };
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, '/src');
     const code = generator.generate();
 
-    // 1. Check Imports
-    expect(code).toContain(`import * as Import_0 from '/src/file.ts';`);
+    // 1. Check Imports — paths are relative to outputDir ('/src')
+    expect(code).toContain(`import * as Import_0 from './file.ts';`);
 
     // 2. Check Factories
     // create_ILogger -> new ConsoleLogger()

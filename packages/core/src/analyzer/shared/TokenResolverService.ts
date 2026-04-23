@@ -482,7 +482,13 @@ export class TokenResolverService {
     let current = symbol;
     let depth = 0;
     while (current.flags & TSContext.ts.SymbolFlags.Alias) {
-      if (depth++ > 20) break;
+      if (depth++ > 20) {
+        console.warn(
+          `[NeoSyringe] resolveSymbol: alias chain exceeded 20 hops for symbol '${symbol.getName()}'. ` +
+          `Resolution truncated — check for circular re-exports.`
+        );
+        break;
+      }
       current = this.checker.getAliasedSymbol(current);
     }
     return current;

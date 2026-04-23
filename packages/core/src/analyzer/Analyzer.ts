@@ -204,11 +204,11 @@ export class Analyzer {
   // NEW MODULAR API for LSP
   // ============================================================================
 
-  private configCollector: IConfigCollector | null = null;
-  private tokenResolver: ITokenResolver | null = null;
-  private validator: IValidator | null = null;
-  private collectedConfigs: Map<string, ConfigGraph> | null = null;
-  private collectionError: Error | null = null;
+  private configCollector: IConfigCollector | undefined;
+  private tokenResolver: ITokenResolver | undefined;
+  private validator: IValidator | undefined;
+  private collectedConfigs: Map<string, ConfigGraph> | undefined;
+  private collectionError: Error | undefined;
 
   /**
    * Lazily initialize the modular components.

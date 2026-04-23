@@ -258,7 +258,7 @@ export function useProperty<T, C extends Constructor<any>>(
  * @template T - A map of Token -> Type provided by the container.
  * @param container - The legacy container instance.
  */
-export function declareContainerTokens<T extends Record<string, any>>(container: any): T & { [K in keyof T]: T[K] } {
+export function declareContainerTokens<T extends Record<string, any>>(container: any): T {
   return container;
 }
 

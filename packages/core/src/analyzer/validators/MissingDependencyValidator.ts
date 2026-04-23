@@ -3,6 +3,7 @@ import type { IValidator, ValidationContext } from './Validator';
 import type { IErrorFormatter } from '../errors/ErrorFormatter';
 import { DependencyAnalyzer } from './DependencyAnalyzer';
 import { findTokenAssignment } from '../utils/PropertyFinder';
+import { getSimpleName } from '../utils/TokenUtils';
 
 /**
  * Validates that all required dependencies are available in the container.
@@ -30,7 +31,7 @@ export class MissingDependencyValidator implements IValidator {
           const errorNode = tokenNode || info.node;
           errors.push({
             type: 'missing',
-            message: `Missing injection: '${depTokenId}' required by '${info.tokenText}' is not registered in this ${config.type === 'builder' ? 'builder nor its parents/extends' : 'partial config'}`,
+            message: `Missing injection: '${getSimpleName(depTokenId)}' required by '${info.tokenText}' is not registered in this ${config.type === 'builder' ? 'builder nor its parents/extends' : 'partial config'}`,
             node: errorNode,
             sourceFile: config.sourceFile,
             context: { tokenText: depTokenId },

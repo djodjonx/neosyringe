@@ -64,6 +64,7 @@ export class InjectionParser {
           }
           break;
         case 'useFactory':
+          // `.kind` comparison is used because TypeScript has no `isTrue()` type-guard helper.
           if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) useFactory = true;
           break;
         case 'scoped':
