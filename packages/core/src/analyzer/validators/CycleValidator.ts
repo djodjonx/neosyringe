@@ -1,27 +1,7 @@
 import type { AnalysisError, ConfigGraph, TokenId } from '../types';
 import type { IValidator, ValidationContext } from './Validator';
 import type { DependencyAnalyzer } from './DependencyAnalyzer';
-
-/**
- * Extracts the simple name from a token ID for human-readable error messages.
- * - "IEventBus_714d1af6" -> "IEventBus"
- * - "useInterface<ILogger>()" -> "ILogger"
- * - "UserService" -> "UserService"
- */
-function getSimpleName(tokenId: TokenId): string {
-  const interfaceMatch = tokenId.match(/useInterface<([^>]+)>/);
-  if (interfaceMatch) {
-    return interfaceMatch[1].split('_')[0];
-  }
-  const parts = tokenId.split('_');
-  if (parts.length > 1) {
-    const lastPart = parts[parts.length - 1];
-    if (/^[a-f0-9]{6,12}$/i.test(lastPart)) {
-      return parts.slice(0, -1).join('_');
-    }
-  }
-  return tokenId;
-}
+import { getSimpleName } from '../utils/TokenUtils';
 
 /**
  * Validates a ConfigGraph for circular dependencies using DFS.
@@ -46,10 +26,11 @@ export class CycleValidator implements IValidator {
 
     const visited = new Set<TokenId>();
     const stack = new Set<TokenId>();
+    const reportedCycles = new Set<string>();
 
     for (const tokenId of depMap.keys()) {
       if (!visited.has(tokenId)) {
-        this.detectCycles(tokenId, depMap, config, visited, stack, errors);
+        this.detectCycles(tokenId, depMap, config, visited, stack, errors, reportedCycles);
       }
     }
 
@@ -66,6 +47,19 @@ export class CycleValidator implements IValidator {
       map.set(tokenId, localDeps);
     }
 
+    if (config.multiInjections) {
+      for (const [tokenId, infos] of config.multiInjections) {
+        for (const info of infos) {
+          const deps = this.dependencyAnalyzer.getRequiredDependencies(info.definition);
+          const localDeps = deps.filter(
+            dep => config.localInjections.has(dep) || config.multiInjections!.has(dep)
+          );
+          const existing = map.get(tokenId) ?? [];
+          map.set(tokenId, [...new Set([...existing, ...localDeps])]);
+        }
+      }
+    }
+
     return map;
   }
 
@@ -75,7 +69,8 @@ export class CycleValidator implements IValidator {
     config: ConfigGraph,
     visited: Set<TokenId>,
     stack: Set<TokenId>,
-    errors: AnalysisError[]
+    errors: AnalysisError[],
+    reportedCycles: Set<string>
   ): void {
     visited.add(tokenId);
     stack.add(tokenId);
@@ -83,9 +78,13 @@ export class CycleValidator implements IValidator {
     const deps = depMap.get(tokenId) ?? [];
     for (const dep of deps) {
       if (!visited.has(dep)) {
-        this.detectCycles(dep, depMap, config, visited, stack, errors);
+        this.detectCycles(dep, depMap, config, visited, stack, errors, reportedCycles);
       } else if (stack.has(dep)) {
         const cycle = [...stack, dep];
+        const cycleKey = [...cycle].sort().join('\0');
+        if (reportedCycles.has(cycleKey)) continue;
+        reportedCycles.add(cycleKey);
+
         const readableCycle = cycle.map(id => getSimpleName(id));
         const info = config.localInjections.get(tokenId);
         if (info) {

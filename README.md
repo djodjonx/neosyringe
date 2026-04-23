@@ -216,7 +216,9 @@ Validate your dependency graph in CI/CD:
 
 ```bash
 pnpm add -D @djodjonx/neosyringe-cli
-npx neosyringe validate --project tsconfig.json
+npx neosyringe-check
+# or specify a custom tsconfig:
+npx neosyringe-check --project tsconfig.build.json
 ```
 
 See [CLI Guide](https://djodjonx.github.io/neosyringe/guide/cli) for all options.

@@ -1,5 +1,5 @@
 import type * as ts from 'typescript';
-import { Analyzer, DuplicateRegistrationError, TypeMismatchError, type AnalysisErrorType } from '../../core/src/analyzer/index';
+import { Analyzer, DuplicateRegistrationError, TypeMismatchError, type AnalysisErrorType } from '@djodjonx/neosyringe-core/analyzer';
 import { LSPLogger } from './logger';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 

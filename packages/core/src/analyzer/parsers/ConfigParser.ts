@@ -1,4 +1,5 @@
 import type * as ts from 'typescript';
+import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
 import type { AnalysisError, DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../types';
 import { TokenResolverService } from '../shared/TokenResolverService';
@@ -245,7 +246,7 @@ export class ConfigParser {
   }
 
   private isAnalysisError(result: ParsedInjection | AnalysisError): result is AnalysisError {
-    return 'message' in result;
+    return !('__kind' in result);
   }
 
   /**
@@ -409,8 +410,7 @@ export class ConfigParser {
    */
   private generateHashBasedContainerId(node: ts.CallExpression): string {
     const sourceFile = node.getSourceFile();
-    const path = require('path');
-    const fileName = path.basename(sourceFile.fileName, '.ts');
+    const fileName = basename(sourceFile.fileName, '.ts');
     const position = node.getStart();
     const configText = node.getText();
 

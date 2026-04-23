@@ -47,7 +47,12 @@ export class Generator {
         return symbol.getName();
       }
       const decl = symbol.declarations?.[0];
-      if (!decl) return 'UNKNOWN';
+      if (!decl) {
+        throw new Error(
+          `[Generator] Cannot resolve import for symbol '${symbol.getName()}': no declaration found. ` +
+          `Ensure all service implementations have explicit source declarations (no ambient-only types).`
+        );
+      }
       const filePath = decl.getSourceFile().fileName;
       if (!imports.has(filePath)) {
         imports.set(filePath, `Import_${imports.size}`);
@@ -138,10 +143,7 @@ class NeoContainer {
     return undefined;
   }
 
-  // For debugging/inspection
-  public get _graph() {
-    return ${JSON.stringify(Array.from(this.graph.nodes.keys()))};
-  }
+  ${this.emitDebugGetter()}
 }
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   }
@@ -151,10 +153,9 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
    * This is used to replace defineBuilderConfig(...) in the source.
    */
   public generateInstantiation(): string {
-    const buildArgs = (this.graph.buildArguments && this.graph.buildArguments.length > 0) ? this.graph.buildArguments[0] : 'undefined';
     const legacyArgs = this.graph.legacyContainers ? `[${this.graph.legacyContainers.join(', ')}]` : 'undefined';
     const nameArg = this.graph.containerName ? JSON.stringify(this.graph.containerName) : 'undefined';
-    return `new NeoContainer(${buildArgs}, ${legacyArgs}, ${nameArg})`;
+    return `new NeoContainer(undefined, ${legacyArgs}, ${nameArg})`;
   }
 
   // ---------------------------------------------------------------------------
@@ -508,6 +509,19 @@ export const ${variableName || 'container'} = ${instantiation};
     ${resolveGuard}
     ${cases.join('\n    ')}
     return [];
+  }`;
+  }
+
+  /**
+   * Emits the `_graph` debug getter only in non-production environments.
+   * Returns an empty string when `NODE_ENV === 'production'` to avoid leaking
+   * internal token IDs in production bundles.
+   */
+  private emitDebugGetter(): string {
+    return `// For debugging/inspection — omitted in production
+  public get _graph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+    return ${JSON.stringify(Array.from(this.graph.nodes.keys()))};
   }`;
   }
 }
