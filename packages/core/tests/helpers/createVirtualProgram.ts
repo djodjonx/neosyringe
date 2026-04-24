@@ -6,9 +6,19 @@ import * as ts from 'typescript';
  *
  * @param fileName - The virtual file name (e.g., 'test.ts')
  * @param content - The TypeScript source code for the virtual file
+ * @param options - Compiler options (defaults to ES2020/CommonJS/strict for new tests).
+ *   Pass `{}` to match existing test helpers that use TypeScript defaults.
  * @returns A ts.Program containing only the virtual file
  */
-export function createVirtualProgram(fileName: string, content: string): ts.Program {
+export function createVirtualProgram(
+  fileName: string,
+  content: string,
+  options: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ES2020,
+    module: ts.ModuleKind.CommonJS,
+    strict: true,
+  }
+): ts.Program {
   const compilerHost = ts.createCompilerHost({});
   const originalGetSourceFile = compilerHost.getSourceFile.bind(compilerHost);
   compilerHost.getSourceFile = (name, languageVersion) => {
@@ -17,9 +27,5 @@ export function createVirtualProgram(fileName: string, content: string): ts.Prog
     }
     return originalGetSourceFile(name, languageVersion);
   };
-  return ts.createProgram([fileName], {
-    target: ts.ScriptTarget.ES2020,
-    module: ts.ModuleKind.CommonJS,
-    strict: true,
-  }, compilerHost);
+  return ts.createProgram([fileName], options, compilerHost);
 }

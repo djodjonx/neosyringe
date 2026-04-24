@@ -14,7 +14,7 @@ import { TSContext } from '../../TSContext';
  * Two hash algorithms are used intentionally for different purposes:
  * - `hashFilePath`: crypto MD5 (stable, cross-platform) — for token IDs that must be
  *   identical between the LSP plugin and build plugin across sessions
- * - `hashString`: djb2-style numeric hash (lightweight) — for container IDs where
+ * - `hashString`: Java String.hashCode()-style numeric hash (lightweight) — for container IDs where
  *   cross-session stability is less critical and speed matters
  *
  * @example
@@ -72,7 +72,7 @@ export class HashUtils {
   /**
    * Generates a simple numeric hash from a string.
    *
-   * Uses a lightweight djb2-style hash function (NOT cryptographic MD5)
+   * Uses a lightweight Java String.hashCode()-style multiplier-31 hash (NOT cryptographic MD5)
    * for speed when cryptographic strength is not needed.
    *
    * For cross-session stable hashing (token IDs), use {@link hashFilePath} instead.
