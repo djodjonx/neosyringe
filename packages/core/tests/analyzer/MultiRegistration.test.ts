@@ -4,7 +4,7 @@ import { Analyzer } from '../../src/analyzer/Analyzer';
 
 const createProgram = (fileName: string, content: string) => {
   const host = ts.createCompilerHost({});
-  const orig = host.getSourceFile;
+  const orig = host.getSourceFile.bind(host);
   host.getSourceFile = (n, l) => n === fileName ? ts.createSourceFile(fileName, content, l) : orig(n, l);
   return ts.createProgram([fileName], {}, host);
 };
