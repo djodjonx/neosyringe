@@ -126,7 +126,7 @@ export const neoSyringePlugin = createUnplugin(() => {
 
       // 2. Transform useInterface<T>() calls to tokenId strings (for non-container files)
       // Collect used tokens for validation at build end
-      return transformUseInterfaceCalls(code, id, options, undefined, usedTokens);
+      return transformUseInterfaceCalls(code, id, options, usedTokens);
     },
 
     /**

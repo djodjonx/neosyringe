@@ -7,14 +7,12 @@ export type UsedTokenEntry = { file: string; line: number; column: number; inter
  * Transforms useInterface<T>() calls into their tokenId string values.
  * This runs on ALL TypeScript files, not just container files.
  *
- * @param excludeRange - Optional range to exclude from transformation (used for defineBuilderConfig content)
  * @param usedTokens - Registry to collect used tokens for later validation (only when non-null)
  */
 export function transformUseInterfaceCalls(
   code: string,
   id: string,
   compilerOptions: ts.CompilerOptions,
-  excludeRange?: { start: number; end: number },
   usedTokens?: Map<string, UsedTokenEntry>
 ): string | null {
   if (!code.includes('useInterface')) return null;
@@ -46,12 +44,6 @@ export function transformUseInterfaceCalls(
 
       const nodeStart = node.getStart();
       const nodeEnd = node.getEnd();
-
-      // Skip if inside exclude range
-      if (excludeRange && nodeStart >= excludeRange.start && nodeEnd <= excludeRange.end) {
-        ts.forEachChild(node, visit);
-        return;
-      }
 
       const typeArg = node.typeArguments[0];
       const type = checker.getTypeFromTypeNode(typeArg);
