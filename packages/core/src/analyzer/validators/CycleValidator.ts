@@ -86,7 +86,11 @@ export class CycleValidator implements IValidator {
         reportedCycles.add(cycleKey);
 
         const readableCycle = cycle.map(id => getSimpleName(id));
-        const info = config.localInjections.get(tokenId);
+        // Look up in localInjections first, then fall back to multiInjections.
+        // Multi-injection tokens are not in localInjections but can still form cycles.
+        const info =
+          config.localInjections.get(tokenId) ??
+          config.multiInjections?.get(tokenId)?.[0];
         if (info) {
           errors.push({
             type: 'cycle',
