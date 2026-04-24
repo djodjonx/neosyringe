@@ -94,6 +94,7 @@ export class TokenResolver implements ITokenResolver {
     const index = new Map<string, ConfigGraph>();
     for (const config of allConfigs.values()) {
       // First occurrence wins — matches the original linear-search behavior.
+      // Omitting this guard would silently change to last-wins semantics.
       // Variable names should be unique, but if two files define a config
       // with the same name, the first one in iteration order takes precedence.
       if (!index.has(config.name)) {
