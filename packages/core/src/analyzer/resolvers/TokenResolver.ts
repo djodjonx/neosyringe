@@ -24,17 +24,20 @@ export class TokenResolver implements ITokenResolver {
     config: ConfigGraph,
     allConfigs: Map<string, ConfigGraph>
   ): Map<TokenId, InheritedToken> {
+    // Build name index once for O(1) lookups in findConfigByName
+    const nameIndex = this.buildNameIndex(allConfigs);
+    
     const inherited = new Map<TokenId, InheritedToken>();
     const visited = new Set<string>();
 
-    this.resolveRecursive(config, allConfigs, inherited, visited, []);
+    this.resolveRecursive(config, nameIndex, inherited, visited, []);
 
     return inherited;
   }
 
   private resolveRecursive(
     config: ConfigGraph,
-    allConfigs: Map<string, ConfigGraph>,
+    nameIndex: Map<string, ConfigGraph>,
     inherited: Map<TokenId, InheritedToken>,
     visited: Set<string>,
     chain: string[]
@@ -47,12 +50,12 @@ export class TokenResolver implements ITokenResolver {
 
     // 1. useContainer (highest priority) - resolve recursively first
     if (config.useContainerRef) {
-      const parent = this.findConfigByName(allConfigs, config.useContainerRef);
+      const parent = this.findConfigByName(nameIndex, config.useContainerRef);
       if (parent) {
         // Resolve parent's inheritance chain first
         this.resolveRecursive(
           parent,
-          allConfigs,
+          nameIndex,
           inherited,
           new Set(visited), // Clone to allow different branches
           [...chain, config.name]
@@ -65,7 +68,7 @@ export class TokenResolver implements ITokenResolver {
 
     // 2. extends (in array order)
     for (const partialName of config.extendsRefs) {
-      const partial = this.findConfigByName(allConfigs, partialName);
+      const partial = this.findConfigByName(nameIndex, partialName);
       if (partial) {
         // Partials don't have extends/useContainer, so just add their tokens
         this.addTokensFromConfig(partial, inherited, 'extends', chain);
@@ -74,19 +77,25 @@ export class TokenResolver implements ITokenResolver {
   }
 
   /**
-   * Find a config by its variable name.
-   * Config keys are "fileName:variableName", so we search by config.name (the variable name part).
+   * Find a config by its variable name using the pre-built name index.
+   * This is O(1) instead of O(n) iteration.
    */
   private findConfigByName(
-    allConfigs: Map<string, ConfigGraph>,
+    nameIndex: Map<string, ConfigGraph>,
     variableName: string
   ): ConfigGraph | undefined {
-    for (const [_key, config] of allConfigs) {
-      if (config.name === variableName) {
-        return config;
-      }
+    return nameIndex.get(variableName);
+  }
+
+  /**
+   * Build a name index that maps variable names to configs for O(1) lookups.
+   */
+  private buildNameIndex(allConfigs: Map<string, ConfigGraph>): Map<string, ConfigGraph> {
+    const index = new Map<string, ConfigGraph>();
+    for (const config of allConfigs.values()) {
+      index.set(config.name, config);
     }
-    return undefined;
+    return index;
   }
 
   private addTokensFromConfig(
