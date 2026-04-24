@@ -7,8 +7,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'clover'],
-      // Thresholds are now set per-package in packages/*/vitest.config.ts
-      // to match the actual coverage levels of each package.
+      thresholds: {
+        statements: 82,
+        branches: 75,
+        functions: 91,
+        lines: 85,
+      },
     },
   },
 });
