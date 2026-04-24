@@ -31,7 +31,10 @@ describe('CycleValidator — multi-injection tokens', () => {
     const cycleErrors = result.errors.filter(e => e.type === 'cycle');
     expect(cycleErrors.length).toBeGreaterThan(0);
     expect(
-      cycleErrors.some(e => e.message.includes('IPlugin') && e.message.includes('->'))
+      cycleErrors.some(e =>
+        e.message.includes('->') &&
+        /IPlugin.*->.*IPlugin/.test(e.message)
+      )
     ).toBe(true);
   });
 

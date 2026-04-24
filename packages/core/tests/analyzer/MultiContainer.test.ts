@@ -11,7 +11,7 @@ describe('Multi-Container per File', () => {
     };
 
     const host = ts.createCompilerHost(compilerOptions);
-    const originalGetSourceFile = host.getSourceFile;
+    const originalGetSourceFile = host.getSourceFile.bind(host);
 
     host.getSourceFile = (name, languageVersion) => {
       if (name === fileName) {
@@ -147,7 +147,7 @@ describe('Multi-Container per File', () => {
       };
 
       const host = ts.createCompilerHost(compilerOptions);
-      const originalGetSourceFile = host.getSourceFile;
+      const originalGetSourceFile = host.getSourceFile.bind(host);
 
       host.getSourceFile = (name, languageVersion) => {
         if (name === 'file1.ts') {
