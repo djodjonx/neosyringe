@@ -11,6 +11,12 @@ import { TSContext } from '../../TSContext';
  * (LSP plugin vs build plugin) and platforms (Windows vs Unix) by normalizing
  * paths and using stable hash functions.
  *
+ * Two hash algorithms are used intentionally for different purposes:
+ * - `hashFilePath`: crypto MD5 (stable, cross-platform) — for token IDs that must be
+ *   identical between the LSP plugin and build plugin across sessions
+ * - `hashString`: djb2-style numeric hash (lightweight) — for container IDs where
+ *   cross-session stability is less critical and speed matters
+ *
  * @example
  * ```typescript
  * // Generate token ID for a symbol
@@ -66,8 +72,10 @@ export class HashUtils {
   /**
    * Generates a simple numeric hash from a string.
    *
-   * Uses a basic hash function (similar to Java's String.hashCode())
-   * for lightweight hashing when cryptographic strength is not needed.
+   * Uses a lightweight djb2-style hash function (NOT cryptographic MD5)
+   * for speed when cryptographic strength is not needed.
+   *
+   * For cross-session stable hashing (token IDs), use {@link hashFilePath} instead.
    *
    * @param str - String to hash
    * @returns 8-character hex hash (padded with zeros if needed)
