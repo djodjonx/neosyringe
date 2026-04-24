@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 
-function createProgram(source: string): ts.Program {
+function createProgram(fileName: string, content: string): ts.Program {
   const host = ts.createCompilerHost({});
-  const orig = host.getSourceFile;
+  const orig = host.getSourceFile.bind(host);
   host.getSourceFile = (n, l) =>
-    n === 'test.ts' ? ts.createSourceFile('test.ts', source, l, true) : orig(n, l);
-  return ts.createProgram(['test.ts'], {}, host);
+    n === fileName ? ts.createSourceFile(fileName, content, l, true) : orig(n, l);
+  return ts.createProgram([fileName], {}, host);
 }
 
 describe('CycleValidator — multi-injection tokens', () => {
@@ -27,10 +27,12 @@ describe('CycleValidator — multi-injection tokens', () => {
       });
     `;
 
-    const result = new Analyzer(createProgram(source)).extractForFile('test.ts');
+    const result = new Analyzer(createProgram('test.ts', source)).extractForFile('test.ts');
     const cycleErrors = result.errors.filter(e => e.type === 'cycle');
     expect(cycleErrors.length).toBeGreaterThan(0);
-    expect(cycleErrors[0].message).toContain('IPlugin');
+    expect(
+      cycleErrors.some(e => e.message.includes('IPlugin') && e.message.includes('->'))
+    ).toBe(true);
   });
 
   it('should not raise a false positive when multi and local tokens do not cycle', () => {
@@ -49,7 +51,7 @@ describe('CycleValidator — multi-injection tokens', () => {
       });
     `;
 
-    const result = new Analyzer(createProgram(source)).extractForFile('test.ts');
+    const result = new Analyzer(createProgram('test.ts', source)).extractForFile('test.ts');
     const cycleErrors = result.errors.filter(e => e.type === 'cycle');
     expect(cycleErrors.length).toBe(0);
   });
