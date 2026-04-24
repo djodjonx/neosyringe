@@ -112,9 +112,10 @@ export class TypeMismatchError extends Error {
  * `CompositeValidator` (duplicate, type, missing-dependency, cycle checks).
  * Returns structured `AnalysisError[]` suitable for IDE diagnostics.
  *
- * Both paths share `ConfigCollector` for config discovery. The modular path
- * additionally runs full semantic validation that the legacy path defers to the
- * `Generator` or leaves to the consumer.
+ * Both paths share the TypeScript `TypeChecker` and `TokenResolverService` for
+ * symbol resolution, but use entirely separate config-discovery pipelines:
+ * - Legacy path uses `ASTVisitor` + `ConfigParser` directly
+ * - Modular path uses `ConfigCollector` (with caching across calls to `extractForFile`)
  *
  * @example
  * ```typescript
@@ -189,7 +190,9 @@ export class Analyzer {
    * Scans all non-declaration source files for container configurations.
    * Each defineBuilderConfig gets its own isolated graph to avoid false positives.
    * Basic validation errors (duplicates, type mismatches) are collected in `graph.errors`.
-   * Full validation (cycles, missing dependencies) is deferred to the `Generator`.
+   * Cycle detection is deferred to the `Generator`'s topological sort.
+   * Missing dependencies are not caught until container runtime (via `NeoServiceNotFoundError`
+   * in the generated code).
    *
    * @returns A `DependencyGraph` containing all registered services and their dependencies.
    * @see {@link extractForFile} for the modular/LSP alternative

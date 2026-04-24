@@ -54,12 +54,13 @@ describe('DualPathEquivalence', () => {
       const modularMissingErrors = modularResult.errors.filter(e => e.type === 'missing');
 
       // Legacy path: extract → does NOT populate graph.errors for missing deps
-      // (those are deferred to Generator/runtime)
+      // (those are deferred to runtime)
       const graph = analyzer.extract();
       const legacyErrors = graph.errors || [];
       const legacyMissingErrors = legacyErrors.filter(e => e.type === 'missing');
 
       // Only modular path detects missing dependencies at analysis time
+      // 2 = UserService has 2 unregistered constructor params (Repository, Logger)
       expect(modularMissingErrors.length).toBe(2);
       expect(legacyMissingErrors.length).toBe(0); // Legacy doesn't check
 
@@ -95,7 +96,7 @@ describe('DualPathEquivalence', () => {
       const legacyErrors = graph.errors || [];
       const legacyDuplicates = legacyErrors.filter(e => e.type === 'duplicate');
 
-      // Both paths should detect the duplicate
+      // Both paths should detect the duplicate (1 duplicate Logger registration)
       expect(modularDuplicates.length).toBeGreaterThan(0);
       expect(legacyDuplicates.length).toBeGreaterThan(0);
 
@@ -157,7 +158,7 @@ describe('DualPathEquivalence', () => {
       const legacyErrors = graph.errors || [];
       const legacyTypeMismatches = legacyErrors.filter(e => e.type === 'type-mismatch');
 
-      // Both paths should detect the type mismatch (ConfigParser checks this)
+      // Both paths should detect the type mismatch (1 mismatch: UserService vs ILogger)
       expect(modularTypeMismatches.length).toBeGreaterThan(0);
       expect(legacyTypeMismatches.length).toBeGreaterThan(0);
 
@@ -202,7 +203,9 @@ describe('DualPathEquivalence', () => {
       expect(modularResult.errors.length).toBe(0);
       expect(legacyErrors.length).toBe(0);
 
-      // Generator should not throw
+      // Only tests the constructor: generate() is not called because the fake program
+      // contains no real symbol declarations (no file paths for import generation).
+      // Full generation is covered by generator/ integration tests.
       expect(() => new Generator(graph)).not.toThrow();
     });
   });
