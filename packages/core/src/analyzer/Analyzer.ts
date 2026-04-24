@@ -112,8 +112,8 @@ export class TypeMismatchError extends Error {
  * `CompositeValidator` (duplicate, type, missing-dependency, cycle checks).
  * Returns structured `AnalysisError[]` suitable for IDE diagnostics.
  *
- * Both paths share the TypeScript `TypeChecker` and `TokenResolverService` for
- * symbol resolution, but use entirely separate config-discovery pipelines:
+ * Both paths share the TypeScript `TypeChecker` for symbol resolution, but use
+ * entirely separate config-discovery pipelines (each with its own `TokenResolverService`):
  * - Legacy path uses `ASTVisitor` + `ConfigParser` directly
  * - Modular path uses `ConfigCollector` (with caching across calls to `extractForFile`)
  *
