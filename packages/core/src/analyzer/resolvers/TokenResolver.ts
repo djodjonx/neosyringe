@@ -93,7 +93,12 @@ export class TokenResolver implements ITokenResolver {
   private buildNameIndex(allConfigs: Map<string, ConfigGraph>): Map<string, ConfigGraph> {
     const index = new Map<string, ConfigGraph>();
     for (const config of allConfigs.values()) {
-      index.set(config.name, config);
+      // First occurrence wins — matches the original linear-search behavior.
+      // Variable names should be unique, but if two files define a config
+      // with the same name, the first one in iteration order takes precedence.
+      if (!index.has(config.name)) {
+        index.set(config.name, config);
+      }
     }
     return index;
   }
