@@ -52,19 +52,17 @@ describe('TokenResolverService', () => {
     it('should identify useInterface call', () => {
       const sourceCode = `const token = useInterface<ILogger>();`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
-      const testService = new TokenResolverService(testChecker);
 
       const callExpr = findNode(sourceFile, ts.isCallExpression);
-      expect(testService.isUseInterfaceCall(callExpr)).toBe(true);
+      expect(new TokenResolverService(testChecker).isUseInterfaceCall(callExpr)).toBe(true);
     });
 
     it('should return false for non-useInterface calls', () => {
       const sourceCode = `const token = someOtherCall<ILogger>();`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
-      const testService = new TokenResolverService(testChecker);
 
       const callExpr = findNode(sourceFile, ts.isCallExpression);
-      expect(testService.isUseInterfaceCall(callExpr)).toBe(false);
+      expect(new TokenResolverService(testChecker).isUseInterfaceCall(callExpr)).toBe(false);
     });
 
     it('should return false for undefined', () => {

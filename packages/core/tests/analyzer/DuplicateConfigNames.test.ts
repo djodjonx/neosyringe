@@ -4,16 +4,14 @@ import { Analyzer } from '../../src/analyzer/Analyzer';
 
 describe('Analyzer - Duplicate Config Names (buildNameIndex)', () => {
   /**
-   * Tests that buildNameIndex uses first-wins semantics when two configs
-   * share the same variable name (which shouldn't happen in normal usage,
-   * but this regression test ensures we don't silently switch to last-wins).
+   * Tests that the analyzer handles configs with duplicate variable names
+   * without crashing. The explicit import in main.ts ensures the first config's
+   * tokens appear in the graph. The guard `if (!index.has(config.name))` in
+   * buildNameIndex prevents the index from being corrupted by duplicate names.
    * 
-   * The scenario: two files in the program both declare configs with the same
-   * variable name. When the analyzer processes both, buildNameIndex should map
-   * the name to the first config encountered in iteration order, not the last.
-   * 
-   * Without the guard `if (!index.has(config.name))`, the last occurrence would
-   * overwrite earlier ones, leading to silent behavior changes.
+   * Note: The tests verify that FirstService (from the explicitly-imported config)
+   * appears in the graph. They do not directly assert that SecondService is excluded
+   * from name-based lookup, since both configs' tokens are collected independently.
    */
   it('should use first occurrence when two configs share the same variable name', () => {
     const file1 = 'file1.ts';
@@ -64,7 +62,7 @@ describe('Analyzer - Duplicate Config Names (buildNameIndex)', () => {
     `;
 
     const compilerHost = ts.createCompilerHost({});
-    const originalGetSourceFile = compilerHost.getSourceFile;
+    const originalGetSourceFile = compilerHost.getSourceFile.bind(compilerHost);
     const originalFileExists = compilerHost.fileExists;
 
     const files = new Map([
@@ -180,7 +178,7 @@ describe('Analyzer - Duplicate Config Names (buildNameIndex)', () => {
     `;
 
     const compilerHost = ts.createCompilerHost({});
-    const originalGetSourceFile = compilerHost.getSourceFile;
+    const originalGetSourceFile = compilerHost.getSourceFile.bind(compilerHost);
     const originalFileExists = compilerHost.fileExists;
 
     const files = new Map([
