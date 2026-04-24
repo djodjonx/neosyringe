@@ -27,9 +27,11 @@ import { type ILogger, consoleLogger } from './Logger';
  * ```
  */
 export class TokenResolverService {
+  private static readonly MAX_ALIAS_CHAIN_DEPTH = 20;
+
   constructor(
-    private checker: ts.TypeChecker,
-    private logger: ILogger = consoleLogger
+    private readonly checker: ts.TypeChecker,
+    private readonly logger: ILogger = consoleLogger
   ) {}
 
   /**
@@ -486,9 +488,9 @@ export class TokenResolverService {
     let current = symbol;
     let depth = 0;
     while (current.flags & TSContext.ts.SymbolFlags.Alias) {
-      if (depth++ > 20) {
+      if (depth++ > TokenResolverService.MAX_ALIAS_CHAIN_DEPTH) {
         this.logger.warn(
-          `[NeoSyringe] resolveSymbol: alias chain exceeded 20 hops for symbol '${symbol.getName()}'. ` +
+          `[NeoSyringe] resolveSymbol: alias chain exceeded ${TokenResolverService.MAX_ALIAS_CHAIN_DEPTH} hops for symbol '${symbol.getName()}'. ` +
           `Resolution truncated — check for circular re-exports.`
         );
         break;
