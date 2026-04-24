@@ -7,6 +7,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'clover'],
+      include: ['src/**'],
       thresholds: {
         statements: 42,
         branches: 44,
