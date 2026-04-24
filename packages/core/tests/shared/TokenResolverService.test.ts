@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { TokenResolverService } from '../../src/analyzer/shared/TokenResolverService';
+import type { ILogger } from '../../src/analyzer/shared';
 import * as ts from 'typescript';
 
 describe('TokenResolverService', () => {
@@ -335,6 +336,36 @@ describe('TokenResolverService', () => {
         const tokenId = testService.resolveTokenId(identifier);
         expect(tokenId).toMatch(/^MyService_[0-9a-f]{8}$/);
       }
+    });
+  });
+
+  describe('resolveSymbol', () => {
+    it('should call logger.warn when alias chain exceeds 20 hops', () => {
+      const { checker: testChecker } = createProgramFromSource('');
+      const mockLogger: ILogger = { warn: vi.fn() };
+      const testService = new TokenResolverService(testChecker, mockLogger);
+
+      // Create a mock symbol that always returns itself as an alias
+      const mockSymbol = {
+        flags: ts.SymbolFlags.Alias,
+        getName: () => 'DeepAliasSymbol',
+      } as unknown as ts.Symbol;
+
+      // Mock the checker to return the same symbol as its alias (creates infinite loop)
+      const mockChecker = {
+        getAliasedSymbol: vi.fn(() => mockSymbol),
+      } as unknown as ts.TypeChecker;
+
+      const serviceWithMockChecker = new TokenResolverService(mockChecker, mockLogger);
+      const result = serviceWithMockChecker.resolveSymbol(mockSymbol);
+
+      // Should have called warn
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('[NeoSyringe] resolveSymbol: alias chain exceeded 20 hops')
+      );
+
+      // Should return the symbol even though depth limit was hit
+      expect(result).toBe(mockSymbol);
     });
   });
 });
