@@ -539,9 +539,12 @@ export const ${variableName || 'container'} = ${instantiation};
   }
 
   /**
-   * Emits the `_graph` debug getter only in non-production environments.
-   * Returns an empty string when `NODE_ENV === 'production'` to avoid leaking
-   * internal token IDs in production bundles.
+   * Emits the `_graph` debug getter into the generated container class.
+   *
+   * The getter is always present in the generated code. In production
+   * (`NODE_ENV === 'production'`), it returns an empty array at runtime
+   * so token IDs are not exposed. Bundlers with dead-code elimination
+   * will strip the branch entirely when NODE_ENV is statically known.
    */
   private emitDebugGetter(): string {
     return `// For debugging/inspection — omitted in production

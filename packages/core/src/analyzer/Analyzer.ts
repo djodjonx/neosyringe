@@ -96,15 +96,35 @@ export class TypeMismatchError extends Error {
  * 4. Validate the complete dependency graph
  * 5. Build a `DependencyGraph` representing the system
  *
+ * ## Analysis Paths
+ *
+ * The analyzer exposes two APIs that serve different consumers:
+ *
+ * ### Legacy path — `extract()` → `DependencyGraph`
+ * Used by the CLI (`@djodjonx/neosyringe-cli`) and build plugins (Vite/Webpack).
+ * Scans all source files in the program, builds a full dependency graph, and
+ * applies basic structural checks (cycle detection via topological sort in Generator).
+ * Returns a `DependencyGraph` ready for code generation.
+ *
+ * ### Modular path — `extractForFile()` / `extractAllErrors()` → `AnalysisResult`
+ * Used by the LSP plugin (`@djodjonx/neosyringe-lsp`).
+ * Collects all configs once (cached), then validates one file at a time using
+ * `CompositeValidator` (duplicate, type, missing-dependency, cycle checks).
+ * Returns structured `AnalysisError[]` suitable for IDE diagnostics.
+ *
+ * Both paths share `ConfigCollector` for config discovery. The modular path
+ * additionally runs full semantic validation that the legacy path defers to the
+ * `Generator` or leaves to the consumer.
+ *
  * @example
  * ```typescript
  * const program = TSContext.ts.createProgram(['src/container.ts'], compilerOptions);
  * const analyzer = new Analyzer(program);
  *
- * // Extract the complete dependency graph
+ * // Legacy path: Extract the complete dependency graph for CLI/build
  * const graph = analyzer.extract();
  *
- * // Or analyze a specific file (for LSP)
+ * // Modular path: Analyze a specific file for LSP diagnostics
  * const result = analyzer.extractForFile('src/container.ts');
  * if (!result.errors.length) {
  *   console.log('No errors found!');
@@ -164,10 +184,16 @@ export class Analyzer {
   /**
    * Extracts the dependency graph from the program's source files.
    *
-   * It scans all non-declaration source files for container configurations.
+   * **Legacy path** used by CLI and build plugins.
+   * 
+   * Scans all non-declaration source files for container configurations.
    * Each defineBuilderConfig gets its own isolated graph to avoid false positives.
+   * Basic validation errors (duplicates, type mismatches) are collected in `graph.errors`.
+   * Full validation (cycles, missing dependencies) is deferred to the `Generator`.
    *
    * @returns A `DependencyGraph` containing all registered services and their dependencies.
+   * @see {@link extractForFile} for the modular/LSP alternative
+   * @see {@link extractAllErrors} for batch error extraction
    */
   public extract(): DependencyGraph {
     const graph: DependencyGraph = {
@@ -256,10 +282,15 @@ export class Analyzer {
   /**
    * Analyzes all files in the program and returns all errors.
    *
-   * Uses the modular architecture (same path as LSP) so every container
-   * configuration in the program is validated, not just the first one.
+   * **Modular path** used for batch validation.
+   * 
+   * Uses the modular architecture (same as LSP) so every container
+   * configuration in the program is validated with full semantic checks
+   * (duplicates, type mismatches, missing dependencies, cycles).
    *
    * @returns All analysis errors found across the entire program
+   * @see {@link extractForFile} for single-file analysis
+   * @see {@link extract} for the legacy graph-building path
    */
   public extractAllErrors(): AnalysisError[] {
     this.initModularComponents();
@@ -281,10 +312,17 @@ export class Analyzer {
 
   /**
    * Entry point for LSP - analyzes a specific file.
-   * Uses the modular architecture for isolated validation.
+   * 
+   * **Modular path** used by the LSP plugin.
+   * 
+   * Uses the modular architecture for isolated validation. Collects all configs
+   * (cached across calls), then validates only those defined in the specified file.
+   * Runs full `CompositeValidator` (duplicates, types, missing deps, cycles).
    *
    * @param fileName - The file to analyze
    * @returns Analysis result with errors for this file only
+   * @see {@link extractAllErrors} for batch analysis
+   * @see {@link extract} for the legacy graph-building path
    */
   public extractForFile(fileName: string): AnalysisResult {
     this.initModularComponents();

@@ -116,8 +116,8 @@ export const neoSyringePlugin = createUnplugin(() => {
                  instantiation +
                  codeAfterDefineBuilder;
 
-          // Step 3: Transform useInterface calls in the final code
-          // Don't collect used tokens here since tokens are defined in this file
+          // The container config block has already been consumed above; remaining
+          // useInterface calls are injection-site tokens that must be transformed.
           const finalCode = transformUseInterfaceCalls(codeWithContainer, id, options);
 
           return finalCode || codeWithContainer;
