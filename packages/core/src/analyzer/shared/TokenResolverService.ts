@@ -2,6 +2,7 @@ import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
 import type { TokenId } from '../types';
 import { HashUtils } from './HashUtils';
+import { type ILogger, consoleLogger } from './Logger';
 
 /**
  * Service for resolving TypeScript nodes to token IDs.
@@ -26,7 +27,10 @@ import { HashUtils } from './HashUtils';
  * ```
  */
 export class TokenResolverService {
-  constructor(private checker: ts.TypeChecker) {}
+  constructor(
+    private checker: ts.TypeChecker,
+    private logger: ILogger = consoleLogger
+  ) {}
 
   /**
    * Resolves a node to its original initializer expression.
@@ -483,7 +487,7 @@ export class TokenResolverService {
     let depth = 0;
     while (current.flags & TSContext.ts.SymbolFlags.Alias) {
       if (depth++ > 20) {
-        console.warn(
+        this.logger.warn(
           `[NeoSyringe] resolveSymbol: alias chain exceeded 20 hops for symbol '${symbol.getName()}'. ` +
           `Resolution truncated — check for circular re-exports.`
         );
