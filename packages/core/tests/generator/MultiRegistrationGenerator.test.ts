@@ -105,4 +105,35 @@ describe('Generator - resolveAll', () => {
 
     expect(code).toContain('return [];');
   });
+
+  it('should use per-node lifecycle for mixed-lifecycle multi-registrations', () => {
+    const tokenId = 'IPlugin_mix';
+    const singletonNode = classNode(tokenId, 'PluginSingleton', '/src/singleton.ts');
+    const transientNode = {
+      ...classNode(tokenId, 'PluginTransient', '/src/transient.ts'),
+      service: {
+        ...classNode(tokenId, 'PluginTransient', '/src/transient.ts').service,
+        lifecycle: 'transient' as const,
+      },
+    };
+
+    const graph: DependencyGraph = {
+      containerId: 'Test',
+      nodes: new Map(),
+      roots: [],
+      multiNodes: new Map([[tokenId, [singletonNode, transientNode]]]),
+    };
+
+    const code = new Generator(graph).generate();
+
+    // Node 0 (singleton): should use instance cache
+    expect(code).toContain('"IPlugin_mix:0"');
+    expect(code).toContain('this.instances.has(k)');
+
+    // Node 1 (transient): should call factory directly without caching
+    expect(code).toContain('this.create_IPlugin_mix_1()');
+    // Verify the transient call is NOT inside instance-cache logic
+    // (the cache key for index 1 should NOT appear)
+    expect(code).not.toContain('"IPlugin_mix:1"');
+  });
 });
