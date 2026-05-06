@@ -135,6 +135,46 @@ describe('neoSyringeTransformer', () => {
     expect(result).toBe(newProgram);
   });
 
+  it('reuses the cached file program when the same fileName appears more than once', async () => {
+    const code = 'export const container = defineBuilderConfig({ name: "C", injections: [] });';
+
+    vi.mocked(Analyzer).mockImplementation(function () {
+      return {
+        extract: vi.fn().mockReturnValue({
+          nodes: new Map([['MyService_abc', {}]]),
+          errors: [],
+          defineBuilderConfigStart: code.indexOf('defineBuilderConfig'),
+          defineBuilderConfigEnd: code.length - 1,
+          variableStatementStart: 0,
+        }),
+      };
+    } as any);
+
+    const sf = makeSourceFile(code);
+    // Returning the same source file twice exercises the cache-hit branch in getFileProgram()
+    const program = {
+      getCompilerOptions: () => ({ target: ts.ScriptTarget.ES2021 }),
+      getSourceFiles: () => [sf, sf],
+      getTypeChecker: () => ({} as ts.TypeChecker),
+      getRootFileNames: () => [sf.fileName],
+      emit: vi.fn(),
+    } as unknown as ts.Program;
+
+    const fileSubProgram = makeProgram();
+    const finalProgram = makeProgram();
+    let callCount = 0;
+    vi.mocked(ts.createProgram).mockImplementation(() => {
+      callCount++;
+      return callCount === 1 ? fileSubProgram : finalProgram;
+    });
+
+    const result = await callTransformer(program);
+
+    // Cache hit on 2nd iteration: only 1 sub-program + 1 final rebuild = 2 total (not 3)
+    expect(vi.mocked(ts.createProgram)).toHaveBeenCalledTimes(2);
+    expect(result).toBe(finalProgram);
+  });
+
   it('throws when graph validation fails', async () => {
     const code = 'export const container = defineBuilderConfig({ name: "C", injections: [] });';
 
