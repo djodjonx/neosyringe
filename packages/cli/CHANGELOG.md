@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-cli
 
+## [0.1.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.1.0...neosyringe-cli-v0.1.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* address all 15 code review issues ([d66a26a](https://github.com/djodjonx/neosyringe/commit/d66a26af5be3de7e5e4ce521eb689a9fcdf155c7))
+
 ## [0.1.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.0.7...neosyringe-cli-v0.1.0) (2026-04-21)
 
 

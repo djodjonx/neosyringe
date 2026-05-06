@@ -1,5 +1,15 @@
 # @djodjonx/neosyringe-lsp
 
+## [0.3.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.3.1...neosyringe-lsp-v0.3.2) (2026-05-06)
+
+
+### Bug Fixes
+
+* address all 15 code review issues ([d66a26a](https://github.com/djodjonx/neosyringe/commit/d66a26af5be3de7e5e4ce521eb689a9fcdf155c7))
+* address all remaining code review issues ([2ce9310](https://github.com/djodjonx/neosyringe/commit/2ce9310ce3da4bb49d6ab9b540d7eee9a06aae94))
+* address code review feedback ([75fe611](https://github.com/djodjonx/neosyringe/commit/75fe611c933e5ddce015a9c59296af85ea95a9ea))
+* address PR review feedback (C2, C4, C5, C6, C7) ([05bd819](https://github.com/djodjonx/neosyringe/commit/05bd8193ebf825e9acbba9f3c41afd8a3a53d085))
+
 ## [0.3.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.3.0...neosyringe-lsp-v0.3.1) (2026-04-22)
 
 
