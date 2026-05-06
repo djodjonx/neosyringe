@@ -71,10 +71,20 @@ export class LSPLogger {
   }
 
   /**
+   * Check if verbose logging is enabled.
+   * Requires NEO_SYRINGE_LSP_VERBOSE=1 environment variable.
+   */
+  private get isVerboseEnabled(): boolean {
+    return process.env['NEO_SYRINGE_LSP_VERBOSE'] === '1';
+  }
+
+  /**
    * Log verbose diagnostic information.
    * Use for detailed internal operations.
+   * Requires NEO_SYRINGE_LSP_VERBOSE=1 environment variable.
    */
   verbose(msg: string): void {
+    if (!this.isVerboseEnabled) return;
     this.log(LogLevel.VERBOSE, msg);
   }
 
@@ -121,10 +131,12 @@ export class LSPLogger {
 
   /**
    * Log verbose message with lazy evaluation.
+   * Requires NEO_SYRINGE_LSP_VERBOSE=1 environment variable.
    *
    * @param msgFactory - Function that returns the log message
    */
   lazyVerbose(msgFactory: () => string): void {
+    if (!this.isVerboseEnabled) return;
     if (!this.shouldLog()) return;
     this.verbose(msgFactory());
   }

@@ -6,7 +6,7 @@ import { TSContext } from '../../TSContext';
  */
 export interface VisitorResults {
   /** Variable names of containers used as parents (via useContainer) */
-  parentContainers: Set<string>;
+  parentContainers: ReadonlySet<string>;
 
   /** All defineBuilderConfig call expressions found */
   builderConfigs: ts.CallExpression[];
@@ -15,7 +15,7 @@ export interface VisitorResults {
   partialConfigs: ts.CallExpression[];
 
   /** Variable names referenced in extends arrays */
-  extendsReferences: Set<string>;
+  extendsReferences: ReadonlySet<string>;
 }
 
 /**
