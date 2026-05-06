@@ -65,18 +65,16 @@ export function generateResolveAllMethod(
     const tokenKey = resolveTokenKey(firstNode.service, getImport);
     const tokenCheck = `if (token === ${tokenKey})`;
 
-    const isTransient = firstNode.service.lifecycle === 'transient';
     const factoryBase = getFactoryName(tokenId);
 
-    let callExprs: string[];
-    if (isTransient) {
-      callExprs = nodes.map((_, i) => `this.${factoryBase}_${i}()`);
-    } else {
-      callExprs = nodes.map((_, i) => {
-        const cacheKey = JSON.stringify(`${tokenId}:${i}`);
-        return `(() => { const k = ${cacheKey}; if (!this.instances.has(k)) { const inst = this.${factoryBase}_${i}(); this.instances.set(k, inst); return inst; } return this.instances.get(k); })()`;
-      });
-    }
+    const callExprs = nodes.map((node, i) => {
+      const nodeIsTransient = node.service.lifecycle === 'transient';
+      if (nodeIsTransient) {
+        return `this.${factoryBase}_${i}()`;
+      }
+      const cacheKey = JSON.stringify(`${tokenId}:${i}`);
+      return `(() => { const k = ${cacheKey}; if (!this.instances.has(k)) { const inst = this.${factoryBase}_${i}(); this.instances.set(k, inst); return inst; } return this.instances.get(k); })()`;
+    });
 
     cases.push(`${tokenCheck} return [${callExprs.join(', ')}] as T[];`);
   }

@@ -2,35 +2,49 @@ import type { DependencyNode, TokenId } from '../analyzer/types';
 
 /**
  * Sorts service tokens in dependency order (dependencies before dependents).
- * Uses recursive depth-first search.
+ * Uses iterative depth-first search.
  * @throws Error if a cycle is detected — validate the graph before calling.
  */
 export function topologicalSort(nodes: Map<TokenId, DependencyNode>): TokenId[] {
   const visited = new Set<TokenId>();
-  const stack = new Set<TokenId>();
   const sorted: TokenId[] = [];
 
-  const visit = (id: TokenId) => {
-    if (visited.has(id)) return;
-    if (stack.has(id)) {
-      throw new Error(
-        `[Generator] Cycle detected involving '${id}'. Validate the graph before calling generate().`
-      );
-    }
-    stack.add(id);
-    const node = nodes.get(id);
-    if (node) {
-      for (const depId of node.dependencies) {
-        visit(depId);
-      }
-      sorted.push(id);
-    }
-    stack.delete(id);
-    visited.add(id);
-  };
+  for (const startId of nodes.keys()) {
+    if (visited.has(startId)) continue;
 
-  for (const id of nodes.keys()) {
-    visit(id);
+    // Each stack frame: [id, dependencies iterator]
+    const iterStack: Array<[TokenId, Iterator<TokenId>]> = [];
+    const recursionSet = new Set<TokenId>();
+
+    iterStack.push([startId, (nodes.get(startId)?.dependencies ?? [])[Symbol.iterator]()]);
+    recursionSet.add(startId);
+
+    while (iterStack.length > 0) {
+      const frame = iterStack[iterStack.length - 1];
+      const [id, depsIter] = frame;
+
+      const next = depsIter.next();
+      if (!next.done) {
+        const depId = next.value;
+        if (!visited.has(depId)) {
+          if (recursionSet.has(depId)) {
+            throw new Error(
+              `[Generator] Cycle detected involving '${depId}'. Validate the graph before calling generate().`
+            );
+          }
+          iterStack.push([depId, (nodes.get(depId)?.dependencies ?? [])[Symbol.iterator]()]);
+          recursionSet.add(depId);
+        }
+      } else {
+        // All deps processed — emit this node
+        iterStack.pop();
+        recursionSet.delete(id);
+        if (!visited.has(id)) {
+          visited.add(id);
+          if (nodes.has(id)) sorted.push(id);
+        }
+      }
+    }
   }
 
   return sorted;

@@ -156,7 +156,7 @@ export class Analyzer {
   } | undefined;
 
   // Populated from ASTVisitor results during extract() — separate from service construction.
-  private _extendsReferences = new Set<string>();
+  private _extendsReferences: ReadonlySet<string> = new Set<string>();
 
   private getLegacyServices() {
     if (!this._legacyServices) {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { LSPLogger, LogLevel } from '../src/logger';
 
 describe('LSPLogger', () => {
@@ -73,7 +73,13 @@ describe('LSPLogger', () => {
   });
 
   describe('when loggingEnabled is true', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
     it('should format log messages with correct level', () => {
+      vi.stubEnv('NEO_SYRINGE_LSP_VERBOSE', '1');
+
       const mockLogger = {
         loggingEnabled: () => true,
         info: vi.fn(),
@@ -159,6 +165,8 @@ describe('LSPLogger', () => {
     });
 
     it('should only construct strings once when logging is enabled', () => {
+      vi.stubEnv('NEO_SYRINGE_LSP_VERBOSE', '1');
+
       const mockLogger = {
         loggingEnabled: () => true,
         info: vi.fn(),
@@ -206,6 +214,8 @@ describe('LSPLogger', () => {
     });
 
     it('should handle mixed log levels in sequence', () => {
+      vi.stubEnv('NEO_SYRINGE_LSP_VERBOSE', '1');
+
       const mockLogger = {
         loggingEnabled: () => true,
         info: vi.fn(),

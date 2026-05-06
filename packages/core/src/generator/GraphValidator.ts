@@ -71,7 +71,7 @@ export class GraphValidator {
     for (const [nodeId, node] of graph.nodes) {
       for (const depId of node.dependencies) {
         // Check if dependency is provided locally OR by parent
-        const isProvidedLocally = graph.nodes.has(depId);
+        const isProvidedLocally = graph.nodes.has(depId) || (graph.multiNodes?.has(depId) ?? false);
         const isProvidedByParent = parentTokens.has(depId);
 
         if (!isProvidedLocally && !isProvidedByParent) {
@@ -92,7 +92,7 @@ export class GraphValidator {
       for (const [tokenId, nodes] of graph.multiNodes) {
         for (const node of nodes) {
           for (const depId of node.dependencies) {
-            const isProvidedLocally = graph.nodes.has(depId) || graph.multiNodes!.has(depId);
+            const isProvidedLocally = graph.nodes.has(depId) || (graph.multiNodes?.has(depId) ?? false);
             const isProvidedByParent = parentTokens.has(depId);
             if (!isProvidedLocally && !isProvidedByParent) {
               errors.push({
@@ -110,6 +110,8 @@ export class GraphValidator {
     }
 
     // 3. Check for Cycles (only in local nodes, parent is assumed valid)
+    // TODO: cycle detection does not yet walk multi-node deps; cycles involving
+    // multi-registered tokens (A → multiToken → A) will not be detected.
     for (const nodeId of graph.nodes.keys()) {
       if (!visited.has(nodeId)) {
         this.detectCycleCollect(nodeId, graph, visited, recursionStack, parentTokens, errors);
