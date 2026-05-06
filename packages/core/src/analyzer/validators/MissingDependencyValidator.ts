@@ -74,6 +74,14 @@ export class MissingDependencyValidator implements IValidator {
       available.add(tokenId);
     }
 
+    // Add local multi-registration tokens — a consumer of a multi-registered
+    // token is valid; the token IS provided, just via resolveAll().
+    if (config.multiInjections) {
+      for (const tokenId of config.multiInjections.keys()) {
+        available.add(tokenId);
+      }
+    }
+
     // For builders, add inherited tokens
     if (config.type === 'builder' && context.inheritedTokens) {
       for (const tokenId of context.inheritedTokens.keys()) {

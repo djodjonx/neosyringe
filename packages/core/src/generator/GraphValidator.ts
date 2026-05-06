@@ -71,7 +71,7 @@ export class GraphValidator {
     for (const [nodeId, node] of graph.nodes) {
       for (const depId of node.dependencies) {
         // Check if dependency is provided locally OR by parent
-        const isProvidedLocally = graph.nodes.has(depId);
+        const isProvidedLocally = graph.nodes.has(depId) || (graph.multiNodes?.has(depId) ?? false);
         const isProvidedByParent = parentTokens.has(depId);
 
         if (!isProvidedLocally && !isProvidedByParent) {
