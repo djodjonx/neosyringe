@@ -1,10 +1,11 @@
 import type * as ts from 'typescript';
 import { relative, isAbsolute } from 'node:path';
-import { TSContext } from '../TSContext';
-import { DependencyGraph, TokenId } from '../analyzer/types';
+import { DependencyGraph } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
-import { FACTORY_NAME_SANITIZER } from '../analyzer/shared/constants';
 import { topologicalSort } from './TopologicalSorter';
+import { generateFactories, generateMultiFactories, type GetImport } from './FactoryEmitter';
+import { generateResolveCases, generateResolveAllMethod } from './ResolveEmitter';
+import { hasAsyncFactories, generateInitializeMethod, generateDestroyMethod } from './LifecycleEmitter';
 
 /**
  * Generates TypeScript code for the dependency injection container.
@@ -13,6 +14,11 @@ import { topologicalSort } from './TopologicalSorter';
  * - Import statements for all dependencies
  * - Factory functions for each service
  * - A NeoContainer class with resolve logic
+ *
+ * The actual emission logic is split into focused modules:
+ * - {@link generateFactories} / {@link generateMultiFactories} (FactoryEmitter)
+ * - {@link generateResolveCases} / {@link generateResolveAllMethod} (ResolveEmitter)
+ * - {@link generateInitializeMethod} / {@link generateDestroyMethod} (LifecycleEmitter)
  */
 export class Generator {
   /**
@@ -49,10 +55,10 @@ export class Generator {
    * @returns TypeScript source code for the generated container.
    */
   public generate(): string {
-    const sorted = this.topologicalSort();
+    const sorted = topologicalSort(this.graph.nodes);
     const imports = new Map<string, string>(); // filePath -> importAliasPrefix
 
-    const getImport = (symbol: ts.Symbol): string => {
+    const getImport: GetImport = (symbol: ts.Symbol): string => {
       if (this.useDirectSymbolNames) {
         return symbol.getName();
       }
@@ -70,17 +76,17 @@ export class Generator {
       return `${imports.get(filePath)}.${symbol.getName()}`;
     };
 
-    const hasAsync = this.hasAsyncFactories();
+    const hasAsync = hasAsyncFactories(this.graph);
     const resolveGuard = hasAsync
       ? `if (!this._initialized) { throw new Error(\`[\${this.name}] This container has async services — call \\\`await container.initialize()\\\` before the first resolve().\`); }`
       : '';
 
-    const factories = this.generateFactories(sorted, getImport);
-    const resolveCases = this.generateResolveCases(sorted, getImport);
-    const multiFactories = this.generateMultiFactories(getImport);
-    const resolveAllMethod = this.generateResolveAllMethod(getImport, resolveGuard);
-    const initializeMethod = hasAsync ? this.generateInitializeMethod(sorted) : '';
-    const destroyMethod = this.generateDestroyMethod(sorted, getImport);
+    const factories = generateFactories(this.graph, sorted, getImport);
+    const resolveCases = generateResolveCases(this.graph, sorted, getImport);
+    const multiFactories = generateMultiFactories(this.graph, getImport);
+    const resolveAllMethod = generateResolveAllMethod(this.graph, getImport, resolveGuard);
+    const initializeMethod = hasAsync ? generateInitializeMethod(this.graph, sorted) : '';
+    const destroyMethod = generateDestroyMethod(this.graph, sorted, getImport);
 
     const importLines: string[] = [];
     if (!this.useDirectSymbolNames) {
@@ -177,122 +183,6 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     return `new NeoContainer(undefined, ${legacyArgs}, ${nameArg})`;
   }
 
-  // ---------------------------------------------------------------------------
-  // Private generation helpers
-  // ---------------------------------------------------------------------------
-
-  /** Generates a factory method for each service in topological order. */
-  private generateFactories(sorted: TokenId[], getImport: (s: ts.Symbol) => string): string[] {
-    const factories: string[] = [];
-
-    for (const tokenId of sorted) {
-      const node = this.graph.nodes.get(tokenId);
-      if (!node) continue;
-      if (node.service.type === 'parent') continue;
-
-      const factoryId = this.getFactoryName(tokenId);
-
-      if (node.service.type === 'value' && node.service.valueSource !== undefined) {
-        // Value provider: embed the source expression directly
-        factories.push(`
-  private ${factoryId}(): any {
-    return ${node.service.valueSource};
-  }`);
-        continue;
-      }
-
-      if (node.service.type === 'factory' && node.service.factorySource) {
-        const userFactory = node.service.factorySource;
-        factories.push(`
-  private ${factoryId}(): any {
-    const userFactory = ${userFactory};
-    return userFactory(this);
-  }`);
-      } else {
-        if (!node.service.implementationSymbol) {
-          throw new Error(
-            `[Generator] No implementation symbol for token '${tokenId}'. ` +
-            `This is likely a bug — ensure all non-factory registrations have a provider class.`
-          );
-        }
-        const className = getImport(node.service.implementationSymbol);
-        const args = this.resolveConstructorArgs(node.dependencies, getImport);
-
-        factories.push(`
-  private ${factoryId}(): any {
-    return new ${className}(${args});
-  }`);
-      }
-    }
-
-    return factories;
-  }
-
-  /** Resolves constructor argument expressions for a list of dependency token IDs. */
-  private resolveConstructorArgs(dependencies: TokenId[], getImport: (s: ts.Symbol) => string): string {
-    return dependencies.map(depId => {
-      const depNode = this.graph.nodes.get(depId);
-      if (!depNode) return 'undefined';
-
-      if (depNode.service.isInterfaceToken) {
-        return `this.resolve(${JSON.stringify(depNode.service.tokenId)})`;
-      } else if (depNode.service.tokenSymbol) {
-        return `this.resolve(${getImport(depNode.service.tokenSymbol)})`;
-      } else if (depNode.service.implementationSymbol) {
-        return `this.resolve(${getImport(depNode.service.implementationSymbol)})`;
-      }
-      return 'undefined';
-    }).join(', ');
-  }
-
-  /** Generates resolve switch cases for each service in topological order. */
-  private generateResolveCases(sorted: TokenId[], getImport: (s: ts.Symbol) => string): string[] {
-    const resolveCases: string[] = [];
-
-    for (const tokenId of sorted) {
-      const node = this.graph.nodes.get(tokenId);
-      if (!node) continue;
-      if (node.service.type === 'parent') continue;
-
-      const factoryId = this.getFactoryName(tokenId);
-      const isTransient = node.service.lifecycle === 'transient';
-
-      let tokenKey: string;
-      let tokenCheck: string;
-
-      if (node.service.isInterfaceToken) {
-        tokenKey = JSON.stringify(node.service.tokenId);
-        tokenCheck = `if (token === ${JSON.stringify(node.service.tokenId)})`;
-      } else if (node.service.tokenSymbol) {
-        const tokenClass = getImport(node.service.tokenSymbol);
-        tokenKey = tokenClass;
-        tokenCheck = `if (token === ${tokenClass})`;
-      } else if (node.service.implementationSymbol) {
-        const className = getImport(node.service.implementationSymbol);
-        tokenKey = className;
-        tokenCheck = `if (token === ${className})`;
-      } else {
-        tokenKey = JSON.stringify(node.service.tokenId);
-        tokenCheck = `if (token === ${JSON.stringify(node.service.tokenId)})`;
-      }
-
-      const creationLogic = isTransient
-        ? `return this.${factoryId}();`
-        : `
-            if (!this.instances.has(${tokenKey})) {
-                const instance = this.${factoryId}();
-                this.instances.set(${tokenKey}, instance);
-                return instance;
-            }
-            return this.instances.get(${tokenKey});
-          `;
-
-      resolveCases.push(`${tokenCheck} { ${creationLogic} }`);
-    }
-
-    return resolveCases;
-  }
-
   /**
    * Generates the container variable declaration with the user's export modifier.
    * If no modifier is specified (undefined), defaults to 'export' for backward compatibility.
@@ -327,190 +217,6 @@ const ${variableName || 'container'} = ${instantiation};
 export const ${variableName || 'container'} = ${instantiation};
 `;
     }
-  }
-
-  /**
-   * Sorts services in topological order (dependencies before dependents).
-   * @throws Error if a cycle is detected — callers must validate the graph before generating.
-   * @returns Array of TokenIds in dependency order.
-   */
-  private topologicalSort(): TokenId[] {
-    return topologicalSort(this.graph.nodes);
-  }
-
-  /**
-   * Creates a valid JavaScript function name from a token ID.
-   * @param tokenId - The token identifier.
-   * @returns A sanitized factory function name.
-   */
-  private getFactoryName(tokenId: TokenId): string {
-    return `create_${tokenId.replace(FACTORY_NAME_SANITIZER, '_')}`;
-  }
-
-  /** Returns true if any singleton in the graph has an async disposable implementation. */
-  private hasAsyncDisposables(sorted: TokenId[]): boolean {
-    for (const tokenId of sorted) {
-      const node = this.graph.nodes.get(tokenId);
-      if (node?.service.isAsyncDisposable && node.service.lifecycle === 'singleton') return true;
-    }
-    return false;
-  }
-
-  /**
-   * Generates the destroy() method.
-   * Calls dispose() on cached singleton services in reverse dependency order.
-   * Becomes async if any service has isAsyncDisposable.
-   */
-  private generateDestroyMethod(sorted: TokenId[], getImport: (s: ts.Symbol) => string): string {
-    const hasAsyncFactory = this.hasAsyncFactories();
-    const hasAsyncDisposable = this.hasAsyncDisposables(sorted);
-    const isAsyncDestroy = hasAsyncDisposable;
-
-    // Collect disposable singletons in reverse dependency order
-    const disposables: Array<{ tokenKey: string; isAsync: boolean }> = [];
-    for (const tokenId of [...sorted].reverse()) {
-      const node = this.graph.nodes.get(tokenId);
-      if (!node) continue;
-      if (node.service.lifecycle === 'transient') continue;
-      if (!node.service.isDisposable && !node.service.isAsyncDisposable) continue;
-
-      let tokenKey: string;
-      if (node.service.isInterfaceToken) {
-        tokenKey = JSON.stringify(node.service.tokenId);
-      } else if (node.service.tokenSymbol) {
-        tokenKey = getImport(node.service.tokenSymbol);
-      } else if (node.service.implementationSymbol) {
-        tokenKey = getImport(node.service.implementationSymbol);
-      } else {
-        tokenKey = JSON.stringify(node.service.tokenId);
-      }
-
-      disposables.push({ tokenKey, isAsync: !!node.service.isAsyncDisposable });
-    }
-
-    const lines: string[] = [];
-    if (hasAsyncFactory) lines.push('this._initialized = false;');
-    for (const { tokenKey, isAsync } of disposables) {
-      const call = isAsync
-        ? `await (this.instances.get(${tokenKey}) as any).dispose();`
-        : `(this.instances.get(${tokenKey}) as any).dispose();`;
-      lines.push(`if (this.instances.has(${tokenKey})) { ${call} }`);
-    }
-    lines.push('this.instances.clear();');
-
-    const asyncKw = isAsyncDestroy ? 'async ' : '';
-    const ret = isAsyncDestroy ? 'Promise<void>' : 'void';
-    return `public ${asyncKw}destroy(): ${ret} {
-    ${lines.join('\n    ')}
-  }`;
-  }
-
-  /** Returns true if any node in the graph has an async factory. */
-  private hasAsyncFactories(): boolean {
-    for (const node of this.graph.nodes.values()) {
-      if (node.service.isAsync) return true;
-    }
-    return false;
-  }
-
-  /**
-   * Generates the initialize() method that pre-creates all async singleton factories
-   * in topological order. Only called when hasAsyncFactories() is true.
-   */
-  private generateInitializeMethod(sorted: TokenId[]): string {
-    const asyncSingletons = sorted.filter(tokenId => {
-      const node = this.graph.nodes.get(tokenId);
-      return node?.service.isAsync && node.service.lifecycle === 'singleton';
-    });
-
-    const lines = asyncSingletons.map(tokenId => {
-      const factoryId = this.getFactoryName(tokenId);
-      return `this.instances.set(${JSON.stringify(tokenId)}, await this.${factoryId}());`;
-    });
-
-    return `public async initialize(): Promise<void> {
-    if (this._initialized) return;
-    ${lines.join('\n    ')}
-    this._initialized = true;
-  }`;
-  }
-
-  /** Generates indexed factory methods for multi-registration nodes. */
-  private generateMultiFactories(getImport: (s: ts.Symbol) => string): string[] {
-    const factories: string[] = [];
-    if (!this.graph.multiNodes) return factories;
-
-    for (const [tokenId, nodes] of this.graph.multiNodes) {
-      nodes.forEach((node, index) => {
-        const factoryId = `${this.getFactoryName(tokenId)}_${index}`;
-
-        if (node.service.type === 'factory' && node.service.factorySource) {
-          factories.push(`
-  private ${factoryId}(): any {
-    const userFactory = ${node.service.factorySource};
-    return userFactory(this);
-  }`);
-        } else if (node.service.type === 'value' && node.service.valueSource !== undefined) {
-          factories.push(`
-  private ${factoryId}(): any {
-    return ${node.service.valueSource};
-  }`);
-        } else {
-          if (!node.service.implementationSymbol) return;
-          const className = getImport(node.service.implementationSymbol);
-          const args = this.resolveConstructorArgs(node.dependencies, getImport);
-          factories.push(`
-  private ${factoryId}(): any {
-    return new ${className}(${args});
-  }`);
-        }
-      });
-    }
-
-    return factories;
-  }
-
-  /** Generates the resolveAll() method with one branch per multi-token. */
-  private generateResolveAllMethod(getImport: (s: ts.Symbol) => string, resolveGuard: string): string {
-    if (!this.graph.multiNodes || this.graph.multiNodes.size === 0) {
-      return `public resolveAll<T>(token: any): T[] { return []; }`;
-    }
-
-    const cases: string[] = [];
-
-    for (const [tokenId, nodes] of this.graph.multiNodes) {
-      const firstNode = nodes[0];
-      let tokenCheck: string;
-
-      if (firstNode.service.isInterfaceToken) {
-        tokenCheck = `if (token === ${JSON.stringify(firstNode.service.tokenId)})`;
-      } else if (firstNode.service.tokenSymbol) {
-        tokenCheck = `if (token === ${getImport(firstNode.service.tokenSymbol)})`;
-      } else {
-        tokenCheck = `if (token === ${JSON.stringify(firstNode.service.tokenId)})`;
-      }
-
-      const isTransient = firstNode.service.lifecycle === 'transient';
-      const factoryBase = this.getFactoryName(tokenId);
-
-      let callExprs: string[];
-      if (isTransient) {
-        callExprs = nodes.map((_, i) => `this.${factoryBase}_${i}()`);
-      } else {
-        callExprs = nodes.map((_, i) => {
-          const cacheKey = JSON.stringify(`${tokenId}:${i}`);
-          return `(() => { const k = ${cacheKey}; if (!this.instances.has(k)) { const inst = this.${factoryBase}_${i}(); this.instances.set(k, inst); return inst; } return this.instances.get(k); })()`;
-        });
-      }
-
-      cases.push(`${tokenCheck} return [${callExprs.join(', ')}] as T[];`);
-    }
-
-    return `public resolveAll<T>(token: any): T[] {
-    ${resolveGuard}
-    ${cases.join('\n    ')}
-    return [];
-  }`;
   }
 
   /**
