@@ -2,7 +2,7 @@ import type { DependencyNode, TokenId } from '../analyzer/types';
 
 /**
  * Sorts service tokens in dependency order (dependencies before dependents).
- * Uses iterative depth-first search.
+ * Uses recursive depth-first search.
  * @throws Error if a cycle is detected — validate the graph before calling.
  */
 export function topologicalSort(nodes: Map<TokenId, DependencyNode>): TokenId[] {

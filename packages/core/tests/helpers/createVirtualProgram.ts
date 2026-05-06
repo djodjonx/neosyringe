@@ -19,7 +19,7 @@ export function createVirtualProgram(
     strict: true,
   }
 ): ts.Program {
-  const compilerHost = ts.createCompilerHost({});
+  const compilerHost = ts.createCompilerHost(options);
   const originalGetSourceFile = compilerHost.getSourceFile.bind(compilerHost);
   compilerHost.getSourceFile = (name, languageVersion) => {
     if (name === fileName) {
