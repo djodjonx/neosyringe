@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
 import { HashUtils } from '../../core/src/analyzer/shared/HashUtils.js';
+import { transformUseInterfaceCalls, type UsedTokenEntry } from '../src/useInterfaceTransform.js';
 
 // Import the transform function (we need to extract it or test the plugin directly)
 
@@ -131,6 +132,45 @@ describe('useInterface Transformation', () => {
     // The useInterface call inside resolve should be replaced
     expect(output).toContain('container.resolve("');
     expect(output).toContain('IOperationTracker_');
+  });
+
+  it('should track useInterface<T>() calls in usedTokens map when provided', () => {
+    const input = `
+      interface IMyService { getValue(): string; }
+      function useInterface<T>(): any { return null; }
+
+      export const service = container.resolve(useInterface<IMyService>());
+    `;
+
+    const usedTokens: Map<string, UsedTokenEntry> = new Map();
+    const compilerOptions = {
+      target: ts.ScriptTarget.ES2021,
+      module: ts.ModuleKind.ESNext,
+    };
+
+    const output = transformUseInterfaceCalls(input, 'test-service.ts', compilerOptions, usedTokens);
+
+    // Verify transformation happened
+    expect(output).toBeDefined();
+    expect(output).toContain('container.resolve("');
+    expect(output).not.toContain('useInterface<IMyService>()');
+
+    // Verify usedTokens was populated
+    expect(usedTokens.size).toBeGreaterThan(0);
+
+    // Find the IMyService token entry
+    let foundEntry: UsedTokenEntry | undefined;
+    for (const [tokenId, entry] of usedTokens) {
+      if (entry.interfaceName === 'IMyService') {
+        foundEntry = entry;
+        break;
+      }
+    }
+
+    expect(foundEntry).toBeDefined();
+    expect(foundEntry?.file).toBe('test-service.ts');
+    expect(foundEntry?.line).toBeGreaterThan(0);
+    expect(foundEntry?.column).toBeGreaterThan(0);
   });
 });
 
