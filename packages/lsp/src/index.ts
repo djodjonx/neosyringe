@@ -3,15 +3,23 @@ import { Analyzer, type AnalysisErrorType } from '@djodjonx/neosyringe-core/anal
 import { LSPLogger } from './logger';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 
-const ERROR_CODES: Record<AnalysisErrorType | string, number> = {
-  missing: 9995,
-  cycle: 9996,
-  'type-mismatch': 9997,
-  duplicate: 9998,
+const enum NeoSyringeErrorCode {
+  Missing = 9995,
+  Cycle = 9996,
+  TypeMismatch = 9997,
+  Duplicate = 9998,
+  Unknown = 9999,
+}
+
+const ERROR_CODE_MAP: Record<AnalysisErrorType, NeoSyringeErrorCode> = {
+  missing: NeoSyringeErrorCode.Missing,
+  cycle: NeoSyringeErrorCode.Cycle,
+  'type-mismatch': NeoSyringeErrorCode.TypeMismatch,
+  duplicate: NeoSyringeErrorCode.Duplicate,
 };
 
 function getErrorCode(type: AnalysisErrorType | string): number {
-  return ERROR_CODES[type] ?? 9999;
+  return ERROR_CODE_MAP[type as AnalysisErrorType] ?? NeoSyringeErrorCode.Unknown;
 }
 
 function makeDiagnostic(

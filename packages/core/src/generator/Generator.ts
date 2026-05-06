@@ -3,6 +3,7 @@ import { relative, isAbsolute } from 'node:path';
 import { TSContext } from '../TSContext';
 import { DependencyGraph, TokenId } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
+import { FACTORY_NAME_SANITIZER } from '../analyzer/shared/constants';
 
 /**
  * Generates TypeScript code for the dependency injection container.
@@ -369,7 +370,7 @@ export const ${variableName || 'container'} = ${instantiation};
    * @returns A sanitized factory function name.
    */
   private getFactoryName(tokenId: TokenId): string {
-    return `create_${tokenId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    return `create_${tokenId.replace(FACTORY_NAME_SANITIZER, '_')}`;
   }
 
   /** Returns true if any singleton in the graph has an async disposable implementation. */

@@ -2,7 +2,7 @@ import type * as ts from 'typescript';
 import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
 import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError } from '../types';
-import { HashUtils, TokenResolverService } from '../shared';
+import { HashUtils, TokenResolverService, DEFAULT_EXPORT_CONTAINER_NAME } from '../shared';
 import { InjectionParser } from '../parsers/InjectionParser';
 
 /**
@@ -226,7 +226,7 @@ export class ConfigCollector implements IConfigCollector {
 
     // Case 2: export default defineBuilderConfig(...)
     if (TSContext.ts.isExportAssignment(parent)) {
-      return '__default__';
+      return DEFAULT_EXPORT_CONTAINER_NAME;
     }
 
     return null;
