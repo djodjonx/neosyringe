@@ -3,6 +3,7 @@ export * from './GraphValidator';
 export { topologicalSort } from './TopologicalSorter';
 export {
   getFactoryName,
+  resolveTokenKey,
   resolveConstructorArgs,
   generateFactories,
   generateMultiFactories,

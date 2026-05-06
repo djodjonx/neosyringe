@@ -1,5 +1,5 @@
 import type { DependencyGraph, TokenId } from '../analyzer/types';
-import { getFactoryName, type GetImport } from './FactoryEmitter';
+import { getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
 
 /** Generates resolve switch cases for each service in topological order. */
 export function generateResolveCases(
@@ -16,25 +16,8 @@ export function generateResolveCases(
 
     const factoryId = getFactoryName(tokenId);
     const isTransient = node.service.lifecycle === 'transient';
-
-    let tokenKey: string;
-    let tokenCheck: string;
-
-    if (node.service.isInterfaceToken) {
-      tokenKey = JSON.stringify(node.service.tokenId);
-      tokenCheck = `if (token === ${JSON.stringify(node.service.tokenId)})`;
-    } else if (node.service.tokenSymbol) {
-      const tokenClass = getImport(node.service.tokenSymbol);
-      tokenKey = tokenClass;
-      tokenCheck = `if (token === ${tokenClass})`;
-    } else if (node.service.implementationSymbol) {
-      const className = getImport(node.service.implementationSymbol);
-      tokenKey = className;
-      tokenCheck = `if (token === ${className})`;
-    } else {
-      tokenKey = JSON.stringify(node.service.tokenId);
-      tokenCheck = `if (token === ${JSON.stringify(node.service.tokenId)})`;
-    }
+    const tokenKey = resolveTokenKey(node.service, getImport);
+    const tokenCheck = `if (token === ${tokenKey})`;
 
     const creationLogic = isTransient
       ? `return this.${factoryId}();`
@@ -57,25 +40,22 @@ export function generateResolveCases(
 export function generateResolveAllMethod(
   graph: DependencyGraph,
   getImport: GetImport,
-  resolveGuard: string
+  hasAsync: boolean
 ): string {
   if (!graph.multiNodes || graph.multiNodes.size === 0) {
     return `public resolveAll<T>(token: any): T[] { return []; }`;
   }
 
+  const resolveGuard = hasAsync
+    ? `if (!this._initialized) { throw new Error(\`[\${this.name}] This container has async services — call \\\`await container.initialize()\\\` before the first resolve().\`); }`
+    : '';
+
   const cases: string[] = [];
 
   for (const [tokenId, nodes] of graph.multiNodes) {
     const firstNode = nodes[0];
-    let tokenCheck: string;
-
-    if (firstNode.service.isInterfaceToken) {
-      tokenCheck = `if (token === ${JSON.stringify(firstNode.service.tokenId)})`;
-    } else if (firstNode.service.tokenSymbol) {
-      tokenCheck = `if (token === ${getImport(firstNode.service.tokenSymbol)})`;
-    } else {
-      tokenCheck = `if (token === ${JSON.stringify(firstNode.service.tokenId)})`;
-    }
+    const tokenKey = resolveTokenKey(firstNode.service, getImport);
+    const tokenCheck = `if (token === ${tokenKey})`;
 
     const isTransient = firstNode.service.lifecycle === 'transient';
     const factoryBase = getFactoryName(tokenId);

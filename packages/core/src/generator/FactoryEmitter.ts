@@ -1,5 +1,5 @@
 import type * as ts from 'typescript';
-import type { DependencyGraph, TokenId } from '../analyzer/types';
+import type { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
 import { FACTORY_NAME_SANITIZER } from '../analyzer/shared/constants';
 
 /**
@@ -38,6 +38,18 @@ export function resolveConstructorArgs(
     }
     return 'undefined';
   }).join(', ');
+}
+
+/**
+ * Resolves a service's runtime token key expression for use in generated code.
+ * This is the value used as both the Map key (for instance caching) and the
+ * token argument to `resolve()`.
+ */
+export function resolveTokenKey(service: DependencyNode['service'], getImport: GetImport): string {
+  if (service.isInterfaceToken) return JSON.stringify(service.tokenId);
+  if (service.tokenSymbol) return getImport(service.tokenSymbol);
+  if (service.implementationSymbol) return getImport(service.implementationSymbol);
+  return JSON.stringify(service.tokenId);
 }
 
 /** Generates a factory method for each service in topological order. */
