@@ -39,9 +39,14 @@ export class CycleValidator implements IValidator {
 
   private buildDependencyMap(config: ConfigGraph): Map<TokenId, TokenId[]> {
     const map = new Map<TokenId, TokenId[]>();
+    // Collect all registered token IDs so property tokens can be matched
+    const allLocalTokens = new Set<TokenId>([
+      ...config.localInjections.keys(),
+      ...(config.multiInjections ? [...config.multiInjections.keys()] : []),
+    ]);
 
     for (const [tokenId, info] of config.localInjections) {
-      const deps = this.dependencyAnalyzer.getRequiredDependencies(info.definition);
+      const deps = this.dependencyAnalyzer.getRequiredDependencies(info.definition, allLocalTokens);
       // Only include deps that are registered locally (external deps can't form local cycles)
       const localDeps = deps.filter(dep => config.localInjections.has(dep));
       map.set(tokenId, localDeps);
@@ -50,7 +55,7 @@ export class CycleValidator implements IValidator {
     if (config.multiInjections) {
       for (const [tokenId, infos] of config.multiInjections) {
         for (const info of infos) {
-          const deps = this.dependencyAnalyzer.getRequiredDependencies(info.definition);
+          const deps = this.dependencyAnalyzer.getRequiredDependencies(info.definition, allLocalTokens);
           const localDeps = deps.filter(
             dep => config.localInjections.has(dep) || config.multiInjections!.has(dep)
           );
