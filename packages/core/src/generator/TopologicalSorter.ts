@@ -26,14 +26,15 @@ export function topologicalSort(nodes: Map<TokenId, DependencyNode>): TokenId[] 
       const next = depsIter.next();
       if (!next.done) {
         const depId = next.value;
-        if (visited.has(depId)) continue;
-        if (recursionSet.has(depId)) {
-          throw new Error(
-            `[Generator] Cycle detected involving '${depId}'. Validate the graph before calling generate().`
-          );
+        if (!visited.has(depId)) {
+          if (recursionSet.has(depId)) {
+            throw new Error(
+              `[Generator] Cycle detected involving '${depId}'. Validate the graph before calling generate().`
+            );
+          }
+          iterStack.push([depId, (nodes.get(depId)?.dependencies ?? [])[Symbol.iterator]()]);
+          recursionSet.add(depId);
         }
-        iterStack.push([depId, (nodes.get(depId)?.dependencies ?? [])[Symbol.iterator]()]);
-        recursionSet.add(depId);
       } else {
         // All deps processed — emit this node
         iterStack.pop();
