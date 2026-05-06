@@ -119,7 +119,7 @@ export const neoSyringePlugin = createUnplugin(() => {
 
           // The container config block has already been consumed above; remaining
           // useInterface calls are injection-site tokens that must be transformed.
-          const finalCode = transformUseInterfaceCalls(codeWithContainer, id, options);
+          const finalCode = transformUseInterfaceCalls(codeWithContainer, id, options, usedTokens);
 
           return finalCode || codeWithContainer;
         }
