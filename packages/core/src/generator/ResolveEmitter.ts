@@ -1,6 +1,16 @@
 import type { DependencyGraph, TokenId } from '../analyzer/types';
 import { getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
 
+/**
+ * Returns the guard statement injected at the top of resolve() and resolveAll()
+ * when the container has async services that require initialization before use.
+ * Returns an empty string when `hasAsync` is false.
+ */
+export function buildAsyncResolveGuard(hasAsync: boolean): string {
+  if (!hasAsync) return '';
+  return `if (!this._initialized) { throw new Error(\`[\${this.name}] This container has async services — call \\\`await container.initialize()\\\` before the first resolve().\`); }`;
+}
+
 /** Generates resolve switch cases for each service in topological order. */
 export function generateResolveCases(
   graph: DependencyGraph,
@@ -46,9 +56,7 @@ export function generateResolveAllMethod(
     return `public resolveAll<T>(token: any): T[] { return []; }`;
   }
 
-  const resolveGuard = hasAsync
-    ? `if (!this._initialized) { throw new Error(\`[\${this.name}] This container has async services — call \\\`await container.initialize()\\\` before the first resolve().\`); }`
-    : '';
+  const resolveGuard = buildAsyncResolveGuard(hasAsync);
 
   const cases: string[] = [];
 

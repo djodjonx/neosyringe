@@ -4,7 +4,7 @@ import { DependencyGraph } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, type GetImport } from './FactoryEmitter';
-import { generateResolveCases, generateResolveAllMethod } from './ResolveEmitter';
+import { generateResolveCases, generateResolveAllMethod, buildAsyncResolveGuard } from './ResolveEmitter';
 import { hasAsyncFactories, generateInitializeMethod, generateDestroyMethod } from './LifecycleEmitter';
 
 /**
@@ -77,9 +77,7 @@ export class Generator {
     };
 
     const hasAsync = hasAsyncFactories(this.graph);
-    const resolveGuard = hasAsync
-      ? `if (!this._initialized) { throw new Error(\`[\${this.name}] This container has async services — call \\\`await container.initialize()\\\` before the first resolve().\`); }`
-      : '';
+    const resolveGuard = buildAsyncResolveGuard(hasAsync);
 
     const factories = generateFactories(this.graph, sorted, getImport);
     const resolveCases = generateResolveCases(this.graph, sorted, getImport);

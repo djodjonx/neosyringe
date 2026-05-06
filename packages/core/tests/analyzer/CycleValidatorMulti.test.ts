@@ -84,6 +84,6 @@ describe('CycleValidator — multi-injection tokens', () => {
     const result = new Analyzer(createProgram('test.ts', source)).extractForFile('test.ts');
     const cycleErrors = result.errors.filter(e => e.type === 'cycle');
     // Both PluginA and PluginB participate in the self-cycle — expect exactly 2 errors.
-    expect(cycleErrors.length).toBeGreaterThanOrEqual(2);
+    expect(cycleErrors.length).toBe(2);
   });
 });
