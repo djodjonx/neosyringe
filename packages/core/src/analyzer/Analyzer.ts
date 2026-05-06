@@ -22,7 +22,7 @@ import {
   type ValidationContext
 } from './validators';
 import { ErrorFormatter, CycleError, type IErrorFormatter } from './errors';
-import { HashUtils, TokenResolverService } from './shared';
+import { TokenResolverService } from './shared';
 import { CallExpressionUtils } from './utils';
 import { ASTVisitor } from './visitors';
 
@@ -136,57 +136,95 @@ export class Analyzer {
   private program: ts.Program;
   private checker: ts.TypeChecker;
 
-  /** Shared services */
+  // === SHARED SERVICES ===
   private tokenResolverService: TokenResolverService;
-  private dependencyResolver: DependencyResolver;
-  private configParser: ConfigParser;
-  private parentContainerResolver: ParentContainerResolver;
 
-  /** Variable names that are parent containers (should not be added to main graph) */
-  private parentContainerNames = new Set<string>();
-
-  /** Variable names referenced in any extends array — populated by ASTVisitor before visitNode runs */
-  private extendsReferences = new Set<string>();
-
-  /**
-   * Creates a new Analyzer instance.
-   *
-   * Initializes all required services for dependency analysis including
-   * the TypeScript type checker, token resolver, and dependency resolver.
-   *
-   * @param program - The TypeScript Program instance containing the source files to analyze
-   *
-   * @example
-   * ```typescript
-   * const program = TSContext.ts.createProgram(['src/app.ts'], {
-   *   target: TSContext.ts.ScriptTarget.ES2020,
-   *   module: TSContext.ts.ModuleKind.ESNext
-   * });
-   * const analyzer = new Analyzer(program);
-   * ```
-   */
   constructor(program: ts.Program) {
     this.program = program;
     this.checker = program.getTypeChecker();
-
-    // Initialize shared services
     this.tokenResolverService = new TokenResolverService(this.checker);
-    this.dependencyResolver = new DependencyResolver(this.checker, this.tokenResolverService);
-    this.configParser = new ConfigParser(this.checker, this.tokenResolverService);
+  }
 
-    // ParentContainerResolver needs a callback to parseBuilderConfig to avoid circular dependency
-    this.parentContainerResolver = new ParentContainerResolver(
-      this.checker,
-      this.tokenResolverService,
-      (node, graph) => this.parseBuilderConfig(node, graph)
-    );
+  // === LEGACY PATH ===
+  // Services initialized lazily — only used by extract()
+
+  private _legacyServices: {
+    dependencyResolver: DependencyResolver;
+    configParser: ConfigParser;
+    parentContainerResolver: ParentContainerResolver;
+    parentContainerNames: Set<string>;
+    extendsReferences: Set<string>;
+  } | undefined;
+
+  private getLegacyServices() {
+    if (!this._legacyServices) {
+      const configParser = new ConfigParser(this.checker, this.tokenResolverService);
+      const parentContainerNames = new Set<string>();
+      this._legacyServices = {
+        dependencyResolver: new DependencyResolver(this.checker, this.tokenResolverService),
+        configParser,
+        parentContainerResolver: new ParentContainerResolver(
+          this.checker,
+          this.tokenResolverService,
+          (node, graph) => this.parseBuilderConfig(node, graph)
+        ),
+        parentContainerNames,
+        extendsReferences: new Set<string>(),
+      };
+    }
+    return this._legacyServices;
+  }
+
+  // === MODULAR PATH ===
+  // Services initialized lazily — only used by extractForFile() / extractAllErrors()
+
+  private _modularServices: {
+    configCollector: IConfigCollector;
+    tokenResolver: ITokenResolver;
+    validator: IValidator;
+    collectedConfigs: Map<string, ConfigGraph> | undefined;
+    collectionError: Error | undefined;
+  } | undefined;
+
+  private getModularServices() {
+    if (!this._modularServices) {
+      const errorFormatter: IErrorFormatter = new ErrorFormatter();
+      const dependencyAnalyzer = new DependencyAnalyzer(this.checker, this.tokenResolverService);
+      this._modularServices = {
+        configCollector: new ConfigCollector(this.program, this.checker),
+        tokenResolver: new TokenResolver(),
+        validator: new CompositeValidator([
+          new DuplicateValidator(errorFormatter),
+          new TypeValidator(this.checker, errorFormatter),
+          new MissingDependencyValidator(errorFormatter, dependencyAnalyzer),
+          new CycleValidator(dependencyAnalyzer),
+        ]),
+        collectedConfigs: undefined,
+        collectionError: undefined,
+      };
+    }
+    return this._modularServices;
+  }
+
+  private getCollectedConfigs(): Map<string, ConfigGraph> {
+    const svc = this.getModularServices();
+    if (svc.collectionError) throw svc.collectionError;
+    if (!svc.collectedConfigs) {
+      try {
+        svc.collectedConfigs = svc.configCollector.collect();
+      } catch (e) {
+        if (e instanceof Error) svc.collectionError = e;
+        throw e;
+      }
+    }
+    return svc.collectedConfigs;
   }
 
   /**
    * Extracts the dependency graph from the program's source files.
    *
    * **Legacy path** used by CLI and build plugins.
-   * 
+   *
    * Scans all non-declaration source files for container configurations.
    * Each defineBuilderConfig gets its own isolated graph to avoid false positives.
    * Basic validation errors (duplicates, type mismatches) are collected in `graph.errors`.
@@ -206,6 +244,8 @@ export class Analyzer {
       errors: [], // Initialize error collection
     };
 
+    const { parentContainerNames, extendsReferences } = this.getLegacyServices();
+
     // Single pass: collect parent container names, extends refs, and config call sites
     // This replaces three separate AST traversals with one.
     const visitor = new ASTVisitor();
@@ -215,9 +255,10 @@ export class Analyzer {
     }
     const visitorResults = visitor.getResults();
     for (const name of visitorResults.parentContainers) {
-      this.parentContainerNames.add(name);
+      parentContainerNames.add(name);
     }
-    this.extendsReferences = visitorResults.extendsReferences;
+    const legacySvc = this.getLegacyServices();
+    legacySvc.extendsReferences = visitorResults.extendsReferences;
 
     // Second pass: parse and build the dependency graph
     for (const sourceFile of this.program.getSourceFiles()) {
@@ -229,64 +270,11 @@ export class Analyzer {
     return graph;
   }
 
-  // ============================================================================
-  // NEW MODULAR API for LSP
-  // ============================================================================
-
-  private configCollector: IConfigCollector | undefined;
-  private tokenResolver: ITokenResolver | undefined;
-  private validator: IValidator | undefined;
-  private collectedConfigs: Map<string, ConfigGraph> | undefined;
-  private collectionError: Error | undefined;
-
-  /**
-   * Lazily initialize the modular components.
-   */
-  private initModularComponents(): void {
-    if (this.configCollector) return;
-
-    const errorFormatter: IErrorFormatter = new ErrorFormatter();
-    const dependencyAnalyzer = new DependencyAnalyzer(this.checker, this.tokenResolverService);
-
-    this.configCollector = new ConfigCollector(this.program, this.checker);
-    this.tokenResolver = new TokenResolver();
-    this.validator = new CompositeValidator([
-      new DuplicateValidator(errorFormatter),
-      new TypeValidator(this.checker, errorFormatter),
-      new MissingDependencyValidator(errorFormatter, dependencyAnalyzer),
-      new CycleValidator(dependencyAnalyzer),
-    ]);
-  }
-
-  /**
-   * Get collected configs (with caching).
-   */
-  private getCollectedConfigs(): Map<string, ConfigGraph> {
-    // If we had a collection error before, re-throw it
-    if (this.collectionError) {
-      throw this.collectionError;
-    }
-
-    if (!this.collectedConfigs) {
-      this.initModularComponents();
-      try {
-        this.collectedConfigs = this.configCollector!.collect();
-      } catch (e) {
-        // Store the error to re-throw on subsequent calls
-        if (e instanceof Error) {
-          this.collectionError = e;
-        }
-        throw e;
-      }
-    }
-    return this.collectedConfigs;
-  }
-
   /**
    * Analyzes all files in the program and returns all errors.
    *
    * **Modular path** used for batch validation.
-   * 
+   *
    * Uses the modular architecture (same as LSP) so every container
    * configuration in the program is validated with full semantic checks
    * (duplicates, type mismatches, missing dependencies, cycles).
@@ -296,7 +284,6 @@ export class Analyzer {
    * @see {@link extract} for the legacy graph-building path
    */
   public extractAllErrors(): AnalysisError[] {
-    this.initModularComponents();
     const allConfigs = this.getCollectedConfigs();
     const errors: AnalysisError[] = [];
     const processedFiles = new Set<string>();
@@ -315,9 +302,9 @@ export class Analyzer {
 
   /**
    * Entry point for LSP - analyzes a specific file.
-   * 
+   *
    * **Modular path** used by the LSP plugin.
-   * 
+   *
    * Uses the modular architecture for isolated validation. Collects all configs
    * (cached across calls), then validates only those defined in the specified file.
    * Runs full `CompositeValidator` (duplicates, types, missing deps, cycles).
@@ -328,8 +315,7 @@ export class Analyzer {
    * @see {@link extract} for the legacy graph-building path
    */
   public extractForFile(fileName: string): AnalysisResult {
-    this.initModularComponents();
-
+    const { tokenResolver, validator } = this.getModularServices();
     const allConfigs = this.getCollectedConfigs();
     const errors: AnalysisError[] = [];
 
@@ -344,7 +330,7 @@ export class Analyzer {
       // For builders, resolve inherited tokens
       if (config.type === 'builder') {
         try {
-          context.inheritedTokens = this.tokenResolver!.resolveInheritedTokens(
+          context.inheritedTokens = tokenResolver.resolveInheritedTokens(
             config,
             allConfigs
           );
@@ -369,7 +355,7 @@ export class Analyzer {
         errors.push(...config.valueErrors);
       }
 
-      errors.push(...this.validator!.validate(config, context));
+      errors.push(...validator.validate(config, context));
     }
 
     return { configs: allConfigs, errors };
@@ -381,6 +367,8 @@ export class Analyzer {
    * @param graph - The graph to populate.
    */
   private visitNode(node: ts.Node, graph: DependencyGraph): void {
+    const { parentContainerNames, extendsReferences } = this.getLegacyServices();
+
     if (TSContext.ts.isCallExpression(node)) {
       if (CallExpressionUtils.isDefineBuilderConfig(node)) {
         // Check if this is a parent container (should be skipped)
@@ -388,7 +376,7 @@ export class Analyzer {
 
         // Case 1: const x = defineBuilderConfig(...)
         if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
-          if (this.parentContainerNames.has(parent.name.text)) {
+          if (parentContainerNames.has(parent.name.text)) {
             // Skip - this container is used as a parent, already processed
             return;
           }
@@ -447,7 +435,7 @@ export class Analyzer {
 
           // Check if this partial is used in any extends array
           // If not, validate it in isolation
-          if (!this.isPartialUsedInExtends(partialName)) {
+          if (!extendsReferences.has(partialName)) {
             const partialGraph: DependencyGraph = {
               containerId: partialName,
               nodes: new Map(),
@@ -470,18 +458,14 @@ export class Analyzer {
     TSContext.ts.forEachChild(node, (child) => this.visitNode(child, graph));
   }
 
-  /** Returns true if a partial config name appears in any extends array (pre-collected by ASTVisitor). */
-  private isPartialUsedInExtends(partialName: string): boolean {
-    return this.extendsReferences.has(partialName);
-  }
-
   /**
    * Parses a defineBuilderConfig or definePartialConfig call.
    * Delegates to ConfigParser service.
    */
   private parseBuilderConfig(node: ts.CallExpression, graph: DependencyGraph): void {
-    // Delegate to ConfigParser
-    this.configParser.parseBuilderConfig(node, graph, this.parentContainerNames);
+    const { configParser, parentContainerResolver, parentContainerNames } = this.getLegacyServices();
+
+    configParser.parseBuilderConfig(node, graph, parentContainerNames);
 
     // Handle parent container token extraction
     const args = node.arguments;
@@ -491,16 +475,14 @@ export class Analyzer {
       );
 
       if (useContainerProp && TSContext.ts.isPropertyAssignment(useContainerProp) && TSContext.ts.isIdentifier(useContainerProp.initializer)) {
-        // Delegate to ParentContainerResolver
-        this.parentContainerResolver.extractParentContainerTokens(
+        parentContainerResolver.extractParentContainerTokens(
           useContainerProp.initializer,
           graph,
-          this.parentContainerNames
+          parentContainerNames
         );
       }
     }
   }
-
 
   /**
    * Resolves dependencies for all nodes in the graph.
@@ -511,17 +493,16 @@ export class Analyzer {
    * @param graph - The dependency graph to process
    */
   private resolveAllDependencies(graph: DependencyGraph): void {
-    this.dependencyResolver.resolveAll(graph);
+    const { dependencyResolver } = this.getLegacyServices();
+    dependencyResolver.resolveAll(graph);
 
     // Resolve dependencies for multi-nodes
     if (graph.multiNodes) {
       for (const nodes of graph.multiNodes.values()) {
         for (const node of nodes) {
-          this.dependencyResolver.resolve(node, graph);
+          dependencyResolver.resolve(node, graph);
         }
       }
     }
   }
-
-
 }
