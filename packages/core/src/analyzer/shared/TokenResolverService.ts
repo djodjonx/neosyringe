@@ -459,22 +459,14 @@ export class TokenResolverService {
    * when registering tokens in defineBuilderConfig (e.g. "IFoo_a1b2c3d4").
    * Used by DependencyAnalyzer to match constructor parameter types against
    * registered token IDs.
+   *
+   * Delegates to `getTypeId` to ensure type aliases are handled consistently.
+   * The old inline implementation only checked `type.getSymbol()`, missing
+   * `type.aliasSymbol`, which caused validators to produce false-positive
+   * "missing dependency" errors for type aliases.
    */
   getHashedTokenIdFromType(type: ts.Type): string {
-    const symbol = type.getSymbol();
-    if (!symbol) return this.checker.typeToString(type);
-
-    const name = symbol.getName();
-    if (name === '__type' || name === 'InterfaceToken' || name === '__brand') {
-      return this.checker.typeToString(type);
-    }
-
-    const declarations = symbol.getDeclarations();
-    if (declarations && declarations.length > 0) {
-      return HashUtils.generateTokenId(symbol, declarations[0].getSourceFile());
-    }
-
-    return name;
+    return this.getTypeId(type);
   }
 
   /**
