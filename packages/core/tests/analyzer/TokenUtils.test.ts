@@ -25,4 +25,9 @@ describe('getSimpleName', () => {
   it('preserves token with non-hex suffix', () => {
     expect(getSimpleName('IService_v2')).toBe('IService_v2');
   });
+
+  it('strips underscore+hash from type name inside useInterface<T>()', () => {
+    // The split('_')[0] logic in getSimpleName strips everything after first _ in the type
+    expect(getSimpleName('useInterface<ILogger_abc12345>()')).toBe('ILogger');
+  });
 });
