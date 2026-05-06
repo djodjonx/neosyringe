@@ -1,5 +1,15 @@
 # @djodjonx/neosyringe
 
+## [0.2.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.2.0...neosyringe-v0.2.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* address all remaining code review issues ([2ce9310](https://github.com/djodjonx/neosyringe/commit/2ce9310ce3da4bb49d6ab9b540d7eee9a06aae94))
+* address code review feedback ([75fe611](https://github.com/djodjonx/neosyringe/commit/75fe611c933e5ddce015a9c59296af85ea95a9ea))
+* address PR review feedback (C2, C4, C5, C6, C7) ([05bd819](https://github.com/djodjonx/neosyringe/commit/05bd8193ebf825e9acbba9f3c41afd8a3a53d085))
+* **neosyringe:** narrow BuilderConfig.useContainer from any to Container | AsyncContainer ([4533bf5](https://github.com/djodjonx/neosyringe/commit/4533bf5ad31462002ee128d7d192df2cd56f9228))
+
 ## [0.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.1.2...neosyringe-v0.2.0) (2026-04-21)
 
 

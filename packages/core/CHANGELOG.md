@@ -1,5 +1,33 @@
 # @djodjonx/neosyringe-core
 
+## [2.1.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v2.0.0...neosyringe-core-v2.1.0) (2026-05-06)
+
+
+### Features
+
+* **core:** add ILogger abstraction to TokenResolverService ([aa38741](https://github.com/djodjonx/neosyringe/commit/aa38741025f414787169850637a2c1a4adef9930))
+
+
+### Bug Fixes
+
+* address all 15 code review issues ([d66a26a](https://github.com/djodjonx/neosyringe/commit/d66a26af5be3de7e5e4ce521eb689a9fcdf155c7))
+* address all remaining code review issues ([2ce9310](https://github.com/djodjonx/neosyringe/commit/2ce9310ce3da4bb49d6ab9b540d7eee9a06aae94))
+* address code review feedback ([75fe611](https://github.com/djodjonx/neosyringe/commit/75fe611c933e5ddce015a9c59296af85ea95a9ea))
+* address PR review feedback (C2, C4, C5, C6, C7) ([05bd819](https://github.com/djodjonx/neosyringe/commit/05bd8193ebf825e9acbba9f3c41afd8a3a53d085))
+* **core:** address code-review issues — guard duplication and struct mutation ([5a6e48d](https://github.com/djodjonx/neosyringe/commit/5a6e48dcb2afc4e73067d1ee49f035044cfac27b))
+* **core:** address Copilot PR review comments ([0ff8292](https://github.com/djodjonx/neosyringe/commit/0ff8292b9b1e98bfe4b4bedd65c8381a104789c6))
+* **core:** detect cycles involving multi-injection tokens in CycleValidator ([92e3c2a](https://github.com/djodjonx/neosyringe/commit/92e3c2a04923df996e7a5940493c9c4ddef96e06))
+* **core:** emit one cycle error per multi-provider instead of only the first ([4e74a25](https://github.com/djodjonx/neosyringe/commit/4e74a2530c1d2569e653138b519e3a0e37bf770f))
+* **core:** preserve first-match semantics in buildNameIndex ([7cf69ce](https://github.com/djodjonx/neosyringe/commit/7cf69ce05319ec24182b473001ba500121f557c5))
+* **core:** resolve property tokens in DependencyAnalyzer to prevent false missing-dep errors ([250e5ae](https://github.com/djodjonx/neosyringe/commit/250e5ae4504aa4aed0a071f775b550e3c51930a5))
+* **core:** unify getHashedTokenIdFromType with getTypeId to prevent type alias token mismatch ([ee580ef](https://github.com/djodjonx/neosyringe/commit/ee580ef03282b69cde18db28d5c8edf1f8f1179f))
+* **core:** use TSContext.projectRoot in HashUtils instead of process.cwd() ([f67fbce](https://github.com/djodjonx/neosyringe/commit/f67fbce1c14458979c887c2aa58ca85b581be591))
+
+
+### Performance Improvements
+
+* **core:** replace O(n) findConfigByName with O(1) name index in TokenResolver ([a814759](https://github.com/djodjonx/neosyringe/commit/a814759762daa6c70aecf91292c1a588a450b64e))
+
 ## [2.0.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v1.3.0...neosyringe-core-v2.0.0) (2026-04-21)
 
 
