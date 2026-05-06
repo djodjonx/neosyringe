@@ -1,5 +1,5 @@
 import type { DependencyGraph, TokenId } from '../analyzer/types';
-import { getFactoryName, type GetImport } from './FactoryEmitter';
+import { getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
 
 /** Returns true if any node in the graph has an async factory. */
 export function hasAsyncFactories(graph: DependencyGraph): boolean {
@@ -52,7 +52,6 @@ export function generateDestroyMethod(
 ): string {
   const hasAsyncFactory = hasAsyncFactories(graph);
   const hasAsyncDisposable = hasAsyncDisposables(graph, sorted);
-  const isAsyncDestroy = hasAsyncDisposable;
 
   // Collect disposable singletons in reverse dependency order
   const disposables: Array<{ tokenKey: string; isAsync: boolean }> = [];
@@ -62,18 +61,10 @@ export function generateDestroyMethod(
     if (node.service.lifecycle === 'transient') continue;
     if (!node.service.isDisposable && !node.service.isAsyncDisposable) continue;
 
-    let tokenKey: string;
-    if (node.service.isInterfaceToken) {
-      tokenKey = JSON.stringify(node.service.tokenId);
-    } else if (node.service.tokenSymbol) {
-      tokenKey = getImport(node.service.tokenSymbol);
-    } else if (node.service.implementationSymbol) {
-      tokenKey = getImport(node.service.implementationSymbol);
-    } else {
-      tokenKey = JSON.stringify(node.service.tokenId);
-    }
-
-    disposables.push({ tokenKey, isAsync: !!node.service.isAsyncDisposable });
+    disposables.push({
+      tokenKey: resolveTokenKey(node.service, getImport),
+      isAsync: !!node.service.isAsyncDisposable,
+    });
   }
 
   const lines: string[] = [];
@@ -86,8 +77,8 @@ export function generateDestroyMethod(
   }
   lines.push('this.instances.clear();');
 
-  const asyncKw = isAsyncDestroy ? 'async ' : '';
-  const ret = isAsyncDestroy ? 'Promise<void>' : 'void';
+  const asyncKw = hasAsyncDisposable ? 'async ' : '';
+  const ret = hasAsyncDisposable ? 'Promise<void>' : 'void';
   return `public ${asyncKw}destroy(): ${ret} {
     ${lines.join('\n    ')}
   }`;

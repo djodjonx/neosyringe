@@ -84,7 +84,7 @@ export class Generator {
     const factories = generateFactories(this.graph, sorted, getImport);
     const resolveCases = generateResolveCases(this.graph, sorted, getImport);
     const multiFactories = generateMultiFactories(this.graph, getImport);
-    const resolveAllMethod = generateResolveAllMethod(this.graph, getImport, resolveGuard);
+    const resolveAllMethod = generateResolveAllMethod(this.graph, getImport, hasAsync);
     const initializeMethod = hasAsync ? generateInitializeMethod(this.graph, sorted) : '';
     const destroyMethod = generateDestroyMethod(this.graph, sorted, getImport);
 
