@@ -6,6 +6,7 @@ import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
 import { Generator } from '@djodjonx/neosyringe-core/generator';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { transformUseInterfaceCalls, type UsedTokenEntry } from './useInterfaceTransform';
+import { hasNeoSyringeMarkers } from './markerUtils';
 
 /**
  * NeoSyringe build plugin for Vite, Rollup, Webpack, and other bundlers.
@@ -62,7 +63,7 @@ export const neoSyringePlugin = createUnplugin(() => {
 
     transform(code, id) {
       // Quick exit for files that don't reference NeoSyringe APIs — avoids tsconfig load
-      if (!code.includes('defineBuilderConfig') && !code.includes('useInterface')) return;
+      if (!hasNeoSyringeMarkers(code)) return;
 
       const options = getCompilerOptions();
 
