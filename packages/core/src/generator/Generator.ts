@@ -4,6 +4,7 @@ import { TSContext } from '../TSContext';
 import { DependencyGraph, TokenId } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { FACTORY_NAME_SANITIZER } from '../analyzer/shared/constants';
+import { topologicalSort } from './TopologicalSorter';
 
 /**
  * Generates TypeScript code for the dependency injection container.
@@ -334,34 +335,7 @@ export const ${variableName || 'container'} = ${instantiation};
    * @returns Array of TokenIds in dependency order.
    */
   private topologicalSort(): TokenId[] {
-    const visited = new Set<TokenId>();
-    const stack = new Set<TokenId>();
-    const sorted: TokenId[] = [];
-
-    const visit = (id: TokenId) => {
-      if (visited.has(id)) return;
-      if (stack.has(id)) {
-        throw new Error(
-          `[Generator] Cycle detected involving '${id}'. Validate the graph before calling generate().`
-        );
-      }
-      stack.add(id);
-      const node = this.graph.nodes.get(id);
-      if (node) {
-        for (const depId of node.dependencies) {
-          visit(depId);
-        }
-        sorted.push(id);
-      }
-      stack.delete(id);
-      visited.add(id);
-    };
-
-    for (const id of this.graph.nodes.keys()) {
-      visit(id);
-    }
-
-    return sorted;
+    return topologicalSort(this.graph.nodes);
   }
 
   /**
