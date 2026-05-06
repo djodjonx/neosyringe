@@ -140,14 +140,6 @@ export default function neoSyringeTransformer(
           languageVersion,
           true,
         );
-        // Set version as a hash of the transformed content to satisfy the builder.
-        // This matches what TypeScript's createIncrementalCompilerHost does internally
-        // via setGetSourceFileAsHashVersioned.
-        if ((sf as any).version === undefined) {
-          (sf as any).version = (baseHost as any).createHash
-            ? (baseHost as any).createHash(transformedText)
-            : hashString(transformedText);
-        }
         return sf;
       }
       return originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
@@ -158,16 +150,4 @@ export default function neoSyringeTransformer(
   // bind symbols against the transformed text.
   const rootFileNames = program.getRootFileNames();
   return tsInstance.createProgram(rootFileNames, compilerOptions, customHost);
-}
-
-/**
- * Simple djb2 hash for version fingerprinting.
- */
-function hashString(text: string): string {
-  let hash = 5381;
-  for (let i = 0; i < text.length; i++) {
-    hash = ((hash << 5) + hash) ^ text.charCodeAt(i);
-    hash = hash | 0; // Convert to 32-bit integer
-  }
-  return String(hash >>> 0);
 }
