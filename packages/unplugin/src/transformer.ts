@@ -3,6 +3,7 @@ import type { PluginConfig, ProgramTransformerExtras } from 'ts-patch';
 import { Analyzer, HashUtils } from '@djodjonx/neosyringe-core/analyzer';
 import { Generator, GraphValidator } from '@djodjonx/neosyringe-core/generator';
 import { transformUseInterfaceCalls } from './useInterfaceTransform';
+import { hasNeoSyringeMarkers } from './markerUtils';
 
 /**
  * ts-patch–compatible TypeScript **Program** transformer for NeoSyringe.
@@ -44,7 +45,7 @@ export default function neoSyringeTransformer(
     const code = sourceFile.text;
     const fileName = sourceFile.fileName;
 
-    if (!code.includes('defineBuilderConfig') && !code.includes('useInterface')) {
+    if (!hasNeoSyringeMarkers(code)) {
       continue;
     }
 
