@@ -86,20 +86,27 @@ export class CycleValidator implements IValidator {
         reportedCycles.add(cycleKey);
 
         const readableCycle = cycle.map(id => getSimpleName(id));
-        // localInjections only covers singular providers; multi-injection tokens live
-        // in multiInjections and can also form cycles, so we fall back to [0] here.
-        // TODO: emit one error per multi-provider that participates in the cycle,
-        // not just the first one. Currently only [0] is reported.
-        const info =
-          config.localInjections.get(tokenId) ??
-          config.multiInjections?.get(tokenId)?.[0];
-        if (info) {
+        const localInfo = config.localInjections.get(tokenId);
+        if (localInfo) {
           errors.push({
             type: 'cycle',
             message: `Circular dependency detected: ${readableCycle.join(' -> ')}`,
-            node: info.node,
+            node: localInfo.node,
             sourceFile: config.sourceFile,
           });
+        } else {
+          // Multi-injection: emit one error per provider participating in the cycle
+          const multiInfos = config.multiInjections?.get(tokenId);
+          if (multiInfos) {
+            for (const info of multiInfos) {
+              errors.push({
+                type: 'cycle',
+                message: `Circular dependency detected: ${readableCycle.join(' -> ')}`,
+                node: info.node,
+                sourceFile: config.sourceFile,
+              });
+            }
+          }
         }
       }
     }

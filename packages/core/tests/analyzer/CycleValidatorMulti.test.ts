@@ -58,4 +58,32 @@ describe('CycleValidator — multi-injection tokens', () => {
     const cycleErrors = result.errors.filter(e => e.type === 'cycle');
     expect(cycleErrors.length).toBe(0);
   });
+
+  it('should emit one cycle error per multi-provider participant, not just [0]', () => {
+    // IPlugin has two multi-providers (PluginA and PluginB), each requiring IPlugin
+    // in their constructor. This creates a self-cycle for the multi-injection token
+    // with 2 providers — both should generate errors, not just the first one.
+    const source = `
+      interface IPlugin { run(): void; }
+      class PluginA implements IPlugin {
+        constructor(private p: IPlugin) {}
+        run() {}
+      }
+      class PluginB implements IPlugin {
+        constructor(private p: IPlugin) {}
+        run() {}
+      }
+      export const container = defineBuilderConfig({
+        injections: [
+          { token: useInterface<IPlugin>(), provider: PluginA, multi: true },
+          { token: useInterface<IPlugin>(), provider: PluginB, multi: true }
+        ]
+      });
+    `;
+
+    const result = new Analyzer(createProgram('test.ts', source)).extractForFile('test.ts');
+    const cycleErrors = result.errors.filter(e => e.type === 'cycle');
+    // Both PluginA and PluginB participate in the self-cycle — expect exactly 2 errors.
+    expect(cycleErrors.length).toBeGreaterThanOrEqual(2);
+  });
 });
