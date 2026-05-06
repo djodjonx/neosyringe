@@ -12,11 +12,11 @@ export function topologicalSort(nodes: Map<TokenId, DependencyNode>): TokenId[] 
   for (const startId of nodes.keys()) {
     if (visited.has(startId)) continue;
 
-    // Each stack frame: [id, dependencies iterator, recursion-guard flag]
-    const iterStack: Array<[TokenId, Iterator<TokenId>, boolean]> = [];
+    // Each stack frame: [id, dependencies iterator]
+    const iterStack: Array<[TokenId, Iterator<TokenId>]> = [];
     const recursionSet = new Set<TokenId>();
 
-    iterStack.push([startId, (nodes.get(startId)?.dependencies ?? [])[Symbol.iterator](), true]);
+    iterStack.push([startId, (nodes.get(startId)?.dependencies ?? [])[Symbol.iterator]()]);
     recursionSet.add(startId);
 
     while (iterStack.length > 0) {
@@ -32,7 +32,7 @@ export function topologicalSort(nodes: Map<TokenId, DependencyNode>): TokenId[] 
             `[Generator] Cycle detected involving '${depId}'. Validate the graph before calling generate().`
           );
         }
-        iterStack.push([depId, (nodes.get(depId)?.dependencies ?? [])[Symbol.iterator](), true]);
+        iterStack.push([depId, (nodes.get(depId)?.dependencies ?? [])[Symbol.iterator]()]);
         recursionSet.add(depId);
       } else {
         // All deps processed — emit this node
