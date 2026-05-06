@@ -350,6 +350,33 @@ describe('MissingDependencyValidator', () => {
     });
   });
 
+  describe('property tokens', () => {
+    it('should not report false missing dependency when primitive param is covered by a useProperty token', () => {
+      const source = `
+        class DatabaseService {
+          constructor(private connectionString: string) {}
+        }
+
+        export const partial = definePartialConfig({
+          injections: [
+            {
+              token: useProperty<string>(DatabaseService, 'connectionString'),
+              provider: { useValue: 'postgres://localhost/db' }
+            },
+            { token: DatabaseService }
+          ]
+        });
+      `;
+
+      const program = createProgram('test.ts', source);
+      const analyzer = new Analyzer(program);
+      const result = analyzer.extractForFile('test.ts');
+
+      const missingErrors = result.errors.filter(e => e.type === 'missing');
+      expect(missingErrors.length).toBe(0);
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle class with no constructor', () => {
       const source = `
