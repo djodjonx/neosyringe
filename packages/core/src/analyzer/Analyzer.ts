@@ -153,13 +153,14 @@ export class Analyzer {
     configParser: ConfigParser;
     parentContainerResolver: ParentContainerResolver;
     parentContainerNames: Set<string>;
-    extendsReferences: Set<string>;
   } | undefined;
+
+  // Populated from ASTVisitor results during extract() — separate from service construction.
+  private _extendsReferences = new Set<string>();
 
   private getLegacyServices() {
     if (!this._legacyServices) {
       const configParser = new ConfigParser(this.checker, this.tokenResolverService);
-      const parentContainerNames = new Set<string>();
       this._legacyServices = {
         dependencyResolver: new DependencyResolver(this.checker, this.tokenResolverService),
         configParser,
@@ -168,8 +169,7 @@ export class Analyzer {
           this.tokenResolverService,
           (node, graph) => this.parseBuilderConfig(node, graph)
         ),
-        parentContainerNames,
-        extendsReferences: new Set<string>(),
+        parentContainerNames: new Set<string>(),
       };
     }
     return this._legacyServices;
@@ -244,7 +244,7 @@ export class Analyzer {
       errors: [], // Initialize error collection
     };
 
-    const { parentContainerNames, extendsReferences } = this.getLegacyServices();
+    const { parentContainerNames } = this.getLegacyServices();
 
     // Single pass: collect parent container names, extends refs, and config call sites
     // This replaces three separate AST traversals with one.
@@ -257,8 +257,7 @@ export class Analyzer {
     for (const name of visitorResults.parentContainers) {
       parentContainerNames.add(name);
     }
-    const legacySvc = this.getLegacyServices();
-    legacySvc.extendsReferences = visitorResults.extendsReferences;
+    this._extendsReferences = visitorResults.extendsReferences;
 
     // Second pass: parse and build the dependency graph
     for (const sourceFile of this.program.getSourceFiles()) {
@@ -367,7 +366,8 @@ export class Analyzer {
    * @param graph - The graph to populate.
    */
   private visitNode(node: ts.Node, graph: DependencyGraph): void {
-    const { parentContainerNames, extendsReferences } = this.getLegacyServices();
+    const { parentContainerNames } = this.getLegacyServices();
+    const extendsReferences = this._extendsReferences;
 
     if (TSContext.ts.isCallExpression(node)) {
       if (CallExpressionUtils.isDefineBuilderConfig(node)) {

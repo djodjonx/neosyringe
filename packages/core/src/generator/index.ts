@@ -9,7 +9,7 @@ export {
   generateMultiFactories,
   type GetImport,
 } from './FactoryEmitter';
-export { generateResolveCases, generateResolveAllMethod } from './ResolveEmitter';
+export { generateResolveCases, generateResolveAllMethod, buildAsyncResolveGuard } from './ResolveEmitter';
 export {
   hasAsyncFactories,
   hasAsyncDisposables,
