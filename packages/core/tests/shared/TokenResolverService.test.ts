@@ -337,6 +337,45 @@ describe('TokenResolverService', () => {
     });
   });
 
+  describe('getHashedTokenIdFromType', () => {
+    it('produces the same token ID as getTypeId for a named interface', () => {
+      // The two methods must be identical — if they diverge, validators (e.g.
+      // MissingDependencyValidator, CycleValidator) can produce false-positive
+      // "missing dependency" errors for type aliases.
+      const sourceCode = `
+        interface ILogger { log(msg: string): void; }
+        const x: ILogger = null as any;
+      `;
+      const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
+      const testService = new TokenResolverService(testChecker);
+
+      const varDecl = findNode(sourceFile, ts.isVariableDeclaration);
+      if (!varDecl || !varDecl.type) throw new Error('Variable declaration not found');
+
+      const type = testChecker.getTypeFromTypeNode(varDecl.type);
+      expect(testService.getHashedTokenIdFromType(type)).toBe(testService.getTypeId(type));
+    });
+
+    it('produces the same token ID as getTypeId for a type alias', () => {
+      // Type aliases use type.aliasSymbol, not type.getSymbol(). The old implementation
+      // of getHashedTokenIdFromType only checked type.getSymbol(), causing it to diverge
+      // from getTypeId for type aliases — this test guards against that regression.
+      const sourceCode = `
+        interface IService { run(): void; }
+        type ServiceAlias = IService;
+        const x: ServiceAlias = null as any;
+      `;
+      const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
+      const testService = new TokenResolverService(testChecker);
+
+      const varDecl = findNode(sourceFile, ts.isVariableDeclaration);
+      if (!varDecl || !varDecl.type) throw new Error('Variable declaration not found');
+
+      const type = testChecker.getTypeFromTypeNode(varDecl.type);
+      expect(testService.getHashedTokenIdFromType(type)).toBe(testService.getTypeId(type));
+    });
+  });
+
   describe('resolveSymbol', () => {
     it('should call logger.warn when alias chain exceeds 20 hops', () => {
       const { checker: testChecker } = createProgramFromSource('');
