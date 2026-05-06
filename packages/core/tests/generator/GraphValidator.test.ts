@@ -124,7 +124,7 @@ describe('GraphValidator', () => {
       nodes: new Map([
         ['PluginManager', {
           service: { tokenId: 'PluginManager', registrationNode: mockNode, type: 'autowire', lifecycle: 'singleton' } as any,
-          dependencies: ['IPlugin_abc'],
+          dependencies: ['IPlugin_abc', 'IRepository_xyz'],
         }],
       ]),
       roots: [],
@@ -135,10 +135,10 @@ describe('GraphValidator', () => {
       ]),
     };
 
-    const validator = new GraphValidator();
     const result = validator.validateAll(graph);
 
     const missingErrors = result.errors.filter(e => e.type === 'missing');
-    expect(missingErrors).toHaveLength(0);
+    expect(missingErrors).toHaveLength(1);
+    expect(missingErrors[0].dependencyId).toBe('IRepository_xyz');
   });
 });
