@@ -115,4 +115,30 @@ describe('GraphValidator', () => {
 
     expect(() => validator.validate(graph)).not.toThrow();
   });
+
+  it('should NOT report missing when dep is satisfied by a multi-node (legacy path)', () => {
+    const mockNode = { getSourceFile: () => mockSourceFile } as unknown as ts.Node;
+
+    const graph: DependencyGraph = {
+      containerId: 'Test',
+      nodes: new Map([
+        ['PluginManager', {
+          service: { tokenId: 'PluginManager', registrationNode: mockNode, type: 'autowire', lifecycle: 'singleton' } as any,
+          dependencies: ['IPlugin_abc'],
+        }],
+      ]),
+      roots: [],
+      multiNodes: new Map([
+        ['IPlugin_abc', [
+          { service: { tokenId: 'IPlugin_abc', registrationNode: mockNode, type: 'explicit', lifecycle: 'singleton' } as any, dependencies: [] },
+        ]],
+      ]),
+    };
+
+    const validator = new GraphValidator();
+    const result = validator.validateAll(graph);
+
+    const missingErrors = result.errors.filter(e => e.type === 'missing');
+    expect(missingErrors).toHaveLength(0);
+  });
 });
