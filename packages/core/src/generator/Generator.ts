@@ -220,13 +220,14 @@ export const ${variableName || 'container'} = ${instantiation};
   /**
    * Emits the `_graph` debug getter into the generated container class.
    *
-   * The getter is always present in the generated code. In production
-   * (`NODE_ENV === 'production'`), it returns an empty array at runtime
-   * so token IDs are not exposed. Bundlers with dead-code elimination
-   * will strip the branch entirely when NODE_ENV is statically known.
+   * Token IDs are always embedded as a literal in the generated source.
+   * In production (`NODE_ENV === 'production'`), the runtime branch returns `[]`
+   * so resolved values are not exposed at runtime, but the literals remain in
+   * the bundle. Bundlers with static dead-code elimination (e.g., esbuild with
+   * NODE_ENV inlined) will strip the literal entirely.
    */
   private emitDebugGetter(): string {
-    return `// For debugging/inspection — omitted in production
+    return `// For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
     return ${JSON.stringify(Array.from(this.graph.nodes.keys()))};

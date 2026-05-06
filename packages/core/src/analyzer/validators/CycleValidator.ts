@@ -47,8 +47,10 @@ export class CycleValidator implements IValidator {
 
     for (const [tokenId, info] of config.localInjections) {
       const deps = this.dependencyAnalyzer.getRequiredDependencies(info.definition, allLocalTokens);
-      // Only include deps that are registered locally (external deps can't form local cycles)
-      const localDeps = deps.filter(dep => config.localInjections.has(dep));
+      // Include deps registered as either local or multi-injection (external deps can't form cycles)
+      const localDeps = deps.filter(dep =>
+        config.localInjections.has(dep) || config.multiInjections?.has(dep)
+      );
       map.set(tokenId, localDeps);
     }
 
@@ -85,7 +87,10 @@ export class CycleValidator implements IValidator {
       if (!visited.has(dep)) {
         this.detectCycles(dep, depMap, config, visited, stack, errors, reportedCycles);
       } else if (stack.has(dep)) {
-        const cycle = [...stack, dep];
+        // Slice from the first occurrence of dep to extract only the actual cycle,
+        // not the full DFS path leading to it.
+        const stackArr = [...stack];
+        const cycle = [...stackArr.slice(stackArr.indexOf(dep)), dep];
         const cycleKey = [...cycle].sort().join('\0');
         if (reportedCycles.has(cycleKey)) continue;
         reportedCycles.add(cycleKey);

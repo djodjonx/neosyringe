@@ -253,7 +253,7 @@ export class ConfigCollector implements IConfigCollector {
 
       const info = this.parseInjection(element, sourceFile);
       if (info) {
-        // Check if it's an AnalysisError (ParsedInjection has __kind: 'info')
+        // Check if it's an AnalysisError (InjectionInfo has __kind: 'info')
         if (!('__kind' in info)) {
           valueErrors.push(info as unknown as AnalysisError);
           continue;
