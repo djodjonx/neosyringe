@@ -445,6 +445,7 @@ describe('MissingDependencyValidator', () => {
     it('should NOT report missing when dep is satisfied by a multi-registration (modular path)', () => {
       const source = `
         interface IPlugin { run(): void; }
+        interface IRepository { query(): void; }
         class PluginA implements IPlugin { run() {} }
         class PluginB implements IPlugin { run() {} }
 
@@ -452,11 +453,16 @@ describe('MissingDependencyValidator', () => {
           constructor(private plugin: IPlugin) {}
         }
 
+        class DataService {
+          constructor(private repo: IRepository) {}
+        }
+
         export const container = defineBuilderConfig({
           injections: [
             { token: useInterface<IPlugin>(), provider: PluginA, multi: true },
             { token: useInterface<IPlugin>(), provider: PluginB, multi: true },
             { token: PluginManager },
+            { token: DataService },
           ]
         });
       `;
@@ -466,7 +472,8 @@ describe('MissingDependencyValidator', () => {
       const result = analyzer.extractForFile('test.ts');
 
       const missingErrors = result.errors.filter(e => e.type === 'missing');
-      expect(missingErrors).toHaveLength(0);
+      expect(missingErrors).toHaveLength(1);
+      expect(missingErrors[0].context?.tokenText).toContain('IRepository');
     });
   });
 });
