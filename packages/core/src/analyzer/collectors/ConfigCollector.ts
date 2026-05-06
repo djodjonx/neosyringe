@@ -34,6 +34,7 @@ export interface IConfigCollector {
 export class ConfigCollector implements IConfigCollector {
   private readonly tokenResolverService: TokenResolverService;
   private readonly injectionParser: InjectionParser;
+  private readonly identifierIndexByFile = new Map<string, Map<string, ts.Identifier>>();
 
   constructor(
     private program: ts.Program,
@@ -439,25 +440,28 @@ export class ConfigCollector implements IConfigCollector {
   /**
    * Helper to find an identifier in a source file.
    */
+  private buildIdentifierIndex(sourceFile: ts.SourceFile): Map<string, ts.Identifier> {
+    const index = new Map<string, ts.Identifier>();
+    const visit = (node: ts.Node) => {
+      if (TSContext.ts.isIdentifier(node) && !index.has(node.text)) {
+        index.set(node.text, node);
+      }
+      TSContext.ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+    return index;
+  }
+
   private findIdentifierInFile(
     name: string,
     sourceFile: ts.SourceFile
   ): ts.Identifier | undefined {
-    let result: ts.Identifier | undefined;
-
-    const visit = (node: ts.Node) => {
-      if (result) return;
-
-      if (TSContext.ts.isIdentifier(node) && node.text === name) {
-        result = node;
-        return;
-      }
-
-      TSContext.ts.forEachChild(node, visit);
-    };
-
-    visit(sourceFile);
-    return result;
+    let index = this.identifierIndexByFile.get(sourceFile.fileName);
+    if (!index) {
+      index = this.buildIdentifierIndex(sourceFile);
+      this.identifierIndexByFile.set(sourceFile.fileName, index);
+    }
+    return index.get(name);
   }
 
   private findProperty(
