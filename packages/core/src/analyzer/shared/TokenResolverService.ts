@@ -101,6 +101,17 @@ export class TokenResolverService {
   }
 
   /**
+   * Returns the initializer of a VariableDeclaration, or undefined if the
+   * declaration is not a variable or has no initializer.
+   */
+  private getVariableInitializer(decl: ts.Declaration): ts.Expression | undefined {
+    if (TSContext.ts.isVariableDeclaration(decl) && decl.initializer) {
+      return decl.initializer;
+    }
+    return undefined;
+  }
+
+  /**
    * Resolves an identifier to its variable initializer.
    *
    * Follows the symbol to its declaration and returns the initializer expression.
@@ -130,25 +141,17 @@ export class TokenResolverService {
     const decl = declarations[0];
 
     // Variable declaration: const x = ...
-    if (TSContext.ts.isVariableDeclaration(decl) && decl.initializer) {
-      return decl.initializer;
-    }
+    const directInit = this.getVariableInitializer(decl);
+    if (directInit) return directInit;
 
     // Import specifier: import { x } from '...'
     if (TSContext.ts.isImportSpecifier(decl)) {
-      const importDecl = decl.parent.parent.parent;
-      if (TSContext.ts.isImportDeclaration(importDecl)) {
-        // Follow the import to the original declaration
-        const importSymbol = this.checker.getSymbolAtLocation(decl.name);
-        if (importSymbol) {
-          const aliasedSymbol = this.checker.getAliasedSymbol(importSymbol);
-          const aliasedDeclarations = aliasedSymbol.getDeclarations();
-          if (aliasedDeclarations && aliasedDeclarations.length > 0) {
-            const aliasedDecl = aliasedDeclarations[0];
-            if (TSContext.ts.isVariableDeclaration(aliasedDecl) && aliasedDecl.initializer) {
-              return aliasedDecl.initializer;
-            }
-          }
+      const importSymbol = this.checker.getSymbolAtLocation(decl.name);
+      if (importSymbol) {
+        const aliasedSymbol = this.checker.getAliasedSymbol(importSymbol);
+        const aliasedDeclarations = aliasedSymbol.getDeclarations();
+        if (aliasedDeclarations && aliasedDeclarations.length > 0) {
+          return this.getVariableInitializer(aliasedDeclarations[0]);
         }
       }
     }
@@ -190,22 +193,18 @@ export class TokenResolverService {
     const declarations = resolvedSymbol.getDeclarations();
     if (!declarations || declarations.length === 0) return undefined;
 
-    const decl = declarations[0];
-    if (
-      TSContext.ts.isVariableDeclaration(decl) &&
-      decl.initializer &&
-      TSContext.ts.isObjectLiteralExpression(decl.initializer)
-    ) {
-      // Find the property in the object literal
-      const propName = propertyAccess.name.text;
-      for (const prop of decl.initializer.properties) {
-        if (
-          TSContext.ts.isPropertyAssignment(prop) &&
-          TSContext.ts.isIdentifier(prop.name) &&
-          prop.name.text === propName
-        ) {
-          return prop.initializer;
-        }
+    const init = this.getVariableInitializer(declarations[0]);
+    if (!init || !TSContext.ts.isObjectLiteralExpression(init)) return undefined;
+
+    // Find the property in the object literal
+    const propName = propertyAccess.name.text;
+    for (const prop of init.properties) {
+      if (
+        TSContext.ts.isPropertyAssignment(prop) &&
+        TSContext.ts.isIdentifier(prop.name) &&
+        prop.name.text === propName
+      ) {
+        return prop.initializer;
       }
     }
 
