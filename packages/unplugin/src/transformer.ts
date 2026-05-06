@@ -39,6 +39,16 @@ export default function neoSyringeTransformer(
   // Map of fileName -> transformed source text
   const transformedSources = new Map<string, string>();
 
+  // Cache per-file programs for the duration of this transformation call.
+  // Avoids creating a new ts.Program for each container file in the same build.
+  const fileProgramCache = new Map<string, ts.Program>();
+  function getFileProgram(fileName: string): ts.Program {
+    if (!fileProgramCache.has(fileName)) {
+      fileProgramCache.set(fileName, tsInstance.createProgram([fileName], compilerOptions));
+    }
+    return fileProgramCache.get(fileName)!;
+  }
+
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue;
 
@@ -54,7 +64,7 @@ export default function neoSyringeTransformer(
     // --- Container transformation ---
     if (code.includes('defineBuilderConfig')) {
       // Use a per-file sub-program so the Analyzer sees only this container file.
-      const fileProgram = tsInstance.createProgram([fileName], compilerOptions);
+      const fileProgram = getFileProgram(fileName);
       const analyzer = new Analyzer(fileProgram);
       const graph = analyzer.extract();
 
