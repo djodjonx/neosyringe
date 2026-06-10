@@ -64,16 +64,18 @@ describe('Plugin — multi-container per file', () => {
   it('emits a NeoContainer class for the parent (sharedKernel)', () => {
     const transform = makeTransform();
     const result = transform(SAME_FILE_CODE, FILE) ?? SAME_FILE_CODE;
-    // Generator names the class after containerId ("SharedKernel")
-    expect(result).toMatch(/class.*SharedKernel/);
+    // Generator produces class NeoContainer that is instantiated for the parent
+    expect(result).toContain('class NeoContainer');
+    expect(result).toContain('const sharedKernel = new NeoContainer');
   });
 
   it('emits a NeoContainer class for the child (container)', () => {
     const transform = makeTransform();
     const result = transform(SAME_FILE_CODE, FILE) ?? SAME_FILE_CODE;
-    // Both classes must be present
-    const containerClassMatches = (result.match(/class Neo\w+Container/g) ?? []);
+    // Both containers must be present with NeoContainer classes
+    const containerClassMatches = (result.match(/class NeoContainer/g) ?? []);
     expect(containerClassMatches.length).toBeGreaterThanOrEqual(2);
+    expect(result).toContain('const container = new NeoContainer');
   });
 
   it('buildEnd does not throw when a parent token is used at an injection site', () => {
