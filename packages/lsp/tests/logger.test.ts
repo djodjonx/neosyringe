@@ -299,5 +299,21 @@ describe('LSPLogger', () => {
       const logger = new LSPLogger(mockLogger as any);
       expect(logger.enabled).toBe(true);
     });
+
+    it('lazyVerbose: skips factory when shouldLog() is false even if verbose is enabled', () => {
+      // Covers logger.ts:140 — the shouldLog() guard inside lazyVerbose.
+      // Requires isVerboseEnabled=true (NEO_SYRINGE_LSP_VERBOSE=1) AND shouldLog()=false.
+      vi.stubEnv('NEO_SYRINGE_LSP_VERBOSE', '1');
+      const mockLogger = {
+        loggingEnabled: () => false,
+        info: vi.fn(),
+      };
+      const logger = new LSPLogger(mockLogger as any);
+      const factory = vi.fn(() => 'should not be called');
+
+      logger.lazyVerbose(factory);
+
+      expect(factory).not.toHaveBeenCalled();
+    });
   });
 });
