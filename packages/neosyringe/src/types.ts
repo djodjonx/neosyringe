@@ -228,19 +228,28 @@ export function useInterface<T>(): InterfaceToken<T> {
  * Creates a property token for injecting primitive values into class constructors.
  * The token is bound to a specific class and parameter name for type-safety.
  *
+ * Only `T` (the primitive type) needs to be provided explicitly — `C` is inferred
+ * from the `targetClass` argument and rarely needs to be specified.
+ *
+ * @template T - The primitive type (`string`, `number`, `boolean`, etc.)
+ * @template C - The class constructor type. **Inferred** from `targetClass`; almost never explicit.
+ *
  * @example
  * ```typescript
- * const apiUrl = useProperty<string>(ApiService, 'apiUrl');
+ * // T is explicit, C is inferred from the class argument
+ * const secret = useProperty<string>(JwtService, 'secret');
+ * const ttl = useProperty<number>(JwtService, 'ttl');
  *
  * defineBuilderConfig({
  *   injections: [
- *     { token: apiUrl, provider: () => 'http://localhost' },
- *     { token: ApiService }
+ *     { token: secret, provider: () => process.env.JWT_SECRET },
+ *     { token: ttl, provider: () => 3600 },
+ *     { token: useInterface<TokenService>(), provider: JwtService }
  *   ]
  * });
  * ```
  *
- * @throws {Error} If called at runtime without compilation.
+ * @throws {Error} If called at runtime without the build plugin.
  */
 export function useProperty<T, C extends Constructor<any> = Constructor<any>>(
   targetClass: C,
