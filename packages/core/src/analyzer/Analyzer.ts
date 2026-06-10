@@ -270,6 +270,64 @@ export class Analyzer {
   }
 
   /**
+   * Extracts one independent DependencyGraph per defineBuilderConfig call found
+   * across all source files in the program.
+   *
+   * Unlike extract(), this method does NOT skip parent containers. Every config
+   * receives its own graph, its own code-generation positions, and independent
+   * dependency resolution. The plugin uses this to generate code for every
+   * container in a file, regardless of whether it is referenced as a parent.
+   *
+   * graph.sourceFileName identifies which source file each graph belongs to,
+   * allowing the plugin to generate only the graphs for the file being processed
+   * while still registering tokens from all graphs (including imported containers).
+   *
+   * @returns One DependencyGraph per defineBuilderConfig in the program.
+   */
+  public extractAll(): DependencyGraph[] {
+    const { parentContainerNames } = this.getLegacyServices();
+
+    // Pass 1: collect metadata — parent names, extends refs, all call sites
+    const visitor = new ASTVisitor();
+    for (const sourceFile of this.program.getSourceFiles()) {
+      if (sourceFile.isDeclarationFile) continue;
+      visitor.visit(sourceFile);
+    }
+    const visitorResults = visitor.getResults();
+    for (const name of visitorResults.parentContainers) {
+      parentContainerNames.add(name);
+    }
+    this._extendsReferences = visitorResults.extendsReferences;
+
+    const graphs: DependencyGraph[] = [];
+
+    // Pass 2: build one graph per builder config (parents included — no skip)
+    for (const configCall of visitorResults.builderConfigs) {
+      const graph: DependencyGraph = {
+        containerId: 'DefaultContainer',
+        nodes: new Map(),
+        roots: [],
+        errors: [],
+      };
+
+      const positioned = this.setGraphPositions(configCall, graph);
+      if (!positioned) continue; // Skip anonymous/unrecognised patterns
+
+      graph.defineBuilderConfigStart = configCall.getStart();
+      graph.defineBuilderConfigEnd = configCall.getEnd();
+      graph.sourceFileName = configCall.getSourceFile().fileName;
+
+      this.parseBuilderConfig(configCall, graph);
+      this.resolveAllDependencies(graph);
+
+      graphs.push(graph);
+    }
+
+    return graphs;
+  }
+
+
+  /**
    * Analyzes all files in the program and returns all errors.
    *
    * **Modular path** used for batch validation.
@@ -361,6 +419,50 @@ export class Analyzer {
   }
 
   /**
+   * Reads the VariableStatement wrapping a defineBuilderConfig call and
+   * populates the graph's position fields and export modifier.
+   * Returns false if the positions could not be determined.
+   */
+  private setGraphPositions(node: ts.CallExpression, graph: DependencyGraph): boolean {
+    const parent = node.parent;
+
+    // Case 1: const varName = defineBuilderConfig(...)
+    if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
+      graph.exportedVariableName = parent.name.text;
+
+      let current: ts.Node = parent;
+      while (current && !TSContext.ts.isVariableStatement(current)) {
+        current = current.parent;
+      }
+      if (!current || !TSContext.ts.isVariableStatement(current)) return false;
+
+      graph.variableStatementStart = current.getStart();
+
+      const modifiers = TSContext.ts.canHaveModifiers(current)
+        ? TSContext.ts.getModifiers(current)
+        : undefined;
+
+      if (modifiers) {
+        const hasExport = modifiers.some(m => m.kind === TSContext.ts.SyntaxKind.ExportKeyword);
+        const hasDefault = modifiers.some(m => m.kind === TSContext.ts.SyntaxKind.DefaultKeyword);
+        graph.variableExportModifier = hasExport && hasDefault ? 'export default' : hasExport ? 'export' : 'none';
+      } else {
+        graph.variableExportModifier = 'none';
+      }
+      return true;
+    }
+
+    // Case 2: export default defineBuilderConfig(...)
+    if (TSContext.ts.isExportAssignment(parent) && parent.isExportEquals === false) {
+      graph.variableExportModifier = 'export default';
+      graph.variableStatementStart = parent.getStart();
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Visits an AST node to find container calls.
    * @param node - The AST node to visit.
    * @param graph - The graph to populate.
@@ -371,70 +473,27 @@ export class Analyzer {
 
     if (TSContext.ts.isCallExpression(node)) {
       if (CallExpressionUtils.isDefineBuilderConfig(node)) {
-        // Check if this is a parent container (should be skipped)
         const parent = node.parent;
 
-        // Case 1: const x = defineBuilderConfig(...)
         if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
           if (parentContainerNames.has(parent.name.text)) {
-            // Skip - this container is used as a parent, already processed
+            // Skip - this container is used as a parent, handled by extract()'s parent resolver
             return;
           }
-          // Extract the exported variable name
-          graph.exportedVariableName = parent.name.text;
-
-          // Find the VariableStatement to get insertion position and export modifier
-          let current: ts.Node = parent;
-          while (current && !TSContext.ts.isVariableStatement(current)) {
-            current = current.parent;
-          }
-          if (current && TSContext.ts.isVariableStatement(current)) {
-            // Use getStart() to exclude leading comments - we want to preserve them
-            graph.variableStatementStart = current.getStart();
-
-            // Detect export modifier
-            const modifiers = TSContext.ts.canHaveModifiers(current) ? TSContext.ts.getModifiers(current) : undefined;
-            if (modifiers) {
-              const hasExport = modifiers.some(m => m.kind === TSContext.ts.SyntaxKind.ExportKeyword);
-              const hasDefault = modifiers.some(m => m.kind === TSContext.ts.SyntaxKind.DefaultKeyword);
-
-              if (hasExport && hasDefault) {
-                graph.variableExportModifier = 'export default';
-              } else if (hasExport) {
-                graph.variableExportModifier = 'export';
-              } else {
-                // No export modifier found
-                graph.variableExportModifier = 'none';
-              }
-            } else {
-              // No modifiers at all
-              graph.variableExportModifier = 'none';
-            }
-          }
         }
-        // Case 2: export default defineBuilderConfig(...)
-        else if (TSContext.ts.isExportAssignment(parent) && parent.isExportEquals === false) {
-          // This is 'export default <expression>'
-          graph.variableExportModifier = 'export default';
-          graph.variableStatementStart = parent.getStart();
-          // No variable name in this case
-        }
+
+        // Populate positions using shared helper
+        this.setGraphPositions(node, graph);
 
         // Store the position of defineBuilderConfig call for replacement
         graph.defineBuilderConfigStart = node.getStart();
         graph.defineBuilderConfigEnd = node.getEnd();
         this.parseBuilderConfig(node, graph);
-      } else if (CallExpressionUtils.isDefinePartialConfig(node)) {
-        // Standalone partial configs (not extended by any defineBuilderConfig)
-        // should be validated in isolation to catch internal duplicates/type mismatches
-        // but their nodes should NOT be added to the main graph
-        const parent = node.parent;
 
+      } else if (CallExpressionUtils.isDefinePartialConfig(node)) {
+        const parent = node.parent;
         if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
           const partialName = parent.name.text;
-
-          // Check if this partial is used in any extends array
-          // If not, validate it in isolation
           if (!extendsReferences.has(partialName)) {
             const partialGraph: DependencyGraph = {
               containerId: partialName,
@@ -442,10 +501,7 @@ export class Analyzer {
               roots: [],
               errors: []
             };
-
             this.parseBuilderConfig(node, partialGraph);
-
-            // Only merge errors, not nodes
             if (partialGraph.errors && partialGraph.errors.length > 0) {
               if (!graph.errors) graph.errors = [];
               graph.errors.push(...partialGraph.errors);
