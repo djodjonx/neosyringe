@@ -315,7 +315,7 @@ export class Analyzer {
 
       graph.defineBuilderConfigStart = configCall.getStart();
       graph.defineBuilderConfigEnd = configCall.getEnd();
-      graph.sourceFileName = configCall.getSourceFile().fileName;
+      graph.sourceFileName = configCall.getSourceFile().fileName.replace(/\\/g, '/');
 
       this.parseBuilderConfig(configCall, graph);
       this.resolveAllDependencies(graph);

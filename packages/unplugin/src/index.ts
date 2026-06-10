@@ -71,9 +71,11 @@ export const neoSyringePlugin = createUnplugin(() => {
       if (code.includes('defineBuilderConfig')) {
         // Create a custom compilerHost that serves the current file's code
         // (otherwise createProgram can't read test code that doesn't exist on disk)
+        const norm = (p: string) => p.replace(/\\/g, '/');
+        
         const compilerHost: ts.CompilerHost = {
           getSourceFile: (fileName) => {
-            if (fileName === id) {
+            if (norm(fileName) === norm(id)) {
               return ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
             }
             try {
@@ -87,8 +89,8 @@ export const neoSyringePlugin = createUnplugin(() => {
           writeFile: () => {},
           getCurrentDirectory: () => process.cwd(),
           getDirectories: (path) => ts.sys.getDirectories(path),
-          fileExists: (fileName) => fileName === id || ts.sys.fileExists(fileName),
-          readFile: (fileName) => fileName === id ? code : ts.sys.readFile(fileName),
+          fileExists: (fileName) => norm(fileName) === norm(id) || ts.sys.fileExists(fileName),
+          readFile: (fileName) => norm(fileName) === norm(id) ? code : ts.sys.readFile(fileName),
           getCanonicalFileName: (fileName) => fileName,
           useCaseSensitiveFileNames: () => ts.sys.useCaseSensitiveFileNames,
           getNewLine: () => '\n',
