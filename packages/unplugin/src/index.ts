@@ -29,6 +29,7 @@ export const neoSyringePlugin = createUnplugin(() => {
   // Per-build registries — scoped to the factory instance, safe for parallel builds
   const registeredTokens = new Set<string>();
   const usedTokens = new Map<string, UsedTokenEntry>();
+  const generatedContainerVars = new Set<string>(); // variable names that were code-generated
 
   // Cache tsconfig parsing — tsconfig doesn't change during a build
   let compilerOptions: ts.CompilerOptions | undefined;
@@ -177,6 +178,10 @@ export const neoSyringePlugin = createUnplugin(() => {
               result.slice(0, graph.variableStatementStart!) +
               replacement +
               result.slice(graph.defineBuilderConfigEnd!);
+
+            if (graph.exportedVariableName) {
+              generatedContainerVars.add(graph.exportedVariableName);
+            }
           }
 
           // Transform any remaining useInterface<T>() call sites (injection sites)
@@ -210,6 +215,7 @@ export const neoSyringePlugin = createUnplugin(() => {
       if (errors.length > 0) {
         registeredTokens.clear();
         usedTokens.clear();
+        generatedContainerVars.clear();
 
         throw new Error(
           `\n${'='.repeat(60)}\n` +
@@ -222,6 +228,7 @@ export const neoSyringePlugin = createUnplugin(() => {
 
       registeredTokens.clear();
       usedTokens.clear();
+      generatedContainerVars.clear();
     },
   };
 });
