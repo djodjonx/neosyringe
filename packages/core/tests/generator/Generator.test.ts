@@ -167,4 +167,92 @@ describe('Generator', () => {
     expect(code).toContain('export default new NeoContainer');
     expect(code).not.toContain('const container =');
   });
+
+  describe('default export class', () => {
+    // Creates a symbol whose getName() returns 'default' but whose declaration
+    // is a ClassDeclaration with name.text = className. This matches what
+    // TypeScript produces for: export default class Login {}
+    function createDefaultExportSymbol(className: string): ts.Symbol {
+      const classDecl = {
+        kind: ts.SyntaxKind.ClassDeclaration,
+        name: { text: className },
+        getSourceFile: () => ({ fileName: '/src/login.ts' }),
+      };
+      return {
+        getName: () => 'default',
+        declarations: [classDecl],
+      } as unknown as ts.Symbol;
+    }
+
+    function makeDefaultExportGraph(depName: string, depSymbolName: string): DependencyGraph {
+      return {
+        containerId: 'Test',
+        nodes: new Map([
+          ['ILogin', {
+            service: {
+              tokenId: 'ILogin',
+              implementationSymbol: createDefaultExportSymbol('Login'),
+              registrationNode: {} as ts.Node,
+              type: 'explicit',
+              lifecycle: 'singleton',
+            } as ServiceDefinition,
+            dependencies: [depName],
+          }],
+          [depName, createMockNode(depName, [], depSymbolName, '/src/dep.ts')],
+        ]),
+        roots: ['ILogin'],
+      };
+    }
+
+    it('useDirectSymbolNames=true: uses class name instead of "default" in new expression', () => {
+      const graph = makeDefaultExportGraph('IRepo', 'Repo');
+      const code = new Generator(graph, true).generate();
+
+      // Must NOT generate invalid `new default(...)`
+      expect(code).not.toContain('new default(');
+      // Must use the class name from the declaration
+      expect(code).toContain('new Login(');
+    });
+
+    it('useDirectSymbolNames=false: generates valid Import_N.default accessor', () => {
+      const graph = makeDefaultExportGraph('IRepo', 'Repo');
+      const code = new Generator(graph, false, '/src').generate();
+
+      // namespace import path: Import_N.default is valid JS (property, not identifier)
+      expect(code).toContain('Import_');
+      expect(code).not.toContain('new default(');
+    });
+
+    it('anonymous default export: falls back gracefully', () => {
+      // export default class {} — no class name
+      const anonymousSymbol = {
+        getName: () => 'default',
+        declarations: [{
+          kind: ts.SyntaxKind.ClassDeclaration,
+          name: undefined,  // anonymous
+          getSourceFile: () => ({ fileName: '/src/anon.ts' }),
+        }],
+      } as unknown as ts.Symbol;
+
+      const graph: DependencyGraph = {
+        containerId: 'Test',
+        nodes: new Map([
+          ['IAnon', {
+            service: {
+              tokenId: 'IAnon',
+              implementationSymbol: anonymousSymbol,
+              registrationNode: {} as ts.Node,
+              type: 'explicit',
+              lifecycle: 'singleton',
+            } as ServiceDefinition,
+            dependencies: [],
+          }],
+        ]),
+        roots: ['IAnon'],
+      };
+
+      // Should not throw — anonymous default exports are an edge case
+      expect(() => new Generator(graph, true).generate()).not.toThrow();
+    });
+  });
 });
