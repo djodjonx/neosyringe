@@ -1,5 +1,13 @@
 # @djodjonx/neosyringe
 
+## [0.2.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.2.1...neosyringe-v0.2.2) (2026-06-10)
+
+
+### Bug Fixes
+
+* default export class name in generated code ([28396b3](https://github.com/djodjonx/neosyringe/commit/28396b3a28cd9221bbd02ee387d6b2265afe6846))
+* useProperty single type argument ([35ec096](https://github.com/djodjonx/neosyringe/commit/35ec0962ac6b51e6f7e6a2563b9dc5345f224f52))
+
 ## [0.2.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.2.0...neosyringe-v0.2.1) (2026-05-06)
 
 
