@@ -242,7 +242,7 @@ export function useInterface<T>(): InterfaceToken<T> {
  *
  * @throws {Error} If called at runtime without compilation.
  */
-export function useProperty<T, C extends Constructor<any>>(
+export function useProperty<T, C extends Constructor<any> = Constructor<any>>(
   targetClass: C,
   paramName: string
 ): PropertyToken<T, InstanceType<C>> {
