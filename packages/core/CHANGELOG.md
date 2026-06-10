@@ -1,5 +1,24 @@
 # @djodjonx/neosyringe-core
 
+## [2.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v2.1.0...neosyringe-core-v2.2.0) (2026-06-10)
+
+
+### Features
+
+* **core:** add Analyzer.extractAll() ([dc44cad](https://github.com/djodjonx/neosyringe/commit/dc44cad451a17207cbba653636fc5cea12e8ff92))
+
+
+### Bug Fixes
+
+* **core:** include multi-registration tokens in missing-dep available set ([badacba](https://github.com/djodjonx/neosyringe/commit/badacba6c3aa4fc216fcdb68fdf0de2122479923))
+* **core:** use per-node lifecycle in generateResolveAllMethod ([aae2864](https://github.com/djodjonx/neosyringe/commit/aae28641d1b3ca5e9f821d17957a123c02b586ad))
+* normalize sourceFileName paths for Windows ([4f6cb2c](https://github.com/djodjonx/neosyringe/commit/4f6cb2cb7b47ad4336bf63242c614f74aa4acf0d))
+
+
+### Performance Improvements
+
+* **core:** cache per-file identifier index in ConfigCollector ([edc4036](https://github.com/djodjonx/neosyringe/commit/edc403620a02d38549bbc24fefe6e4f0a1e89984))
+
 ## [2.1.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v2.0.0...neosyringe-core-v2.1.0) (2026-05-06)
 
 

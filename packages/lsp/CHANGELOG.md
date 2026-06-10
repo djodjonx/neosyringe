@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-lsp
 
+## [0.3.3](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.3.2...neosyringe-lsp-v0.3.3) (2026-06-10)
+
+
+### Bug Fixes
+
+* **lsp:** update verbose tests to set NEO_SYRINGE_LSP_VERBOSE env var ([8bd723b](https://github.com/djodjonx/neosyringe/commit/8bd723bd817b00dadf0f7c90909dd0b7911fc37c))
+
 ## [0.3.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.3.1...neosyringe-lsp-v0.3.2) (2026-05-06)
 
 
