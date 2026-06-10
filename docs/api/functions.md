@@ -124,10 +124,10 @@ const logger = container.resolve(useInterface<ILogger>());
 ## useProperty
 
 ```typescript
-function useProperty<T, C = unknown>(
-  targetClass: Constructor<C>,
+function useProperty<T, C extends Constructor<any> = Constructor<any>>(
+  targetClass: C,
   paramName: string
-): PropertyToken<T, C>
+): PropertyToken<T, InstanceType<C>>
 ```
 
 Create a token for a primitive constructor parameter.
@@ -136,19 +136,19 @@ Create a token for a primitive constructor parameter.
 
 | Name | Description |
 |------|-------------|
-| `T` | The primitive type (string, number, boolean) |
-| `C` | The class type |
+| `T` | **Required.** The primitive type (`string`, `number`, `boolean`) |
+| `C` | **Inferred** from `targetClass`. Rarely needs to be explicit. |
 
 ### Parameters
 
 | Name | Type | Description |
 |------|------|-------------|
-| `targetClass` | `Constructor<C>` | The class that has this parameter |
+| `targetClass` | `Constructor` | The class that has this parameter |
 | `paramName` | `string` | The parameter name |
 
 ### Returns
 
-`PropertyToken<T, C>` - A token for the primitive
+`PropertyToken<T, InstanceType<C>>` - A token for the primitive
 
 ### Example
 
@@ -162,6 +162,7 @@ class ApiService {
   ) {}
 }
 
+// Only T needs to be explicit — C is inferred from the class argument
 const apiUrl = useProperty<string>(ApiService, 'apiUrl');
 const timeout = useProperty<number>(ApiService, 'timeout');
 

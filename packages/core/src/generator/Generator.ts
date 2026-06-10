@@ -6,6 +6,40 @@ import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, type GetImport } from './FactoryEmitter';
 import { generateResolveCases, generateResolveAllMethod, buildAsyncResolveGuard } from './ResolveEmitter';
 import { hasAsyncFactories, generateInitializeMethod, generateDestroyMethod } from './LifecycleEmitter';
+import { TSContext } from '../TSContext';
+
+/**
+ * Returns a usable identifier name for a symbol in the context of direct symbol names
+ * (useDirectSymbolNames = true, i.e. the build plugin path where generated code is inlined).
+ *
+ * When a class is imported as a default export (`import Login from './Login'`), TypeScript
+ * resolves the symbol name to `"default"` — a reserved word that cannot be used as an
+ * identifier in `new default(...)`. This helper detects that case and falls back to the
+ * class name from the declaration (`ClassDeclaration.name.text`).
+ *
+ * @example
+ * // export default class Login {}
+ * // import Login from './Login'
+ * // symbol.getName() === 'default'
+ * // symbol.declarations[0] is a ClassDeclaration with name.text === 'Login'
+ * resolveDefaultExportName(symbol) // → 'Login'
+ */
+function resolveDefaultExportName(symbol: ts.Symbol): string {
+  const name = symbol.getName();
+  if (name !== 'default') return name;
+
+  const decl = symbol.declarations?.[0];
+  if (!decl) return name;
+
+  if (TSContext.ts.isClassDeclaration(decl) && decl.name) {
+    return decl.name.text;
+  }
+  if (TSContext.ts.isFunctionDeclaration(decl) && decl.name) {
+    return decl.name.text;
+  }
+
+  return name;
+}
 
 /**
  * Generates TypeScript code for the dependency injection container.
@@ -60,7 +94,7 @@ export class Generator {
 
     const getImport: GetImport = (symbol: ts.Symbol): string => {
       if (this.useDirectSymbolNames) {
-        return symbol.getName();
+        return resolveDefaultExportName(symbol);
       }
       const decl = symbol.declarations?.[0];
       if (!decl) {
