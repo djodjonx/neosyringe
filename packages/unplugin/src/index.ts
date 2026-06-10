@@ -67,61 +67,119 @@ export const neoSyringePlugin = createUnplugin(() => {
 
       const options = getCompilerOptions();
 
-      // 1. If file contains defineBuilderConfig, handle it specially
+      // Handle files containing container definitions
       if (code.includes('defineBuilderConfig')) {
-        const program = ts.createProgram([id], options);
+        // Create a custom compilerHost that serves the current file's code
+        // (otherwise createProgram can't read test code that doesn't exist on disk)
+        const compilerHost: ts.CompilerHost = {
+          getSourceFile: (fileName) => {
+            if (fileName === id) {
+              return ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
+            }
+            try {
+              const sourceText = ts.sys.readFile(fileName);
+              return sourceText ? ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true) : undefined;
+            } catch {
+              return undefined;
+            }
+          },
+          getDefaultLibFileName: (opts) => ts.getDefaultLibFileName(opts),
+          writeFile: () => {},
+          getCurrentDirectory: () => process.cwd(),
+          getDirectories: (path) => ts.sys.getDirectories(path),
+          fileExists: (fileName) => fileName === id || ts.sys.fileExists(fileName),
+          readFile: (fileName) => fileName === id ? code : ts.sys.readFile(fileName),
+          getCanonicalFileName: (fileName) => fileName,
+          useCaseSensitiveFileNames: () => ts.sys.useCaseSensitiveFileNames,
+          getNewLine: () => '\n',
+        };
+
+        const program = ts.createProgram([id], options, compilerHost);
         const analyzer = new Analyzer(program);
-        const graph = analyzer.extract();
 
-        // Check for analysis errors (duplicates, type mismatches) and fail the build
-        if (graph.errors && graph.errors.length > 0) {
-          const messages = graph.errors.map(e => `[neosyringe-plugin] ${e.message}`).join('\n');
-          const buildError = new Error(messages) as Error & { file?: string };
-          buildError.name = graph.errors[0].type === 'duplicate' ? 'DuplicateRegistrationError' : 'TypeMismatchError';
-          buildError.file = id;
-          throw buildError;
-        }
+        // extractAll() returns one graph per defineBuilderConfig call (parents included).
+        // Graphs from imported files are used for token registration only.
+        const allGraphs = analyzer.extractAll();
 
-        if (graph.nodes.size > 0 &&
-            graph.defineBuilderConfigStart !== undefined &&
-            graph.defineBuilderConfigEnd !== undefined &&
-            graph.variableStatementStart !== undefined) {
-
-          // Register all tokens from this container for validation
-          for (const tokenId of graph.nodes.keys()) {
-            registeredTokens.add(tokenId);
-          }
-
-          // Step 1: Validate graph — report all errors before generating
-          const validator = new GraphValidator();
-          const validationResult = validator.validateAll(graph);
-          if (!validationResult.valid) {
-            const messages = validationResult.errors.map(e => e.message).join('\n  ');
-            const buildError = new Error(`[neosyringe-plugin]\n  ${messages}`) as Error & { file?: string };
+        // Check for analysis errors (duplicates, type mismatches) across all graphs
+        for (const graph of allGraphs) {
+          if (graph.errors && graph.errors.length > 0) {
+            const messages = graph.errors.map(e => `[neosyringe-plugin] ${e.message}`).join('\n');
+            const buildError = new Error(messages) as Error & { file?: string };
+            buildError.name = graph.errors[0].type === 'duplicate' ? 'DuplicateRegistrationError' : 'TypeMismatchError';
             buildError.file = id;
             throw buildError;
           }
+        }
 
-          const generator = new Generator(graph, true);
-          const containerClass = generator.generate();
-          const instantiation = generator.generateInstantiation();
+        // Register tokens from ALL graphs (local + multi + parent-provided for legacy containers)
+        for (const graph of allGraphs) {
+          for (const tokenId of graph.nodes.keys()) registeredTokens.add(tokenId);
+          if (graph.multiNodes) {
+            for (const tokenId of graph.multiNodes.keys()) registeredTokens.add(tokenId);
+          }
+          // parentProvidedTokens: necessary for legacy containers (declareContainerTokens)
+          // that have no defineBuilderConfig of their own. NeoSyringe parent tokens are
+          // covered by their own graph above, so this is redundant-but-harmless for them.
+          if (graph.parentProvidedTokens) {
+            for (const tokenId of graph.parentProvidedTokens) registeredTokens.add(tokenId);
+          }
+        }
 
-          // Step 2: Build code with container replacement (using ORIGINAL positions)
-          const codeBeforeStatement = code.slice(0, graph.variableStatementStart);
-          const codeAfterDefineBuilder = code.slice(graph.defineBuilderConfigEnd);
-          const variableDeclaration = code.slice(graph.variableStatementStart, graph.defineBuilderConfigStart);
+        // Normalize the current file path to forward slashes.
+        // Webpack passes this.resource with backslashes on Windows while TypeScript
+        // always uses forward slashes internally — without this, no container would
+        // be generated on Windows (filter below would never match).
+        const normalizedId = id.replace(/\\/g, '/');
 
-          const codeWithContainer = codeBeforeStatement +
-                 containerClass + '\n' +
-                 variableDeclaration +
-                 instantiation +
-                 codeAfterDefineBuilder;
+        // Generate and collect replacements for graphs in THIS file only
+        // (imported-file graphs are excluded — they are processed when their own file
+        //  is transformed).
+        const thisFileGraphs = allGraphs.filter(
+          g => g.sourceFileName === normalizedId &&
+               g.defineBuilderConfigStart !== undefined &&
+               g.defineBuilderConfigEnd !== undefined &&
+               g.variableStatementStart !== undefined
+        );
 
-          // The container config block has already been consumed above; remaining
-          // useInterface calls are injection-site tokens that must be transformed.
-          const finalCode = transformUseInterfaceCalls(codeWithContainer, id, options, usedTokens);
+        if (thisFileGraphs.length > 0) {
+          // Validate each graph independently
+          const validator = new GraphValidator();
+          for (const graph of thisFileGraphs) {
+            const validationResult = validator.validateAll(graph);
+            if (!validationResult.valid) {
+              const messages = validationResult.errors.map(e => e.message).join('\n  ');
+              const buildError = new Error(`[neosyringe-plugin]\n  ${messages}`) as Error & { file?: string };
+              buildError.file = id;
+              throw buildError;
+            }
+          }
 
-          return finalCode || codeWithContainer;
+          // Build replacements: sort descending by variableStatementStart (right-to-left)
+          // so earlier offsets remain valid as we splice.
+          const replacements = [...thisFileGraphs].sort(
+            (a, b) => b.variableStatementStart! - a.variableStatementStart!
+          );
+
+          let result = code;
+          for (const graph of replacements) {
+            const generator = new Generator(graph, true);
+            const containerClass = generator.generate();
+            const instantiation = generator.generateInstantiation();
+            // Slice positions are from the CURRENT result, but since we process
+            // right-to-left, content to the left has not yet been modified.
+            const varDecl = result.slice(graph.variableStatementStart!, graph.defineBuilderConfigStart!);
+            const replacement = containerClass + '\n' + varDecl + instantiation;
+
+            result =
+              result.slice(0, graph.variableStatementStart!) +
+              replacement +
+              result.slice(graph.defineBuilderConfigEnd!);
+          }
+
+          // Transform any remaining useInterface<T>() call sites (injection sites)
+          const finalCode = transformUseInterfaceCalls(result, id, options, usedTokens);
+          return finalCode ?? result;
         }
       }
 
