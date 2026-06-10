@@ -143,7 +143,7 @@ Create a token for a primitive constructor parameter.
 
 | Name | Type | Description |
 |------|------|-------------|
-| `targetClass` | `Constructor` | The class that has this parameter |
+| `targetClass` | `C` | The class that has this parameter |
 | `paramName` | `string` | The parameter name |
 
 ### Returns
