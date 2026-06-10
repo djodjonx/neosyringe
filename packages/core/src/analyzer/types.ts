@@ -232,6 +232,9 @@ export interface DependencyGraph {
 
   /** Multi-registration nodes (token -> ordered list of nodes) */
   multiNodes?: Map<TokenId, DependencyNode[]>;
+
+  /** Absolute path of the source file this graph was extracted from. */
+  sourceFileName?: string;
 }
 
 // ============================================================================
