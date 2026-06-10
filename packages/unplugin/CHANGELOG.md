@@ -1,5 +1,19 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.2.1...neosyringe-plugin-v0.3.0) (2026-06-10)
+
+
+### Features
+
+* **plugin:** track generated container variable names ([534c1db](https://github.com/djodjonx/neosyringe/commit/534c1db8d6ab84f60112113aa8bed42d53ba2686))
+
+
+### Bug Fixes
+
+* normalize sourceFileName paths for Windows ([4f6cb2c](https://github.com/djodjonx/neosyringe/commit/4f6cb2cb7b47ad4336bf63242c614f74aa4acf0d))
+* **plugin:** generate all containers per file ([1a978c1](https://github.com/djodjonx/neosyringe/commit/1a978c1d56d3c0b83231651daeeafcc1a36a3ba0))
+* **unplugin:** track useInterface tokens in container-file branch ([477c6c5](https://github.com/djodjonx/neosyringe/commit/477c6c5c8ce9e08b0477f9ca9f30fd4efd069785))
+
 ## [0.2.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.2.0...neosyringe-plugin-v0.2.1) (2026-05-06)
 
 
