@@ -1,5 +1,13 @@
 # @djodjonx/neosyringe-core
 
+## [2.2.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v2.2.0...neosyringe-core-v2.2.1) (2026-06-10)
+
+
+### Bug Fixes
+
+* default export class name in generated code ([28396b3](https://github.com/djodjonx/neosyringe/commit/28396b3a28cd9221bbd02ee387d6b2265afe6846))
+* lsp missing injection for imported classes ([b9bf8eb](https://github.com/djodjonx/neosyringe/commit/b9bf8ebe26fb0355b3a688fb1feaa314a862eadb))
+
 ## [2.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v2.1.0...neosyringe-core-v2.2.0) (2026-06-10)
 
 
