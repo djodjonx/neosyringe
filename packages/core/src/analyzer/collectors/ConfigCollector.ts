@@ -310,8 +310,12 @@ export class ConfigCollector implements IConfigCollector {
     const parsed = result;
     const definition: ServiceDefinition = {
       tokenId: parsed.tokenId,
-      implementationSymbol: parsed.implementationSymbol,
-      tokenSymbol: parsed.tokenSymbol,
+      implementationSymbol: parsed.implementationSymbol
+        ? this.tokenResolverService.resolveSymbol(parsed.implementationSymbol)
+        : undefined,
+      tokenSymbol: parsed.tokenSymbol
+        ? this.tokenResolverService.resolveSymbol(parsed.tokenSymbol)
+        : undefined,
       registrationNode: obj,
       type: parsed.registrationType,
       lifecycle: parsed.lifecycle,

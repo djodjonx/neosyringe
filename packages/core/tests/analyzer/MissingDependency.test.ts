@@ -476,4 +476,77 @@ describe('MissingDependencyValidator', () => {
       expect(missingErrors[0].context?.tokenText).toContain('IRepository');
     });
   });
+
+  describe('imported classes (cross-file alias resolution)', () => {
+    // Reproduces the bug: when a provider is imported from another file,
+    // checker.getSymbolAtLocation() returns an alias symbol (ImportSpecifier).
+    // ConfigCollector must resolve the alias to find the actual ClassDeclaration,
+    // otherwise DependencyAnalyzer cannot traverse the constructor and detect
+    // missing dependencies.
+    function createMultiFileProgram(files: Record<string, string>): ts.Program {
+      const host = ts.createCompilerHost({});
+      const orig = host.getSourceFile;
+      host.getSourceFile = (name, v) => {
+        const key = Object.keys(files).find(k => name.endsWith(k.replace('./', '')));
+        if (key) return ts.createSourceFile(name, files[key], v, true);
+        return orig.call(host, name, v);
+      };
+      host.fileExists = (f) => Object.keys(files).some(k => f.endsWith(k.replace('./', ''))) || ts.sys.fileExists(f);
+      return ts.createProgram(Object.keys(files), {}, host);
+    }
+
+    it('detects missing injection when provider is a named import', () => {
+      // UserService is imported from another file. Its constructor depends on
+      // IDatabase which is NOT registered. The LSP must detect this.
+      const files: Record<string, string> = {
+        'service.ts': `
+          interface IDatabase { query(): void; }
+          export class UserService {
+            constructor(private db: IDatabase) {}
+          }
+        `,
+        'container.ts': `
+          import { UserService } from './service';
+          function defineBuilderConfig(c: any) { return c; }
+          export const container = defineBuilderConfig({
+            injections: [{ token: UserService }]
+          });
+        `,
+      };
+
+      const program = createMultiFileProgram(files);
+      const analyzer = new Analyzer(program);
+      const result = analyzer.extractForFile('container.ts');
+
+      const missingErrors = result.errors.filter(e => e.type === 'missing');
+      expect(missingErrors.length).toBeGreaterThan(0);
+      expect(missingErrors[0].message).toContain('IDatabase');
+    });
+
+    it('detects missing injection when provider is a default import', () => {
+      const files: Record<string, string> = {
+        'login.ts': `
+          interface ITokenService { verify(t: string): boolean; }
+          export default class Login {
+            constructor(private tokenService: ITokenService) {}
+          }
+        `,
+        'container.ts': `
+          import Login from './login';
+          function defineBuilderConfig(c: any) { return c; }
+          export const container = defineBuilderConfig({
+            injections: [{ token: Login }]
+          });
+        `,
+      };
+
+      const program = createMultiFileProgram(files);
+      const analyzer = new Analyzer(program);
+      const result = analyzer.extractForFile('container.ts');
+
+      const missingErrors = result.errors.filter(e => e.type === 'missing');
+      expect(missingErrors.length).toBeGreaterThan(0);
+      expect(missingErrors[0].message).toContain('ITokenService');
+    });
+  });
 });
