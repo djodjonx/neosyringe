@@ -351,5 +351,40 @@ describe('LSP Diagnostics Integration', () => {
     expect(highlightedText).toContain('IRepository');
     expect(highlightedText).toContain('ConsoleLogger');
   });
+
+  it('catches errors thrown by extractForFile and logs them without propagating', () => {
+    // Covers index.ts:98 — the catch block when analysis throws unexpectedly.
+    // A broken TypeChecker (mock returning {}) causes the real Analyzer to throw.
+    const fileName = path.resolve('/tmp/catch-block-test.ts');
+    const fileContent = 'function defineBuilderConfig(c) { return c; }\nexport const app = defineBuilderConfig({ injections: [] });';
+
+    const loggedMessages: string[] = [];
+    const loggingTsLogger = {
+      info: (msg: string) => { loggedMessages.push(msg); },
+      loggingEnabled: () => true,
+      startGroup: () => {},
+      endGroup: () => {},
+    };
+
+    const sourceFile = ts.createSourceFile(fileName, fileContent, ts.ScriptTarget.Latest);
+    // A mock program with an empty TypeChecker causes Analyzer.extractForFile to throw.
+    const mockProgram = {
+      getSourceFile: (name: string) => name === fileName ? sourceFile : undefined,
+      getSourceFiles: () => [sourceFile],
+      getTypeChecker: () => ({}),
+    };
+    const languageService = {
+      getSemanticDiagnostics: () => [],
+      getProgram: () => mockProgram,
+    };
+
+    const proxy = pluginFactory.create({
+      languageService,
+      project: { projectService: { logger: loggingTsLogger } },
+    } as any);
+
+    expect(() => proxy.getSemanticDiagnostics(fileName)).not.toThrow();
+    expect(loggedMessages.some(m => m.includes('NeoSyringe analysis failed'))).toBe(true);
+  });
 });
 
