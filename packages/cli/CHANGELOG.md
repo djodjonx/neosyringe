@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-cli
 
+## [0.2.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.2.0...neosyringe-cli-v0.2.1) (2026-06-11)
+
+
+### Dependencies
+
+* bump @djodjonx/neosyringe-core to 2.2.3
+
 ## [0.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.1.2...neosyringe-cli-v0.2.0) (2026-06-11)
 
 
