@@ -1,5 +1,35 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.4.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.3.1...neosyringe-plugin-v0.4.0) (2026-06-11)
+
+
+### Features
+
+* **example/nestjs:** replace webpack with ts-patch TypeScript transformer ([0891f3a](https://github.com/djodjonx/neosyringe/commit/0891f3a7970d760f4249759744a49e867b78ff76))
+* **plugin:** track generated container variable names ([534c1db](https://github.com/djodjonx/neosyringe/commit/534c1db8d6ab84f60112113aa8bed42d53ba2686))
+* **unplugin:** add TypeScript compiler transformer for ts-patch ([fb54297](https://github.com/djodjonx/neosyringe/commit/fb54297a3f7fecadd283f18191917a980db7d8c1))
+* **unplugin:** expose ./transformer export path for ts-patch usage ([630c5b5](https://github.com/djodjonx/neosyringe/commit/630c5b5868e30d678c140aa8817c588c20bd8bcf))
+* **unplugin:** init @djodjonx/neosyringe-plugin ([ff89e74](https://github.com/djodjonx/neosyringe/commit/ff89e744255f248638de4998eb9ab819ff80514b))
+
+
+### Bug Fixes
+
+* address all remaining code review issues ([2ce9310](https://github.com/djodjonx/neosyringe/commit/2ce9310ce3da4bb49d6ab9b540d7eee9a06aae94))
+* address code review feedback ([75fe611](https://github.com/djodjonx/neosyringe/commit/75fe611c933e5ddce015a9c59296af85ea95a9ea))
+* address PR review feedback (C2, C4, C5, C6, C7) ([05bd819](https://github.com/djodjonx/neosyringe/commit/05bd8193ebf825e9acbba9f3c41afd8a3a53d085))
+* **cli,unplugin,core:** remove deprecated GraphValidator.validate() and report all errors ([e29df2c](https://github.com/djodjonx/neosyringe/commit/e29df2c271df8e39faa84c4166b0ea51d8499151))
+* **core,lsp,unplugin:** fix type validation bugs and eliminate code duplication ([92fa8cd](https://github.com/djodjonx/neosyringe/commit/92fa8cd68debfcdcebb791e0e9c9165d628dba86))
+* normalize sourceFileName paths for Windows ([4f6cb2c](https://github.com/djodjonx/neosyringe/commit/4f6cb2cb7b47ad4336bf63242c614f74aa4acf0d))
+* **plugin:** generate all containers per file ([1a978c1](https://github.com/djodjonx/neosyringe/commit/1a978c1d56d3c0b83231651daeeafcc1a36a3ba0))
+* **tests:** use source imports instead of published packages ([0f92646](https://github.com/djodjonx/neosyringe/commit/0f926468cc75aaa03eb53242c2eaa187aa9ce269))
+* **unplugin:** track useInterface tokens in container-file branch ([477c6c5](https://github.com/djodjonx/neosyringe/commit/477c6c5c8ce9e08b0477f9ca9f30fd4efd069785))
+* **unplugin:** update to use new Analyzer APIs ([0c6aab6](https://github.com/djodjonx/neosyringe/commit/0c6aab6b36eabe82dfed158e1a03c71fdcec26ba))
+
+
+### Performance Improvements
+
+* **unplugin:** cache per-file TypeScript programs to avoid redundant createProgram calls ([428dc29](https://github.com/djodjonx/neosyringe/commit/428dc294982367a2e878138cb7a713f9198a2af6))
+
 ## [0.3.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.3.0...neosyringe-plugin-v0.3.1) (2026-06-11)
 
 
