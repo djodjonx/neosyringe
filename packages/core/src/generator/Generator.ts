@@ -1,5 +1,5 @@
 import type * as ts from 'typescript';
-import { relative, isAbsolute } from 'node:path';
+import { relative, isAbsolute, dirname } from 'node:path';
 import { DependencyGraph, DependencyNode } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
@@ -115,27 +115,43 @@ export class Generator {
       for (const nodes of this.graph.multiNodes.values()) nodes.forEach(indexLocalNames);
     }
 
-    // For useDirectSymbolNames mode, generate module-level capture variables for default exports.
-    // Class body references (e.g. `new Login()`, `if (token === Login)`) are not always tracked
-    // by bundlers (e.g. rolldown) for tree-shaking/scope analysis. Capturing at module scope
-    // (e.g. `const __neo_Login = Login`) guarantees the bundler sees the reference and keeps the
-    // import, and provides a stable identifier usable inside the generated class body.
-    const captureNameBySymbol = new Map<ts.Symbol, string>();
-    const captureLines: string[] = [];
+    // For default exports in useDirectSymbolNames=true mode, pre-register their source file
+    // in the imports map so we generate an explicit `import * as Import_N` statement.
+    //
+    // WHY: bundlers (rolldown, webpack, esbuild) resolve import bindings by RENAMING them
+    // during inlining. A `const __neo_Login = Login` capture was our previous approach, but
+    // rolldown fails to rename `Login` in injected code because that reference was added by
+    // the transform after its initial scope analysis. The result: `Login is not defined` at
+    // runtime in the bundle.
+    //
+    // The correct fix is to use `import * as Import_N from './path'` + `Import_N.default`:
+    // an explicit namespace import is self-contained — the bundler never needs to rename it
+    // and always knows what `Import_N.default` refers to.
     if (this.useDirectSymbolNames) {
-      for (const [symbol, localName] of localNameBySymbol) {
-        const captureName = `__neo_${localName}`;
-        captureNameBySymbol.set(symbol, captureName);
-        captureLines.push(`const ${captureName} = ${localName};`);
+      for (const [symbol] of localNameBySymbol) {
+        const decl = symbol.declarations?.[0];
+        if (decl) {
+          const filePath = decl.getSourceFile().fileName;
+          if (!imports.has(filePath)) {
+            imports.set(filePath, `Import_${imports.size}`);
+          }
+        }
       }
     }
 
     const getImport: GetImport = (symbol: ts.Symbol): string => {
       if (this.useDirectSymbolNames) {
-        // Use the module-level capture variable for default exports when available.
-        const captureName = captureNameBySymbol.get(symbol);
-        if (captureName) return captureName;
-        return resolveDefaultExportName(symbol, localNameBySymbol.get(symbol));
+        // Default exports: use Import_N.default (explicit namespace import, bundler-safe).
+        if (localNameBySymbol.has(symbol)) {
+          const decl = symbol.declarations?.[0];
+          if (decl) {
+            const filePath = decl.getSourceFile().fileName;
+            const alias = imports.get(filePath);
+            if (alias) return `${alias}.default`;
+          }
+        }
+        // Named exports: direct identifier is stable — bundlers correctly rename all references.
+        return resolveDefaultExportName(symbol);
       }
       const decl = symbol.declarations?.[0];
       if (!decl) {
@@ -161,9 +177,19 @@ export class Generator {
     const initializeMethod = hasAsync ? generateInitializeMethod(this.graph, sorted) : '';
     const destroyMethod = generateDestroyMethod(this.graph, sorted, getImport);
 
+    // Generate import lines for:
+    // - All symbols when useDirectSymbolNames=false (CLI/generated file mode)
+    // - Only default export symbols when useDirectSymbolNames=true (inline transform mode)
     const importLines: string[] = [];
-    if (!this.useDirectSymbolNames) {
-      const base = this.outputDir ?? process.cwd();
+    if (imports.size > 0) {
+      // Base directory for relative import paths:
+      // - useDirectSymbolNames=true: relative to the container source file (so the injected
+      //   import resolves correctly from the file's perspective)
+      // - useDirectSymbolNames=false: relative to the output directory (generated file)
+      const base = this.useDirectSymbolNames
+        ? (this.graph.sourceFileName ? dirname(this.graph.sourceFileName) : process.cwd())
+        : (this.outputDir ?? process.cwd());
+
       for (const [filePath, alias] of imports) {
         let importPath: string;
         if (isAbsolute(filePath)) {
@@ -180,7 +206,6 @@ export class Generator {
 
     return `
 ${importLines.join('\n')}
-${captureLines.length > 0 ? captureLines.join('\n') : ''}
 
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }

@@ -67,6 +67,8 @@ export default function neoSyringeTransformer(
       const fileProgram = getFileProgram(fileName);
       const analyzer = new Analyzer(fileProgram);
       const graph = analyzer.extract();
+      // Needed by Generator to compute relative import paths for default export namespace imports
+      graph.sourceFileName = fileName;
 
       if (
         graph.nodes.size > 0 &&

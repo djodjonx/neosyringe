@@ -211,18 +211,21 @@ describe('Generator', () => {
       };
     }
 
-    it('useDirectSymbolNames=true: uses local import name when provided', () => {
+    it('useDirectSymbolNames=true: uses Import_N.default for default exports', () => {
       // Scenario: export default class AuthService {} imported as `import Auth from './AuthService'`
-      // A module-level capture `const __neo_Auth = Auth` is generated so rolldown can
-      // statically track the reference (class body refs are not always analyzed by bundlers).
+      // A namespace import `import * as Import_0 from './...'` + `Import_0.default` is generated.
+      // This is bundler-safe: rolldown tracks explicit import declarations correctly, whereas
+      // local alias references (like `Login`) can be missed when the bundler renames/inlines modules.
       const graph = makeDefaultExportGraph('IRepo', 'Repo', 'Auth');
       const code = new Generator(graph, true).generate();
 
       expect(code).not.toContain('new default(');
       expect(code).not.toContain('new AuthService(');
-      // Uses the capture variable, not the raw local name
-      expect(code).toContain('const __neo_Auth = Auth');
-      expect(code).toContain('new __neo_Auth(');
+      expect(code).not.toContain('new Auth('); // raw local alias not used
+      expect(code).not.toContain('__neo_');    // no capture variable pattern
+      // Uses namespace import accessor — self-contained reference
+      expect(code).toContain('import * as Import_');
+      expect(code).toContain('.default');
     });
 
     it('useDirectSymbolNames=true: falls back to class declaration name when no local name', () => {
@@ -304,10 +307,10 @@ describe('Generator', () => {
       const code = new Generator(graph, true).generate();
 
       expect(code).not.toContain('new default(');
-      // Uses the capture variable for both factory and token comparison
-      expect(code).toContain('const __neo_Auth = Auth');
-      expect(code).toContain('new __neo_Auth(');
-      expect(code).toContain('token === __neo_Auth');
+      expect(code).not.toContain('__neo_');
+      // Namespace import used consistently for new expression and token comparison
+      expect(code).toContain('import * as Import_');
+      expect(code).toContain('.default');
     });
   });
 });
