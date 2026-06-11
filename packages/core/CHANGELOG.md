@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-core
 
+## [2.2.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v2.2.1...neosyringe-core-v2.2.2) (2026-06-11)
+
+
+### Bug Fixes
+
+* use local import alias for default export class in generated code ([b84384e](https://github.com/djodjonx/neosyringe/commit/b84384ead4f59cacd72aaea222ac4a4012648e28))
+
 ## [2.2.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v2.2.0...neosyringe-core-v2.2.1) (2026-06-10)
 
 
