@@ -327,6 +327,8 @@ export class ConfigCollector implements IConfigCollector {
       isAsync: parsed.isAsync || undefined,
       isDisposable: parsed.isDisposable || undefined,
       isAsyncDisposable: parsed.isAsyncDisposable || undefined,
+      implementationLocalName: parsed.implementationLocalName,
+      tokenLocalName: parsed.tokenLocalName,
     };
     return {
       __kind: 'info',

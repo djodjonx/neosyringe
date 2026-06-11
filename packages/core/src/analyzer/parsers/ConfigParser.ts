@@ -225,6 +225,8 @@ export class ConfigParser {
       isScoped,
       isDisposable: parsed.isDisposable || undefined,
       isAsyncDisposable: parsed.isAsyncDisposable || undefined,
+      implementationLocalName: parsed.implementationLocalName,
+      tokenLocalName: parsed.tokenLocalName,
     };
     this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
   }

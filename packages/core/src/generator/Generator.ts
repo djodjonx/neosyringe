@@ -1,6 +1,6 @@
 import type * as ts from 'typescript';
 import { relative, isAbsolute } from 'node:path';
-import { DependencyGraph } from '../analyzer/types';
+import { DependencyGraph, DependencyNode } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, type GetImport } from './FactoryEmitter';
@@ -12,22 +12,31 @@ import { TSContext } from '../TSContext';
  * Returns a usable identifier name for a symbol in the context of direct symbol names
  * (useDirectSymbolNames = true, i.e. the build plugin path where generated code is inlined).
  *
- * When a class is imported as a default export (`import Login from './Login'`), TypeScript
- * resolves the symbol name to `"default"` — a reserved word that cannot be used as an
- * identifier in `new default(...)`. This helper detects that case and falls back to the
- * class name from the declaration (`ClassDeclaration.name.text`).
+ * When a class is imported as a default export (`import Auth from './AuthService'`), TypeScript
+ * resolves the symbol to the `"default"` export symbol — a reserved word that cannot appear
+ * as an identifier in `new default(...)`. The correct name to emit is the local binding as it
+ * appears in the container file (`"Auth"`), NOT the class declaration name (`"AuthService"`),
+ * because only the local binding is in scope in the generated code.
+ *
+ * @param symbol - The resolved symbol (getName() may return "default")
+ * @param localName - The local identifier name from the container file (e.g. "Auth").
+ *   Captured by InjectionParser before resolveSymbol() follows the alias chain.
  *
  * @example
- * // export default class Login {}
- * // import Login from './Login'
+ * // export default class AuthService {}
+ * // import Auth from './AuthService'
  * // symbol.getName() === 'default'
- * // symbol.declarations[0] is a ClassDeclaration with name.text === 'Login'
- * resolveDefaultExportName(symbol) // → 'Login'
+ * resolveDefaultExportName(symbol, 'Auth') // → 'Auth'  ← uses local name (correct)
+ * resolveDefaultExportName(symbol)         // → 'AuthService'  ← fallback (only when localName missing)
  */
-function resolveDefaultExportName(symbol: ts.Symbol): string {
+function resolveDefaultExportName(symbol: ts.Symbol, localName?: string): string {
   const name = symbol.getName();
   if (name !== 'default') return name;
 
+  // Prefer the local import identifier — it is the name actually in scope in the container file.
+  if (localName) return localName;
+
+  // Fallback: use the class/function declaration name (works when class name === import alias).
   const decl = symbol.declarations?.[0];
   if (!decl) return name;
 
@@ -92,9 +101,23 @@ export class Generator {
     const sorted = topologicalSort(this.graph.nodes);
     const imports = new Map<string, string>(); // filePath -> importAliasPrefix
 
+    // Build a map from resolved symbol → local identifier name for default exports.
+    // InjectionParser captures the local name (e.g. "Auth" from `import Auth from './AuthService'`)
+    // before resolveSymbol() follows the alias chain and loses it.
+    const localNameBySymbol = new Map<ts.Symbol, string>();
+    const indexLocalNames = (node: DependencyNode) => {
+      const { implementationSymbol, implementationLocalName, tokenSymbol, tokenLocalName } = node.service;
+      if (implementationSymbol && implementationLocalName) localNameBySymbol.set(implementationSymbol, implementationLocalName);
+      if (tokenSymbol && tokenLocalName) localNameBySymbol.set(tokenSymbol, tokenLocalName);
+    };
+    for (const node of this.graph.nodes.values()) indexLocalNames(node);
+    if (this.graph.multiNodes) {
+      for (const nodes of this.graph.multiNodes.values()) nodes.forEach(indexLocalNames);
+    }
+
     const getImport: GetImport = (symbol: ts.Symbol): string => {
       if (this.useDirectSymbolNames) {
-        return resolveDefaultExportName(symbol);
+        return resolveDefaultExportName(symbol, localNameBySymbol.get(symbol));
       }
       const decl = symbol.declarations?.[0];
       if (!decl) {
