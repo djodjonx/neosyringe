@@ -127,7 +127,9 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
   });
 
   describe('Generator output (useDirectSymbolNames = true)', () => {
-    it('emits new Login() when class name equals the import alias', () => {
+    it('generates a module-level capture variable and uses it in new expression', () => {
+      // The capture `const __neo_Login = Login` is emitted at module scope so rolldown
+      // can statically track the reference (class body refs are not always analyzed).
       const files = {
         'login.ts': `export default class Login {}`,
         'container.ts': `
@@ -143,12 +145,15 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const graph = analyzer.extract();
       const code = new Generator(graph, true).generate();
 
-      expect(code).toContain('new Login(');
+      expect(code).toContain('const __neo_Login = Login');
+      expect(code).toContain('new __neo_Login(');
       expect(code).not.toContain('new default(');
+      expect(code).not.toContain('new Login('); // raw local name not used in class body
     });
 
-    it('emits new Login() when the import alias differs from the class name', () => {
-      // Regression: before the fix, this would emit `new AuthService()` which is not in scope.
+    it('uses the capture variable when alias differs from class name (regression)', () => {
+      // Regression: before the fix, `new AuthService()` was generated (class not in scope).
+      // Now: `const __neo_Login = Login` + `new __neo_Login()`.
       const files = {
         'auth-service.ts': `export default class AuthService {}`,
         'container.ts': `
@@ -164,12 +169,15 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const graph = analyzer.extract();
       const code = new Generator(graph, true).generate();
 
-      expect(code).toContain('new Login(');
+      expect(code).toContain('const __neo_Login = Login');
+      expect(code).toContain('new __neo_Login(');
       expect(code).not.toContain('new AuthService(');
       expect(code).not.toContain('new default(');
     });
 
-    it('uses the local alias in this.resolve() when the token is a default export (autowire)', () => {
+    it('uses the capture variable in token comparison (rolldown scope fix)', () => {
+      // The token key in `if (token === X)` must use the capture variable, not the raw
+      // local name, so rolldown tracks the reference at module scope.
       const files = {
         'auth-service.ts': `export default class AuthService {}`,
         'container.ts': `
@@ -185,10 +193,31 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const graph = analyzer.extract();
       const code = new Generator(graph, true).generate();
 
-      // The token key in if (token === X) must also use the local alias
-      expect(code).toContain('token === Login');
+      expect(code).toContain('const __neo_Login = Login');
+      expect(code).toContain('token === __neo_Login');
       expect(code).not.toContain('token === AuthService');
       expect(code).not.toContain('token === default');
+    });
+
+    it('does NOT generate capture variables for named exports', () => {
+      // Named exports don't need capture vars — rolldown tracks them fine as direct identifiers.
+      const files = {
+        'auth-service.ts': `export class AuthService {}`,
+        'container.ts': `
+          import { AuthService } from './auth-service';
+          function defineBuilderConfig(c: any) { return c; }
+          export const container = defineBuilderConfig({
+            injections: [{ token: AuthService }]
+          });
+        `,
+      };
+
+      const analyzer = new Analyzer(createMultiFileProgram(files));
+      const graph = analyzer.extract();
+      const code = new Generator(graph, true).generate();
+
+      expect(code).not.toContain('__neo_');
+      expect(code).toContain('new AuthService(');
     });
   });
 });

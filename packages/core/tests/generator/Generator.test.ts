@@ -213,13 +213,16 @@ describe('Generator', () => {
 
     it('useDirectSymbolNames=true: uses local import name when provided', () => {
       // Scenario: export default class AuthService {} imported as `import Auth from './AuthService'`
-      // The local name "Auth" must be used in new Auth(), not "AuthService" (not in scope).
+      // A module-level capture `const __neo_Auth = Auth` is generated so rolldown can
+      // statically track the reference (class body refs are not always analyzed by bundlers).
       const graph = makeDefaultExportGraph('IRepo', 'Repo', 'Auth');
       const code = new Generator(graph, true).generate();
 
       expect(code).not.toContain('new default(');
       expect(code).not.toContain('new AuthService(');
-      expect(code).toContain('new Auth(');
+      // Uses the capture variable, not the raw local name
+      expect(code).toContain('const __neo_Auth = Auth');
+      expect(code).toContain('new __neo_Auth(');
     });
 
     it('useDirectSymbolNames=true: falls back to class declaration name when no local name', () => {
@@ -301,9 +304,10 @@ describe('Generator', () => {
       const code = new Generator(graph, true).generate();
 
       expect(code).not.toContain('new default(');
-      expect(code).toContain('new Auth(');
-      // The resolve case must also use "Auth" as the token key
-      expect(code).toContain('if (token === Auth)');
+      // Uses the capture variable for both factory and token comparison
+      expect(code).toContain('const __neo_Auth = Auth');
+      expect(code).toContain('new __neo_Auth(');
+      expect(code).toContain('token === __neo_Auth');
     });
   });
 });

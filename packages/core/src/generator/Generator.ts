@@ -115,8 +115,26 @@ export class Generator {
       for (const nodes of this.graph.multiNodes.values()) nodes.forEach(indexLocalNames);
     }
 
+    // For useDirectSymbolNames mode, generate module-level capture variables for default exports.
+    // Class body references (e.g. `new Login()`, `if (token === Login)`) are not always tracked
+    // by bundlers (e.g. rolldown) for tree-shaking/scope analysis. Capturing at module scope
+    // (e.g. `const __neo_Login = Login`) guarantees the bundler sees the reference and keeps the
+    // import, and provides a stable identifier usable inside the generated class body.
+    const captureNameBySymbol = new Map<ts.Symbol, string>();
+    const captureLines: string[] = [];
+    if (this.useDirectSymbolNames) {
+      for (const [symbol, localName] of localNameBySymbol) {
+        const captureName = `__neo_${localName}`;
+        captureNameBySymbol.set(symbol, captureName);
+        captureLines.push(`const ${captureName} = ${localName};`);
+      }
+    }
+
     const getImport: GetImport = (symbol: ts.Symbol): string => {
       if (this.useDirectSymbolNames) {
+        // Use the module-level capture variable for default exports when available.
+        const captureName = captureNameBySymbol.get(symbol);
+        if (captureName) return captureName;
         return resolveDefaultExportName(symbol, localNameBySymbol.get(symbol));
       }
       const decl = symbol.declarations?.[0];
@@ -162,6 +180,7 @@ export class Generator {
 
     return `
 ${importLines.join('\n')}
+${captureLines.length > 0 ? captureLines.join('\n') : ''}
 
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
