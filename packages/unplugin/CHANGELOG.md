@@ -1,12 +1,5 @@
 # @djodjonx/neosyringe-plugin
 
-## [0.4.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.4.0...neosyringe-plugin-v0.4.1) (2026-06-11)
-
-
-### Dependencies
-
-* bump @djodjonx/neosyringe-core to 2.2.3
-
 ## [0.4.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.3.1...neosyringe-plugin-v0.4.0) (2026-06-11)
 
 

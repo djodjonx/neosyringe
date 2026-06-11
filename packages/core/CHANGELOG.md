@@ -1,12 +1,5 @@
 # @djodjonx/neosyringe-core
 
-## [2.2.3](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v2.2.2...neosyringe-core-v2.2.3) (2026-06-11)
-
-
-### Bug Fixes
-
-* capture default export references at module scope for rolldown compatibility ([19e910b](https://github.com/djodjonx/neosyringe/commit/19e910b))
-
 ## [2.2.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v2.2.1...neosyringe-core-v2.2.2) (2026-06-11)
 
 
