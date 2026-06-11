@@ -66,6 +66,21 @@ export interface ServiceDefinition {
 
   /** True if the implementation class has dispose(): Promise<void> */
   isAsyncDisposable?: boolean;
+
+  /**
+   * Local identifier name for the implementation symbol when it is a default export.
+   * E.g. for `import Auth from './AuthService'` where `export default class AuthService {}`,
+   * this is `"Auth"` — the name actually in scope in the container file.
+   * Needed because resolveSymbol() follows the alias chain to the `"default"` export symbol,
+   * losing the local binding name that must appear in generated `new <name>()` expressions.
+   */
+  implementationLocalName?: string;
+
+  /**
+   * Local identifier name for the token symbol when it is a default export.
+   * Same rationale as implementationLocalName — needed for correct `this.resolve(token)` generation.
+   */
+  tokenLocalName?: string;
 }
 
 // ============================================================================

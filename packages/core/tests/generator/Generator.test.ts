@@ -171,12 +171,13 @@ describe('Generator', () => {
   describe('default export class', () => {
     // Creates a symbol whose getName() returns 'default' but whose declaration
     // is a ClassDeclaration with name.text = className. This matches what
-    // TypeScript produces for: export default class Login {}
-    function createDefaultExportSymbol(className: string): ts.Symbol {
+    // TypeScript produces for: export default class AuthService {}
+    // (the 'default' export symbol has name "default", not the class name).
+    function createDefaultExportSymbol(className: string, fileName = '/src/auth.ts'): ts.Symbol {
       const classDecl = {
         kind: ts.SyntaxKind.ClassDeclaration,
         name: { text: className },
-        getSourceFile: () => ({ fileName: '/src/login.ts' }),
+        getSourceFile: () => ({ fileName }),
       };
       return {
         getName: () => 'default',
@@ -184,41 +185,59 @@ describe('Generator', () => {
       } as unknown as ts.Symbol;
     }
 
-    function makeDefaultExportGraph(depName: string, depSymbolName: string): DependencyGraph {
+    function makeDefaultExportGraph(
+      depName: string,
+      depSymbolName: string,
+      implLocalName?: string
+    ): DependencyGraph {
+      const implSymbol = createDefaultExportSymbol('AuthService');
       return {
         containerId: 'Test',
         nodes: new Map([
-          ['ILogin', {
+          ['IAuth', {
             service: {
-              tokenId: 'ILogin',
-              implementationSymbol: createDefaultExportSymbol('Login'),
+              tokenId: 'IAuth',
+              implementationSymbol: implSymbol,
               registrationNode: {} as ts.Node,
               type: 'explicit',
               lifecycle: 'singleton',
+              implementationLocalName: implLocalName,
             } as ServiceDefinition,
             dependencies: [depName],
           }],
           [depName, createMockNode(depName, [], depSymbolName, '/src/dep.ts')],
         ]),
-        roots: ['ILogin'],
+        roots: ['IAuth'],
       };
     }
 
-    it('useDirectSymbolNames=true: uses class name instead of "default" in new expression', () => {
-      const graph = makeDefaultExportGraph('IRepo', 'Repo');
+    it('useDirectSymbolNames=true: uses local import name when provided', () => {
+      // Scenario: export default class AuthService {} imported as `import Auth from './AuthService'`
+      // The local name "Auth" must be used in new Auth(), not "AuthService" (not in scope).
+      const graph = makeDefaultExportGraph('IRepo', 'Repo', 'Auth');
       const code = new Generator(graph, true).generate();
 
-      // Must NOT generate invalid `new default(...)`
       expect(code).not.toContain('new default(');
-      // Must use the class name from the declaration
-      expect(code).toContain('new Login(');
+      expect(code).not.toContain('new AuthService(');
+      expect(code).toContain('new Auth(');
+    });
+
+    it('useDirectSymbolNames=true: falls back to class declaration name when no local name', () => {
+      // When implementationLocalName is absent (e.g. class name === import alias),
+      // fall back to the class declaration name from the symbol.
+      const graph = makeDefaultExportGraph('IRepo', 'Repo', undefined);
+      const code = new Generator(graph, true).generate();
+
+      expect(code).not.toContain('new default(');
+      // Falls back to decl.name.text = "AuthService"
+      expect(code).toContain('new AuthService(');
     });
 
     it('useDirectSymbolNames=false: generates valid Import_N.default accessor', () => {
-      const graph = makeDefaultExportGraph('IRepo', 'Repo');
+      const graph = makeDefaultExportGraph('IRepo', 'Repo', 'Auth');
       const code = new Generator(graph, false, '/src').generate();
 
-      // namespace import path: Import_N.default is valid JS (property, not identifier)
+      // namespace import path: new Import_N.default() is valid JS (property access, not identifier)
       expect(code).toContain('Import_');
       expect(code).not.toContain('new default(');
     });
@@ -229,7 +248,7 @@ describe('Generator', () => {
         getName: () => 'default',
         declarations: [{
           kind: ts.SyntaxKind.ClassDeclaration,
-          name: undefined,  // anonymous
+          name: undefined,
           getSourceFile: () => ({ fileName: '/src/anon.ts' }),
         }],
       } as unknown as ts.Symbol;
@@ -253,6 +272,38 @@ describe('Generator', () => {
 
       // Should not throw — anonymous default exports are an edge case
       expect(() => new Generator(graph, true).generate()).not.toThrow();
+    });
+
+    it('tokenLocalName: used for this.resolve() when token is a default export', () => {
+      // Scenario: { token: Auth } autowire where Auth is `import Auth from './AuthService'`
+      // The token key in this.resolve() must use "Auth", not "AuthService" or "default".
+      const authSymbol = createDefaultExportSymbol('AuthService');
+      const graph: DependencyGraph = {
+        containerId: 'Test',
+        nodes: new Map([
+          ['AuthService', {
+            service: {
+              tokenId: 'AuthService',
+              implementationSymbol: authSymbol,
+              tokenSymbol: authSymbol,
+              registrationNode: {} as ts.Node,
+              type: 'autowire',
+              lifecycle: 'singleton',
+              implementationLocalName: 'Auth',
+              tokenLocalName: 'Auth',
+            } as ServiceDefinition,
+            dependencies: [],
+          }],
+        ]),
+        roots: ['AuthService'],
+      };
+
+      const code = new Generator(graph, true).generate();
+
+      expect(code).not.toContain('new default(');
+      expect(code).toContain('new Auth(');
+      // The resolve case must also use "Auth" as the token key
+      expect(code).toContain('if (token === Auth)');
     });
   });
 });

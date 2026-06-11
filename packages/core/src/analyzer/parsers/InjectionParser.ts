@@ -26,6 +26,8 @@ export interface ParsedInjection {
   registrationType: ParsedRegistrationType;
   isDisposable: boolean;
   isAsyncDisposable: boolean;
+  implementationLocalName?: string;
+  tokenLocalName?: string;
 }
 
 /**
@@ -196,6 +198,20 @@ export class InjectionParser {
     const factorySource =
       registrationType === 'factory' && providerNode ? providerNode.getText(sourceFile) : undefined;
 
+    // 9. Capture local identifier names for default exports.
+    // When `import Auth from './AuthService'` is used, getSymbolAtLocation returns an alias
+    // whose getName() is "Auth". ConfigParser/ConfigCollector then call resolveSymbol() which
+    // follows the alias chain to the 'default' export symbol (getName() === "default"), losing
+    // the local binding name. We capture it here while we still have the original AST nodes.
+    const implementationLocalName = this.resolveDefaultLocalName(
+      implementationSymbol,
+      providerNode ?? (TSContext.ts.isIdentifier(tokenNode) ? tokenNode : undefined)
+    );
+    const tokenLocalName = this.resolveDefaultLocalName(
+      tokenSymbol,
+      TSContext.ts.isIdentifier(tokenNode) ? tokenNode : undefined
+    );
+
     return {
       __kind: 'parsed',
       tokenNode,
@@ -217,6 +233,8 @@ export class InjectionParser {
       registrationType,
       isDisposable,
       isAsyncDisposable,
+      implementationLocalName,
+      tokenLocalName,
     };
   }
 
@@ -269,5 +287,24 @@ export class InjectionParser {
     if (!TSContext.ts.isArrowFunction(node) && !TSContext.ts.isFunctionExpression(node)) return false;
     const fn = node as ts.ArrowFunction | ts.FunctionExpression;
     return fn.modifiers?.some(m => m.kind === TSContext.ts.SyntaxKind.AsyncKeyword) ?? false;
+  }
+
+  /**
+   * Returns the local identifier name for a symbol if it is an alias for a 'default' export.
+   * After ConfigParser/ConfigCollector call resolveSymbol(), the alias chain is followed and the
+   * local binding name (e.g. "Auth" from `import Auth from './Foo'`) is replaced by "default".
+   * This method captures the local name while the original AST node is still available.
+   */
+  private resolveDefaultLocalName(
+    symbol: ts.Symbol | undefined,
+    identifierNode: ts.Expression | undefined
+  ): string | undefined {
+    if (!symbol || !identifierNode || !TSContext.ts.isIdentifier(identifierNode)) return undefined;
+    if (!(symbol.flags & TSContext.ts.SymbolFlags.Alias)) return undefined;
+
+    const aliased = this.checker.getAliasedSymbol(symbol);
+    if (aliased.getName() !== 'default') return undefined;
+
+    return (identifierNode as ts.Identifier).text;
   }
 }
