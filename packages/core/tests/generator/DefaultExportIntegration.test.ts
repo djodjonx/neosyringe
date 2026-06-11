@@ -127,9 +127,12 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
   });
 
   describe('Generator output (useDirectSymbolNames = true)', () => {
-    it('generates a module-level capture variable and uses it in new expression', () => {
-      // The capture `const __neo_Login = Login` is emitted at module scope so rolldown
-      // can statically track the reference (class body refs are not always analyzed).
+    it('generates a namespace import and uses Import_N.default for default exports', () => {
+      // For default exports, the generator emits `import * as Import_0 from './...'` and
+      // uses `Import_0.default` instead of the local alias `Login`.
+      // This is bundler-safe: an explicit import declaration is always correctly tracked,
+      // whereas local alias references can be silently dropped or not renamed by rolldown
+      // when it inlines modules after the neosyringe transform has already injected code.
       const files = {
         'login.ts': `export default class Login {}`,
         'container.ts': `
@@ -145,15 +148,18 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const graph = analyzer.extract();
       const code = new Generator(graph, true).generate();
 
-      expect(code).toContain('const __neo_Login = Login');
-      expect(code).toContain('new __neo_Login(');
       expect(code).not.toContain('new default(');
-      expect(code).not.toContain('new Login('); // raw local name not used in class body
+      expect(code).not.toContain('new Login(');
+      expect(code).not.toContain('__neo_');
+      // Self-contained namespace import — no dependency on local alias in scope
+      expect(code).toContain('import * as Import_');
+      expect(code).toContain('Import_0.default');
     });
 
-    it('uses the capture variable when alias differs from class name (regression)', () => {
-      // Regression: before the fix, `new AuthService()` was generated (class not in scope).
-      // Now: `const __neo_Login = Login` + `new __neo_Login()`.
+    it('uses Import_N.default when alias differs from class name (no scope dependency)', () => {
+      // Critical regression: `import Login from './auth-service'` where class is AuthService.
+      // Must never generate `new AuthService()` (not in scope) or `new Login()` (local alias
+      // that bundlers may silently drop). Must use Import_N.default.
       const files = {
         'auth-service.ts': `export default class AuthService {}`,
         'container.ts': `
@@ -169,15 +175,15 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const graph = analyzer.extract();
       const code = new Generator(graph, true).generate();
 
-      expect(code).toContain('const __neo_Login = Login');
-      expect(code).toContain('new __neo_Login(');
       expect(code).not.toContain('new AuthService(');
+      expect(code).not.toContain('new Login(');
       expect(code).not.toContain('new default(');
+      expect(code).not.toContain('__neo_');
+      expect(code).toContain('import * as Import_');
+      expect(code).toContain('Import_0.default');
     });
 
-    it('uses the capture variable in token comparison (rolldown scope fix)', () => {
-      // The token key in `if (token === X)` must use the capture variable, not the raw
-      // local name, so rolldown tracks the reference at module scope.
+    it('uses Import_N.default in token comparison', () => {
       const files = {
         'auth-service.ts': `export default class AuthService {}`,
         'container.ts': `
@@ -193,14 +199,15 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const graph = analyzer.extract();
       const code = new Generator(graph, true).generate();
 
-      expect(code).toContain('const __neo_Login = Login');
-      expect(code).toContain('token === __neo_Login');
+      expect(code).toContain('Import_0.default');
+      expect(code).not.toContain('token === Login');
       expect(code).not.toContain('token === AuthService');
       expect(code).not.toContain('token === default');
     });
 
-    it('does NOT generate capture variables for named exports', () => {
-      // Named exports don't need capture vars — rolldown tracks them fine as direct identifiers.
+    it('does NOT generate namespace imports for named exports — uses direct identifier', () => {
+      // Named exports are stable: rolldown correctly renames all references to them.
+      // No extra import needed.
       const files = {
         'auth-service.ts': `export class AuthService {}`,
         'container.ts': `
@@ -217,6 +224,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const code = new Generator(graph, true).generate();
 
       expect(code).not.toContain('__neo_');
+      expect(code).not.toContain('Import_');
       expect(code).toContain('new AuthService(');
     });
   });
