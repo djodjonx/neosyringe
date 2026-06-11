@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-lsp
 
+## [0.3.4](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.3.3...neosyringe-lsp-v0.3.4) (2026-06-11)
+
+
+### Dependencies
+
+* bump @djodjonx/neosyringe-core to 2.2.2
+
 ## [0.3.3](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.3.2...neosyringe-lsp-v0.3.3) (2026-06-10)
 
 

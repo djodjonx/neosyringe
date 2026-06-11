@@ -1,6 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "node",
+  "group-pull-request-title-pattern": "chore: release",
   "packages": {
     "packages/neosyringe": {
       "package-name": "@djodjonx/neosyringe",
@@ -21,6 +22,17 @@
     "packages/unplugin": {
       "package-name": "@djodjonx/neosyringe-plugin",
       "changelog-path": "CHANGELOG.md"
+    }
+  },
+  "groups": {
+    "neosyringe": {
+      "packages": [
+        "packages/neosyringe",
+        "packages/core",
+        "packages/lsp",
+        "packages/cli",
+        "packages/unplugin"
+      ]
     }
   }
 }
