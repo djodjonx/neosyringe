@@ -1,5 +1,21 @@
 # @djodjonx/neosyringe-cli
 
+## [0.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.1.2...neosyringe-cli-v0.2.0) (2026-06-11)
+
+
+### Features
+
+* **cli:** init @djodjonx/neosyringe-cli ([dae65c3](https://github.com/djodjonx/neosyringe/commit/dae65c3f37948148aa04ef7dfbee91dd1a77a396))
+* **lsp:** detect multiple errors simultaneously ([a54f7ad](https://github.com/djodjonx/neosyringe/commit/a54f7adb21b9f6802145a49b00ebd2a563506405))
+
+
+### Bug Fixes
+
+* address all 15 code review issues ([d66a26a](https://github.com/djodjonx/neosyringe/commit/d66a26af5be3de7e5e4ce521eb689a9fcdf155c7))
+* **cli,unplugin,core:** remove deprecated GraphValidator.validate() and report all errors ([e29df2c](https://github.com/djodjonx/neosyringe/commit/e29df2c271df8e39faa84c4166b0ea51d8499151))
+* **errors:** normalize missing-injection message and add error reference doc ([c79e2d4](https://github.com/djodjonx/neosyringe/commit/c79e2d40997ae4bf8ec79c6991912cd645de58ee))
+* **tests:** use source imports instead of published packages ([0f92646](https://github.com/djodjonx/neosyringe/commit/0f926468cc75aaa03eb53242c2eaa187aa9ce269))
+
 ## [0.1.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.1.1...neosyringe-cli-v0.1.2) (2026-06-11)
 
 
