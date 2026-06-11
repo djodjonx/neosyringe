@@ -17,9 +17,9 @@
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
-    "@djodjonx/neosyringe-cli": "0.1.1",
-    "@djodjonx/neosyringe-lsp": "0.3.3",
-    "@djodjonx/neosyringe-plugin": "0.3.0",
+    "@djodjonx/neosyringe-cli": "0.2.1",
+    "@djodjonx/neosyringe-lsp": "0.4.1",
+    "@djodjonx/neosyringe-plugin": "0.4.1",
     "@nuxt/devtools": "^2.7.0",
     "typescript": "^5.9.3",
     "unplugin": "^2.3.11",
