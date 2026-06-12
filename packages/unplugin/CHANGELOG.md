@@ -1,5 +1,19 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.4.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.4.1...neosyringe-plugin-v0.4.2) (2026-06-12)
+
+
+### Bug Fixes
+
+* use namespace import for default exports to prevent bundler ReferenceError ([061dd2f](https://github.com/djodjonx/neosyringe/commit/061dd2f2090a51ff3e6745dcda9db9ce3187124d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.0.1
+
 ## [0.4.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.4.0...neosyringe-plugin-v0.4.1) (2026-06-11)
 
 
