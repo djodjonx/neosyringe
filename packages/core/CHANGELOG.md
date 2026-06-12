@@ -1,5 +1,13 @@
 # @djodjonx/neosyringe-core
 
+## [3.0.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.0.0...neosyringe-core-v3.0.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* prefix inline namespace imports and strip TS extensions ([3bd1335](https://github.com/djodjonx/neosyringe/commit/3bd1335a103488b816fb99f89decfdb7e9d66da7))
+* use namespace import for default exports to prevent bundler ReferenceError ([061dd2f](https://github.com/djodjonx/neosyringe/commit/061dd2f2090a51ff3e6745dcda9db9ce3187124d))
+
 ## [3.0.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v2.2.3...neosyringe-core-v3.0.0) (2026-06-11)
 
 
