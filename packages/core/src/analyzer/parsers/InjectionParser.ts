@@ -111,6 +111,14 @@ export class InjectionParser {
         };
       }
       useFactory = true;
+
+      const propertyTypeError = this.checkPropertyProviderType(
+        resolvedTokenNode as ts.CallExpression,
+        providerNode,
+        obj,
+        sourceFile
+      );
+      if (propertyTypeError) return propertyTypeError;
     } else {
       const tokenType = this.checker.getTypeAtLocation(tokenNode);
       tokenId = this.tokenResolverService.getTypeIdFromConstructor(tokenType);
@@ -281,6 +289,45 @@ export class InjectionParser {
     const isAsync = this.checker.typeToString(returnType).startsWith('Promise');
 
     return { isDisposable: !isAsync, isAsyncDisposable: isAsync };
+  }
+
+  /**
+   * Validates that the factory provider's return type is assignable to the T in useProperty<T>.
+   * Example: useProperty<number>(...) with provider: () => 'a string' → type-mismatch error.
+   */
+  private checkPropertyProviderType(
+    tokenCall: ts.CallExpression,
+    providerNode: ts.Expression,
+    registrationNode: ts.ObjectLiteralExpression,
+    sourceFile: ts.SourceFile
+  ): AnalysisError | null {
+    if (!tokenCall.typeArguments || tokenCall.typeArguments.length === 0) return null;
+
+    let expectedType: ts.Type;
+    try {
+      expectedType = this.checker.getTypeFromTypeNode(tokenCall.typeArguments[0]);
+    } catch {
+      return null;
+    }
+
+    const providerType = this.checker.getTypeAtLocation(providerNode);
+    const signatures = providerType.getCallSignatures();
+    if (signatures.length === 0) return null;
+
+    const returnType = this.checker.getReturnTypeOfSignature(signatures[0]);
+
+    if (!this.checker.isTypeAssignableTo(returnType, expectedType)) {
+      const expectedName = this.checker.typeToString(expectedType);
+      const returnName = this.checker.typeToString(returnType);
+      return {
+        type: 'type-mismatch',
+        message: `Type mismatch: provider for useProperty<${expectedName}> returns '${returnName}', but '${expectedName}' is expected.`,
+        node: registrationNode,
+        sourceFile,
+      };
+    }
+
+    return null;
   }
 
   private isAsyncFunction(node: ts.Expression): boolean {
