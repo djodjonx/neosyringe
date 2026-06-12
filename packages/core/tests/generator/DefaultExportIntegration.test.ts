@@ -127,12 +127,9 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
   });
 
   describe('Generator output (useDirectSymbolNames = true)', () => {
-    it('generates a namespace import and uses Import_N.default for default exports', () => {
-      // For default exports, the generator emits `import * as Import_0 from './...'` and
-      // uses `Import_0.default` instead of the local alias `Login`.
-      // This is bundler-safe: an explicit import declaration is always correctly tracked,
-      // whereas local alias references can be silently dropped or not renamed by rolldown
-      // when it inlines modules after the neosyringe transform has already injected code.
+    it('generates a prefixed namespace import (__neo_Import_N) without extension for default exports', () => {
+      // Prefixed alias (__neo_Import_N) avoids collision with user identifiers in the same file.
+      // Extension-stripped path (no .ts) avoids duplicate specifiers alongside the user's import.
       const files = {
         'login.ts': `export default class Login {}`,
         'container.ts': `
@@ -150,16 +147,13 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
 
       expect(code).not.toContain('new default(');
       expect(code).not.toContain('new Login(');
-      expect(code).not.toContain('__neo_');
-      // Self-contained namespace import — no dependency on local alias in scope
-      expect(code).toContain('import * as Import_');
-      expect(code).toContain('Import_0.default');
+      expect(code).not.toContain('import * as Import_');  // no unprefix alias in inline mode
+      expect(code).toContain('import * as __neo_Import_'); // prefixed alias
+      expect(code).not.toContain('.ts\'');                 // no .ts extension in specifier
+      expect(code).toContain('__neo_Import_0.default');
     });
 
-    it('uses Import_N.default when alias differs from class name (no scope dependency)', () => {
-      // Critical regression: `import Login from './auth-service'` where class is AuthService.
-      // Must never generate `new AuthService()` (not in scope) or `new Login()` (local alias
-      // that bundlers may silently drop). Must use Import_N.default.
+    it('uses __neo_Import_N.default when alias differs from class name (no scope dependency)', () => {
       const files = {
         'auth-service.ts': `export default class AuthService {}`,
         'container.ts': `
@@ -178,12 +172,12 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       expect(code).not.toContain('new AuthService(');
       expect(code).not.toContain('new Login(');
       expect(code).not.toContain('new default(');
-      expect(code).not.toContain('__neo_');
-      expect(code).toContain('import * as Import_');
-      expect(code).toContain('Import_0.default');
+      expect(code).not.toContain('import * as Import_');
+      expect(code).toContain('import * as __neo_Import_');
+      expect(code).toContain('__neo_Import_0.default');
     });
 
-    it('uses Import_N.default in token comparison', () => {
+    it('uses __neo_Import_N.default in token comparison', () => {
       const files = {
         'auth-service.ts': `export default class AuthService {}`,
         'container.ts': `
@@ -199,7 +193,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const graph = analyzer.extract();
       const code = new Generator(graph, true).generate();
 
-      expect(code).toContain('Import_0.default');
+      expect(code).toContain('__neo_Import_0.default');
       expect(code).not.toContain('token === Login');
       expect(code).not.toContain('token === AuthService');
       expect(code).not.toContain('token === default');
@@ -223,7 +217,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const graph = analyzer.extract();
       const code = new Generator(graph, true).generate();
 
-      expect(code).not.toContain('__neo_');
+      expect(code).not.toContain('__neo_Import_');
       expect(code).not.toContain('Import_');
       expect(code).toContain('new AuthService(');
     });

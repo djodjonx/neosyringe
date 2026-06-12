@@ -211,20 +211,18 @@ describe('Generator', () => {
       };
     }
 
-    it('useDirectSymbolNames=true: uses Import_N.default for default exports', () => {
-      // Scenario: export default class AuthService {} imported as `import Auth from './AuthService'`
-      // A namespace import `import * as Import_0 from './...'` + `Import_0.default` is generated.
-      // This is bundler-safe: rolldown tracks explicit import declarations correctly, whereas
-      // local alias references (like `Login`) can be missed when the bundler renames/inlines modules.
+    it('useDirectSymbolNames=true: uses __neo_Import_N.default for default exports', () => {
+      // Prefixed alias avoids collision with existing user identifiers (code is injected inline).
+      // Extension-stripped path avoids duplicate module specifiers vs. the user's own import.
       const graph = makeDefaultExportGraph('IRepo', 'Repo', 'Auth');
       const code = new Generator(graph, true).generate();
 
       expect(code).not.toContain('new default(');
       expect(code).not.toContain('new AuthService(');
-      expect(code).not.toContain('new Auth('); // raw local alias not used
-      expect(code).not.toContain('__neo_');    // no capture variable pattern
-      // Uses namespace import accessor — self-contained reference
-      expect(code).toContain('import * as Import_');
+      expect(code).not.toContain('new Auth(');
+      expect(code).not.toContain('import * as Import_'); // CLI-style prefix not used in inline mode
+      expect(code).toContain('import * as __neo_Import_');
+      expect(code).toContain('__neo_Import_');
       expect(code).toContain('.default');
     });
 
@@ -307,9 +305,9 @@ describe('Generator', () => {
       const code = new Generator(graph, true).generate();
 
       expect(code).not.toContain('new default(');
-      expect(code).not.toContain('__neo_');
-      // Namespace import used consistently for new expression and token comparison
-      expect(code).toContain('import * as Import_');
+      expect(code).not.toContain('import * as Import_'); // CLI prefix not used inline
+      // Namespace import with prefixed alias used for both factory and token comparison
+      expect(code).toContain('import * as __neo_Import_');
       expect(code).toContain('.default');
     });
   });

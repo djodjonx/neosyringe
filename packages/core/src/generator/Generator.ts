@@ -133,7 +133,9 @@ export class Generator {
         if (decl) {
           const filePath = decl.getSourceFile().fileName;
           if (!imports.has(filePath)) {
-            imports.set(filePath, `Import_${imports.size}`);
+            // Use __neo_ prefix to avoid collisions with any existing identifier in the
+            // user's file (code is injected inline, not in a separate generated file).
+            imports.set(filePath, `__neo_Import_${imports.size}`);
           }
         }
       }
@@ -197,6 +199,13 @@ export class Generator {
           importPath = rel.startsWith('.') ? rel : `./${rel}`;
         } else {
           importPath = filePath;
+        }
+        // Strip TS/TSX extensions in inline mode: the user's own import of the same file
+        // typically uses no extension (or .js). Using './login.ts' alongside './login'
+        // risks two distinct module specifiers which some toolchains won't deduplicate,
+        // breaking the identity comparison token === Import_N.default.
+        if (this.useDirectSymbolNames) {
+          importPath = importPath.replace(/\.(ts|tsx|mts|cts)$/, '');
         }
         importLines.push(`import * as ${alias} from '${importPath}';`);
       }
