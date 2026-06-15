@@ -55,6 +55,11 @@ export class MissingDependencyValidator implements IValidator {
       }
     }
 
+    // Phase 2: verify builder satisfies all partial expects
+    if (config.type === 'builder') {
+      errors.push(...this.checkPartialExpectsSatisfied(config, context, availableTokens));
+    }
+
     return errors;
   }
 
@@ -82,6 +87,14 @@ export class MissingDependencyValidator implements IValidator {
       }
     }
 
+    // For partials: add tokens declared in `expects` — they will be provided
+    // by the host BuilderConfig at assembly time, not by the partial itself.
+    if (config.type === 'partial' && config.expectedExternalTokens) {
+      for (const tokenId of config.expectedExternalTokens) {
+        available.add(tokenId);
+      }
+    }
+
     // For builders, add inherited tokens
     if (config.type === 'builder' && context.inheritedTokens) {
       for (const tokenId of context.inheritedTokens.keys()) {
@@ -97,5 +110,57 @@ export class MissingDependencyValidator implements IValidator {
     }
 
     return available;
+  }
+
+  /**
+   * Phase 2: verifies that for each partial extended by this builder, all tokens
+   * declared in the partial's `expects` are actually provided by the builder's
+   * available token set (own injections + inherited + legacy parent).
+   */
+  private checkPartialExpectsSatisfied(
+    config: ConfigGraph,
+    context: ValidationContext,
+    availableTokens: Set<TokenId>
+  ): AnalysisError[] {
+    const errors: AnalysisError[] = [];
+
+    // Build a set of simple (hash-stripped) names for cross-file token matching.
+    // Token IDs include a file-path hash (e.g. ICacheClient_4b059a3f) that differs
+    // across files even for the same interface name, so we compare by simple name.
+    const availableSimpleNames = new Set<string>();
+    for (const tokenId of availableTokens) {
+      availableSimpleNames.add(getSimpleName(tokenId));
+    }
+
+    for (const extendRef of config.extendsRefs) {
+      const partial = this.findPartialConfigByName(extendRef, context.allConfigs);
+      if (!partial?.expectedExternalTokens) continue;
+
+      for (const tokenId of partial.expectedExternalTokens) {
+        const simpleName = getSimpleName(tokenId);
+        if (!availableSimpleNames.has(simpleName)) {
+          errors.push({
+            type: 'missing',
+            message: `Missing token: '${simpleName}' is declared in '${extendRef}.expects' but is not provided by this builder or its parent container.`,
+            node: config.node,
+            sourceFile: config.sourceFile,
+            context: { tokenText: tokenId },
+          });
+        }
+      }
+    }
+
+    return errors;
+  }
+
+  /** Finds a partial ConfigGraph by its variable name across all collected configs. */
+  private findPartialConfigByName(
+    name: string,
+    allConfigs: Map<string, ConfigGraph>
+  ): ConfigGraph | undefined {
+    for (const cfg of allConfigs.values()) {
+      if (cfg.name === name && cfg.type === 'partial') return cfg;
+    }
+    return undefined;
   }
 }

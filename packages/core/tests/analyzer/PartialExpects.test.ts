@@ -59,8 +59,9 @@ describe('definePartialConfig — expects field', () => {
         injections: [{ token: Login }]
       });
     `;
-    const graph = new Analyzer(createProgram({ 'partial.ts': code })).extract();
-    const missingErrors = graph.errors?.filter(e => e.type === 'missing') ?? [];
+    const program = createProgram({ 'partial.ts': code });
+    const result = new Analyzer(program).extractForFile('partial.ts');
+    const missingErrors = result.errors.filter(e => e.type === 'missing');
     expect(missingErrors).toHaveLength(1);
     expect(missingErrors[0].message).toContain('ITokenService');
   });
@@ -77,8 +78,9 @@ describe('definePartialConfig — expects field', () => {
         injections: [{ token: Login }]
       });
     `;
-    const graph = new Analyzer(createProgram({ 'partial.ts': code })).extract();
-    const missingErrors = graph.errors?.filter(e => e.type === 'missing') ?? [];
+    const program = createProgram({ 'partial.ts': code });
+    const result = new Analyzer(program).extractForFile('partial.ts');
+    const missingErrors = result.errors.filter(e => e.type === 'missing');
     expect(missingErrors).toHaveLength(1);
     expect(missingErrors[0].message).toContain('ICacheClient');
   });
@@ -146,8 +148,7 @@ describe('definePartialConfig — expects field', () => {
         });
       `,
     };
-    const graph = new Analyzer(createProgram(files)).extract();
-    const missingErrors = graph.errors?.filter(e => e.type === 'missing') ?? [];
+    const missingErrors = new Analyzer(createProgram(files)).extractAllErrors().filter(e => e.type === 'missing');
     expect(missingErrors).toHaveLength(0);
   });
 
@@ -172,8 +173,7 @@ describe('definePartialConfig — expects field', () => {
         });
       `,
     };
-    const graph = new Analyzer(createProgram(files)).extract();
-    const missingErrors = graph.errors?.filter(e => e.type === 'missing') ?? [];
+    const missingErrors = new Analyzer(createProgram(files)).extractAllErrors().filter(e => e.type === 'missing');
     expect(missingErrors.length).toBeGreaterThan(0);
     expect(missingErrors.some(e => e.message.includes('ICacheClient'))).toBe(true);
   });
