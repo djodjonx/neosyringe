@@ -262,6 +262,44 @@ export const container = defineBuilderConfig({
 });
 ```
 
+### Declaring external dependencies with `expects`
+
+In feature-first architectures, a partial's services often depend on tokens registered in a shared kernel or parent container. Use `expects` to declare these peer dependencies:
+
+```typescript
+// shared/sharedKernel.ts
+export const sharedKernel = defineBuilderConfig({
+  injections: [
+    { token: useInterface<ICacheClient>(), provider: RedisCacheClient },
+    { token: useInterface<ITokenService>(), provider: JwtTokenService },
+  ]
+});
+
+// user/config.ts
+export const userPartial = definePartialConfig({
+  // Declare tokens coming from the host — suppresses false-positive analyzer errors
+  expects: [
+    useInterface<ICacheClient>(),
+    useInterface<ITokenService>(),
+  ],
+  injections: [
+    { token: Login },    // Login depends on ICacheClient and ITokenService
+    { token: Register },
+  ]
+});
+
+// app/container.ts
+export const appContainer = defineBuilderConfig({
+  useContainer: sharedKernel,  // ← provides ICacheClient and ITokenService
+  extends: [userPartial],
+});
+```
+
+::: info Validation
+- `userPartial` validates cleanly — `expects` tells the analyzer those tokens are external.
+- `appContainer` is validated to actually provide every token declared in `expects`. Missing tokens produce an error on the builder.
+:::
+
 ## Complete Example
 
 ```typescript
