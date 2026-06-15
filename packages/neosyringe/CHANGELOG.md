@@ -1,5 +1,17 @@
 # @djodjonx/neosyringe
 
+## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.2.2...neosyringe-v0.3.0) (2026-06-15)
+
+
+### Features
+
+* add expects field to PartialConfig interface ([a63376a](https://github.com/djodjonx/neosyringe/commit/a63376a1305d7afef3f45a98e68c57448881c793))
+
+
+### Bug Fixes
+
+* address review feedback on expects feature ([11ff467](https://github.com/djodjonx/neosyringe/commit/11ff4673f2ec9d1e96599159fe5402c95d2ca3c7))
+
 ## [0.2.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.2.1...neosyringe-v0.2.2) (2026-06-10)
 
 
