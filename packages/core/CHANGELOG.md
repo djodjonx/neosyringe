@@ -1,5 +1,22 @@
 # @djodjonx/neosyringe-core
 
+## [3.1.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.0.1...neosyringe-core-v3.1.0) (2026-06-15)
+
+
+### Features
+
+* add expectedExternalTokens to ConfigGraph ([804b375](https://github.com/djodjonx/neosyringe/commit/804b3753c18abffee4d1e89b5d58d611f69f7cf6))
+* extract expects tokens in ConfigCollector ([7b6b080](https://github.com/djodjonx/neosyringe/commit/7b6b08074ad84a5011760860485c2bda0b7d5721))
+* suppress partial expects errors and validate builder assembly (Phase 1 + 2) ([ae325ad](https://github.com/djodjonx/neosyringe/commit/ae325adf20e2b8fcdf06e35e3a9c7d49abdc655d))
+
+
+### Bug Fixes
+
+* add cross-file comparison comment and inherited-token Phase 2 test ([d7f98d2](https://github.com/djodjonx/neosyringe/commit/d7f98d270402a1d5f43cdd57cac145eeb2310d33))
+* address review feedback on expects feature ([11ff467](https://github.com/djodjonx/neosyringe/commit/11ff4673f2ec9d1e96599159fe5402c95d2ca3c7))
+* handle non-callable and async providers in useProperty type check ([73d15df](https://github.com/djodjonx/neosyringe/commit/73d15df7ecc4986f65c999b3d3a981ed8a8bc19d))
+* validate useProperty&lt;T&gt; provider return type against T ([f6754aa](https://github.com/djodjonx/neosyringe/commit/f6754aa95f11b6ad88b3a35135fb75b1f128dafb))
+
 ## [3.0.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.0.0...neosyringe-core-v3.0.1) (2026-06-12)
 
 
