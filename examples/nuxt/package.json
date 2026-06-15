@@ -11,15 +11,15 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "@djodjonx/neosyringe": "0.2.2",
+    "@djodjonx/neosyringe": "0.3.0",
     "nuxt": "^4.2.2",
     "vue": "^3.5.27",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
-    "@djodjonx/neosyringe-cli": "0.2.2",
-    "@djodjonx/neosyringe-lsp": "0.4.2",
-    "@djodjonx/neosyringe-plugin": "0.4.2",
+    "@djodjonx/neosyringe-cli": "0.2.3",
+    "@djodjonx/neosyringe-lsp": "0.4.3",
+    "@djodjonx/neosyringe-plugin": "0.4.3",
     "@nuxt/devtools": "^2.7.0",
     "typescript": "^5.9.3",
     "unplugin": "^2.3.11",
