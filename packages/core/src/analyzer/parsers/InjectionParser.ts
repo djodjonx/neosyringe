@@ -312,8 +312,30 @@ export class InjectionParser {
 
     const providerType = this.checker.getTypeAtLocation(providerNode);
     const signatures = providerType.getCallSignatures();
-    if (signatures.length === 0) return null;
 
+    if (signatures.length === 0) {
+      // Distinguish between a class constructor (has construct signatures — clearly wrong for
+      // useProperty) and other non-callables like object literals (handled elsewhere or
+      // intentionally unvalidated here). Only emit an error for class constructors.
+      const constructSignatures = providerType.getConstructSignatures();
+      if (constructSignatures.length > 0) {
+        const expectedName = this.checker.typeToString(expectedType);
+        return {
+          type: 'type-mismatch',
+          message: `Type mismatch: provider for useProperty<${expectedName}> must be a factory function () => ${expectedName}, not a class constructor.`,
+          node: registrationNode,
+          sourceFile,
+        };
+      }
+      return null;
+    }
+
+    // For async factories, the signature return type is Promise<T>. Since async useProperty
+    // providers are resolved via initialize() at runtime, we skip static type validation
+    // for them to avoid false-positive type-mismatch errors.
+    if (this.isAsyncFunction(providerNode)) return null;
+
+    // Note: for overloaded providers only signatures[0] is checked (simplification).
     const returnType = this.checker.getReturnTypeOfSignature(signatures[0]);
 
     if (!this.checker.isTypeAssignableTo(returnType, expectedType)) {
