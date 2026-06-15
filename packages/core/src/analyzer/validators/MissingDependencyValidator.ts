@@ -124,13 +124,13 @@ export class MissingDependencyValidator implements IValidator {
   ): AnalysisError[] {
     const errors: AnalysisError[] = [];
 
-    // Build a set of simple (hash-stripped) names for cross-file token matching.
-    // Token IDs include a file-path hash (e.g. ICacheClient_4b059a3f) that differs
-    // across files even for the same interface name, so we compare by simple name.
-    const availableSimpleNames = new Set<string>();
-    for (const tokenId of availableTokens) {
-      availableSimpleNames.add(getSimpleName(tokenId));
-    }
+    // Cross-file comparison: tokenIds include a file-path hash that differs
+    // even for the same interface imported from the same file, so we compare
+    // by simple name. Trade-off: two different interfaces sharing the same
+    // name from different modules would not raise an error (false negative).
+    // This is acceptable for typical DI usage where interface names are
+    // globally unique within a project.
+    const availableSimpleNames = new Set([...availableTokens].map(getSimpleName));
 
     for (const extendRef of config.extendsRefs) {
       const partial = this.findPartialConfigByName(extendRef, context.allConfigs);
