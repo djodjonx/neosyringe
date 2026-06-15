@@ -197,6 +197,11 @@ export class ConfigCollector implements IConfigCollector {
       ? this.extractLegacyParentTokens(useContainerRef, sourceFile)
       : undefined;
 
+    // Collect expected external tokens (for partials only)
+    const expectedExternalTokens = type === 'partial'
+      ? this.collectExpectedTokens(configArg)
+      : undefined;
+
     // Get container name
     const containerName = this.getContainerName(configArg);
 
@@ -211,6 +216,7 @@ export class ConfigCollector implements IConfigCollector {
       extendsRefs,
       useContainerRef,
       legacyParentTokens,
+      expectedExternalTokens,
       containerName,
       valueErrors: valueErrors.length > 0 ? valueErrors : undefined,
       multiInjections: multiInjections && multiInjections.size > 0 ? multiInjections : undefined,
@@ -534,5 +540,51 @@ export class ConfigCollector implements IConfigCollector {
     }
 
     return undefined;
+  }
+
+  /**
+   * Extracts the `expects` array from a partial config object and resolves
+   * each element to a TokenId using the same strategies as InjectionParser.
+   */
+  private collectExpectedTokens(
+    configObj: ts.ObjectLiteralExpression
+  ): Set<string> | undefined {
+    const expectsProp = this.findProperty(configObj, 'expects');
+    if (!expectsProp || !TSContext.ts.isArrayLiteralExpression(expectsProp.initializer)) {
+      return undefined;
+    }
+
+    const tokenIds = new Set<string>();
+
+    for (const element of expectsProp.initializer.elements) {
+      try {
+        const tokenId = this.resolveExpectedTokenId(element);
+        if (tokenId) tokenIds.add(tokenId);
+      } catch {
+        // Silently skip unresolvable elements — injection parsing will surface real errors
+      }
+    }
+
+    return tokenIds.size > 0 ? tokenIds : undefined;
+  }
+
+  /**
+   * Resolves a single `expects` element to a TokenId.
+   * Handles: useInterface<T>(), useProperty<T>(), and class constructor references.
+   */
+  private resolveExpectedTokenId(element: ts.Expression): string | null {
+    const resolved = this.tokenResolverService.resolveToInitializer(element) ?? element;
+
+    if (this.tokenResolverService.isUseInterfaceCall(resolved)) {
+      return this.tokenResolverService.extractInterfaceTokenId(resolved);
+    }
+
+    if (this.tokenResolverService.isUsePropertyCall(resolved)) {
+      return this.tokenResolverService.extractPropertyTokenId(resolved);
+    }
+
+    // Class token — the constructor type itself is the token
+    const type = this.checker.getTypeAtLocation(element);
+    return this.tokenResolverService.getTypeIdFromConstructor(type);
   }
 }
