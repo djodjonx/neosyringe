@@ -116,10 +116,22 @@ A single injection definition:
 ```typescript
 interface PartialConfig {
   injections?: Injection[];
+  expects?: any[];
 }
 ```
 
 A reusable configuration block.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `injections` | `Injection[]` | Services provided by this partial |
+| `expects` | `any[]` | Token references expected from the host container |
+
+The `expects` field accepts the same token expressions used in `token:` fields:
+- `useInterface<T>()` for interface tokens
+- A class constructor for class tokens
+
+See [definePartialConfig](/api/functions#definepartialconfig) for usage.
 
 ## BuilderConfig
 

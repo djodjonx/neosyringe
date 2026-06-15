@@ -42,19 +42,20 @@ export const container = defineBuilderConfig({
 function definePartialConfig(config: PartialConfig): PartialConfig
 ```
 
-Define a reusable partial configuration that can be extended.
+Define a reusable partial configuration that can be extended by a `defineBuilderConfig`.
 
 ### Parameters
 
 | Name | Type | Description |
 |------|------|-------------|
-| `config` | `PartialConfig` | Partial configuration |
+| `config.injections` | `Injection[]` | Services provided by this partial |
+| `config.expects` | `any[]` | Tokens this partial expects from its host container |
 
 ### Returns
 
-`PartialConfig` - The partial configuration
+`PartialConfig` — The partial configuration
 
-### Example
+### Example — basic partial
 
 ```typescript
 import { definePartialConfig, useInterface } from '@djodjonx/neosyringe';
@@ -65,14 +66,41 @@ export const loggingPartial = definePartialConfig({
   ]
 });
 
-// Use in main config
 export const container = defineBuilderConfig({
   extends: [loggingPartial],
-  injections: [
-    { token: UserService }
-  ]
+  injections: [{ token: UserService }]
 });
 ```
+
+### Example — partial with `expects` (peer dependencies)
+
+Use `expects` when a partial's services depend on tokens registered in the host container. Common in feature-first / DDD architectures where a shared kernel registers cross-cutting concerns.
+
+```typescript
+// user/config.ts
+export const userPartial = definePartialConfig({
+  expects: [
+    useInterface<ICacheClient>(),
+    useInterface<ITokenService>(),
+    useInterface<IIdGenerator>(),
+  ],
+  injections: [
+    { token: Login },
+    { token: Register },
+    { token: GetMe },
+  ]
+});
+
+// app/container.ts
+export const appContainer = defineBuilderConfig({
+  useContainer: sharedKernel,      // provides ICacheClient, ITokenService, IIdGenerator
+  extends: [userPartial],
+});
+```
+
+::: tip
+If the host builder does not provide a token declared in `expects`, the analyzer raises an error pointing to the builder — not the partial.
+:::
 
 ---
 

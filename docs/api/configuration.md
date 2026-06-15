@@ -244,6 +244,29 @@ defineBuilderConfig({
 });
 ```
 
+### expects
+
+Type: `any[]`
+
+Optional. Tokens this partial expects its host container to provide. Accepts the same token expressions used in `token:` fields: `useInterface<T>()` or a class constructor.
+
+```typescript
+const userPartial = definePartialConfig({
+  expects: [
+    useInterface<ICacheClient>(),
+    useInterface<ITokenService>(),
+  ],
+  injections: [
+    { token: Login },
+    { token: Register },
+  ]
+});
+```
+
+The analyzer validates that:
+1. During partial validation, expected tokens are treated as available (no false-positive errors).
+2. When this partial is used in a `defineBuilderConfig`, the builder must provide all tokens listed in `expects`.
+
 ## Injection Options
 
 ```typescript
