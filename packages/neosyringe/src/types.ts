@@ -172,7 +172,7 @@ export interface PartialConfig {
    * });
    * ```
    */
-  expects?: any[];
+  expects?: Array<Token<any>>;
 }
 
 /**

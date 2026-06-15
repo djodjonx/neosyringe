@@ -244,9 +244,17 @@ defineBuilderConfig({
 });
 ```
 
+## PartialConfig Options
+
+### injections
+
+Type: `Injection[]`
+
+Optional. List of services registered by this partial. See [Injection Options](#injection-options).
+
 ### expects
 
-Type: `any[]`
+Type: `Array<Token<any>>`
 
 Optional. Tokens this partial expects its host container to provide. Accepts the same token expressions used in `token:` fields: `useInterface<T>()` or a class constructor.
 
