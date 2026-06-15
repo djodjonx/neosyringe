@@ -143,6 +143,36 @@ export interface Injection<T = any> {
  */
 export interface PartialConfig {
   injections?: Injection[];
+  /**
+   * Declares tokens this partial expects to be provided by its host container.
+   *
+   * Use when a partial's injections depend on tokens registered elsewhere
+   * (e.g. in a shared kernel or parent container). Declaring them in `expects`
+   * suppresses false-positive "missing dependency" errors during partial
+   * validation and documents the partial's external contract.
+   *
+   * Accepts the same token expressions as `token:` in an injection:
+   * - `useInterface<T>()` for interface tokens
+   * - A class constructor for class tokens
+   *
+   * The host `defineBuilderConfig` must provide all declared tokens either
+   * in its own `injections` or via `useContainer` / other `extends`.
+   *
+   * @example
+   * ```typescript
+   * export const userPartial = definePartialConfig({
+   *   expects: [
+   *     useInterface<ICacheClient>(),
+   *     useInterface<ITokenService>(),
+   *   ],
+   *   injections: [
+   *     { token: Login },
+   *     { token: Register },
+   *   ]
+   * });
+   * ```
+   */
+  expects?: any[];
 }
 
 /**
