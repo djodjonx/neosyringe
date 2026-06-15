@@ -124,24 +124,19 @@ export class MissingDependencyValidator implements IValidator {
   ): AnalysisError[] {
     const errors: AnalysisError[] = [];
 
-    // Cross-file comparison: tokenIds include a file-path hash that differs
-    // even for the same interface imported from the same file, so we compare
-    // by simple name. Trade-off: two different interfaces sharing the same
-    // name from different modules would not raise an error (false negative).
-    // This is acceptable for typical DI usage where interface names are
-    // globally unique within a project.
-    const availableSimpleNames = new Set([...availableTokens].map(getSimpleName));
-
+    // Strict tokenId comparison: when the same interface is imported from the same
+    // declaration file in both the partial and the builder, their tokenIds are identical
+    // (the hash is derived from the symbol's declaration location, not the call site).
+    // Using strict comparison preserves the hash-based collision protection.
     for (const extendRef of config.extendsRefs) {
       const partial = this.findPartialConfigByName(extendRef, context.allConfigs);
       if (!partial?.expectedExternalTokens) continue;
 
       for (const tokenId of partial.expectedExternalTokens) {
-        const simpleName = getSimpleName(tokenId);
-        if (!availableSimpleNames.has(simpleName)) {
+        if (!availableTokens.has(tokenId)) {
           errors.push({
             type: 'missing',
-            message: `Missing token: '${simpleName}' is declared in '${extendRef}.expects' but is not provided by this builder or its parent container.`,
+            message: `Missing token: '${getSimpleName(tokenId)}' is declared in '${extendRef}.expects' but is not provided by this builder or its parent container.`,
             node: config.node,
             sourceFile: config.sourceFile,
             context: { tokenText: tokenId },

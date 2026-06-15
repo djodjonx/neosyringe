@@ -198,9 +198,9 @@ export class ConfigCollector implements IConfigCollector {
       : undefined;
 
     // Collect expected external tokens (for partials only)
-    const expectedExternalTokens = type === 'partial'
-      ? this.collectExpectedTokens(configArg)
-      : undefined;
+    const { tokens: expectedExternalTokens, errors: expectedErrors } = type === 'partial'
+      ? this.collectExpectedTokens(configArg, sourceFile)
+      : { tokens: undefined, errors: [] };
 
     // Get container name
     const containerName = this.getContainerName(configArg);
@@ -218,7 +218,7 @@ export class ConfigCollector implements IConfigCollector {
       legacyParentTokens,
       expectedExternalTokens,
       containerName,
-      valueErrors: valueErrors.length > 0 ? valueErrors : undefined,
+      valueErrors: [...valueErrors, ...expectedErrors].length > 0 ? [...valueErrors, ...expectedErrors] : undefined,
       multiInjections: multiInjections && multiInjections.size > 0 ? multiInjections : undefined,
     };
   }
@@ -547,25 +547,35 @@ export class ConfigCollector implements IConfigCollector {
    * each element to a TokenId using the same strategies as InjectionParser.
    */
   private collectExpectedTokens(
-    configObj: ts.ObjectLiteralExpression
-  ): Set<string> | undefined {
+    configObj: ts.ObjectLiteralExpression,
+    sourceFile: ts.SourceFile
+  ): { tokens: Set<string> | undefined; errors: import('../types').AnalysisError[] } {
     const expectsProp = this.findProperty(configObj, 'expects');
     if (!expectsProp || !TSContext.ts.isArrayLiteralExpression(expectsProp.initializer)) {
-      return undefined;
+      return { tokens: undefined, errors: [] };
     }
 
     const tokenIds = new Set<string>();
+    const errors: import('../types').AnalysisError[] = [];
 
     for (const element of expectsProp.initializer.elements) {
       try {
         const tokenId = this.resolveExpectedTokenId(element);
         if (tokenId) tokenIds.add(tokenId);
-      } catch {
-        // Silently skip unresolvable elements — injection parsing will surface real errors
+      } catch (err) {
+        errors.push({
+          type: 'type-mismatch',
+          message: `Invalid token in expects: ${err instanceof Error ? err.message : String(err)}`,
+          node: element,
+          sourceFile,
+        });
       }
     }
 
-    return tokenIds.size > 0 ? tokenIds : undefined;
+    return {
+      tokens: tokenIds.size > 0 ? tokenIds : undefined,
+      errors,
+    };
   }
 
   /**

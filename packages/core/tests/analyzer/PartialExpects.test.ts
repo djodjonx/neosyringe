@@ -121,13 +121,19 @@ describe('definePartialConfig — expects field', () => {
   });
 
   // ── Phase 2: assembly-level validation ──────────────────────────────────────
+  //
+  // Phase 2 tests use a shared interface declaration file (interfaces.ts) so that
+  // useInterface<ICacheClient>() generates the SAME tokenId in both the partial and
+  // the builder — the tokenId hash is derived from the interface's declaration location,
+  // not from the call site. This enables strict tokenId comparison (no getSimpleName hack).
 
   it('builder passes when it provides all tokens declared in partial expects', () => {
     const files = {
+      'interfaces.ts': `export interface ICacheClient { get(k: string): string; }`,
       'partial.ts': `
+        import type { ICacheClient } from './interfaces';
         function definePartialConfig(c: any) { return c; }
         function useInterface<T>(): any { return null; }
-        interface ICacheClient { get(k: string): string; }
         class Login { constructor(private cache: ICacheClient) {} }
         export const userPartial = definePartialConfig({
           expects: [useInterface<ICacheClient>()],
@@ -135,10 +141,10 @@ describe('definePartialConfig — expects field', () => {
         });
       `,
       'container.ts': `
+        import type { ICacheClient } from './interfaces';
         import { userPartial } from './partial';
         function defineBuilderConfig(c: any) { return c; }
         function useInterface<T>(): any { return null; }
-        interface ICacheClient { get(k: string): string; }
         class RedisCacheClient implements ICacheClient { get(k: string) { return ''; } }
         export const appContainer = defineBuilderConfig({
           extends: [userPartial],
@@ -154,10 +160,11 @@ describe('definePartialConfig — expects field', () => {
 
   it('builder errors when it does NOT provide a token declared in partial expects', () => {
     const files = {
+      'interfaces.ts': `export interface ICacheClient { get(k: string): string; }`,
       'partial.ts': `
+        import type { ICacheClient } from './interfaces';
         function definePartialConfig(c: any) { return c; }
         function useInterface<T>(): any { return null; }
-        interface ICacheClient { get(k: string): string; }
         class Login { constructor(private cache: ICacheClient) {} }
         export const userPartial = definePartialConfig({
           expects: [useInterface<ICacheClient>()],
@@ -169,7 +176,7 @@ describe('definePartialConfig — expects field', () => {
         function defineBuilderConfig(c: any) { return c; }
         export const appContainer = defineBuilderConfig({
           extends: [userPartial],
-          injections: []
+          injections: []  // ICacheClient NOT provided
         });
       `,
     };
@@ -182,19 +189,20 @@ describe('definePartialConfig — expects field', () => {
     // The builder doesn't inject ICacheClient directly — it extends a partial that provides it.
     // That inherited token should satisfy the user partial's expects.
     const files = {
+      'interfaces.ts': `export interface ICacheClient { get(k: string): string; }`,
       'cache-partial.ts': `
+        import type { ICacheClient } from './interfaces';
         function definePartialConfig(c: any) { return c; }
         function useInterface<T>(): any { return null; }
-        interface ICacheClient { get(k: string): string; }
         class RedisCacheClient implements ICacheClient { get(k: string) { return ''; } }
         export const cachePartial = definePartialConfig({
           injections: [{ token: useInterface<ICacheClient>(), provider: RedisCacheClient }]
         });
       `,
       'user-partial.ts': `
+        import type { ICacheClient } from './interfaces';
         function definePartialConfig(c: any) { return c; }
         function useInterface<T>(): any { return null; }
-        interface ICacheClient { get(k: string): string; }
         class Login { constructor(private cache: ICacheClient) {} }
         export const userPartial = definePartialConfig({
           expects: [useInterface<ICacheClient>()],
@@ -211,9 +219,7 @@ describe('definePartialConfig — expects field', () => {
         });
       `,
     };
-    const program = createProgram(files);
-    const errors = new Analyzer(program).extractAllErrors();
-    const missingErrors = errors.filter(e => e.type === 'missing');
+    const missingErrors = new Analyzer(createProgram(files)).extractAllErrors().filter(e => e.type === 'missing');
     expect(missingErrors).toHaveLength(0);
   });
 });
