@@ -177,4 +177,43 @@ describe('definePartialConfig — expects field', () => {
     expect(missingErrors.length).toBeGreaterThan(0);
     expect(missingErrors.some(e => e.message.includes('ICacheClient'))).toBe(true);
   });
+
+  it('builder passes Phase 2 when expects token is satisfied via another extended partial', () => {
+    // The builder doesn't inject ICacheClient directly — it extends a partial that provides it.
+    // That inherited token should satisfy the user partial's expects.
+    const files = {
+      'cache-partial.ts': `
+        function definePartialConfig(c: any) { return c; }
+        function useInterface<T>(): any { return null; }
+        interface ICacheClient { get(k: string): string; }
+        class RedisCacheClient implements ICacheClient { get(k: string) { return ''; } }
+        export const cachePartial = definePartialConfig({
+          injections: [{ token: useInterface<ICacheClient>(), provider: RedisCacheClient }]
+        });
+      `,
+      'user-partial.ts': `
+        function definePartialConfig(c: any) { return c; }
+        function useInterface<T>(): any { return null; }
+        interface ICacheClient { get(k: string): string; }
+        class Login { constructor(private cache: ICacheClient) {} }
+        export const userPartial = definePartialConfig({
+          expects: [useInterface<ICacheClient>()],
+          injections: [{ token: Login }]
+        });
+      `,
+      'container.ts': `
+        import { cachePartial } from './cache-partial';
+        import { userPartial } from './user-partial';
+        function defineBuilderConfig(c: any) { return c; }
+        export const appContainer = defineBuilderConfig({
+          extends: [cachePartial, userPartial],
+          injections: []
+        });
+      `,
+    };
+    const program = createProgram(files);
+    const errors = new Analyzer(program).extractAllErrors();
+    const missingErrors = errors.filter(e => e.type === 'missing');
+    expect(missingErrors).toHaveLength(0);
+  });
 });
