@@ -1,5 +1,13 @@
 # @djodjonx/neosyringe-core
 
+## [3.0.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.0.1...neosyringe-core-v3.0.2) (2026-06-15)
+
+
+### Bug Fixes
+
+* handle non-callable and async providers in useProperty type check ([73d15df](https://github.com/djodjonx/neosyringe/commit/73d15df7ecc4986f65c999b3d3a981ed8a8bc19d))
+* validate useProperty&lt;T&gt; provider return type against T ([f6754aa](https://github.com/djodjonx/neosyringe/commit/f6754aa95f11b6ad88b3a35135fb75b1f128dafb))
+
 ## [3.0.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.0.0...neosyringe-core-v3.0.1) (2026-06-12)
 
 
