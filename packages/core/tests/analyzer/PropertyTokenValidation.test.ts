@@ -202,6 +202,50 @@ describe('useProperty<T> provider type validation', () => {
     expect(typeErrors.length).toBe(0);
   });
 
+  // ── Edge cases ──────────────────────────────────────────────────────────────
+
+  it('does NOT error for async factory with correct inner type (async is skipped — runtime handles via initialize())', () => {
+    // async () => 42 has return type Promise<number>. Validating Promise<number> against number
+    // would be a false positive — the runtime unwraps it via initialize(). We skip the check.
+    const code = `
+      function defineBuilderConfig(c: any) { return c; }
+      function useProperty<T>(cls: any, name: string): any { return null; }
+      class Login { constructor(public tokenExpired: number) {} }
+
+      export const container = defineBuilderConfig({
+        injections: [
+          { token: useProperty<number>(Login, 'tokenExpired'), provider: async () => 42 }
+        ]
+      });
+    `;
+
+    const graph = new Analyzer(createProgram(code)).extract();
+    const typeErrors = graph.errors?.filter(e => e.type === 'type-mismatch') ?? [];
+    expect(typeErrors.length).toBe(0);
+  });
+
+  it('errors when provider is non-callable (class constructor instead of factory)', () => {
+    // provider: SomeClass is a class (construct signature only, no call signature)
+    // useProperty requires a factory function — this should be an explicit error.
+    const code = `
+      function defineBuilderConfig(c: any) { return c; }
+      function useProperty<T>(cls: any, name: string): any { return null; }
+      class Login { constructor(public tokenExpired: number) {} }
+      class NotAFactory {}
+
+      export const container = defineBuilderConfig({
+        injections: [
+          { token: useProperty<number>(Login, 'tokenExpired'), provider: NotAFactory }
+        ]
+      });
+    `;
+
+    const graph = new Analyzer(createProgram(code)).extract();
+    const typeErrors = graph.errors?.filter(e => e.type === 'type-mismatch') ?? [];
+    expect(typeErrors.length).toBeGreaterThan(0);
+    expect(typeErrors[0].message).toContain('factory function');
+  });
+
   // ── LSP/modular path (extractForFile) ───────────────────────────────────────
 
   it('also reports the error via the modular LSP path (extractForFile)', () => {
