@@ -126,6 +126,13 @@ export interface ConfigGraph {
   /** Tokens provided by legacy parent containers (declareContainerTokens) - BUILDER ONLY */
   legacyParentTokens?: Set<TokenId>;
 
+  /**
+   * Token IDs declared as external dependencies by a partial config (via `expects`).
+   * These tokens will be provided by the host BuilderConfig, not by the partial itself.
+   * PARTIAL ONLY — undefined for builder configs.
+   */
+  expectedExternalTokens?: Set<TokenId>;
+
   /** Container name from config */
   containerName?: string;
 
