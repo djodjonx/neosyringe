@@ -78,6 +78,43 @@ export class TypeMismatchError extends Error {
   }
 }
 
+/**
+ * Error thrown when a `defineBuilderConfig(...)` call site has a shape the
+ * plugin cannot statically position for replacement — e.g. a bare
+ * `return defineBuilderConfig({...})` with no intermediate variable.
+ *
+ * Without this check, such a call is silently left untransformed: no error,
+ * no generated container, just the literal `defineBuilderConfig(...)` call
+ * shipped as-is, which throws (or behaves incorrectly) at runtime with no
+ * indication the build plugin ever saw it.
+ */
+export class UnsupportedContainerShapeError extends Error {
+  public readonly fileName: string;
+  public readonly line: number;
+  public readonly character: number;
+  /** Byte offset of the end of the offending node (for diagnostic span width). */
+  public readonly endOffset: number;
+
+  constructor(
+    message: string,
+    node: ts.Node,
+    sourceFile: ts.SourceFile
+  ) {
+    super(message);
+    this.name = 'UnsupportedContainerShapeError';
+    this.fileName = sourceFile.fileName;
+    const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+    this.line = pos.line;
+    this.character = pos.character;
+    this.endOffset = node.getEnd();
+  }
+}
+
+const UNSUPPORTED_SHAPE_MESSAGE =
+  "defineBuilderConfig() must be assigned to a variable — 'const container = defineBuilderConfig({...})' " +
+  "(then `return container;` separately if inside a function) — or used as 'export default defineBuilderConfig({...})'. " +
+  "A bare 'return defineBuilderConfig({...})' (or any other shape) cannot be located for replacement and would " +
+  "silently ship the untransformed call, which is unsafe at runtime.";
 
 /**
  * Analyzes TypeScript source code to extract the dependency injection graph.
@@ -311,7 +348,9 @@ export class Analyzer {
       };
 
       const positioned = this.setGraphPositions(configCall, graph);
-      if (!positioned) continue; // Skip anonymous/unrecognised patterns
+      if (!positioned) {
+        throw new UnsupportedContainerShapeError(UNSUPPORTED_SHAPE_MESSAGE, configCall, configCall.getSourceFile());
+      }
 
       graph.defineBuilderConfigStart = configCall.getStart();
       graph.defineBuilderConfigEnd = configCall.getEnd();
@@ -453,7 +492,10 @@ export class Analyzer {
     }
 
     // Case 2: export default defineBuilderConfig(...)
-    if (TSContext.ts.isExportAssignment(parent) && parent.isExportEquals === false) {
+    // NOTE: for `export default expr`, TypeScript's `isExportEquals` is `undefined`,
+    // not `false` — only `export = expr` (CommonJS-style) sets it to `true`. A strict
+    // `=== false` check here silently never matches real `export default` syntax.
+    if (TSContext.ts.isExportAssignment(parent) && parent.isExportEquals !== true) {
       graph.variableExportModifier = 'export default';
       graph.variableStatementStart = parent.getStart();
       return true;
@@ -483,7 +525,10 @@ export class Analyzer {
         }
 
         // Populate positions using shared helper
-        this.setGraphPositions(node, graph);
+        const positioned = this.setGraphPositions(node, graph);
+        if (!positioned) {
+          throw new UnsupportedContainerShapeError(UNSUPPORTED_SHAPE_MESSAGE, node, node.getSourceFile());
+        }
 
         // Store the position of defineBuilderConfig call for replacement
         graph.defineBuilderConfigStart = node.getStart();
