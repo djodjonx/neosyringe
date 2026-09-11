@@ -38,9 +38,8 @@ pnpm exec neosyringe-check
 neosyringe-check [options]
 
 Options:
-  -p, --project <path>   Path to tsconfig.json (default: "./tsconfig.json")
-  -h, --help             Display help
-  -v, --version          Display version
+  -p, --project <path>   Path to tsconfig.json (default: auto-detected in cwd)
+  --json                 Machine-readable output for CI (see below)
 ```
 
 ## Output
@@ -48,44 +47,53 @@ Options:
 ### Success
 
 ```
-🔍 Analyzing project: /path/to/tsconfig.json
-   Found 45 services.
-🛡️  Validating graph...
-✅ Validation passed! No circular dependencies or missing bindings found.
+Analyzing project: /path/to/tsconfig.json
+🔍 Validating all dependency containers...
+✅ Validation passed! No errors found.
 ```
 
-### Circular Dependency Detected
+### Errors found
 
 ```
-🔍 Analyzing project: /path/to/tsconfig.json
-   Found 12 services.
-🛡️  Validating graph...
-❌ Validation failed!
+Analyzing project: /path/to/tsconfig.json
+🔍 Validating all dependency containers...
 
-Error: Circular dependency detected: A -> B -> C -> A
+❌ Validation failed — 1 error(s) found:
+
+  container.ts:4:57  [missing]  Missing injection: 'ILogger' required by 'UserService' is not registered in this builder nor its parents/extends
 ```
 
-### Missing Binding
+Each line is `<file>:<line>:<column>  [<type>]  <message>` — `type` is one of `missing`, `cycle`, `type-mismatch`, `duplicate` (see the [Error Reference](/api/errors) for what each one means).
 
-```
-🔍 Analyzing project: /path/to/tsconfig.json
-   Found 8 services.
-🛡️  Validating graph...
-❌ Validation failed!
+### `--json` — machine-readable output for CI
 
-Error: Missing binding: 'UserService' depends on 'ILogger', but no provider registered.
+```bash
+neosyringe-check --json
 ```
 
-### Duplicate Registration
+Prints a single JSON object to stdout instead of the human-readable format, and suppresses the `Analyzing project...` / `🔍 Validating...` lines:
 
+```json
+{
+  "ok": false,
+  "errorCount": 1,
+  "errors": [
+    {
+      "file": "container.ts",
+      "line": 4,
+      "column": 57,
+      "type": "missing",
+      "message": "Missing injection: 'ILogger' required by 'UserService' is not registered in this builder nor its parents/extends"
+    }
+  ]
+}
 ```
-🔍 Analyzing project: /path/to/tsconfig.json
-   Found 15 services.
-🛡️  Validating graph...
-❌ Validation failed!
 
-Error: Duplicate registration: 'ILogger' is already registered in the parent container.
-Use 'scoped: true' to override the parent's registration intentionally.
+On success: `{"ok":true,"errorCount":0,"errors":[]}`. A fatal error before analysis even starts (e.g. no `tsconfig.json` found) instead produces `{"ok":false,"errorCount":0,"errors":[],"fatal":"<message>"}`.
+
+```bash
+# Example: fail the build and show only the messages
+neosyringe-check --json | jq -e '.ok or (.errors[] | .message)'
 ```
 
 ## Exit Codes
@@ -93,8 +101,7 @@ Use 'scoped: true' to override the parent's registration intentionally.
 | Code | Meaning |
 |------|---------|
 | 0 | Validation passed |
-| 1 | Validation failed |
-| 2 | Configuration error |
+| 1 | Validation failed, or a fatal error occurred before validation could run (missing/invalid tsconfig) |
 
 ## CI/CD Integration
 

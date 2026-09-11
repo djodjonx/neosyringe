@@ -50,16 +50,38 @@ The generated container has **no import from `@djodjonx/neosyringe`**. It is pla
 
 ## Debugging
 
-The generated container exposes two helpers:
+The generated container exposes a few helpers, all stripped by dead-code elimination when `NODE_ENV === 'production'`:
 
 ```typescript
 // List all registered token IDs
 console.log(container._graph);
+// ["ILogger_a1b2c3d4", "UserService_e5f6a7b8", ...]
 
-// Error messages include the container name
+// Same list, but with each token's own dependency edges — enough to render
+// an actual dependency graph (DOT, mermaid, whatever you feed it into)
+console.log(container._dependencyGraph);
+// [{ token: "ILogger_a1b2c3d4", dependencies: [] },
+//  { token: "UserService_e5f6a7b8", dependencies: ["ILogger_a1b2c3d4"] }]
+
+// Error messages include the container name and a readable token name
+// (a class token's declared name, or a string token with its hash suffix
+// stripped — never the raw hash, and never a whole stringified class):
 // [AppContainer] Service not found or token not registered: UnknownToken
 ```
 
+### Overriding a registration in tests
+
+Every generated container also has `override()` / `clearOverrides()`, meant for tests — not production wiring:
+
+```typescript
+container.override(useInterface<ILogger>(), () => mockLogger);
+// every resolve() for that token now returns mockLogger (cached, like a singleton)
+
+container.clearOverrides(); // revert to the real registrations
+```
+
+`destroy()` also clears overrides, so a container reused across tests doesn't leak one test's mocks into the next.
+
 ## Inspecting the Output
 
-If you want to see exactly what was generated, look at the file after your build runs. With Vite, the output lands in `dist/`. With the CLI validator, use `--output` to write the generated code to a file.
+If you want to see exactly what was generated, look at the file after your build runs. With Vite, the output lands in `dist/`.

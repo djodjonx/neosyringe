@@ -35,6 +35,30 @@ export const container = defineBuilderConfig({
 });
 ```
 
+### Optional Dependencies
+
+A constructor parameter marked `?` (or typed `T | undefined`) is **optional**: if nothing registers it anywhere (this container, a `useContainer` parent, or an `extends`-ed partial), it resolves to `undefined` instead of failing the build. If it *is* registered somewhere, it's wired normally.
+
+```typescript
+interface ITelemetry { track(event: string): void; }
+
+class UserService {
+  // Optional — no build error even if ITelemetry is never registered
+  constructor(private telemetry?: ITelemetry) {}
+
+  createUser(name: string) {
+    this.telemetry?.track('user_created'); // guard the call yourself
+    // ...
+  }
+}
+
+export const container = defineBuilderConfig({
+  injections: [{ token: UserService }]  // no ITelemetry registration — this is fine
+});
+```
+
+There's no new field to learn — this reuses ordinary TypeScript syntax rather than adding a DI-specific annotation. Use it for genuinely optional collaborators (telemetry, an optional plugin) where a missing registration is expected, not a mistake. For anything that's actually required, leave the parameter non-optional so a missing registration still fails the build loudly.
+
 ## Interface Token
 
 Bind an interface to a concrete implementation using `useInterface<T>()`.
