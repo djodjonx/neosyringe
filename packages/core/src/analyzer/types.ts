@@ -249,6 +249,21 @@ export interface DependencyGraph {
   /** Tokens provided by the parent container (used for validation). */
   parentProvidedTokens?: Set<TokenId>;
 
+  /**
+   * Subset of `parentProvidedTokens` that codegen can safely delegate to at
+   * runtime via a string-keyed `this.resolve(tokenId)` call: interface tokens
+   * (`useInterface<T>()`) and `declareContainerTokens` entries, both of which
+   * are resolved by string comparison in the generated `resolveLocal()`.
+   *
+   * Bare class-based tokens registered in a parent (e.g. `{ token: SomeClass }`)
+   * are deliberately excluded — the parent's own `resolveLocal()` compares by
+   * class identity, not by string, and codegen has no access to the parent's
+   * class reference from the child's call site. Generating a string-keyed
+   * `resolve()` call for those would silently never match, which is why they
+   * are tracked separately instead of being lumped into `parentProvidedTokens`.
+   */
+  parentResolvableTokens?: Set<TokenId>;
+
   /** Analysis errors collected during extraction (duplicates, type mismatches, etc.). */
   errors?: AnalysisError[];
 

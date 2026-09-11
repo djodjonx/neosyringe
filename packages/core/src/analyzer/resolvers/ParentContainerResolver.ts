@@ -117,16 +117,29 @@ export class ParentContainerResolver {
     this.parseBuilderConfigCallback(init, parentGraph);
 
     graph.parentProvidedTokens ??= new Set();
+    graph.parentResolvableTokens ??= new Set();
 
-    // Add all parent tokens to parentProvidedTokens
-    for (const tokenId of parentGraph.nodes.keys()) {
+    // Add all parent tokens to parentProvidedTokens. Only interface tokens are
+    // also added to parentResolvableTokens — the parent's generated resolveLocal()
+    // matches those by string, so a child can safely delegate to them via
+    // this.resolve(tokenId). Bare class tokens match by identity and can't be
+    // resolved this way from another call site (see field doc on the type).
+    for (const [tokenId, node] of parentGraph.nodes) {
       graph.parentProvidedTokens.add(tokenId);
+      if (node.service.isInterfaceToken) {
+        graph.parentResolvableTokens.add(tokenId);
+      }
     }
 
     // Also inherit parent's parent tokens (transitive inheritance)
     if (parentGraph.parentProvidedTokens) {
       for (const tokenId of parentGraph.parentProvidedTokens) {
         graph.parentProvidedTokens.add(tokenId);
+      }
+    }
+    if (parentGraph.parentResolvableTokens) {
+      for (const tokenId of parentGraph.parentResolvableTokens) {
+        graph.parentResolvableTokens.add(tokenId);
       }
     }
   }
@@ -153,18 +166,21 @@ export class ParentContainerResolver {
     const type = this.checker.getTypeFromTypeNode(typeArg);
 
     graph.parentProvidedTokens ??= new Set();
+    graph.parentResolvableTokens ??= new Set();
 
     // Get properties of the type (e.g., { AuthService: AuthService, UserRepo: UserRepo })
+    // declareContainerTokens() bridges to a legacy container that is always resolved
+    // by string key (that's the whole point of the shim), regardless of whether the
+    // declared type is a class or an interface — so every entry is resolvable.
     const properties = type.getProperties();
     for (const prop of properties) {
       const propType = this.checker.getTypeOfSymbol(prop);
-      if (propType) {
-        const tokenId = this.tokenResolverService.getTypeId(propType);
-        graph.parentProvidedTokens.add(tokenId);
-      } else {
+      const tokenId = propType
+        ? this.tokenResolverService.getTypeId(propType)
         // Fallback to property name if type not available
-        graph.parentProvidedTokens.add(prop.getName());
-      }
+        : prop.getName();
+      graph.parentProvidedTokens.add(tokenId);
+      graph.parentResolvableTokens.add(tokenId);
     }
   }
 

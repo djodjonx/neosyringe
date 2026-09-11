@@ -1,6 +1,7 @@
 import type * as ts from 'typescript';
 import type { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
 import { FACTORY_NAME_SANITIZER } from '../analyzer/shared/constants';
+import { getSimpleName } from '../analyzer/utils/TokenUtils';
 
 /**
  * Resolves a TypeScript symbol to a string reference usable in generated code.
@@ -27,7 +28,27 @@ export function resolveConstructorArgs(
 ): string {
   return dependencies.map(depId => {
     const depNode = graph.nodes.get(depId);
-    if (!depNode) return 'undefined';
+    if (!depNode) {
+      // Not registered locally — check whether it's satisfied by a parent/legacy
+      // container (see DependencyGraph.parentResolvableTokens for why only this
+      // subset of parent-provided tokens is safe to wire this way).
+      if (graph.parentResolvableTokens?.has(depId)) {
+        return `this.resolve(${JSON.stringify(depId)})`;
+      }
+      if (graph.parentProvidedTokens?.has(depId)) {
+        // GraphValidator considers this dependency satisfied (it's registered as a
+        // bare class token in the parent), but codegen has no way to reference that
+        // class from here — emitting `undefined` would silently break the consumer
+        // at runtime. Fail the build instead of shipping broken wiring.
+        throw new Error(
+          `[Generator] Cannot wire dependency '${getSimpleName(depId)}' from a parent/legacy container: ` +
+          `it is registered as a class-based (non-interface) token there, and cross-container ` +
+          `resolution of class-based tokens is not supported. Register '${getSimpleName(depId)}' with ` +
+          `useInterface<...>() in the parent container, or register it directly in this container.`
+        );
+      }
+      return 'undefined';
+    }
 
     if (depNode.service.isInterfaceToken) {
       return `this.resolve(${JSON.stringify(depNode.service.tokenId)})`;

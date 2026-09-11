@@ -7,6 +7,7 @@ import { generateFactories, generateMultiFactories, type GetImport } from './Fac
 import { generateResolveCases, generateResolveAllMethod, buildAsyncResolveGuard } from './ResolveEmitter';
 import { hasAsyncFactories, generateInitializeMethod, generateDestroyMethod } from './LifecycleEmitter';
 import { TSContext } from '../TSContext';
+import { HashUtils } from '../analyzer/shared/HashUtils';
 
 /**
  * Returns a usable identifier name for a symbol in the context of direct symbol names
@@ -64,6 +65,11 @@ function resolveDefaultExportName(symbol: ts.Symbol, localName?: string): string
  * - {@link generateInitializeMethod} / {@link generateDestroyMethod} (LifecycleEmitter)
  */
 export class Generator {
+  /** Name of the generated container class — see {@link getGeneratedClassSuffix}. */
+  private readonly containerClassName: string;
+  /** Name of the generated "not found" error class — see {@link getGeneratedClassSuffix}. */
+  private readonly notFoundErrorClassName: string;
+
   /**
    * Creates a new Generator.
    *
@@ -91,6 +97,34 @@ export class Generator {
         throw new TypeMismatchError(firstError.message, firstError.node, firstError.sourceFile);
       }
     }
+
+    // In useDirectSymbolNames mode (unplugin inline transform), multiple
+    // defineBuilderConfig() calls can share the same module scope — e.g. a parent
+    // and child container in the same file. Without a per-call-site suffix, every
+    // call site would emit an identically-named `class NeoContainer` /
+    // `class NeoServiceNotFoundError`, which is a SyntaxError (duplicate lexical
+    // declaration) once two of them land in the same scope.
+    //
+    // In separate-output-file mode (useDirectSymbolNames=false), each container
+    // already lives alone in its own generated file, so no suffix is needed —
+    // keep names stable there for backward compatibility.
+    const suffix = this.useDirectSymbolNames ? `_${this.getGeneratedClassSuffix()}` : '';
+    this.containerClassName = `NeoContainer${suffix}`;
+    this.notFoundErrorClassName = `NeoServiceNotFoundError${suffix}`;
+  }
+
+  /**
+   * Computes a short, deterministic, per-call-site hash used to uniquify the
+   * generated class names (see constructor). Prefers the source file + AST
+   * position of the `defineBuilderConfig` call (unique per call site); falls
+   * back to `containerId` when positions aren't available (e.g. hand-built
+   * graphs in unit tests).
+   */
+  private getGeneratedClassSuffix(): string {
+    const key = this.graph.sourceFileName !== undefined && this.graph.defineBuilderConfigStart !== undefined
+      ? `${this.graph.sourceFileName}:${this.graph.defineBuilderConfigStart}`
+      : this.graph.containerId;
+    return HashUtils.hashString(key);
   }
 
   /**
@@ -216,12 +250,12 @@ export class Generator {
     return `
 ${importLines.join('\n')}
 
-class NeoServiceNotFoundError extends Error {
+class ${this.notFoundErrorClassName} extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
-class NeoContainer {
+class ${this.containerClassName} {
   private instances = new Map<any, any>();
   ${initializedField}
 
@@ -264,7 +298,7 @@ class NeoContainer {
         }
     }
 
-    throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${token}\`);
   }
 
   ${destroyMethod}
@@ -288,7 +322,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   public generateInstantiation(): string {
     const legacyArgs = this.graph.legacyContainers ? `[${this.graph.legacyContainers.join(', ')}]` : 'undefined';
     const nameArg = this.graph.containerName ? JSON.stringify(this.graph.containerName) : 'undefined';
-    return `new NeoContainer(undefined, ${legacyArgs}, ${nameArg})`;
+    return `new ${this.containerClassName}(undefined, ${legacyArgs}, ${nameArg})`;
   }
 
   /**

@@ -168,6 +168,57 @@ describe('Generator', () => {
     expect(code).not.toContain('const container =');
   });
 
+  describe('useDirectSymbolNames=true: per-call-site class name uniqueness', () => {
+    // Regression test: two defineBuilderConfig() calls inlined into the same
+    // module scope (e.g. a parent and a child container in one file) each used
+    // to emit an identically-named `class NeoContainer` / `class
+    // NeoServiceNotFoundError`, which is a SyntaxError (duplicate lexical
+    // declaration) once both land in the same scope.
+    function makeGraph(sourceFileName: string, defineBuilderConfigStart: number): DependencyGraph {
+      return {
+        containerId: 'TestContainer',
+        nodes: new Map([
+          ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
+        ]),
+        roots: [],
+        sourceFileName,
+        defineBuilderConfigStart,
+      };
+    }
+
+    it('gives two call sites in the same file distinct class names', () => {
+      const codeA = new Generator(makeGraph('/src/container.ts', 100), true).generate();
+      const codeB = new Generator(makeGraph('/src/container.ts', 250), true).generate();
+
+      const classNameA = codeA.match(/class (NeoContainer\w*) \{/)?.[1];
+      const classNameB = codeB.match(/class (NeoContainer\w*) \{/)?.[1];
+
+      expect(classNameA).toBeDefined();
+      expect(classNameB).toBeDefined();
+      expect(classNameA).not.toBe(classNameB);
+
+      const errNameA = codeA.match(/class (NeoServiceNotFoundError\w*) extends Error/)?.[1];
+      const errNameB = codeB.match(/class (NeoServiceNotFoundError\w*) extends Error/)?.[1];
+      expect(errNameA).not.toBe(errNameB);
+
+      // Instantiation and class declaration must agree on the same name.
+      const instantiationA = new Generator(makeGraph('/src/container.ts', 100), true).generateInstantiation();
+      expect(instantiationA).toContain(`new ${classNameA}(`);
+    });
+
+    it('is deterministic for the same call site (stable across separate builds)', () => {
+      const codeA1 = new Generator(makeGraph('/src/container.ts', 100), true).generate();
+      const codeA2 = new Generator(makeGraph('/src/container.ts', 100), true).generate();
+      expect(codeA1).toBe(codeA2);
+    });
+
+    it('does not suffix class names in useDirectSymbolNames=false (separate-file) mode', () => {
+      const graph = makeGraph('/src/container.ts', 100);
+      const code = new Generator(graph, false, '/src').generate();
+      expect(code).toContain('class NeoContainer {');
+    });
+  });
+
   describe('default export class', () => {
     // Creates a symbol whose getName() returns 'default' but whose declaration
     // is a ClassDeclaration with name.text = className. This matches what
