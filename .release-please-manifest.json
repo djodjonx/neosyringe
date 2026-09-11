@@ -1,7 +1,7 @@
 {
   "packages/neosyringe": "0.3.0",
-  "packages/core": "3.1.1",
-  "packages/lsp": "0.4.4",
-  "packages/cli": "0.2.4",
-  "packages/unplugin": "0.4.4"
+  "packages/core": "3.1.2",
+  "packages/lsp": "0.4.5",
+  "packages/cli": "0.2.5",
+  "packages/unplugin": "0.4.5"
 }

@@ -1,5 +1,14 @@
 # @djodjonx/neosyringe-lsp
 
+## [0.4.5](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.4.4...neosyringe-lsp-v0.4.5) (2026-09-11)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.1.2
+
 ## [0.4.4](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.4.3...neosyringe-lsp-v0.4.4) (2026-09-11)
 
 

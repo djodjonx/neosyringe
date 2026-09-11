@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-core
 
+## [3.1.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.1.1...neosyringe-core-v3.1.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* **core:** reject unsupported defineBuilderConfig() shapes at build time ([bf06faf](https://github.com/djodjonx/neosyringe/commit/bf06faf949cce70c9aa2873f940891806fe4d5f5))
+
 ## [3.1.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.1.0...neosyringe-core-v3.1.1) (2026-09-11)
 
 
