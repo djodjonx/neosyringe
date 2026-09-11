@@ -70,6 +70,6 @@ describe('Generator - External Bindings', () => {
     expect(code).not.toContain('if (token === Import_0.SharedKernel)');
 
     // 5. Verify Container Instantiation (no parent/legacy/name args)
-    expect(code).toContain('export const container = new NeoContainer(undefined, undefined, undefined);');
+    expect(code).toContain('export const container = new NeoContainer(undefined, undefined);');
   });
 });

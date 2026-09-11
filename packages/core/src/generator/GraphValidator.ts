@@ -73,8 +73,9 @@ export class GraphValidator {
         // Check if dependency is provided locally OR by parent
         const isProvidedLocally = graph.nodes.has(depId) || (graph.multiNodes?.has(depId) ?? false);
         const isProvidedByParent = parentTokens.has(depId);
+        const isOptional = node.optionalDependencies?.has(depId) ?? false;
 
-        if (!isProvidedLocally && !isProvidedByParent) {
+        if (!isProvidedLocally && !isProvidedByParent && !isOptional) {
           errors.push({
             type: 'missing',
             message: `Missing injection: '${getSimpleName(depId)}' required by '${getSimpleName(nodeId)}' is not registered.`,
@@ -94,7 +95,8 @@ export class GraphValidator {
           for (const depId of node.dependencies) {
             const isProvidedLocally = graph.nodes.has(depId) || (graph.multiNodes?.has(depId) ?? false);
             const isProvidedByParent = parentTokens.has(depId);
-            if (!isProvidedLocally && !isProvidedByParent) {
+            const isOptional = node.optionalDependencies?.has(depId) ?? false;
+            if (!isProvidedLocally && !isProvidedByParent && !isOptional) {
               errors.push({
                 type: 'missing',
                 message: `Missing injection: '${getSimpleName(depId)}' required by multi-registration '${getSimpleName(tokenId)}' is not registered.`,

@@ -210,6 +210,14 @@ export interface DependencyNode {
 
   /** Token IDs of dependencies required by this service's constructor. */
   dependencies: TokenId[];
+
+  /**
+   * Subset of `dependencies` that are optional — the constructor parameter is
+   * marked `?` or typed `T | undefined`. These are exempt from the
+   * missing-dependency validators (build and LSP) when unregistered anywhere,
+   * and codegen resolves them to `undefined` instead of failing the build.
+   */
+  optionalDependencies?: Set<TokenId>;
 }
 
 /**
@@ -263,6 +271,26 @@ export interface DependencyGraph {
    * are tracked separately instead of being lumped into `parentProvidedTokens`.
    */
   parentResolvableTokens?: Set<TokenId>;
+
+  /**
+   * For parent-provided tokens that are bare class registrations (not interface
+   * tokens, so absent from `parentResolvableTokens`), the symbol needed to
+   * reference that class from the child's generated code (passed to
+   * Generator's import-resolution so the child can emit
+   * `this.resolve(TheClass)` instead of failing to wire it). Populated only
+   * when a symbol could actually be captured for the registration.
+   */
+  parentClassTokenSymbols?: Map<TokenId, Symbol>;
+
+  /**
+   * True when the `useContainer` parent (transitively) has async factories of
+   * its own, i.e. its generated container has an `initialize()` method that
+   * must run before any of its services can be resolved. Lets a child with no
+   * async factories of its own still generate an `initialize()` that cascades
+   * into `this.legacy`, rather than silently leaving the caller to discover
+   * and sequence the parent's initialization manually.
+   */
+  parentHasAsyncInitialize?: boolean;
 
   /** Analysis errors collected during extraction (duplicates, type mismatches, etc.). */
   errors?: AnalysisError[];

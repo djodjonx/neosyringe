@@ -20,30 +20,45 @@ export function getFactoryName(tokenId: TokenId): string {
   return `create_${tokenId.replace(FACTORY_NAME_SANITIZER, '_')}`;
 }
 
-/** Resolves constructor argument expressions for a list of dependency token IDs. */
+/**
+ * Resolves constructor argument expressions for a list of dependency token IDs.
+ *
+ * @param getForeignImport - Like `getImport`, but always emits an explicit
+ *   namespace import regardless of default/named export status. Required for
+ *   a parent-provided class token: unlike the child's own local dependencies
+ *   (which the child file necessarily already imports, since the user wrote
+ *   `{ token: X }` there themselves), a class living in the parent's file is
+ *   not guaranteed to be in scope in the child's file at all.
+ */
 export function resolveConstructorArgs(
   dependencies: TokenId[],
   graph: DependencyGraph,
-  getImport: GetImport
+  getImport: GetImport,
+  getForeignImport: GetImport
 ): string {
   return dependencies.map(depId => {
     const depNode = graph.nodes.get(depId);
     if (!depNode) {
       // Not registered locally — check whether it's satisfied by a parent/legacy
       // container (see DependencyGraph.parentResolvableTokens for why only this
-      // subset of parent-provided tokens is safe to wire this way).
+      // subset of parent-provided tokens is safe to wire this way via a string key).
       if (graph.parentResolvableTokens?.has(depId)) {
         return `this.resolve(${JSON.stringify(depId)})`;
       }
+      // A bare class token from the parent: resolved by class identity, not by
+      // string, so we need the actual class reference — see parentClassTokenSymbols.
+      const classSymbol = graph.parentClassTokenSymbols?.get(depId);
+      if (classSymbol) {
+        return `this.resolve(${getForeignImport(classSymbol)})`;
+      }
       if (graph.parentProvidedTokens?.has(depId)) {
-        // GraphValidator considers this dependency satisfied (it's registered as a
-        // bare class token in the parent), but codegen has no way to reference that
-        // class from here — emitting `undefined` would silently break the consumer
-        // at runtime. Fail the build instead of shipping broken wiring.
+        // GraphValidator considers this dependency satisfied, but no symbol could
+        // be captured for it (should not normally happen) — fail the build instead
+        // of shipping a silently broken `undefined`.
         throw new Error(
           `[Generator] Cannot wire dependency '${getSimpleName(depId)}' from a parent/legacy container: ` +
-          `it is registered as a class-based (non-interface) token there, and cross-container ` +
-          `resolution of class-based tokens is not supported. Register '${getSimpleName(depId)}' with ` +
+          `it is registered as a class-based (non-interface) token there, and no symbol could be ` +
+          `captured to reference it from here. Register '${getSimpleName(depId)}' with ` +
           `useInterface<...>() in the parent container, or register it directly in this container.`
         );
       }
@@ -77,7 +92,8 @@ export function resolveTokenKey(service: DependencyNode['service'], getImport: G
 export function generateFactories(
   graph: DependencyGraph,
   sorted: TokenId[],
-  getImport: GetImport
+  getImport: GetImport,
+  getForeignImport: GetImport
 ): string[] {
   const factories: string[] = [];
 
@@ -112,7 +128,7 @@ export function generateFactories(
         );
       }
       const className = getImport(node.service.implementationSymbol);
-      const args = resolveConstructorArgs(node.dependencies, graph, getImport);
+      const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport);
 
       factories.push(`
   private ${factoryId}(): any {
@@ -127,7 +143,8 @@ export function generateFactories(
 /** Generates indexed factory methods for multi-registration nodes. */
 export function generateMultiFactories(
   graph: DependencyGraph,
-  getImport: GetImport
+  getImport: GetImport,
+  getForeignImport: GetImport
 ): string[] {
   const factories: string[] = [];
   if (!graph.multiNodes) return factories;
@@ -150,7 +167,7 @@ export function generateMultiFactories(
       } else {
         if (!node.service.implementationSymbol) return;
         const className = getImport(node.service.implementationSymbol);
-        const args = resolveConstructorArgs(node.dependencies, graph, getImport);
+        const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport);
         factories.push(`
   private ${factoryId}(): any {
     return new ${className}(${args});

@@ -122,12 +122,19 @@ export class ParentContainerResolver {
     // Add all parent tokens to parentProvidedTokens. Only interface tokens are
     // also added to parentResolvableTokens — the parent's generated resolveLocal()
     // matches those by string, so a child can safely delegate to them via
-    // this.resolve(tokenId). Bare class tokens match by identity and can't be
-    // resolved this way from another call site (see field doc on the type).
+    // this.resolve(tokenId). Bare class tokens match by identity instead; the
+    // symbol needed to reference that class from the child's own generated code
+    // is captured separately in parentClassTokenSymbols (see field doc).
     for (const [tokenId, node] of parentGraph.nodes) {
       graph.parentProvidedTokens.add(tokenId);
       if (node.service.isInterfaceToken) {
         graph.parentResolvableTokens.add(tokenId);
+      } else {
+        const symbol = node.service.tokenSymbol ?? node.service.implementationSymbol;
+        if (symbol) {
+          graph.parentClassTokenSymbols ??= new Map();
+          graph.parentClassTokenSymbols.set(tokenId, symbol);
+        }
       }
     }
 
@@ -142,6 +149,27 @@ export class ParentContainerResolver {
         graph.parentResolvableTokens.add(tokenId);
       }
     }
+    if (parentGraph.parentClassTokenSymbols) {
+      graph.parentClassTokenSymbols ??= new Map();
+      for (const [tokenId, symbol] of parentGraph.parentClassTokenSymbols) {
+        graph.parentClassTokenSymbols.set(tokenId, symbol);
+      }
+    }
+
+    // Propagate "needs initialize()" up the chain: a child with no async
+    // factories of its own still needs to cascade into a parent that has them
+    // (directly, or transitively through the parent's own parent).
+    if (this.hasAsyncFactories(parentGraph) || parentGraph.parentHasAsyncInitialize) {
+      graph.parentHasAsyncInitialize = true;
+    }
+  }
+
+  /** Minimal local check — avoids a reverse dependency on the generator package. */
+  private hasAsyncFactories(graph: DependencyGraph): boolean {
+    for (const node of graph.nodes.values()) {
+      if (node.service.isAsync) return true;
+    }
+    return false;
   }
 
   /**

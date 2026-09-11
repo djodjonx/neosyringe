@@ -64,6 +64,27 @@ describe('Generator', () => {
     expect(code).toContain('throw new NeoServiceNotFoundError(`[${this.name}] Service not found');
   });
 
+  it('exposes _dependencyGraph with per-token dependency edges (not just a flat token list)', () => {
+    const graph: DependencyGraph = {
+      containerId: 'TestContainer',
+      nodes: new Map([
+        ['ILogger', createMockNode('ILogger', [], 'ConsoleLogger', '/src/logger.ts')],
+        ['UserService', createMockNode('UserService', ['ILogger'], 'UserService', '/src/user.ts')],
+      ]),
+      roots: ['UserService'],
+    };
+
+    const code = new Generator(graph, false, '/src').generate();
+
+    expect(code).toContain('public get _dependencyGraph() {');
+    expect(code).toContain(JSON.stringify([
+      { token: 'ILogger', dependencies: [] },
+      { token: 'UserService', dependencies: ['ILogger'] },
+    ]));
+    // _graph itself keeps its existing flat-list shape (no breaking change).
+    expect(code).toContain(JSON.stringify(['ILogger', 'UserService']));
+  });
+
   it('should handle scopes correctly', () => {
     const graph: DependencyGraph = {
       containerId: "TestContainer", nodes: new Map([
@@ -166,6 +187,64 @@ describe('Generator', () => {
     const code = new Generator(graph).generate();
     expect(code).toContain('export default new NeoContainer');
     expect(code).not.toContain('const container =');
+  });
+
+  describe('runtime error messages use formatToken(), not a raw interpolation', () => {
+    // Regression test: `${token}` was interpolated directly into the thrown
+    // NeoServiceNotFoundError message. For a class token this means the ENTIRE
+    // stringified class source (all its methods) landed in the error message;
+    // for an interface/string token it showed the raw hashed id
+    // ("ILogger_a1b2c3d4") instead of a readable name.
+    it('routes the thrown token through the static formatToken() helper', () => {
+      const graph: DependencyGraph = {
+        containerId: 'Test',
+        nodes: new Map([['Service', createMockNode('Service', [], 'S', '/src/s.ts')]]),
+        roots: [],
+      };
+      const code = new Generator(graph).generate();
+
+      expect(code).toContain('throw new NeoServiceNotFoundError(`[${this.name}] Service not found or token not registered: ${NeoContainer.formatToken(token)}`);');
+      expect(code).toContain('private static formatToken(token: any): string {');
+      // Class tokens: use the declared name, not the whole stringified class body.
+      expect(code).toContain(`if (typeof token === 'function') return token.name || String(token);`);
+      // String tokens: strip the trailing content-hash suffix, same convention as
+      // the analyzer's own getSimpleName() used for build-time messages.
+      expect(code).toContain(`/^[a-f0-9]{6,12}$/i.test(last)`);
+    });
+  });
+
+  describe('initialize() cascades into a useContainer parent/legacy chain', () => {
+    // Regression test: a child container with no async factories of its own,
+    // but whose useContainer parent has them, never got an initialize() method
+    // at all — nothing cascaded the parent's async setup, leaving the caller to
+    // discover and manually sequence `await parent.initialize()` themselves.
+    it('generates initialize() purely to cascade when parentHasAsyncInitialize is set, even with zero local async factories', () => {
+      const graph: DependencyGraph = {
+        containerId: 'Test',
+        nodes: new Map([['Service', createMockNode('Service', [], 'S', '/src/s.ts')]]),
+        roots: [],
+        parentHasAsyncInitialize: true,
+      };
+      const code = new Generator(graph).generate();
+
+      expect(code).toContain('public async initialize(): Promise<void> {');
+      expect(code).toContain(`if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`);
+      // The resolve() guard must also activate, or resolve() could run before
+      // this container's own (cascade-only) initialize() completes.
+      expect(code).toContain('if (!this._initialized)');
+    });
+
+    it('does not generate initialize() when neither this container nor its parent has async factories', () => {
+      const graph: DependencyGraph = {
+        containerId: 'Test',
+        nodes: new Map([['Service', createMockNode('Service', [], 'S', '/src/s.ts')]]),
+        roots: [],
+      };
+      const code = new Generator(graph).generate();
+
+      expect(code).not.toContain('public async initialize(');
+      expect(code).not.toContain('if (!this._initialized)');
+    });
   });
 
   describe('useDirectSymbolNames=true: per-call-site class name uniqueness', () => {

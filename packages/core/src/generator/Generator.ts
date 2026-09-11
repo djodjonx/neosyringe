@@ -203,12 +203,40 @@ export class Generator {
       return `${imports.get(filePath)}.${symbol.getName()}`;
     };
 
-    const hasAsync = hasAsyncFactories(this.graph);
+    // Like getImport, but always emits an explicit namespace import — used only
+    // for a parent-provided class token (see FactoryEmitter.resolveConstructorArgs).
+    // Unlike the container's own local dependencies (necessarily already imported
+    // into this file, since the user wrote `{ token: X }` here themselves), a
+    // class living in a useContainer parent's file is not guaranteed to be in
+    // scope here at all — so the bare-identifier shortcut getImport takes for
+    // same-file/named exports in inline mode is not safe to reuse for this case.
+    const getForeignImport: GetImport = (symbol: ts.Symbol): string => {
+      const decl = symbol.declarations?.[0];
+      if (!decl) {
+        throw new Error(
+          `[Generator] Cannot resolve import for parent-provided class token '${symbol.getName()}': ` +
+          `no declaration found.`
+        );
+      }
+      const filePath = decl.getSourceFile().fileName;
+      const prefix = this.useDirectSymbolNames ? '__neo_Import_' : 'Import_';
+      if (!imports.has(filePath)) {
+        imports.set(filePath, `${prefix}${imports.size}`);
+      }
+      return `${imports.get(filePath)}.${symbol.getName()}`;
+    };
+
+    // A container with no async factories of its own still needs initialize()
+    // (and the guard below) if its useContainer parent/legacy chain has them —
+    // otherwise resolving from this container before the parent is ready would
+    // silently succeed for local tokens and only fail deep inside the parent's
+    // own resolve(), with no guidance that it's an initialization-order issue.
+    const hasAsync = hasAsyncFactories(this.graph) || !!this.graph.parentHasAsyncInitialize;
     const resolveGuard = buildAsyncResolveGuard(hasAsync);
 
-    const factories = generateFactories(this.graph, sorted, getImport);
+    const factories = generateFactories(this.graph, sorted, getImport, getForeignImport);
     const resolveCases = generateResolveCases(this.graph, sorted, getImport);
-    const multiFactories = generateMultiFactories(this.graph, getImport);
+    const multiFactories = generateMultiFactories(this.graph, getImport, getForeignImport);
     const resolveAllMethod = generateResolveAllMethod(this.graph, getImport, hasAsync);
     const initializeMethod = hasAsync ? generateInitializeMethod(this.graph, sorted) : '';
     const destroyMethod = generateDestroyMethod(this.graph, sorted, getImport);
@@ -257,37 +285,53 @@ class ${this.notFoundErrorClassName} extends Error {
 // -- Container --
 class ${this.containerClassName} {
   private instances = new Map<any, any>();
+  private overrides = new Map<any, () => any>();
   ${initializedField}
 
   // -- Factories --
   ${[...factories, ...multiFactories].join('\n  ')}
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
 
   ${initializeMethod}
 
+  /**
+   * Replaces a token's provider for the lifetime of this container instance —
+   * for tests, not production wiring. The factory runs once (its result is
+   * cached like a singleton); call override() again to change it, or
+   * clearOverrides() to remove all overrides and fall back to the real
+   * registrations.
+   */
+  public override(token: any, factory: () => any): void {
+    this.overrides.set(token, factory);
+    this.instances.delete(token);
+  }
+
+  /** Removes all overrides set via override(), reverting to real registrations. */
+  public clearOverrides(): void {
+    this.overrides.clear();
+  }
+
   public resolve<T>(token: any): T {
     ${resolveGuard}
+    // 0. An overridden token always wins, even over a cached real instance.
+    if (this.overrides.has(token)) {
+      if (!this.instances.has(token)) {
+        this.instances.set(token, this.overrides.get(token)!());
+      }
+      return this.instances.get(token);
+    }
+
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
     if (result !== undefined) return result;
 
-    // 2. Delegate to parent
-    if (this.parent) {
-        try {
-            return this.parent.resolve(token);
-        } catch (e: any) {
-            // Only fall through for "not found" — let real errors bubble.
-            // Use e.name instead of instanceof to support cross-file generated containers.
-            if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
-        }
-    }
-
-    // 3. Delegate to legacy
+    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+    // ends up here)
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -298,7 +342,23 @@ class ${this.containerClassName} {
         }
     }
 
-    throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${this.containerClassName}.formatToken(token)}\`);
+  }
+
+  /**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  private static formatToken(token: any): string {
+    if (typeof token === 'function') return token.name || String(token);
+    if (typeof token !== 'string') return String(token);
+    const parts = token.split('_');
+    const last = parts[parts.length - 1];
+    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+      return parts.slice(0, -1).join('_');
+    }
+    return token;
   }
 
   ${destroyMethod}
@@ -322,7 +382,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   public generateInstantiation(): string {
     const legacyArgs = this.graph.legacyContainers ? `[${this.graph.legacyContainers.join(', ')}]` : 'undefined';
     const nameArg = this.graph.containerName ? JSON.stringify(this.graph.containerName) : 'undefined';
-    return `new ${this.containerClassName}(undefined, ${legacyArgs}, ${nameArg})`;
+    return `new ${this.containerClassName}(${legacyArgs}, ${nameArg})`;
   }
 
   /**
@@ -371,10 +431,30 @@ export const ${variableName || 'container'} = ${instantiation};
    * NODE_ENV inlined) will strip the literal entirely.
    */
   private emitDebugGetter(): string {
+    const edges: Array<{ token: string; dependencies: string[]; multi?: true }> = [];
+    for (const [tokenId, node] of this.graph.nodes) {
+      edges.push({ token: tokenId, dependencies: node.dependencies });
+    }
+    if (this.graph.multiNodes) {
+      for (const [tokenId, nodes] of this.graph.multiNodes) {
+        for (const node of nodes) {
+          edges.push({ token: tokenId, dependencies: node.dependencies, multi: true });
+        }
+      }
+    }
+
     return `// For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
     return ${JSON.stringify(Array.from(this.graph.nodes.keys()))};
+  }
+
+  // Same token list as _graph, but with each token's own dependency edges —
+  // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+  // instead of just a flat list. Stripped by DCE in production, same as _graph.
+  public get _dependencyGraph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+    return ${JSON.stringify(edges)};
   }`;
   }
 }

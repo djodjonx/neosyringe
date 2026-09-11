@@ -118,8 +118,26 @@ export class DependencyResolver {
       const dependency = this.resolveParameter(param, className, graph);
       if (dependency) {
         node.dependencies.push(dependency);
+        if (this.isOptionalParameter(param)) {
+          node.optionalDependencies ??= new Set();
+          node.optionalDependencies.add(dependency);
+        }
       }
     }
+  }
+
+  /**
+   * True when a constructor parameter is optional: marked `?` (`logger?: ILogger`)
+   * or explicitly typed to include `undefined` (`logger: ILogger | undefined`).
+   * An optional dependency that isn't registered anywhere resolves to `undefined`
+   * instead of failing the build.
+   */
+  private isOptionalParameter(param: ts.ParameterDeclaration): boolean {
+    if (param.questionToken) return true;
+    if (!param.type) return false;
+    const type = this.checker.getTypeFromTypeNode(param.type);
+    if (!type.isUnion()) return false;
+    return type.types.some(t => (t.flags & TSContext.ts.TypeFlags.Undefined) !== 0);
   }
 
   /**

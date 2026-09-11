@@ -71,8 +71,11 @@ describe('resolveAll — Analyzer to Generator integration', () => {
     // resolveAll exists
     expect(code).toContain('public resolveAll<T>');
 
-    // IPlugin should NOT appear in resolveLocal
-    const resolveLocalSection = code.split('private resolveLocal')[1]?.split('public destroy')[0] ?? '';
+    // IPlugin should NOT appear in resolveLocal's own body (bounded by the next
+    // member — the debug getters — not by end-of-file, which would also catch
+    // the unrelated _dependencyGraph/_graph debug data that legitimately
+    // mentions IPlugin).
+    const resolveLocalSection = code.split('private resolveLocal')[1]?.split('public get _graph')[0] ?? '';
     expect(resolveLocalSection).not.toContain('IPlugin');
   });
 });

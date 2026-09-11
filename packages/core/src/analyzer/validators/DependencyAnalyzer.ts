@@ -39,6 +39,40 @@ export class DependencyAnalyzer {
   }
 
   /**
+   * Returns the subset of a service's required dependencies that are optional —
+   * the constructor parameter is marked `?` or typed `T | undefined`. These are
+   * exempt from "missing dependency" diagnostics when unregistered anywhere.
+   */
+  getOptionalDependencyIds(definition: ServiceDefinition): Set<TokenId> {
+    if (definition.type === 'factory' || !definition.implementationSymbol) {
+      return new Set();
+    }
+
+    const optional = new Set<TokenId>();
+    const declarations = definition.implementationSymbol.getDeclarations();
+    const classDecl = declarations?.find(d => TSContext.ts.isClassDeclaration(d)) as ts.ClassDeclaration | undefined;
+    const constructor = classDecl?.members.find(
+      m => TSContext.ts.isConstructorDeclaration(m)
+    ) as ts.ConstructorDeclaration | undefined;
+    if (!constructor) return optional;
+
+    for (const param of constructor.parameters) {
+      if (!param.type || !this.isOptionalParameter(param)) continue;
+      const type = this.checker.getTypeFromTypeNode(param.type);
+      optional.add(this.tokenResolverService.getHashedTokenIdFromType(type));
+    }
+    return optional;
+  }
+
+  private isOptionalParameter(param: ts.ParameterDeclaration): boolean {
+    if (param.questionToken) return true;
+    if (!param.type) return false;
+    const type = this.checker.getTypeFromTypeNode(param.type);
+    if (!type.isUnion()) return false;
+    return type.types.some(t => (t.flags & TSContext.ts.TypeFlags.Undefined) !== 0);
+  }
+
+  /**
    * Extracts dependencies from a class constructor.
    * @param symbol - Class symbol to analyze
    * @param knownTokenIds - Optional set of registered token IDs used to match property tokens

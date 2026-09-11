@@ -70,6 +70,29 @@ describe('MissingDependencyValidator', () => {
       expect(missingErrors.length).toBe(0);
     });
 
+    it('should not flag an unregistered `?` constructor param as missing (optional dependency)', () => {
+      const source = `
+        class Repository {}
+
+        class UserService {
+          constructor(private repo?: Repository) {}
+        }
+
+        export const partial = definePartialConfig({
+          injections: [
+            { token: UserService }
+          ]
+        });
+      `;
+
+      const program = createProgram('test.ts', source);
+      const analyzer = new Analyzer(program);
+      const result = analyzer.extractForFile('test.ts');
+
+      const missingErrors = result.errors.filter(e => e.type === 'missing');
+      expect(missingErrors.length).toBe(0);
+    });
+
     it('should handle multiple missing dependencies', () => {
       const source = `
         class Repository {}

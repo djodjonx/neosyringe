@@ -28,8 +28,9 @@ export class MissingDependencyValidator implements IValidator {
         info.definition,
         availableTokens  // pass so property tokens are matched correctly
       );
+      const optionalDeps = this.dependencyAnalyzer.getOptionalDependencyIds(info.definition);
       for (const depTokenId of requiredDeps) {
-        if (!availableTokens.has(depTokenId)) {
+        if (!availableTokens.has(depTokenId) && !optionalDeps.has(depTokenId)) {
           const tokenNode = findTokenAssignment(info.node);
           const errorNode = tokenNode || info.node;
           errors.push({

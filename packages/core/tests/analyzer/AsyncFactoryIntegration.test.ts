@@ -55,6 +55,48 @@ describe('Async factories — Analyzer to Generator integration', () => {
     expect(initSection).not.toContain('UserService');
   });
 
+  it('should generate a cascading initialize() when a sync child uses a useContainer parent with async factories', () => {
+    const program = createProgram('container.ts', `
+      function defineBuilderConfig(c: any) { return c; }
+      function useInterface<T>(): any { return null; }
+
+      interface IDatabase { query(sql: string): any; }
+
+      const sharedKernel = defineBuilderConfig({
+        injections: [
+          {
+            token: useInterface<IDatabase>(),
+            provider: async () => ({ query: (sql: string) => [] }),
+            useFactory: true
+          }
+        ]
+      });
+
+      class UserService {
+        constructor(private db: IDatabase) {}
+      }
+
+      export const app = defineBuilderConfig({
+        useContainer: sharedKernel,
+        injections: [
+          { token: UserService }
+        ]
+      });
+    `);
+
+    const graph = new Analyzer(program).extract();
+    expect(graph.errors ?? []).toHaveLength(0);
+    expect(graph.parentHasAsyncInitialize).toBe(true);
+
+    const code = new Generator(graph, true).generate();
+
+    // This container has NO async factories of its own — the only reason it
+    // needs initialize() at all is to cascade into the async parent.
+    expect(code).toContain('public async initialize(): Promise<void>');
+    expect(code).toContain(`if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`);
+    expect(code).toContain('if (!this._initialized)');
+  });
+
   it('should NOT generate initialize() for all-sync container', () => {
     const program = createProgram('container.ts', `
       function defineBuilderConfig(c: any) { return c; }

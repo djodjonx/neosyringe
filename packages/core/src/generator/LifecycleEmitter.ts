@@ -20,7 +20,10 @@ export function hasAsyncDisposables(graph: DependencyGraph, sorted: TokenId[]): 
 
 /**
  * Generates the initialize() method that pre-creates all async singleton factories
- * in topological order. Only called when hasAsyncFactories() is true.
+ * in topological order. Called whenever this container OR its useContainer
+ * parent/legacy chain has async factories (see DependencyGraph.parentHasAsyncInitialize) —
+ * a container with none of its own still needs to exist here purely to cascade
+ * into a parent that does, rather than leaving that sequencing to the caller.
  */
 export function generateInitializeMethod(graph: DependencyGraph, sorted: TokenId[]): string {
   const asyncSingletons = sorted.filter(tokenId => {
@@ -28,10 +31,21 @@ export function generateInitializeMethod(graph: DependencyGraph, sorted: TokenId
     return node?.service.isAsync && node.service.lifecycle === 'singleton';
   });
 
-  const lines = asyncSingletons.map(tokenId => {
+  const lines: string[] = [];
+
+  // Cascade first: a local async factory may itself resolve() a parent-provided
+  // singleton, so the parent/legacy chain must be ready before we create ours.
+  // Guarded at runtime (not statically) so this also covers declareContainerTokens
+  // legacy adapters we can't analyze — if one happens to expose its own
+  // initialize(), it still gets awaited; if not, this is a harmless no-op.
+  lines.push(
+    `if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`
+  );
+
+  for (const tokenId of asyncSingletons) {
     const factoryId = getFactoryName(tokenId);
-    return `this.instances.set(${JSON.stringify(tokenId)}, await this.${factoryId}());`;
-  });
+    lines.push(`this.instances.set(${JSON.stringify(tokenId)}, await this.${factoryId}());`);
+  }
 
   return `public async initialize(): Promise<void> {
     if (this._initialized) return;
@@ -76,6 +90,7 @@ export function generateDestroyMethod(
     lines.push(`if (this.instances.has(${tokenKey})) { ${call} }`);
   }
   lines.push('this.instances.clear();');
+  lines.push('this.overrides.clear();');
 
   const asyncKw = hasAsyncDisposable ? 'async ' : '';
   const ret = hasAsyncDisposable ? 'Promise<void>' : 'void';
