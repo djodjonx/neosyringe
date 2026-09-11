@@ -15,7 +15,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "USAGE.md"
   ],
   "publishConfig": {
     "access": "public"

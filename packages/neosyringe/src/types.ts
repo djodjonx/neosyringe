@@ -94,8 +94,24 @@ export interface Injection<T = any> {
    * Use for config objects, environment variables, or any pre-created instance.
    * For primitives (string, number, boolean), use useProperty() instead.
    *
+   * **Only valid for interface tokens (`useInterface<T>()`) and property tokens
+   * (`useProperty<T>()`).** Using `useValue` with a class-constructor token
+   * (`{ token: SomeClass, useValue: instance }`) throws `TypeMismatchError` at
+   * build time — the container has no way to compare an already-built value
+   * against a class-identity token. For a pre-built instance of a concrete
+   * class, register a factory that returns it instead:
+   *
    * @example
+   * ```typescript
+   * // ✅ useValue with an interface token
    * { token: useInterface<DatabaseConfig>(), useValue: { url: process.env.DB_URL } }
+   *
+   * // ❌ useValue with a class token — throws TypeMismatchError at build time
+   * { token: SomeConcreteClass, useValue: someInstance }
+   *
+   * // ✅ Correct way to hand a pre-built instance under a class token
+   * { token: SomeConcreteClass, provider: () => someInstance, useFactory: true }
+   * ```
    */
   useValue?: T;
   /**
@@ -247,6 +263,21 @@ export function defineBuilderConfig(_config: BuilderConfig): Container {
 /**
  * Runtime helper to create an interface token.
  * This function is replaced at compile-time by a unique ID.
+ *
+ * **Scope: by type declaration, not by call site.** The generated token ID is
+ * derived from where the interface *type* `T` is declared (its symbol + declaring
+ * source file) — not from where `useInterface<T>()` is called. Calling
+ * `useInterface<SomePort>()` in three different files, for the same `SomePort`
+ * interface, produces the exact same token in all three. This is what makes it
+ * possible to `provider`-register a token in one file and `container.resolve(...)`
+ * it from a completely different one (see the "Composing across modules" guide).
+ *
+ * **This is a technical fact, not a file-layout requirement.** You can call
+ * `useInterface<T>()` anywhere in your codebase. Confining a module's
+ * `defineBuilderConfig` + `useInterface` calls to one composition-root file per
+ * module is a *recommended convention* for readability (one obvious place to see
+ * everything a module wires up) — it is not something the compiler enforces or
+ * needs.
  *
  * @throws {Error} If called at runtime without compilation.
  */

@@ -100,6 +100,8 @@ At build time, this generates optimized factory functions. **Zero DI library shi
 
 For complete documentation, visit **[djodjonx.github.io/neosyringe](https://djodjonx.github.io/neosyringe/)**
 
+No network access (offline, sandboxed CI, agent environments)? `@djodjonx/neosyringe` ships a condensed **[USAGE.md](https://github.com/djodjonx/neosyringe/blob/main/packages/neosyringe/USAGE.md)** inside the npm package itself — check `node_modules/@djodjonx/neosyringe/USAGE.md` for setup, key gotchas, and an error-text-to-fix troubleshooting table.
+
 | Topic | Description |
 |-------|-------------|
 | [Getting Started](https://djodjonx.github.io/neosyringe/guide/getting-started) | Installation and first container |

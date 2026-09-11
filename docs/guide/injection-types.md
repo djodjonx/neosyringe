@@ -82,8 +82,54 @@ At compile-time, `useInterface<ICache>()` is replaced with a unique string ID:
 { token: useInterface<ICache>(), provider: RedisCache }
 
 // After (generated)
-{ token: "ICache", provider: RedisCache }
+{ token: "ICache_a1b2c3d4", provider: RedisCache }
 ```
+
+### Token Identity & Scope
+
+The token ID is derived from **where the interface type is declared** — its symbol and declaring source file — not from where `useInterface<T>()` is called. This means:
+
+- Calling `useInterface<ICache>()` for the *same* `ICache` interface in three different files produces the *exact same token* in all three.
+- You can register a token in one file and resolve it (directly, or via an auto-wired class's typed constructor parameter) from a completely different file:
+
+```typescript
+// logger.ts
+export interface ILogger { log(msg: string): void; }
+```
+
+```typescript
+// parent-root.ts
+import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
+import { ILogger } from './logger';
+import { ConsoleLogger } from './console-logger';
+
+export const parentContainer = defineBuilderConfig({
+  injections: [{ token: useInterface<ILogger>(), provider: ConsoleLogger }],
+});
+```
+
+```typescript
+// child-root.ts — a different file, same ILogger type
+import { defineBuilderConfig } from '@djodjonx/neosyringe';
+import { parentContainer } from './parent-root';
+import type { ILogger } from './logger';
+
+export class ConsumerA {
+  constructor(private readonly logger: ILogger) {}
+}
+
+export const childContainer = defineBuilderConfig({
+  useContainer: parentContainer,
+  injections: [{ token: ConsumerA }],
+});
+
+// ConsumerA's ILogger dependency resolves to the parent's ConsoleLogger instance —
+// same token, because it's the same declared interface.
+```
+
+::: tip Recommended convention, not a technical requirement
+Nothing *requires* `useInterface<T>()` and `defineBuilderConfig` calls to live in one file per module — the token identity works across files by design (see above). Confining a module's registrations to one composition-root file is a **recommended convention** for readability (one obvious place to see everything a module wires up), not something the compiler enforces.
+:::
 
 ## Explicit Provider
 
@@ -194,6 +240,24 @@ Values are always singletons. Each `resolve()` call returns the same object.
 
 ::: warning Primitives Not Supported
 `useValue` does not accept primitive types (string, number, boolean). Use [`useProperty`](#property-token) for injecting primitive configuration values into class constructors.
+:::
+
+::: warning Class Tokens Not Supported
+`useValue` only works with **interface tokens** (`useInterface<T>()`) and **property tokens** (`useProperty<T>()`) — both are resolved by string comparison. A **class-constructor token** (`{ token: SomeClass }`) is resolved by class identity, which a pre-built value has no way to satisfy:
+
+```typescript
+// ❌ Throws TypeMismatchError at build time
+{ token: SomeConcreteClass, useValue: someInstance }
+```
+
+For a pre-built instance registered under a class token (e.g. a class constructed with arguments the container can't itself supply), use a factory instead:
+
+```typescript
+// ✅ Correct
+{ token: SomeConcreteClass, provider: () => someInstance, useFactory: true }
+```
+
+See [`TypeMismatchError` reference](/api/errors#usevalue-with-a-class-token) for the exact error text.
 :::
 
 ## Property Token

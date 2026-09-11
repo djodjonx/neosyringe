@@ -83,10 +83,20 @@ const apiUrl = useProperty<string>(ApiService, 'apiUrl');
 ### `useValue` with a class token
 
 ```
-useValue cannot be used with a class token. Use provider: MyClass to register a class.
+useValue cannot be used with a class token. Use provider: MyClass to register a class, or useInterface<T>() with useValue for an interface token.
 ```
 
-**Fix:** Use `provider` instead of `useValue` for class tokens.
+`useValue` only works for interface tokens (`useInterface<T>()`) and property tokens (`useProperty<T>()`) — both are resolved by string comparison. A class-constructor token is resolved by class identity, which a pre-built value has no way to satisfy.
+
+**Fix:** For a plain registration, use `provider: MyClass`. For a pre-built instance under a class token, use a factory instead of `useValue`:
+
+```typescript
+// ❌ Throws TypeMismatchError
+{ token: SomeConcreteClass, useValue: someInstance }
+
+// ✅ Correct
+{ token: SomeConcreteClass, provider: () => someInstance, useFactory: true }
+```
 
 ---
 
@@ -155,3 +165,50 @@ All registrations for a token must consistently use multi: true or not at all.
 ```
 
 **Fix:** Decide whether the token is multi or single, and apply `multi: true` (or not) consistently to all registrations.
+
+---
+
+## Unsupported Container Shape (build time, not a coded diagnostic)
+
+`defineBuilderConfig(...)` was called in a shape the build plugin cannot locate and replace — most commonly, returned directly from a function with no intermediate variable.
+
+```
+defineBuilderConfig() must be assigned to a variable — 'const container = defineBuilderConfig({...})'
+(then `return container;` separately if inside a function) — or used as
+'export default defineBuilderConfig({...})'. A bare 'return defineBuilderConfig({...})' (or any other
+shape) cannot be located for replacement and would silently ship the untransformed call, which is
+unsafe at runtime.
+```
+
+**Fix:** Assign the result to a `const` first, then return it:
+
+```typescript
+// ❌ Fails the build
+export function buildContainer() {
+  return defineBuilderConfig({ injections: [ /* ... */ ] });
+}
+
+// ✅ Works
+export function buildContainer() {
+  const container = defineBuilderConfig({ injections: [ /* ... */ ] });
+  return container;
+}
+```
+
+This used to fail silently — no error, and the raw `defineBuilderConfig()` call shipped untouched, throwing an unrelated runtime error the first time it was ever invoked. It is now caught and rejected at build time.
+
+---
+
+## Service Not Found (runtime, not a build-time diagnostic)
+
+Unlike every error above, this one is thrown by the **generated container itself**, at `resolve()` time — not by the build plugin.
+
+```
+NeoServiceNotFoundError: [ContainerName] Service not found or token not registered: <token>
+```
+
+**Cause:** You called `container.resolve(token)` (or an auto-wired class depends on `token`) for a token that isn't registered in that specific container, its `useContainer` parent chain, or its `legacy` containers.
+
+**Fix:**
+- Double-check you're resolving from the right container — a token registered in a sibling module's container is not visible unless shared through `useContainer` (see [Composing Containers Across Modules](../guide/parent-container.md)).
+- If this is meant to come from a parent/legacy container, confirm the token was actually registered there — a build-time "Missing injection" error would normally catch this first, but a token resolved manually at runtime (not via a typed constructor parameter) isn't checked at build time.

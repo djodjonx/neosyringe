@@ -10,6 +10,12 @@ NeoSyringe supports parent containers for:
 - **Modular architecture**: Each module has its own container
 - **Testing**: Override production services with mocks
 
+::: tip `useContainer` vs. `extends` — different tools for different jobs
+`useContainer` shares **instances**: the child resolves the *same singleton object* the parent already created (`sharedKernel`'s `ConsoleLogger` instance and `userModule`'s `ConsoleLogger` instance are identical). `extends` (with `definePartialConfig`) shares **recipes**: each container that `extends` a partial gets its *own, independent* instances from the same registrations — nothing is shared at runtime. If two modules must observe the same event bus instance, use `useContainer`. If they just want to avoid repeating the same boilerplate registrations but don't need shared state, use `extends`. See [Multiple Containers per File](./multi-containers.md#shared-kernel-pattern) for the `extends` version of this pattern.
+:::
+
+`useContainer` works whether the parent lives in the same file or a different one — the same-file case just needs each `defineBuilderConfig` call assigned to its own variable (see [Multiple Containers per File](./multi-containers.md)).
+
 ## Basic Usage
 
 ```typescript
@@ -238,52 +244,72 @@ const child = defineBuilderConfig({
 
 ## Generated Code
 
-The parent relationship is preserved in generated code:
+This is the real output (trimmed) for `userModule` from the SharedKernel example above — captured directly from the build plugin, not simplified pseudocode:
 
 ```typescript
 // Configuration
-export const child = defineBuilderConfig({
-  name: 'ChildContainer',
-  useContainer: parent,
+export const userModule = defineBuilderConfig({
+  name: 'UserModule',
+  useContainer: sharedKernel,
   injections: [
+    { token: UserRepository },
     { token: UserService }
   ]
 });
 
-// Generated code
-import { parent } from './parent';
-
-class NeoContainer {
+// Generated code (class name suffix is a per-call-site hash — see
+// Multiple Containers per File — omitted below as `NeoContainer_<hash>`)
+class NeoContainer_<hash> {
   private instances = new Map<any, any>();
 
-  // ... factories
+  private create_UserRepository(): any {
+    return new UserRepository(this.resolve("ILogger_<hash>"));
+  }
+
+  private create_UserService(): any {
+    return new UserService(
+      this.resolve("ILogger_<hash>"),
+      this.resolve("IEventBus_<hash>"),
+      this.resolve(UserRepository)
+    );
+  }
 
   constructor(
     private parent?: any,
     private legacy?: any[],
-    private name: string = 'ChildContainer'
+    private name: string = 'NeoContainer'
   ) {}
 
   public resolve<T>(token: any): T {
     const result = this.resolveLocal(token);
     if (result !== undefined) return result;
 
-    if (this.parent) {
-      try {
-        return this.parent.resolve(token);
-      } catch (e: any) {
-        if (!e?.message?.includes('Service not found or token not registered')) throw e;
+    // `this.parent` is reserved for future use — currently always undefined.
+    if (this.parent) { /* ... */ }
+
+    // useContainer's target (sharedKernel) is delegated to here, through `legacy`:
+    if (this.legacy) {
+      for (const legacyContainer of this.legacy) {
+        try {
+          if (legacyContainer.resolve) return legacyContainer.resolve(token);
+        } catch (e: any) {
+          if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
+        }
       }
     }
 
-    throw new Error(`[${this.name}] Service not found or token not registered: ${token}`);
+    throw new NeoServiceNotFoundError(`[${this.name}] Service not found or token not registered: ${token}`);
   }
 
   // resolveLocal, destroy...
 }
 
-export const child = new NeoContainer(parent, undefined, "ChildContainer");
+export const userModule = new NeoContainer_<hash>(undefined, [sharedKernel], "UserModule");
 ```
+
+::: warning `this.parent` vs. `this.legacy`
+Whatever you pass to `useContainer` — a NeoSyringe container from another file, one from the same file, or a `declareContainerTokens()` legacy adapter — is always routed into the `legacy` array, never into `parent`. The `parent` constructor argument exists in every generated container but is never populated by the plugin today. Functionally this makes no difference (the `legacy` delegation is what actually resolves parent tokens, as shown above and proven by the interface-token example), but don't be surprised if you inspect the generated code and see `this.parent` stay `undefined`.
+:::
 
 ## Best Practices
 

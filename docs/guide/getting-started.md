@@ -2,6 +2,16 @@
 
 This guide will help you install NeoSyringe and create your first container in 5 minutes.
 
+## Package Overview
+
+NeoSyringe is split across three packages — you'll only ever install and import from the first two:
+
+| Package | What it's for | You import from it? |
+|---|---|---|
+| `@djodjonx/neosyringe` | Runtime API: `defineBuilderConfig`, `useInterface`, `useProperty`, types (`Container`, `BuilderConfig`, ...) | ✅ Yes — this is what your application code imports |
+| `@djodjonx/neosyringe-plugin` | Build integration: the Vite/Rollup/Webpack/esbuild plugin, and the `tsc`/ts-patch transformer | ✅ Yes — only in your build config (`vite.config.ts`, `tsconfig.json`, ...) |
+| `@djodjonx/neosyringe-core` | Internal analyzer + code generator shared by the plugin, the [LSP](./ide-plugin.md), and the [CLI](./cli.md) | ❌ No — this is an implementation detail. You should never need to `import` from it directly; if you find yourself doing so, something is probably better solved another way. |
+
 ## Installation
 
 ::: code-group

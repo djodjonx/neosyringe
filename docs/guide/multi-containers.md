@@ -30,37 +30,39 @@ export const productContainer = defineBuilderConfig({
 });
 ```
 
-## Container ID Generation
+## Generated Class Names vs. the `name` Field
 
-Each container needs a **unique ID** to generate distinct class names. The ID is determined by:
+Every `defineBuilderConfig()` call site gets its own generated class, uniquified by a **hash derived from its file and position** — `class NeoContainer_<hash>` — regardless of whether you set a `name` field or not. This is what makes it safe to declare any number of containers in the same file: two containers never collide, even with identical or absent `name` fields.
 
-### Priority 1: The `name` Field
+```typescript
+export const userContainer = defineBuilderConfig({
+  name: 'UserModule',
+  injections: [/* ... */]
+});
+// Generates something like: class NeoContainer_2e10a6c1 { ... }
 
-**Recommended**: Use the `name` field for explicit control.
+export const productContainer = defineBuilderConfig({
+  // No name field — still gets its own unique class
+  injections: [/* ... */]
+});
+// Generates something like: class NeoContainer_2e10a288 { ... }
+```
+
+The **`name` field is not part of the class identity** — it only sets the container's runtime `this.name`, which is purely a display label used in error messages:
 
 ```typescript
 export const myContainer = defineBuilderConfig({
-  name: 'UserModule',  // ← This becomes the container ID
+  name: 'UserModule',
   injections: [/* ... */]
 });
 
-// Generates: class NeoContainer_UserModule { ... }
+// Error: [UserModule] Service not found or token not registered: SomeToken
+//         ^^^^^^^^^^ — this is the `name` field, not the class name
 ```
 
-### Priority 2: Hash-Based ID
-
-If no `name` field is provided, a stable hash is generated:
-
-```typescript
-export const container = defineBuilderConfig({
-  // No name field
-  injections: [/* ... */]
-});
-
-// Generates: class NeoContainer_a1b2c3d4 { ... }
-```
-
-⚠️ **Warning**: Hash-based IDs may change if the config content changes. Always prefer using the `name` field.
+::: tip `name` is optional and purely cosmetic
+Setting `name` costs nothing and makes error messages much easier to read — but it has no effect on class generation, uniqueness, or correctness. Two containers with the same `name` (or no `name` at all) work exactly as well as two with distinct names; you just get a less specific label if either one throws.
+:::
 
 ## Generated Code
 
@@ -81,98 +83,85 @@ export const productContainer = defineBuilderConfig({
 
 ### Generated Output
 
-```typescript
-// containers.ts (after build)
-import * as Import_0 from './containers';
+This is the real output (trimmed) captured from the build plugin for the source above — note the hash-suffixed class names, and that the `name` field only reaches the constructor's `name` argument, not the class identifier:
 
-// ✨ Unique class for UserModule
-class NeoContainer_UserModule {
+```typescript
+// containers.ts (after build, via the inline unplugin transform)
+
+class NeoServiceNotFoundError_3edbbbcb extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
+
+class NeoContainer_3edbbbcb {
   private instances = new Map<any, any>();
+
+  private create_UserRepository(): any {
+    return new UserRepository();
+  }
 
   private create_UserService(): any {
-    return new Import_0.UserService();
+    return new UserService(this.resolve(UserRepository));
   }
 
   constructor(
     private parent?: any,
     private legacy?: any[],
-    private name: string = 'UserModule'
+    private name: string = 'NeoContainer'
   ) {}
 
   // resolve, destroy, resolveLocal...
 }
 
-export const userContainer = new NeoContainer_UserModule(undefined, undefined, "UserModule");
+export const userContainer = new NeoContainer_3edbbbcb(undefined, undefined, "UserModule");
 
-// ✨ Unique class for ProductModule
-class NeoContainer_ProductModule {
+class NeoServiceNotFoundError_3edbc066 extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
+
+class NeoContainer_3edbc066 {
   private instances = new Map<any, any>();
 
+  private create_ProductRepository(): any {
+    return new ProductRepository();
+  }
+
   private create_ProductService(): any {
-    return new Import_0.ProductService();
+    return new ProductService(this.resolve(ProductRepository));
   }
 
   constructor(
     private parent?: any,
     private legacy?: any[],
-    private name: string = 'ProductModule'
+    private name: string = 'NeoContainer'
   ) {}
 
   // resolve, destroy, resolveLocal...
 }
 
-export const productContainer = new NeoContainer_ProductModule(undefined, undefined, "ProductModule");
+export const productContainer = new NeoContainer_3edbc066(undefined, undefined, "ProductModule");
 ```
 
-## Validation Rules
+## Naming Is Not Validated
 
-### ✅ Allowed: Different Names in Same File
-
-```typescript
-export const containerA = defineBuilderConfig({
-  name: 'ModuleA',
-  injections: [/* ... */]
-});
-
-export const containerB = defineBuilderConfig({
-  name: 'ModuleB',
-  injections: [/* ... */]
-});
-// ✅ OK - Different names
-```
-
-### ✅ Allowed: Same Name in Different Files
-
-```typescript
-// file1.ts
-export const container = defineBuilderConfig({
-  name: 'AppContainer',
-  injections: [/* ... */]
-});
-
-// file2.ts
-export const container = defineBuilderConfig({
-  name: 'AppContainer',  // ✅ OK - Different file
-  injections: [/* ... */]
-});
-```
-
-### ❌ Error: Duplicate Names in Same File
+Because the `name` field is purely cosmetic (see above), **nothing stops you from giving two containers the same `name`** — in the same file or across files. It is not a build error:
 
 ```typescript
 export const containerA = defineBuilderConfig({
   name: 'MyContainer',
-  injections: [/* ... */]
+  injections: [{ token: ServiceA }]
 });
 
 export const containerB = defineBuilderConfig({
-  name: 'MyContainer',  // ❌ ERROR!
-  injections: [/* ... */]
+  name: 'MyContainer',  // Allowed — no error, no collision
+  injections: [{ token: ServiceB }]
 });
-
-// Error: Duplicate container name 'MyContainer' found in containers.ts.
-// Each container must have a unique 'name' field within the same file.
 ```
+
+Both containers are generated correctly and behave independently — they just share the same label in error messages, which can make debugging slightly more ambiguous (`[MyContainer] Service not found: X` won't tell you *which* `MyContainer` threw it). That ambiguity, not a build failure, is the actual cost of a duplicate `name`.
+
+::: tip Best practice
+Give each container a distinct, descriptive `name` anyway — not because it's required, but because it makes error messages unambiguous.
+:::
 
 ## Independent Validation
 
@@ -396,33 +385,33 @@ Error messages include the container name:
 
 ## Troubleshooting
 
-### Error: Duplicate container name
+### Ambiguous error messages with duplicate `name`
 
-**Problem**: Two containers have the same `name` in the same file.
+**Symptom**: An error like `[MyContainer] Service not found: X` doesn't tell you which of several same-named containers threw it.
 
-**Solution**: Use unique names for each container:
+**Cause**: Two (or more) `defineBuilderConfig()` calls share the same `name` field. This is allowed (see [Naming Is Not Validated](#naming-is-not-validated) above) — it's not a build error, just a debugging inconvenience.
+
+**Fix**: Give each container a distinct, descriptive `name`:
 
 ```typescript
-// ❌ Before
+// Before — ambiguous in error messages
 export const containerA = defineBuilderConfig({ name: 'MyContainer', /* ... */ });
 export const containerB = defineBuilderConfig({ name: 'MyContainer', /* ... */ });
 
-// ✅ After
+// After — unambiguous
 export const containerA = defineBuilderConfig({ name: 'ContainerA', /* ... */ });
 export const containerB = defineBuilderConfig({ name: 'ContainerB', /* ... */ });
 ```
 
-### Class name collisions in generated code
+### `defineBuilderConfig() called at runtime` / unresolved `defineBuilderConfig(` in the output
 
-**Problem**: Two containers generate the same class name.
+**Cause**: The call site couldn't be transformed — most commonly a bare `return defineBuilderConfig({...})` with no intermediate variable. The build now rejects this shape explicitly (`UnsupportedContainerShapeError`) instead of shipping it untransformed. See the [error reference](/api/errors#unsupported-container-shape-build-time-not-a-coded-diagnostic).
 
-**Cause**: Same `name` field or hash collision.
-
-**Solution**: Always use explicit, unique `name` fields.
+**Fix**: Assign to a `const` first: `const container = defineBuilderConfig({...}); return container;`.
 
 ## See Also
 
 - [Basic Usage](./basic-usage.md) - Container configuration basics
 - [Parent Container](./parent-container.md) - Using `useContainer`
-- [Partial Configs](./parent-container.md#partial-configurations) - Using `extends`
+- [Partials (Modular Configuration)](./basic-usage.md#partials-modular-configuration) - Using `extends` and `definePartialConfig`
 - [Generated Code](./generated-code.md) - Understanding the output
