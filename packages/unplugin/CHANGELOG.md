@@ -1,5 +1,19 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.4.5](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.4.4...neosyringe-plugin-v0.4.5) (2026-09-11)
+
+
+### Bug Fixes
+
+* **core:** reject unsupported defineBuilderConfig() shapes at build time ([bf06faf](https://github.com/djodjonx/neosyringe/commit/bf06faf949cce70c9aa2873f940891806fe4d5f5))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.1.2
+
 ## [0.4.4](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.4.3...neosyringe-plugin-v0.4.4) (2026-09-11)
 
 
