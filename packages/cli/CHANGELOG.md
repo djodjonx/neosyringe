@@ -1,5 +1,14 @@
 # @djodjonx/neosyringe-cli
 
+## [0.2.4](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.2.3...neosyringe-cli-v0.2.4) (2026-09-11)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.1.1
+
 ## [0.2.3](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.2.2...neosyringe-cli-v0.2.3) (2026-06-15)
 
 

@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe-core
 
+## [3.1.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.1.0...neosyringe-core-v3.1.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **core:** fix useContainer parent/child wiring and same-file class collision ([9882d41](https://github.com/djodjonx/neosyringe/commit/9882d4155cf27fa26567eedaf67575a352365c5b))
+
 ## [3.1.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.0.1...neosyringe-core-v3.1.0) (2026-06-15)
 
 

@@ -1,5 +1,19 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.4.4](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.4.3...neosyringe-plugin-v0.4.4) (2026-09-11)
+
+
+### Bug Fixes
+
+* **core:** fix useContainer parent/child wiring and same-file class collision ([9882d41](https://github.com/djodjonx/neosyringe/commit/9882d4155cf27fa26567eedaf67575a352365c5b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.1.1
+
 ## [0.4.3](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.4.2...neosyringe-plugin-v0.4.3) (2026-06-15)
 
 
