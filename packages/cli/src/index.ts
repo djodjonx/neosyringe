@@ -10,21 +10,13 @@
  * ```bash
  * npx neosyringe-check
  * npx neosyringe-check --project ./tsconfig.build.json
+ * npx neosyringe-check --json   # machine-readable output for CI
  * ```
  */
 import * as ts from 'typescript';
-import { resolve, relative } from 'node:path';
+import { resolve } from 'node:path';
 import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-
-function parseArgs(argv: string[]): { project: string | undefined } {
-  let project: string | undefined;
-  for (let i = 0; i < argv.length; i++) {
-    if ((argv[i] === '--project' || argv[i] === '-p') && argv[i + 1]) {
-      project = argv[i + 1];
-    }
-  }
-  return { project };
-}
+import { parseArgs, buildJsonReport } from './report';
 
 /**
  * CLI entry point.
@@ -32,7 +24,7 @@ function parseArgs(argv: string[]): { project: string | undefined } {
  * and reports any validation errors.
  */
 function main() {
-  const { project: projectArg } = parseArgs(process.argv.slice(2));
+  const { project: projectArg, json } = parseArgs(process.argv.slice(2));
   const cwd = process.cwd();
 
   const tsconfigPath = projectArg
@@ -40,15 +32,25 @@ function main() {
     : ts.findConfigFile(cwd, ts.sys.fileExists, 'tsconfig.json');
 
   if (!tsconfigPath) {
-    console.error('❌ Could not find tsconfig.json. Use --project <path> to specify one.');
+    const message = 'Could not find tsconfig.json. Use --project <path> to specify one.';
+    if (json) {
+      console.log(JSON.stringify({ ok: false, errorCount: 0, errors: [], fatal: message }));
+    } else {
+      console.error(`❌ ${message}`);
+    }
     process.exit(1);
   }
 
-  console.log(`Analyzing project: ${tsconfigPath}`);
+  if (!json) console.log(`Analyzing project: ${tsconfigPath}`);
 
   const { config, error: configReadError } = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   if (configReadError) {
-    console.error(`❌ Could not read tsconfig: ${ts.flattenDiagnosticMessageText(configReadError.messageText, '\n')}`);
+    const message = `Could not read tsconfig: ${ts.flattenDiagnosticMessageText(configReadError.messageText, '\n')}`;
+    if (json) {
+      console.log(JSON.stringify({ ok: false, errorCount: 0, errors: [], fatal: message }));
+    } else {
+      console.error(`❌ ${message}`);
+    }
     process.exit(1);
   }
 
@@ -59,8 +61,13 @@ function main() {
   );
 
   if (parseErrors.length > 0) {
-    console.error('❌ TypeScript config errors:');
-    parseErrors.forEach(e => console.error(`   ${ts.flattenDiagnosticMessageText(e.messageText, '\n')}`));
+    const messages = parseErrors.map(e => ts.flattenDiagnosticMessageText(e.messageText, '\n'));
+    if (json) {
+      console.log(JSON.stringify({ ok: false, errorCount: 0, errors: [], fatal: messages.join('\n') }));
+    } else {
+      console.error('❌ TypeScript config errors:');
+      messages.forEach(m => console.error(`   ${m}`));
+    }
     process.exit(1);
   }
 
@@ -68,15 +75,19 @@ function main() {
   const analyzer = new Analyzer(program);
 
   try {
-    console.log('🔍 Validating all dependency containers...');
+    if (!json) console.log('🔍 Validating all dependency containers...');
     const errors = analyzer.extractAllErrors();
+
+    if (json) {
+      console.log(JSON.stringify(buildJsonReport(errors, cwd)));
+      process.exit(errors.length > 0 ? 1 : 0);
+    }
 
     if (errors.length > 0) {
       console.error(`\n❌ Validation failed — ${errors.length} error(s) found:\n`);
       for (const err of errors) {
-        const filePath = relative(cwd, err.sourceFile.fileName);
-        const { line, character } = err.sourceFile.getLineAndCharacterOfPosition(err.node.getStart());
-        console.error(`  ${filePath}:${line + 1}:${character + 1}  [${err.type}]  ${err.message}`);
+        const report = buildJsonReport([err], cwd).errors[0];
+        console.error(`  ${report.file}:${report.line}:${report.column}  [${report.type}]  ${report.message}`);
       }
       console.error('');
       process.exit(1);
@@ -86,7 +97,11 @@ function main() {
     process.exit(0);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
-    console.error(`\n❌ Unexpected error: ${message}`);
+    if (json) {
+      console.log(JSON.stringify({ ok: false, errorCount: 0, errors: [], fatal: message }));
+    } else {
+      console.error(`\n❌ Unexpected error: ${message}`);
+    }
     process.exit(1);
   }
 }
