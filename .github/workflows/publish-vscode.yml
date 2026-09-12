@@ -39,15 +39,14 @@ jobs:
           TAG="neosyringe-vscode-v${{ github.event.inputs.version }}"
           gh release create "$TAG" "$VSIX" \
             --title "VSCode Extension v${{ github.event.inputs.version }}" \
-            --notes "NeoSyringe VSCode extension v${{ github.event.inputs.version }}
+            --notes-file - <<'NOTES'
+NeoSyringe VSCode extension.
 
-## Installation
-\`\`\`bash
-gh release download $TAG --pattern '*.vsix' --repo djodjonx/neosyringe
-code --install-extension neosyringe-vscode-${{ github.event.inputs.version }}.vsix
-\`\`\`
+Install from the VSCode Extensions panel (search **NeoSyringe**) via Open VSX,
+or download the .vsix from this release and run:
 
-Or search **NeoSyringe** in the VSCode Extensions panel (via Open VSX)."
+    code --install-extension neosyringe-vscode-*.vsix
+NOTES
           echo "✅ GitHub Release $TAG created"
 
       - name: Publish to Open VSX Registry
