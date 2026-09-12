@@ -7,6 +7,10 @@
     }
   ],
   "packages": {
+    "packages/vscode-extension": {
+      "package-name": "neosyringe-vscode",
+      "changelog-path": "CHANGELOG.md"
+    },
     "packages/ui": {
       "package-name": "@djodjonx/neosyringe-ui",
       "changelog-path": "CHANGELOG.md"
