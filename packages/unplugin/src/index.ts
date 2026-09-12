@@ -7,6 +7,9 @@ import { Generator, resolveDebugFlag } from '@djodjonx/neosyringe-core/generator
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { transformUseInterfaceCalls, type UsedTokenEntry } from './useInterfaceTransform';
 import { hasNeoSyringeMarkers } from './markerUtils';
+import { serializeGraph } from '@djodjonx/neosyringe-ui';
+import type { SerializableGraph } from '@djodjonx/neosyringe-ui';
+import { createDevtoolsMiddleware } from './devtools';
 
 /** Options accepted by every bundler entry point (`.vite()`, `.rollup()`, `.webpack()`, `.esbuild()`). */
 export interface NeoSyringePluginOptions {
@@ -17,6 +20,12 @@ export interface NeoSyringePluginOptions {
    * see resolveDebugFlag in @djodjonx/neosyringe-core.
    */
   debug?: boolean;
+  /**
+   * When true, serves a graph visualization at /__neosyringe/ on the Vite dev-server.
+   * Only active during development (Vite serve mode). Has no effect in production builds
+   * or with non-Vite bundlers.
+   */
+  devtools?: boolean;
 }
 
 /**
@@ -42,6 +51,10 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
   const usedTokens = new Map<string, UsedTokenEntry>();
   const generatedContainerVars = new Set<string>(); // variable names that were code-generated
   const emitDebugHelpers = resolveDebugFlag(options.debug);
+
+  // Graphs keyed by source file for the devtools middleware.
+  // Map ensures re-transforming a file (HMR) replaces its entry rather than accumulating.
+  const devtoolsGraphs = new Map<string, SerializableGraph>();
 
   // Cache tsconfig parsing — tsconfig doesn't change during a build
   let compilerOptions: ts.CompilerOptions | undefined;
@@ -196,6 +209,13 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
             }
           }
 
+          // Update devtools graph store for this file (replaces on HMR re-transform)
+          if (options?.devtools) {
+            for (const g of thisFileGraphs) {
+              devtoolsGraphs.set(g.sourceFileName ?? id, serializeGraph(g));
+            }
+          }
+
           // Transform any remaining useInterface<T>() call sites (injection sites)
           const finalCode = transformUseInterfaceCalls(result, id, options, usedTokens);
           return finalCode ?? result;
@@ -241,6 +261,16 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       registeredTokens.clear();
       usedTokens.clear();
       generatedContainerVars.clear();
+    },
+
+    vite: {
+      configureServer(server) {
+        if (!options?.devtools) return;
+        const middleware = createDevtoolsMiddleware(() => [...devtoolsGraphs.values()]);
+        server.middlewares.use(middleware);
+        // eslint-disable-next-line no-console
+        console.log('[NeoSyringe] Devtools available at /__neosyringe/');
+      },
     },
   };
 });

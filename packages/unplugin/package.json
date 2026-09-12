@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "@djodjonx/neosyringe-core": "workspace:*",
+    "@djodjonx/neosyringe-ui": "workspace:*",
     "unplugin": "^2.0.0"
   },
   "peerDependencies": {
