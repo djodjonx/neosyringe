@@ -29,6 +29,7 @@ export function buildStandaloneHtml(graphs: SerializableGraph[]): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:;">
   <title>NeoSyringe — Dependency Graph</title>
   <script src="${MERMAID_CDN}"></script>
   <style>
