@@ -72,6 +72,15 @@ module.exports = {
 };
 ```
 
+```javascript [Rspack]
+// rspack.config.js
+const { neoSyringePlugin } = require('@djodjonx/neosyringe-plugin');
+
+module.exports = {
+  plugins: [neoSyringePlugin.rspack()]
+};
+```
+
 ```typescript [esbuild]
 // esbuild.config.js
 import { neoSyringePlugin } from '@djodjonx/neosyringe-plugin';
@@ -111,6 +120,24 @@ pnpm add -D ts-patch @djodjonx/neosyringe-plugin
 ```
 
 `tsc` and any tool that delegates to it (NestJS CLI's `nest build`, `ts-node`, etc.) will then pick up the transformer automatically.
+:::
+
+::: details NestJS 12+ with the Rspack builder
+NestJS v12 deprecated its webpack builder in favor of Rspack (the default for monorepos, and available via `--builder rspack` otherwise). Point Nest at a custom Rspack config the same way you'd customize its webpack one — merge `neoSyringePlugin.rspack()` into the `plugins` array Nest already builds, rather than replacing the config outright:
+
+```javascript
+// rspack.config.js
+const { neoSyringePlugin } = require('@djodjonx/neosyringe-plugin');
+
+module.exports = function (options, rspack) {
+  return {
+    ...options,
+    plugins: [...options.plugins, neoSyringePlugin.rspack()],
+  };
+};
+```
+
+Verified end-to-end against a real Rspack build (`@rspack/core`) outside of Nest specifically — Nest's own CLI wiring (the exact `nest-cli.json` field name and CLI flag for a custom Rspack config path) can differ across versions, so check [NestJS's own Rspack builder docs](https://docs.nestjs.com) for the current option name in your version.
 :::
 
 ## Create Your First Container

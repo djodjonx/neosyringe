@@ -154,6 +154,20 @@ module.exports = {
 </details>
 
 <details>
+<summary><strong>Rspack</strong> (NestJS 12+'s default builder)</summary>
+
+```javascript
+const { neoSyringePlugin } = require('@djodjonx/neosyringe-plugin');
+
+module.exports = {
+  plugins: [neoSyringePlugin.rspack()]
+};
+```
+
+For NestJS specifically, merge it into the `plugins` array of a custom Rspack config the same way you'd customize Nest's webpack one — see the [Getting Started guide](https://djodjonx.github.io/neosyringe/guide/getting-started) for the full example.
+</details>
+
+<details>
 <summary><strong>TypeScript compiler (ts-patch) — no bundler needed</strong></summary>
 
 Install ts-patch and add the transformer to your `tsconfig.json`:
