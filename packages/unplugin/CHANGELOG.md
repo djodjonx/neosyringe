@@ -1,5 +1,25 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.5.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.4.5...neosyringe-plugin-v0.5.0) (2026-09-12)
+
+
+### Features
+
+* **core:** build-time debug option to strip _graph/_dependencyGraph data ([d381f06](https://github.com/djodjonx/neosyringe/commit/d381f06768143df7e559a9c1cf689a083287dc9a))
+* **core:** resolve class tokens across useContainer, plus DX fixes ([c67b158](https://github.com/djodjonx/neosyringe/commit/c67b1589f10db17d14ce0ff964e00624da459160))
+
+
+### Bug Fixes
+
+* **core:** debug option is opt-in, not opt-out ([026af10](https://github.com/djodjonx/neosyringe/commit/026af1038a03268cec1669bb04ea4cfc6c7919e3))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.2.0
+
 ## [0.4.5](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.4.4...neosyringe-plugin-v0.4.5) (2026-09-11)
 
 
