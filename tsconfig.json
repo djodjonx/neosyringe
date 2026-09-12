@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "declaration": true,
     "paths": {
+      "@djodjonx/neosyringe-ui": ["./packages/ui/src"],
       "@djodjonx/neosyringe": ["./packages/neosyringe/src"],
       "@djodjonx/neosyringe-core/analyzer": ["./packages/core/src/analyzer/index.ts"],
       "@djodjonx/neosyringe-core/generator": ["./packages/core/src/generator/index.ts"],

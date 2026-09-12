@@ -7,6 +7,10 @@
     }
   ],
   "packages": {
+    "packages/ui": {
+      "package-name": "@djodjonx/neosyringe-ui",
+      "changelog-path": "CHANGELOG.md"
+    },
     "packages/neosyringe": {
       "package-name": "@djodjonx/neosyringe",
       "changelog-path": "CHANGELOG.md"
