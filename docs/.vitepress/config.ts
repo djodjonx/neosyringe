@@ -106,6 +106,7 @@ export default withMermaid(defineConfig({
           items: [
             { text: 'CLI Validator', link: '/guide/cli' },
             { text: 'IDE Plugin', link: '/guide/ide-plugin' },
+            { text: 'Graph Visualization', link: '/guide/graph-visualization' },
           ]
         }
       ],

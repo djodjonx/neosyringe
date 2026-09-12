@@ -39,6 +39,7 @@
 - **Comprehensive Validation** - Validates across parent containers, extends, and partialConfigs
 - **Gradual Migration** - Bridge existing containers (tsyringe, InversifyJS)
 - **CI Validation** - CLI to verify your dependency graph
+- **Graph Visualization** - Interactive dependency graph via CLI export, Vite devtools, or VSCode extension
 - **ts-patch support** - Works with plain `tsc`, no bundler required
 
 ## 📦 Installation
