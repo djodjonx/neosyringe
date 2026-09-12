@@ -20,6 +20,9 @@ jobs:
 
       - uses: ./.github/actions/setup-node-pnpm
 
+      - name: Build workspace dependencies
+        run: pnpm --filter @djodjonx/neosyringe-core --filter @djodjonx/neosyringe-ui build
+
       - name: Set version in package.json
         run: npm pkg set version="${{ github.event.inputs.version }}"
         working-directory: packages/vscode-extension
