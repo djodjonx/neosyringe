@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-ui-v0.2.0...neosyringe-ui-v0.2.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **ui:** add CSP meta tag to allow Mermaid CDN in VSCode WebViews ([e0bee51](https://github.com/djodjonx/neosyringe/commit/e0bee51273af01ef665baab8e2843ec3758fc1e1))
+
 ## [0.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-ui-v0.1.0...neosyringe-ui-v0.2.0) (2026-09-12)
 
 

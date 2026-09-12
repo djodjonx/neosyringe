@@ -1,5 +1,14 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.6.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.6.0...neosyringe-plugin-v0.6.1) (2026-09-12)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-ui bumped to 0.2.1
+
 ## [0.6.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.5.0...neosyringe-plugin-v0.6.0) (2026-09-12)
 
 
