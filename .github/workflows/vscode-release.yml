@@ -1,0 +1,53 @@
+name: Publish VSCode Extension
+# Triggered manually from Actions tab → Run workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Extension version (e.g. 0.1.0)'
+        required: true
+        default: '0.1.0'
+
+jobs:
+  publish-vscode:
+    name: Build and publish VSCode extension
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Set version in package.json
+        run: npm pkg set version="${{ github.event.inputs.version }}"
+        working-directory: packages/vscode-extension
+
+      - name: Build extension bundle
+        run: node packages/vscode-extension/esbuild.mjs
+
+      - name: Package VSIX
+        run: npx @vscode/vsce package --no-dependencies
+        working-directory: packages/vscode-extension
+
+      - name: Create GitHub Release and upload VSIX
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: packages/vscode-extension
+        run: |
+          VSIX=$(ls *.vsix | head -1)
+          TAG="neosyringe-vscode-v${{ github.event.inputs.version }}"
+          gh release create "$TAG" "$VSIX" \
+            --title "VSCode Extension v${{ github.event.inputs.version }}" \
+            --notes "NeoSyringe VSCode extension. Install from the Extensions panel (search NeoSyringe via Open VSX) or download the .vsix and run: code --install-extension $VSIX"
+          echo "Uploaded $VSIX to $TAG"
+
+      - name: Publish to Open VSX Registry
+        env:
+          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+        working-directory: packages/vscode-extension
+        run: |
+          VSIX=$(ls *.vsix | head -1)
+          npx ovsx publish "$VSIX" -p "$OVSX_TOKEN"
+          echo "Published $VSIX to Open VSX"
