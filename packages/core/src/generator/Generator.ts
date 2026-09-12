@@ -304,8 +304,17 @@ class ${this.containerClassName} {
    * cached like a singleton); call override() again to change it, or
    * clearOverrides() to remove all overrides and fall back to the real
    * registrations.
+   *
+   * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+   * shared singleton, so an override left in by mistake (or called from
+   * somewhere it shouldn't be) would silently change what every caller gets,
+   * for as long as the process runs. Throwing loudly here is cheaper than
+   * debugging that at 3am.
    */
   public override(token: any, factory: () => any): void {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+      throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+    }
     this.overrides.set(token, factory);
     this.instances.delete(token);
   }

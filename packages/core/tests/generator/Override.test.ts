@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import * as ts from 'typescript';
 import { Generator } from '../../src/generator/Generator';
 import { DependencyGraph, ServiceDefinition } from '../../src/analyzer/types';
@@ -83,5 +83,39 @@ describe('Generator — container.override() (executed, not just string-matched)
     container.override('ILogger_abc123', () => 'mock-logger');
     container.destroy();
     expect(container.resolve('ILogger_abc123')).toBe('real-logger');
+  });
+
+  describe('disabled in production', () => {
+    // A container is commonly a long-lived, process-wide singleton — an
+    // override left in by mistake (or reachable from somewhere it shouldn't
+    // be) would silently change what every caller gets for as long as the
+    // process runs. override() must fail loudly instead in production.
+    const originalNodeEnv = process.env.NODE_ENV;
+    afterEach(() => {
+      process.env.NODE_ENV = originalNodeEnv;
+    });
+
+    it('throws when NODE_ENV=production', () => {
+      const container = buildContainer();
+      process.env.NODE_ENV = 'production';
+      expect(() => container.override('ILogger_abc123', () => 'mock-logger')).toThrow(
+        /override\(\) is a testing utility and is disabled when NODE_ENV=production/
+      );
+    });
+
+    it('does not affect the real registration when the throw is caught', () => {
+      const container = buildContainer();
+      process.env.NODE_ENV = 'production';
+      expect(() => container.override('ILogger_abc123', () => 'mock-logger')).toThrow();
+      process.env.NODE_ENV = originalNodeEnv;
+      expect(container.resolve('ILogger_abc123')).toBe('real-logger');
+    });
+
+    it('works normally outside production (e.g. NODE_ENV=test)', () => {
+      const container = buildContainer();
+      process.env.NODE_ENV = 'test';
+      expect(() => container.override('ILogger_abc123', () => 'mock-logger')).not.toThrow();
+      expect(container.resolve('ILogger_abc123')).toBe('mock-logger');
+    });
   });
 });
