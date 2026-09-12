@@ -298,6 +298,7 @@ class ${this.notFoundErrorClassName} extends Error {
 class ${this.containerClassName} {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
+  private resolveListeners = new Set<(token: any, instance: any) => void>();
   ${initializedField}
 
   // -- Factories --
@@ -336,6 +337,29 @@ class ${this.containerClassName} {
     this.overrides.clear();
   }
 
+  /**
+   * Subscribes to container events — currently only 'resolve', fired with the
+   * token and the resolved instance every time resolve() succeeds (whether
+   * served from cache, freshly created, an override, or a parent/legacy
+   * container). Returns an unsubscribe function. A listener that throws is
+   * caught and ignored — a bug in an observability hook must never break the
+   * actual resolution it's observing.
+   */
+  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+    this.resolveListeners.add(listener);
+    return () => { this.resolveListeners.delete(listener); };
+  }
+
+  private notifyResolve(token: any, instance: any): void {
+    for (const listener of this.resolveListeners) {
+      try {
+        listener(token, instance);
+      } catch {
+        // A listener's own bug must never break the resolution it's observing.
+      }
+    }
+  }
+
   public resolve<T>(token: any): T {
     ${resolveGuard}
     // 0. An overridden token always wins, even over a cached real instance.
@@ -343,12 +367,17 @@ class ${this.containerClassName} {
       if (!this.instances.has(token)) {
         this.instances.set(token, this.overrides.get(token)!());
       }
-      return this.instances.get(token);
+      const overridden = this.instances.get(token);
+      this.notifyResolve(token, overridden);
+      return overridden;
     }
 
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) return result;
+    if (result !== undefined) {
+      this.notifyResolve(token, result);
+      return result;
+    }
 
     // 2. Delegate to parent/legacy containers (useContainer's target, whether a
     // NeoSyringe container or a declareContainerTokens() legacy adapter, always
@@ -356,7 +385,11 @@ class ${this.containerClassName} {
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
-                if (legacyContainer.resolve) return legacyContainer.resolve(token);
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    this.notifyResolve(token, legacyResult);
+                    return legacyResult;
+                }
             } catch (e: any) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }

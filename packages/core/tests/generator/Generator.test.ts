@@ -218,6 +218,26 @@ describe('Generator', () => {
     expect(code).not.toContain('const container =');
   });
 
+  describe('on(\'resolve\', ...) notifies on every successful resolve path', () => {
+    // The runtime execution tests (OnResolve.test.ts) cover the override and
+    // local-resolve paths end-to-end; this checks the third path — delegation
+    // to a parent/legacy container — since exercising that one for real would
+    // need extracting the raw class to control constructor args, which isn't
+    // worth the complexity given the notify-then-return shape is identical
+    // (and independently proven) in all three branches.
+    it('notifies before returning a legacy-delegated result', () => {
+      const graph: DependencyGraph = {
+        containerId: 'Test',
+        nodes: new Map([['Service', createMockNode('Service', [], 'S', '/src/s.ts')]]),
+        roots: [],
+      };
+      const code = new Generator(graph).generate();
+
+      expect(code).toContain('const legacyResult = legacyContainer.resolve(token);');
+      expect(code).toMatch(/const legacyResult = legacyContainer\.resolve\(token\);\s*this\.notifyResolve\(token, legacyResult\);\s*return legacyResult;/);
+    });
+  });
+
   describe('runtime error messages use formatToken(), not a raw interpolation', () => {
     // Regression test: `${token}` was interpolated directly into the thrown
     // NeoServiceNotFoundError message. For a class token this means the ENTIRE

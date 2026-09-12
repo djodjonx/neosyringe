@@ -104,6 +104,27 @@ container.clearOverrides(); // revert to the real registrations
 `override()` throws if `process.env.NODE_ENV === 'production'`. A container is commonly a long-lived, shared singleton — an override left in by mistake, or reachable from somewhere it shouldn't be, would silently change what every caller gets for as long as the process runs. This is a deliberate guard, not an oversight — don't work around it by unsetting `NODE_ENV` in production.
 :::
 
+### Observing resolutions — `on('resolve', ...)`
+
+Every generated container has `on(event, listener)` for cross-cutting concerns — logging, tracing, timing how long a factory takes — without wrapping each factory by hand. Unlike `override()`, this is meant for production use too (e.g. wiring into your own tracing/APM), not just tests:
+
+```typescript
+const unsubscribe = container.on('resolve', (token, instance) => {
+  console.log('resolved', token, '→', instance);
+});
+
+container.resolve(UserService); // triggers the listener above
+
+unsubscribe(); // stop listening
+```
+
+- Fires on **every successful `resolve()`**, regardless of where the instance actually came from — a fresh factory call, a cached singleton, an `override()`, or delegation to a `useContainer` parent/legacy container.
+- Multiple listeners can be registered independently; each returns its own unsubscribe function.
+- A listener that throws is caught and ignored — a bug in an observability hook must never break the resolution it's observing, and it doesn't stop other listeners from running.
+- `destroy()` also clears all listeners, same as `override()`.
+
+`'resolve'` is currently the only event.
+
 ## Inspecting the Output
 
 If you want to see exactly what was generated, look at the file after your build runs. With Vite, the output lands in `dist/`.

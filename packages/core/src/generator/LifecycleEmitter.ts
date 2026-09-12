@@ -91,6 +91,7 @@ export function generateDestroyMethod(
   }
   lines.push('this.instances.clear();');
   lines.push('this.overrides.clear();');
+  lines.push('this.resolveListeners.clear();');
 
   const asyncKw = hasAsyncDisposable ? 'async ' : '';
   const ret = hasAsyncDisposable ? 'Promise<void>' : 'void';
