@@ -59,6 +59,7 @@ jobs:
           echo "Published $VSIX to Open VSX"
 
       - name: Publish to VS Code Marketplace
+        if: ${{ secrets.VSCE_TOKEN != '' }}
         env:
           VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
         working-directory: packages/vscode-extension
