@@ -17,6 +17,7 @@ import * as ts from 'typescript';
 import { resolve } from 'node:path';
 import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
 import { parseArgs, buildJsonReport } from './report';
+import { exportGraphHtml, exportMermaid } from './graphExport';
 
 /**
  * CLI entry point.
@@ -24,7 +25,7 @@ import { parseArgs, buildJsonReport } from './report';
  * and reports any validation errors.
  */
 function main() {
-  const { project: projectArg, json } = parseArgs(process.argv.slice(2));
+  const { project: projectArg, json, graph, mermaid } = parseArgs(process.argv.slice(2));
   const cwd = process.cwd();
 
   const tsconfigPath = projectArg
@@ -77,6 +78,19 @@ function main() {
   try {
     if (!json) console.log('🔍 Validating all dependency containers...');
     const errors = analyzer.extractAllErrors();
+
+    // Graph export — runs independently of validation output
+    if (graph !== false || mermaid) {
+      const allGraphs = analyzer.extractAll();
+      if (graph !== false) {
+        const filePath = exportGraphHtml(allGraphs, graph, cwd);
+        if (!json) console.log(`📊 Graph written to: ${filePath}`);
+      }
+      if (mermaid) {
+        console.log(exportMermaid(allGraphs));
+        process.exit(0);
+      }
+    }
 
     if (json) {
       console.log(JSON.stringify(buildJsonReport(errors, cwd)));

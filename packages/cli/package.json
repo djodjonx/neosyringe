@@ -18,7 +18,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@djodjonx/neosyringe-core": "workspace:*"
+    "@djodjonx/neosyringe-core": "workspace:*",
+    "@djodjonx/neosyringe-ui": "workspace:*"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"
