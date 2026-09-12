@@ -103,40 +103,22 @@ export const container = defineBuilderConfig({
 
 ## How It Works
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      BUILD TIME                              │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  1. defineBuilderConfig({...})                              │
-│              │                                               │
-│              ▼                                               │
-│  2. TypeScript Plugin analyzes configuration                │
-│              │                                               │
-│              ▼                                               │
-│  3. Generates optimized NeoContainer class                  │
-│              │                                               │
-│              ▼                                               │
-│  4. Replaces defineBuilderConfig with generated code        │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       RUNTIME                                │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  container.resolve(UserService)                             │
-│              │                                               │
-│              ▼                                               │
-│  Generated factory creates UserService with                 │
-│  all dependencies resolved recursively                      │
-│                                                              │
-│  ✅ No reflection                                            │
-│  ✅ No DI library in your bundle                             │
-│  ✅ Errors caught at compile-time                            │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph build["BUILD TIME"]
+        direction TB
+        B1["1. defineBuilderConfig({...})"] --> B2["2. TypeScript Plugin<br/>analyzes config"]
+        B2 --> B3["3. Generates<br/>NeoContainer class"]
+        B3 --> B4["4. Replaces call with<br/>generated code"]
+    end
+    subgraph runtime["RUNTIME"]
+        direction TB
+        R1["container.resolve(UserService)"] --> R2["Factory resolves all<br/>dependencies recursively"]
+        R2 --> R3["✅ No reflection"]
+        R3 --> R4["✅ No DI library shipped"]
+        R4 --> R5["✅ Errors caught at compile-time"]
+    end
+    build --> runtime
 ```
 
 ## Next Steps

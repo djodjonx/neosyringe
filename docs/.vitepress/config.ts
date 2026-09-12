@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: 'NeoSyringe',
   description: 'Zero-Overhead, Compile-Time Dependency Injection for TypeScript',
 
@@ -109,5 +110,5 @@ export default defineConfig({
       text: 'Edit this page on GitHub'
     }
   }
-})
+}))
 

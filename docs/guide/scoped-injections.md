@@ -46,56 +46,39 @@ const child = defineBuilderConfig({
 
 Resolution delegates to the parent:
 
-```
-child.resolve(ILogger)
-        │
-        ▼
-   Not found locally
-        │
-        ▼
-   Delegate to parent
-        │
-        ▼
-   parent.resolve(ILogger)
-        │
-        ▼
-   Returns ConsoleLogger
+```mermaid
+flowchart TD
+    A["child.resolve(ILogger)"] --> B["Not found locally"]
+    B --> C["Delegate to parent"]
+    C --> D["parent.resolve(ILogger)"]
+    D --> E["Returns ConsoleLogger"]
 ```
 
 ### With `scoped: true`
 
 Resolution stays local:
 
-```
-child.resolve(ILogger)
-        │
-        ▼
-   Found locally (scoped)
-        │
-        ▼
-   Returns FileLogger ✅
+```mermaid
+flowchart TD
+    A["child.resolve(ILogger)"] --> B["Found locally (scoped)"]
+    B --> C["Returns FileLogger ✅"]
 ```
 
 ## Visual Comparison
 
-```
-Without scoped: true                    With scoped: true
-┌─────────────────────┐                ┌─────────────────────┐
-│    ChildContainer   │                │    ChildContainer   │
-│  resolve(ILogger)   │                │  resolve(ILogger)   │
-│         │           │                │         │           │
-│         ▼           │                │    ┌────▼────┐      │
-│   Not found locally │                │    │ LOCAL   │      │
-│         │           │                │    │FileLogger│      │
-│         ▼           │                │    └─────────┘      │
-│  ┌──────────────┐   │                │  ✅ Returns local   │
-│  │ Delegate to  │   │                │     instance        │
-│  │    Parent    │   │                └─────────────────────┘
-│  └──────┬───────┘   │
-│         ▼           │
-│  ConsoleLogger      │
-│  from parent        │
-└─────────────────────┘
+```mermaid
+flowchart LR
+    subgraph without["Without scoped: true"]
+        direction TB
+        W1["ChildContainer<br/>resolve(ILogger)"] --> W2["Not found locally"]
+        W2 --> W3["Delegate to Parent"]
+        W3 --> W4["ConsoleLogger<br/>from parent"]
+    end
+    subgraph with["With scoped: true"]
+        direction TB
+        S1["ChildContainer<br/>resolve(ILogger)"] --> S2["LOCAL<br/>FileLogger"]
+        S2 --> S3["✅ Returns local instance"]
+    end
 ```
 
 ## Behavior Summary
