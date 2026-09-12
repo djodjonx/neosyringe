@@ -1,4 +1,5 @@
 name: Publish VSCode Extension
+# Triggered manually from Actions tab → Run workflow
 
 on:
   workflow_dispatch:
