@@ -55,3 +55,12 @@ jobs:
           VSIX=$(ls *.vsix | head -1)
           npx ovsx publish "$VSIX" -p "$OVSX_TOKEN"
           echo "Published $VSIX to Open VSX"
+
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
+        working-directory: packages/vscode-extension
+        run: |
+          VSIX=$(ls *.vsix | head -1)
+          npx @vscode/vsce publish --packagePath "$VSIX" -p "$VSCE_TOKEN"
+          echo "Published $VSIX to VS Code Marketplace"
