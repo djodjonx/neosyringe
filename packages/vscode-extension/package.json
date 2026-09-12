@@ -1,7 +1,7 @@
 {
   "name": "neosyringe-vscode",
   "displayName": "NeoSyringe",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Dependency graph visualization for NeoSyringe DI",
   "icon": "images/logo.png",
   "license": "MIT",
@@ -11,8 +11,12 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["workspaceContains:**/tsconfig.json"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/tsconfig.json"
+  ],
   "contributes": {
     "commands": [
       {
