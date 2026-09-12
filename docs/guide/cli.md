@@ -40,6 +40,9 @@ neosyringe-check [options]
 Options:
   -p, --project <path>   Path to tsconfig.json (default: auto-detected in cwd)
   --json                 Machine-readable output for CI (see below)
+  --graph [path]         Write a standalone HTML visualization of the dependency graph
+                         (default filename: neosyringe-graph.html)
+  --mermaid              Print Mermaid flowchart syntax to stdout
 ```
 
 ## Output
@@ -95,6 +98,42 @@ On success: `{"ok":true,"errorCount":0,"errors":[]}`. A fatal error before analy
 # Example: fail the build and show only the messages
 neosyringe-check --json | jq -e '.ok or (.errors[] | .message)'
 ```
+
+### `--graph` — export graph as HTML
+
+```bash
+neosyringe-check --graph                    # writes neosyringe-graph.html
+neosyringe-check --graph out/graph.html     # custom output path
+```
+
+Generates a standalone HTML file with an interactive Mermaid diagram of your dependency graph. Open it in any browser — no server required.
+
+Nodes are color-coded by type:
+- 🟢 **Green** — singleton services
+- 🔵 **Blue** — transient services
+- 🟠 **Orange** — factory registrations
+- ⚫ **Grey** — value registrations
+
+Solid arrows = required dependencies, dashed arrows = optional dependencies.
+
+::: tip Combine with validation
+`--graph` runs alongside normal validation. You get both a visual output and the usual error report in one command.
+:::
+
+### `--mermaid` — print raw Mermaid syntax
+
+```bash
+neosyringe-check --mermaid
+```
+
+Prints Mermaid flowchart syntax to stdout. Useful for embedding in Markdown documentation or feeding into other tools.
+
+```bash
+# Append to a markdown file
+neosyringe-check --mermaid >> docs/architecture.md
+```
+
+See also: [Graph Visualization](/guide/graph-visualization) for the VSCode extension and Vite devtools.
 
 ## Exit Codes
 

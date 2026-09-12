@@ -1,0 +1,6 @@
+src/
+*.mjs
+*.ts
+!dist/
+node_modules/
+.git/

@@ -1,0 +1,31 @@
+{
+  "name": "@djodjonx/neosyringe-ui",
+  "version": "0.1.0",
+  "description": "Graph visualization utilities for NeoSyringe",
+  "type": "module",
+  "license": "MIT",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@djodjonx/neosyringe-core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "0.20.0-beta.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

@@ -8,24 +8,26 @@ describe('CLI report — parseArgs', () => {
     expect(parseArgs(['--project', './tsconfig.build.json'])).toEqual({
       project: './tsconfig.build.json',
       json: false,
+      graph: false,
+      mermaid: false,
     });
   });
 
   it('parses -p as a shorthand for --project', () => {
-    expect(parseArgs(['-p', 'tsconfig.json'])).toEqual({ project: 'tsconfig.json', json: false });
+    expect(parseArgs(['-p', 'tsconfig.json'])).toEqual({ project: 'tsconfig.json', json: false, graph: false, mermaid: false });
   });
 
   it('parses --json', () => {
-    expect(parseArgs(['--json'])).toEqual({ project: undefined, json: true });
+    expect(parseArgs(['--json'])).toEqual({ project: undefined, json: true, graph: false, mermaid: false });
   });
 
   it('parses --project and --json together, in either order', () => {
-    expect(parseArgs(['--json', '--project', 'a.json'])).toEqual({ project: 'a.json', json: true });
-    expect(parseArgs(['--project', 'a.json', '--json'])).toEqual({ project: 'a.json', json: true });
+    expect(parseArgs(['--json', '--project', 'a.json'])).toEqual({ project: 'a.json', json: true, graph: false, mermaid: false });
+    expect(parseArgs(['--project', 'a.json', '--json'])).toEqual({ project: 'a.json', json: true, graph: false, mermaid: false });
   });
 
   it('defaults to no project override and non-json when nothing is passed', () => {
-    expect(parseArgs([])).toEqual({ project: undefined, json: false });
+    expect(parseArgs([])).toEqual({ project: undefined, json: false, graph: false, mermaid: false });
   });
 });
 

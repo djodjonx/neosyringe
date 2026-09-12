@@ -4,12 +4,18 @@ import { relative } from 'node:path';
 export interface CliArgs {
   project: string | undefined;
   json: boolean;
+  /** Path to write HTML output, true for default filename, false if not requested. */
+  graph: string | true | false;
+  mermaid: boolean;
 }
 
 /** Parses CLI arguments. Pure and side-effect free — easy to unit test. */
 export function parseArgs(argv: string[]): CliArgs {
   let project: string | undefined;
   let json = false;
+  let graph: string | true | false = false;
+  let mermaid = false;
+
   for (let i = 0; i < argv.length; i++) {
     if ((argv[i] === '--project' || argv[i] === '-p') && argv[i + 1]) {
       project = argv[i + 1];
@@ -17,8 +23,16 @@ export function parseArgs(argv: string[]): CliArgs {
     if (argv[i] === '--json') {
       json = true;
     }
+    if (argv[i] === '--graph') {
+      const next = argv[i + 1];
+      graph = next && !next.startsWith('--') ? next : true;
+    }
+    if (argv[i] === '--mermaid') {
+      mermaid = true;
+    }
   }
-  return { project, json };
+
+  return { project, json, graph, mermaid };
 }
 
 export interface JsonReportError {

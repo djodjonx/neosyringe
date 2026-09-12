@@ -1,0 +1,39 @@
+{
+  "name": "neosyringe-vscode",
+  "displayName": "NeoSyringe",
+  "version": "0.1.0",
+  "description": "Dependency graph visualization for NeoSyringe DI",
+  "license": "MIT",
+  "private": true,
+  "publisher": "djodjonx",
+  "main": "dist/extension.js",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["workspaceContains:**/tsconfig.json"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "neosyringe.showGraph",
+        "title": "NeoSyringe: Show Dependency Graph",
+        "icon": "$(type-hierarchy)"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "@djodjonx/neosyringe-core": "workspace:*",
+    "@djodjonx/neosyringe-ui": "workspace:*",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.25.0"
+  }
+}
