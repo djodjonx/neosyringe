@@ -1,5 +1,25 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.6.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.5.0...neosyringe-plugin-v0.6.0) (2026-09-12)
+
+
+### Features
+
+* graph visualization (UI package, CLI export, Vite devtools, VSCode extension) ([0d1ea7d](https://github.com/djodjonx/neosyringe/commit/0d1ea7db51680777fc3ab63742ead9c70d3a90d4))
+* **plugin:** add devtools middleware for Vite dev-server ([b9cee96](https://github.com/djodjonx/neosyringe/commit/b9cee9661a642126d2e016f49962065911af5250))
+
+
+### Bug Fixes
+
+* raise timeout for real-fs transformer debug-option tests ([6ee6187](https://github.com/djodjonx/neosyringe/commit/6ee6187f474bbd76f0dfe48c9469d4a18a5c9a55))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-ui bumped to 0.2.0
+
 ## [0.5.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.4.5...neosyringe-plugin-v0.5.0) (2026-09-12)
 
 

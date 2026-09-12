@@ -1,5 +1,20 @@
 # @djodjonx/neosyringe-cli
 
+## [0.4.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.3.0...neosyringe-cli-v0.4.0) (2026-09-12)
+
+
+### Features
+
+* **cli:** add --graph and --mermaid export flags ([5554129](https://github.com/djodjonx/neosyringe/commit/5554129bd466ab29666ed423448410c6399cfe8e))
+* graph visualization (UI package, CLI export, Vite devtools, VSCode extension) ([0d1ea7d](https://github.com/djodjonx/neosyringe/commit/0d1ea7db51680777fc3ab63742ead9c70d3a90d4))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-ui bumped to 0.2.0
+
 ## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.2.5...neosyringe-cli-v0.3.0) (2026-09-12)
 
 
