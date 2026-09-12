@@ -186,7 +186,7 @@ export const container = defineBuilderConfig({
 2. Type `T` properties are extracted (e.g., `{ AuthService, UserRepo }`)
 3. These tokens are added to `parentProvidedTokens`
 4. GraphValidator accepts them as valid dependencies
-5. Generator outputs: `new NeoContainer(undefined, [legacyContainer])`
+5. Generator outputs: `new NeoContainer([legacyContainer])`
 
 ### At Runtime
 
@@ -194,8 +194,8 @@ export const container = defineBuilderConfig({
 // Generated code (simplified)
 class NeoContainer {
   constructor(
-    private parent?: any,
-    private legacy?: any[]  // ← Your tsyringe/inversify container
+    private legacy?: any[],       // ← Your tsyringe/inversify container ends up here
+    private name: string = 'NeoContainer'
   ) {}
 
   resolve(token: any): any {
@@ -203,25 +203,18 @@ class NeoContainer {
     const local = this.resolveLocal(token);
     if (local !== undefined) return local;
 
-    // 2. Delegate to parent (NeoSyringe container)
-    if (this.parent) {
-      try { return this.parent.resolve(token); }
-      catch (e: any) {
-        if (!e?.message?.includes('Service not found or token not registered')) throw e;
-      }
-    }
-
-    // 3. Delegate to legacy containers
+    // 2. Delegate to legacy containers (this is also where a NeoSyringe
+    // useContainer parent ends up — see the Parent Container guide)
     if (this.legacy) {
       for (const container of this.legacy) {
         try { if (container.resolve) return container.resolve(token); }  // ← Calls tsyringe!
         catch (e: any) {
-          if (!e?.message?.includes('Service not found or token not registered')) throw e;
+          if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
         }
       }
     }
 
-    throw new Error(`[${this.name}] Service not found or token not registered: ${token}`);
+    throw new NeoServiceNotFoundError(`[${this.name}] Service not found or token not registered: ${token}`);
   }
 }
 ```

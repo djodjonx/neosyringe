@@ -261,6 +261,7 @@ export const userModule = defineBuilderConfig({
 // Multiple Containers per File — omitted below as `NeoContainer_<hash>`)
 class NeoContainer_<hash> {
   private instances = new Map<any, any>();
+  private overrides = new Map<any, () => any>();
 
   private create_UserRepository(): any {
     return new UserRepository(this.resolve("ILogger_<hash>"));
@@ -275,7 +276,6 @@ class NeoContainer_<hash> {
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
@@ -283,9 +283,6 @@ class NeoContainer_<hash> {
   public resolve<T>(token: any): T {
     const result = this.resolveLocal(token);
     if (result !== undefined) return result;
-
-    // `this.parent` is reserved for future use — currently always undefined.
-    if (this.parent) { /* ... */ }
 
     // useContainer's target (sharedKernel) is delegated to here, through `legacy`:
     if (this.legacy) {
@@ -301,14 +298,14 @@ class NeoContainer_<hash> {
     throw new NeoServiceNotFoundError(`[${this.name}] Service not found or token not registered: ${token}`);
   }
 
-  // resolveLocal, destroy...
+  // resolveLocal, destroy, override, _graph, _dependencyGraph...
 }
 
-export const userModule = new NeoContainer_<hash>(undefined, [sharedKernel], "UserModule");
+export const userModule = new NeoContainer_<hash>([sharedKernel], "UserModule");
 ```
 
-::: warning `this.parent` vs. `this.legacy`
-Whatever you pass to `useContainer` — a NeoSyringe container from another file, one from the same file, or a `declareContainerTokens()` legacy adapter — is always routed into the `legacy` array, never into `parent`. The `parent` constructor argument exists in every generated container but is never populated by the plugin today. Functionally this makes no difference (the `legacy` delegation is what actually resolves parent tokens, as shown above and proven by the interface-token example), but don't be surprised if you inspect the generated code and see `this.parent` stay `undefined`.
+::: tip Everything you pass to `useContainer` goes through `legacy`
+Whatever the parent is — a NeoSyringe container from another file, one from the same file, or a `declareContainerTokens()` legacy adapter — it's always routed into the `legacy` array. There's no separate "real parent" slot in the generated container; `legacy` delegation is the one mechanism that resolves everything a parent provides, as shown above.
 :::
 
 ## Best Practices

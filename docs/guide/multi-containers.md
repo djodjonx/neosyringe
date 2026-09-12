@@ -104,7 +104,6 @@ class NeoContainer_3edbbbcb {
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
@@ -112,7 +111,7 @@ class NeoContainer_3edbbbcb {
   // resolve, destroy, resolveLocal...
 }
 
-export const userContainer = new NeoContainer_3edbbbcb(undefined, undefined, "UserModule");
+export const userContainer = new NeoContainer_3edbbbcb(undefined, "UserModule");
 
 class NeoServiceNotFoundError_3edbc066 extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
@@ -130,7 +129,6 @@ class NeoContainer_3edbc066 {
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
@@ -138,7 +136,7 @@ class NeoContainer_3edbc066 {
   // resolve, destroy, resolveLocal...
 }
 
-export const productContainer = new NeoContainer_3edbc066(undefined, undefined, "ProductModule");
+export const productContainer = new NeoContainer_3edbc066(undefined, "ProductModule");
 ```
 
 ## Naming Is Not Validated
