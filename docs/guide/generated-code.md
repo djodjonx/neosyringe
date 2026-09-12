@@ -66,6 +66,10 @@ This is a **build-time** decision, not a runtime check: when disabled, the token
 
 **Opt-in, not opt-out**: disabled by default — pass `{ debug: true }` explicitly to get `_graph`/`_dependencyGraph` data at all. This is deliberate: a project that never thinks about this option shouldn't silently carry the size/exposure cost of debug data it never asked for. On top of that, production **forces it off no matter what** — `{ debug: true }` in a production build is silently ignored. Both rules apply identically whether you use a bundler or ts-patch.
 
+::: tip Not applicable to the [IDE Plugin](/guide/ide-plugin)
+`debug` only affects the two entry points that actually generate a container (the bundler plugin and the ts-patch transformer). The LSP (`@djodjonx/neosyringe-lsp`) never generates one — it only analyzes your code to produce editor diagnostics — so adding `debug` to its `tsconfig.json` entry does nothing.
+:::
+
 ```typescript
 // List all registered token IDs
 console.log(container._graph);

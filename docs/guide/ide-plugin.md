@@ -34,6 +34,10 @@ The plugin validates dependencies across:
 }
 ```
 
+::: tip No build-plugin options apply here
+This entry only takes `name`. Options like `debug` (see [Generated Code](/guide/generated-code#debugging)) belong to the ts-patch **transformer** entry (`{ "transform": "@djodjonx/neosyringe-plugin/transformer" }`) — a separate plugin from this one. The LSP never generates a container, so nothing about codegen applies to it.
+:::
+
 ### Step 2: Use Workspace TypeScript
 
 The plugin only works with the workspace TypeScript version.
