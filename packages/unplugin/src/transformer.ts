@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import type { PluginConfig, ProgramTransformerExtras } from 'ts-patch';
 import { Analyzer, HashUtils } from '@djodjonx/neosyringe-core/analyzer';
-import { Generator, GraphValidator } from '@djodjonx/neosyringe-core/generator';
+import { Generator, GraphValidator, resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
 import { transformUseInterfaceCalls } from './useInterfaceTransform';
 import { hasNeoSyringeMarkers } from './markerUtils';
 
@@ -31,10 +31,16 @@ import { hasNeoSyringeMarkers } from './markerUtils';
 export default function neoSyringeTransformer(
   program: ts.Program,
   host: ts.CompilerHost | undefined,
-  _config: PluginConfig,
+  config: PluginConfig,
   { ts: tsInstance }: ProgramTransformerExtras,
 ): ts.Program {
   const compilerOptions = program.getCompilerOptions();
+  // Reads a `debug` key from the plugin's own tsconfig.json entry, e.g.
+  // { "transform": "@djodjonx/neosyringe-plugin/transformer", "debug": false }.
+  // Shares resolveDebugFlag with the bundler entry points (index.ts) so the
+  // "forced off in production, no escape hatch" behavior is identical
+  // regardless of which one a project uses.
+  const emitDebugHelpers = resolveDebugFlag(config.debug);
 
   // Map of fileName -> transformed source text
   const transformedSources = new Map<string, string>();
@@ -83,7 +89,7 @@ export default function neoSyringeTransformer(
           throw new Error(`[neosyringe-transformer]\n  ${messages}`);
         }
 
-        const generator = new Generator(graph, true);
+        const generator = new Generator(graph, true, undefined, emitDebugHelpers);
         const containerClass = generator.generate();
         const instantiation = generator.generateInstantiation();
 

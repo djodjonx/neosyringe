@@ -1,5 +1,6 @@
 export * from './Generator';
 export * from './GraphValidator';
+export { resolveDebugFlag } from './DebugConfig';
 export { topologicalSort } from './TopologicalSorter';
 export {
   getFactoryName,

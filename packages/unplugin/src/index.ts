@@ -3,10 +3,21 @@ import * as ts from 'typescript';
 import * as path from 'path';
 import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
 import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
-import { Generator } from '@djodjonx/neosyringe-core/generator';
+import { Generator, resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { transformUseInterfaceCalls, type UsedTokenEntry } from './useInterfaceTransform';
 import { hasNeoSyringeMarkers } from './markerUtils';
+
+/** Options accepted by every bundler entry point (`.vite()`, `.rollup()`, `.webpack()`, `.esbuild()`). */
+export interface NeoSyringePluginOptions {
+  /**
+   * Whether generated containers embed `_graph`/`_dependencyGraph` debug data.
+   * Defaults to `true` outside production. Forced to `false` whenever
+   * `process.env.NODE_ENV === 'production'`, with no way to override that —
+   * see resolveDebugFlag in @djodjonx/neosyringe-core.
+   */
+  debug?: boolean;
+}
 
 /**
  * NeoSyringe build plugin for Vite, Rollup, Webpack, and other bundlers.
@@ -25,11 +36,12 @@ import { hasNeoSyringeMarkers } from './markerUtils';
  * });
  * ```
  */
-export const neoSyringePlugin = createUnplugin(() => {
+export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions | undefined = {}) => {
   // Per-build registries — scoped to the factory instance, safe for parallel builds
   const registeredTokens = new Set<string>();
   const usedTokens = new Map<string, UsedTokenEntry>();
   const generatedContainerVars = new Set<string>(); // variable names that were code-generated
+  const emitDebugHelpers = resolveDebugFlag(options.debug);
 
   // Cache tsconfig parsing — tsconfig doesn't change during a build
   let compilerOptions: ts.CompilerOptions | undefined;
@@ -166,7 +178,7 @@ export const neoSyringePlugin = createUnplugin(() => {
 
           let result = code;
           for (const graph of replacements) {
-            const generator = new Generator(graph, true);
+            const generator = new Generator(graph, true, undefined, emitDebugHelpers);
             const containerClass = generator.generate();
             const instantiation = generator.generateInstantiation();
             // Slice positions are from the CURRENT result, but since we process

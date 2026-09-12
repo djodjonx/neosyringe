@@ -85,6 +85,35 @@ describe('Generator', () => {
     expect(code).toContain(JSON.stringify(['ILogger', 'UserService']));
   });
 
+  it('emitDebugHelpers=false strips the embedded data at build time (not just a runtime check)', () => {
+    // Regression test: the previous approach only guarded access at runtime
+    // (`if (NODE_ENV === 'production') return []`) — the literal token/edge
+    // data was always written into the source, relying entirely on a
+    // bundler's dead-code elimination to remove it. That doesn't help at all
+    // for the no-bundler tsc/ts-patch path. With emitDebugHelpers=false, the
+    // data must never appear in the output at all, while the getters
+    // themselves still exist (so container._graph stays defined, not undefined).
+    const graph: DependencyGraph = {
+      containerId: 'TestContainer',
+      nodes: new Map([
+        ['ILogger', createMockNode('ILogger', [], 'ConsoleLogger', '/src/logger.ts')],
+        ['UserService', createMockNode('UserService', ['ILogger'], 'UserService', '/src/user.ts')],
+      ]),
+      roots: ['UserService'],
+    };
+
+    const code = new Generator(graph, false, '/src', false).generate();
+
+    expect(code).toContain('public get _graph() { return []; }');
+    expect(code).toContain('public get _dependencyGraph() { return []; }');
+    // The debug payload itself — the token-id/edge array literals that
+    // `emitDebugHelpers: true` would embed — must not be present anywhere in
+    // the output. (Token ids legitimately still appear elsewhere, e.g. in
+    // factory method names — that's the actual wiring, not debug data.)
+    expect(code).not.toContain('["ILogger","UserService"]');
+    expect(code).not.toContain('"dependencies"');
+  });
+
   it('should handle scopes correctly', () => {
     const graph: DependencyGraph = {
       containerId: "TestContainer", nodes: new Map([

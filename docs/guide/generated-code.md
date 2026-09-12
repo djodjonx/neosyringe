@@ -50,7 +50,21 @@ The generated container has **no import from `@djodjonx/neosyringe`**. It is pla
 
 ## Debugging
 
-The generated container exposes a few helpers, all stripped by dead-code elimination when `NODE_ENV === 'production'`:
+The generated container exposes a few helpers for `_graph`/`_dependencyGraph`:
+
+```typescript
+// vite.config.ts / rollup.config.js / webpack.config.js / esbuild build script
+neoSyringePlugin.vite({ debug: false })   // or .rollup(), .webpack(), .esbuild()
+```
+
+```json
+// tsconfig.json (ts-patch, no bundler)
+{ "transform": "@djodjonx/neosyringe-plugin/transformer", "debug": false }
+```
+
+This is a **build-time** decision, not a runtime check: when disabled, the token/dependency data is never written into the generated source at all — there's nothing for a bundler to dead-code-eliminate, which matters because ts-patch/plain-`tsc` builds have no bundler or minifier step to do that stripping for you. `container._graph` still exists either way (it just returns `[]` when disabled), so accessing it never breaks.
+
+**Defaults**: enabled outside production; **forced off whenever `process.env.NODE_ENV === 'production'`, with no way to override that** — passing `{ debug: true }` in a production build is silently ignored. This applies identically whether you use a bundler or ts-patch.
 
 ```typescript
 // List all registered token IDs

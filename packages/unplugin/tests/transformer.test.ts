@@ -20,6 +20,7 @@ vi.mock('@djodjonx/neosyringe-core/generator', () => ({
   GraphValidator: vi.fn().mockImplementation(() => ({
     validateAll: vi.fn().mockReturnValue({ valid: true, errors: [] }),
   })),
+  resolveDebugFlag: vi.fn().mockReturnValue(true),
 }));
 
 vi.mock('typescript', async (importOriginal) => {

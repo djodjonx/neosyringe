@@ -86,7 +86,19 @@ export class Generator {
   constructor(
     private graph: DependencyGraph,
     private useDirectSymbolNames: boolean = false,
-    private outputDir?: string
+    private outputDir?: string,
+    /**
+     * Whether to embed the `_graph`/`_dependencyGraph` debug data (token ids
+     * and dependency edges) in the generated source at all. Unlike the
+     * previous NODE_ENV runtime check alone, this is a true build-time
+     * decision: when false, the literal data is never written into the
+     * output, so there is nothing for a bundler's dead-code elimination to
+     * depend on — this is what actually matters for the plain `tsc`/ts-patch
+     * path, which has no bundler/minifier step at all. The getters still
+     * exist either way (returning `[]` when disabled), so `container._graph`
+     * is never `undefined` — only its payload changes.
+     */
+    private emitDebugHelpers: boolean = true
   ) {
     // Check for analysis errors and throw the first one for CLI compatibility
     if (graph.errors && graph.errors.length > 0) {
@@ -440,6 +452,16 @@ export const ${variableName || 'container'} = ${instantiation};
    * NODE_ENV inlined) will strip the literal entirely.
    */
   private emitDebugGetter(): string {
+    if (!this.emitDebugHelpers) {
+      // Build-time strip: the data is never written into the output at all —
+      // nothing for a bundler's DCE to depend on, and nothing shipped for the
+      // no-bundler tsc/ts-patch path either. The getters still exist so
+      // `container._graph`/`_dependencyGraph` stay defined (never `undefined`).
+      return `// Debug data stripped at build time (see the plugin's \`debug\` option)
+  public get _graph() { return []; }
+  public get _dependencyGraph() { return []; }`;
+    }
+
     const edges: Array<{ token: string; dependencies: string[]; multi?: true }> = [];
     for (const [tokenId, node] of this.graph.nodes) {
       edges.push({ token: tokenId, dependencies: node.dependencies });
