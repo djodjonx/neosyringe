@@ -38,6 +38,7 @@ misc/
 # Synchronized documentation
 packages/neosyringe/README.md
 docs/superpowers/
+.superpowers/brainstorm/
 # Verdaccio local registry storage
 .verdaccio-storage/
 .verdaccio-htpasswd
