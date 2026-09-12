@@ -80,7 +80,7 @@ jobs:
           git push
 
   publish-vscode:
-    name: Build and upload VSCode extension
+    name: Build and publish VSCode extension
     runs-on: ubuntu-latest
     needs: [release-please]
     if: needs.release-please.outputs.releases_created == 'true'
@@ -109,3 +109,11 @@ jobs:
           TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
           gh release upload "$TAG" "$VSIX" --clobber
           echo "✅ Uploaded $VSIX to release $TAG"
+
+      - name: Publish to Open VSX Registry
+        env:
+          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+        run: |
+          VSIX=$(ls packages/vscode-extension/*.vsix | head -1)
+          npx ovsx publish "$VSIX" -p "$OVSX_TOKEN"
+          echo "✅ Published $VSIX to Open VSX"
