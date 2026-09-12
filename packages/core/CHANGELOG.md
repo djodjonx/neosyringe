@@ -1,5 +1,20 @@
 # @djodjonx/neosyringe-core
 
+## [3.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.1.2...neosyringe-core-v3.2.0) (2026-09-12)
+
+
+### Features
+
+* **core:** build-time debug option to strip _graph/_dependencyGraph data ([d381f06](https://github.com/djodjonx/neosyringe/commit/d381f06768143df7e559a9c1cf689a083287dc9a))
+* **core:** container.on('resolve', listener) hook for cross-cutting concerns ([6bdeaeb](https://github.com/djodjonx/neosyringe/commit/6bdeaeb2a61ac3b05e8a966ebd67074a1bd1cc2d))
+* **core:** resolve class tokens across useContainer, plus DX fixes ([c67b158](https://github.com/djodjonx/neosyringe/commit/c67b1589f10db17d14ce0ff964e00624da459160))
+
+
+### Bug Fixes
+
+* **core:** debug option is opt-in, not opt-out ([026af10](https://github.com/djodjonx/neosyringe/commit/026af1038a03268cec1669bb04ea4cfc6c7919e3))
+* **core:** disable container.override() when NODE_ENV=production ([d85f619](https://github.com/djodjonx/neosyringe/commit/d85f619c61cf4877f144eebacde26efd69954ce0))
+
 ## [3.1.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.1.1...neosyringe-core-v3.1.2) (2026-09-11)
 
 

@@ -1,5 +1,19 @@
 # @djodjonx/neosyringe-cli
 
+## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.2.5...neosyringe-cli-v0.3.0) (2026-09-12)
+
+
+### Features
+
+* **cli:** add --json output for CI integration ([562995e](https://github.com/djodjonx/neosyringe/commit/562995e66a5835a6d976e44775d38e0d901f3f81))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.2.0
+
 ## [0.2.5](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.2.4...neosyringe-cli-v0.2.5) (2026-09-11)
 
 
