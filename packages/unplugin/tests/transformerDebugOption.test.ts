@@ -30,30 +30,54 @@ describe('neoSyringeTransformer — debug option (real, unmocked)', () => {
     process.env.NODE_ENV = originalNodeEnv;
   });
 
-  it('strips the data by default outside production (opt-in, not opt-out)', () => {
-    process.env.NODE_ENV = 'test';
-    const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer' });
-    expect(text).toContain('public get _graph() { return []; }');
-    expect(text).not.toContain('"dependencies"');
-  });
+  // Each test below builds a real ts.Program against the real filesystem with
+  // no host override and no lib-resolution mocking, so TypeScript parses the
+  // full default lib (lib.es5.d.ts, lib.dom.d.ts, ...) from disk on every
+  // call. That's real, deliberate I/O (see the file-level doc comment) whose
+  // cost depends on the OS file-cache being warm — the default 5s vitest
+  // timeout isn't enough headroom for a cold cache on a loaded CI runner.
+  const REAL_FS_PROGRAM_TIMEOUT = 20000;
 
-  it('{ debug: false } in tsconfig.json strips the data outside production (same as the default)', () => {
-    process.env.NODE_ENV = 'test';
-    const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer', debug: false });
-    expect(text).toContain('public get _graph() { return []; }');
-    expect(text).not.toContain('"dependencies"');
-  });
+  it(
+    'strips the data by default outside production (opt-in, not opt-out)',
+    () => {
+      process.env.NODE_ENV = 'test';
+      const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer' });
+      expect(text).toContain('public get _graph() { return []; }');
+      expect(text).not.toContain('"dependencies"');
+    },
+    REAL_FS_PROGRAM_TIMEOUT,
+  );
 
-  it('{ debug: true } in tsconfig.json embeds real debug data outside production', () => {
-    process.env.NODE_ENV = 'test';
-    const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer', debug: true });
-    expect(text).toContain('"dependencies"');
-  });
+  it(
+    '{ debug: false } in tsconfig.json strips the data outside production (same as the default)',
+    () => {
+      process.env.NODE_ENV = 'test';
+      const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer', debug: false });
+      expect(text).toContain('public get _graph() { return []; }');
+      expect(text).not.toContain('"dependencies"');
+    },
+    REAL_FS_PROGRAM_TIMEOUT,
+  );
 
-  it('NODE_ENV=production forces stripping even with { debug: true }', () => {
-    process.env.NODE_ENV = 'production';
-    const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer', debug: true });
-    expect(text).toContain('public get _graph() { return []; }');
-    expect(text).not.toContain('"dependencies"');
-  });
+  it(
+    '{ debug: true } in tsconfig.json embeds real debug data outside production',
+    () => {
+      process.env.NODE_ENV = 'test';
+      const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer', debug: true });
+      expect(text).toContain('"dependencies"');
+    },
+    REAL_FS_PROGRAM_TIMEOUT,
+  );
+
+  it(
+    'NODE_ENV=production forces stripping even with { debug: true }',
+    () => {
+      process.env.NODE_ENV = 'production';
+      const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer', debug: true });
+      expect(text).toContain('public get _graph() { return []; }');
+      expect(text).not.toContain('"dependencies"');
+    },
+    REAL_FS_PROGRAM_TIMEOUT,
+  );
 });
