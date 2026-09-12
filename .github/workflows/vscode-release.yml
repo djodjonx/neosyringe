@@ -25,7 +25,8 @@ jobs:
         working-directory: packages/vscode-extension
 
       - name: Build extension bundle
-        run: node packages/vscode-extension/esbuild.mjs
+        run: node esbuild.mjs
+        working-directory: packages/vscode-extension
 
       - name: Package VSIX
         run: npx @vscode/vsce package --no-dependencies
