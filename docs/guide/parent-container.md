@@ -308,6 +308,10 @@ export const userModule = new NeoContainer_<hash>([sharedKernel], "UserModule");
 Whatever the parent is — a NeoSyringe container from another file, one from the same file, or a `declareContainerTokens()` legacy adapter — it's always routed into the `legacy` array. There's no separate "real parent" slot in the generated container; `legacy` delegation is the one mechanism that resolves everything a parent provides, as shown above.
 :::
 
+## If the Parent Has Async Factories
+
+If `sharedKernel` (or any container in the chain) has async factories, the child needs `await child.initialize()` too — even if the child itself has no async work — since it cascades into the parent automatically. See [Async Parent Containers](./async-factories.md#async-parent-containers-usecontainer) for the full example.
+
 ## Best Practices
 
 ### 1. Name Your Containers

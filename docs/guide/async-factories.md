@@ -108,6 +108,55 @@ export const container = defineBuilderConfig({
 await container.initialize();
 ```
 
+## Async Parent Containers (`useContainer`)
+
+If a container has **no async factories of its own**, but its `useContainer` parent does, it still gets an `initialize()` — purely to cascade into the parent:
+
+```typescript
+// shared-kernel.ts — has an async factory
+export const sharedKernel = defineBuilderConfig({
+  injections: [
+    {
+      token: useInterface<IDatabase>(),
+      provider: async () => { /* connect, etc. */ },
+      useFactory: true
+    }
+  ]
+});
+
+// app.ts — no async factories of its own, but depends on the async parent
+export const app = defineBuilderConfig({
+  useContainer: sharedKernel,
+  injections: [
+    { token: UserService }  // constructor(private db: IDatabase) — sync code, no await anywhere
+  ]
+});
+```
+
+```typescript
+// main.ts — one call is enough; you don't need to separately
+// initialize sharedKernel yourself
+await app.initialize();
+
+const userService = app.resolve(UserService);
+```
+
+`app`'s generated `initialize()` (real output, trimmed) does nothing but cascade:
+
+```typescript
+public async initialize(): Promise<void> {
+  if (this._initialized) return;
+  if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }
+  this._initialized = true;
+}
+```
+
+This also means `app.resolve(...)` throws the same "call `await container.initialize()` first" guard if you forget — even though `app` itself has no async work, resolving before the cascade runs would mean `sharedKernel`'s async singleton might not be ready yet.
+
+::: tip Works through any depth of `useContainer` chaining
+The cascade check (`typeof c?.initialize === 'function'`) is a runtime check, not a static one — so it also covers a `declareContainerTokens` legacy adapter that happens to expose its own `initialize()`, and a multi-level `useContainer` chain (domain → infrastructure) cascades all the way down automatically.
+:::
+
 ## Testing
 
 `destroy()` resets the initialized state so you can call `initialize()` again between tests:
