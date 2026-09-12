@@ -93,9 +93,12 @@ jobs:
 
       - uses: ./.github/actions/setup-node-pnpm
 
+      - name: Build workspace dependencies
+        run: pnpm --filter @djodjonx/neosyringe-core --filter @djodjonx/neosyringe-ui build
+
       - name: Build VSCode extension bundle
-        run: node packages/vscode-extension/esbuild.mjs
-        working-directory: ${{ github.workspace }}
+        run: node esbuild.mjs
+        working-directory: packages/vscode-extension
 
       - name: Package VSIX
         run: npx @vscode/vsce package --no-dependencies
@@ -104,8 +107,9 @@ jobs:
       - name: Upload VSIX to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: packages/vscode-extension
         run: |
-          VSIX=$(ls packages/vscode-extension/*.vsix | head -1)
+          VSIX=$(ls *.vsix | head -1)
           TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
           gh release upload "$TAG" "$VSIX" --clobber
           echo "✅ Uploaded $VSIX to release $TAG"
@@ -113,7 +117,8 @@ jobs:
       - name: Publish to Open VSX Registry
         env:
           OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+        working-directory: packages/vscode-extension
         run: |
-          VSIX=$(ls packages/vscode-extension/*.vsix | head -1)
+          VSIX=$(ls *.vsix | head -1)
           npx ovsx publish "$VSIX" -p "$OVSX_TOKEN"
           echo "✅ Published $VSIX to Open VSX"
