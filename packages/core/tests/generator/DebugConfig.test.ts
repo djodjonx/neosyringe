@@ -14,14 +14,18 @@ describe('resolveDebugFlag', () => {
     expect(resolveDebugFlag(undefined)).toBe(false);
   });
 
-  it('defaults to true outside production when nothing is passed', () => {
+  it('defaults to false outside production when nothing is passed (opt-in, not opt-out)', () => {
     process.env.NODE_ENV = 'development';
-    expect(resolveDebugFlag(undefined)).toBe(true);
+    expect(resolveDebugFlag(undefined)).toBe(false);
   });
 
-  it('respects an explicit value outside production', () => {
+  it('is false outside production when explicitly set to false', () => {
     process.env.NODE_ENV = 'test';
     expect(resolveDebugFlag(false)).toBe(false);
+  });
+
+  it('is true outside production only when explicitly set to true', () => {
+    process.env.NODE_ENV = 'test';
     expect(resolveDebugFlag(true)).toBe(true);
   });
 });

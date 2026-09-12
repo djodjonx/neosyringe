@@ -30,17 +30,24 @@ describe('neoSyringeTransformer — debug option (real, unmocked)', () => {
     process.env.NODE_ENV = originalNodeEnv;
   });
 
-  it('embeds real debug data by default outside production', () => {
+  it('strips the data by default outside production (opt-in, not opt-out)', () => {
     process.env.NODE_ENV = 'test';
     const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer' });
-    expect(text).toContain('"dependencies"');
+    expect(text).toContain('public get _graph() { return []; }');
+    expect(text).not.toContain('"dependencies"');
   });
 
-  it('{ debug: false } in tsconfig.json strips the data even outside production', () => {
+  it('{ debug: false } in tsconfig.json strips the data outside production (same as the default)', () => {
     process.env.NODE_ENV = 'test';
     const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer', debug: false });
     expect(text).toContain('public get _graph() { return []; }');
     expect(text).not.toContain('"dependencies"');
+  });
+
+  it('{ debug: true } in tsconfig.json embeds real debug data outside production', () => {
+    process.env.NODE_ENV = 'test';
+    const text = transformedText({ transform: '@djodjonx/neosyringe-plugin/transformer', debug: true });
+    expect(text).toContain('"dependencies"');
   });
 
   it('NODE_ENV=production forces stripping even with { debug: true }', () => {

@@ -64,7 +64,7 @@ neoSyringePlugin.vite({ debug: false })   // or .rollup(), .webpack(), .esbuild(
 
 This is a **build-time** decision, not a runtime check: when disabled, the token/dependency data is never written into the generated source at all — there's nothing for a bundler to dead-code-eliminate, which matters because ts-patch/plain-`tsc` builds have no bundler or minifier step to do that stripping for you. `container._graph` still exists either way (it just returns `[]` when disabled), so accessing it never breaks.
 
-**Defaults**: enabled outside production; **forced off whenever `process.env.NODE_ENV === 'production'`, with no way to override that** — passing `{ debug: true }` in a production build is silently ignored. This applies identically whether you use a bundler or ts-patch.
+**Opt-in, not opt-out**: disabled by default — pass `{ debug: true }` explicitly to get `_graph`/`_dependencyGraph` data at all. This is deliberate: a project that never thinks about this option shouldn't silently carry the size/exposure cost of debug data it never asked for. On top of that, production **forces it off no matter what** — `{ debug: true }` in a production build is silently ignored. Both rules apply identically whether you use a bundler or ts-patch.
 
 ```typescript
 // List all registered token IDs

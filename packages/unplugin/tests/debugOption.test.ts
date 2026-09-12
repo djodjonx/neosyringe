@@ -41,17 +41,24 @@ describe('Plugin — debug option', () => {
     return transform(CODE, FILE) ?? CODE;
   }
 
-  it('embeds real debug data by default outside production', () => {
+  it('strips the data by default outside production (opt-in, not opt-out)', () => {
     process.env.NODE_ENV = 'test';
     const result = transformWith();
-    expect(result).toContain('"dependencies"');
+    expect(result).toContain('public get _graph() { return []; }');
+    expect(result).not.toContain('"dependencies"');
   });
 
-  it('{ debug: false } strips the data even outside production', () => {
+  it('{ debug: false } strips the data outside production (same as the default)', () => {
     process.env.NODE_ENV = 'test';
     const result = transformWith({ debug: false });
     expect(result).toContain('public get _graph() { return []; }');
     expect(result).not.toContain('"dependencies"');
+  });
+
+  it('{ debug: true } embeds real debug data outside production', () => {
+    process.env.NODE_ENV = 'test';
+    const result = transformWith({ debug: true });
+    expect(result).toContain('"dependencies"');
   });
 
   it('NODE_ENV=production forces stripping even with { debug: true }', () => {
