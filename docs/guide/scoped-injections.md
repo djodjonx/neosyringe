@@ -47,11 +47,12 @@ const child = defineBuilderConfig({
 Resolution delegates to the parent:
 
 ```mermaid
-flowchart TD
-    A["child.resolve(ILogger)"] --> B["Not found locally"]
-    B --> C["Delegate to parent"]
-    C --> D["parent.resolve(ILogger)"]
-    D --> E["Returns ConsoleLogger"]
+sequenceDiagram
+    participant Child as ChildContainer
+    participant Parent as ParentContainer
+
+    Child->>Parent: Not found locally, delegate
+    Parent-->>Child: ConsoleLogger
 ```
 
 ### With `scoped: true`
@@ -59,25 +60,29 @@ flowchart TD
 Resolution stays local:
 
 ```mermaid
-flowchart TD
-    A["child.resolve(ILogger)"] --> B["Found locally (scoped)"]
-    B --> C["Returns FileLogger ✅"]
+sequenceDiagram
+    participant Child as ChildContainer
+
+    Note over Child: Found locally (scoped) ✅
+    Child-->>Child: Returns FileLogger
 ```
 
 ## Visual Comparison
 
 ```mermaid
-flowchart LR
-    subgraph without["Without scoped: true"]
-        direction TB
-        W1["ChildContainer<br/>resolve(ILogger)"] --> W2["Not found locally"]
-        W2 --> W3["Delegate to Parent"]
-        W3 --> W4["ConsoleLogger<br/>from parent"]
-    end
-    subgraph with["With scoped: true"]
-        direction TB
-        S1["ChildContainer<br/>resolve(ILogger)"] --> S2["LOCAL<br/>FileLogger"]
-        S2 --> S3["✅ Returns local instance"]
+sequenceDiagram
+    participant Caller
+    participant Child as ChildContainer
+    participant Parent as ParentContainer
+
+    Caller->>Child: resolve(ILogger)
+    alt scoped: true
+        Note right of Child: Found locally ✅
+        Child-->>Caller: FileLogger
+    else default (no scoped)
+        Child->>Parent: Not found locally, delegate
+        Parent-->>Child: ConsoleLogger
+        Child-->>Caller: ConsoleLogger
     end
 ```
 

@@ -46,12 +46,24 @@ const userModule = defineBuilderConfig({
 When you call `resolve()`, NeoSyringe looks up the token in this order:
 
 ```mermaid
-flowchart TD
-    A["resolve(token)"] --> B{Found in<br/>local container?}
-    B -- Yes --> C["Return instance"]
-    B -- No --> D{Found in<br/>parent container?}
-    D -- Yes --> C
-    D -- No --> E["Throw NeoServiceNotFoundError"]
+sequenceDiagram
+    participant Caller
+    participant Child as Container
+    participant Parent as Parent Container
+
+    Caller->>Child: resolve(token)
+    alt Found locally
+        Child-->>Caller: instance
+    else Not found locally
+        Child->>Parent: resolve(token)
+        alt Found in parent
+            Parent-->>Child: instance
+            Child-->>Caller: instance
+        else Not found anywhere
+            Parent--xChild: NeoServiceNotFoundError
+            Child--xCaller: NeoServiceNotFoundError
+        end
+    end
 ```
 
 ## SharedKernel Architecture

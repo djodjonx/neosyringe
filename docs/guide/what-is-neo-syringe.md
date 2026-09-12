@@ -104,21 +104,22 @@ export const container = defineBuilderConfig({
 ## How It Works
 
 ```mermaid
-flowchart TD
-    subgraph build["BUILD TIME"]
-        direction TB
-        B1["1. defineBuilderConfig({...})"] --> B2["2. TypeScript Plugin<br/>analyzes config"]
-        B2 --> B3["3. Generates<br/>NeoContainer class"]
-        B3 --> B4["4. Replaces call with<br/>generated code"]
-    end
-    subgraph runtime["RUNTIME"]
-        direction TB
-        R1["container.resolve(UserService)"] --> R2["Factory resolves all<br/>dependencies recursively"]
-        R2 --> R3["✅ No reflection"]
-        R3 --> R4["✅ No DI library shipped"]
-        R4 --> R5["✅ Errors caught at compile-time"]
-    end
-    build --> runtime
+sequenceDiagram
+    participant Dev as Your Code
+    participant Compiler as NeoSyringe Compiler
+    participant App as Your App
+    participant Container as Generated Container
+
+    Note over Dev,Compiler: Build Time
+    Dev->>Compiler: defineBuilderConfig({...})
+    Compiler->>Compiler: Analyze configuration
+    Compiler->>Container: Generate NeoContainer class
+    Compiler-->>Dev: Replace call with generated code
+
+    Note over App,Container: Runtime
+    App->>Container: resolve(UserService)
+    Container->>Container: Factory resolves dependencies recursively
+    Container-->>App: instance ✅ no reflection · no DI library · compile-time errors
 ```
 
 ## Next Steps
