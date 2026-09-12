@@ -1,6 +1,6 @@
 {
   "name": "@djodjonx/neosyringe-ui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Graph visualization utilities for NeoSyringe",
   "type": "module",
   "license": "MIT",
@@ -14,8 +14,12 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsdown",
     "test": "vitest run"

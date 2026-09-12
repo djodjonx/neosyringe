@@ -1,8 +1,8 @@
 {
-  "packages/ui": "0.1.0",
+  "packages/ui": "0.2.0",
   "packages/neosyringe": "0.3.0",
   "packages/core": "3.2.0",
   "packages/lsp": "0.4.6",
-  "packages/cli": "0.3.0",
-  "packages/unplugin": "0.5.0"
+  "packages/cli": "0.4.0",
+  "packages/unplugin": "0.6.0"
 }
