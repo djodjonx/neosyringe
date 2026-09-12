@@ -1,5 +1,5 @@
 {
-  "name": "@djodjonx/neosyringe-vscode",
+  "name": "neosyringe-vscode",
   "displayName": "NeoSyringe",
   "version": "0.1.0",
   "description": "Dependency graph visualization for NeoSyringe DI",
