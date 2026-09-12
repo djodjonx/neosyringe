@@ -30,6 +30,8 @@ coverage/
 # VitePress
 docs/.vitepress/cache/
 docs/.vitepress/dist/
+# VSIX extension packages
+*.vsix
 # Misc
 .cache/
 temp/
