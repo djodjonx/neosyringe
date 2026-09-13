@@ -4,6 +4,10 @@
 export interface SerializableGraph {
   containerId: string;
   containerName?: string;
+  /** Variable name from source code — most readable identifier (e.g. `appContainer`). */
+  exportedVariableName?: string;
+  /** Absolute path of the source file containing the container definition. */
+  sourceFileName?: string;
   nodes: SerializableNode[];
   roots: string[];
 }

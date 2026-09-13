@@ -34,6 +34,9 @@
   "dependencies": {
     "@djodjonx/neosyringe-core": "workspace:*",
     "@djodjonx/neosyringe-ui": "workspace:*",
+    "cytoscape": "^3.34.3",
+    "cytoscape-dagre": "^4.0.1",
+    "dagre": "^0.8.5",
     "typescript": "^5.9.3"
   },
   "devDependencies": {

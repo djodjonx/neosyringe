@@ -19,6 +19,8 @@ export function serializeGraph(graph: DependencyGraph): SerializableGraph {
   return {
     containerId: graph.containerId,
     containerName: graph.containerName,
+    exportedVariableName: graph.exportedVariableName,
+    sourceFileName: graph.sourceFileName,
     nodes,
     roots: graph.roots,
   };

@@ -2,23 +2,35 @@ import * as esbuild from 'esbuild';
 
 const isWatch = process.argv.includes('--watch');
 
-/** @type {import('esbuild').BuildOptions} */
-const config = {
+const extensionConfig = {
   entryPoints: ['src/extension.ts'],
   bundle: true,
   outfile: 'dist/extension.js',
   platform: 'node',
   format: 'cjs',
-  // vscode is provided by the extension host at runtime — never bundle it
   external: ['vscode'],
   sourcemap: true,
   logLevel: 'info',
 };
 
+// Browser bundle: cytoscape + dagre + cytoscape-dagre for the WebView
+const cytoscapeConfig = {
+  entryPoints: ['src/cytoscape-bundle.js'],
+  bundle: true,
+  outfile: 'media/cytoscape.js',
+  platform: 'browser',
+  format: 'iife',
+  minify: true,
+  logLevel: 'info',
+};
+
 if (isWatch) {
-  const ctx = await esbuild.context(config);
+  const ctx = await esbuild.context(extensionConfig);
   await ctx.watch();
   console.log('Watching...');
 } else {
-  await esbuild.build(config);
+  await Promise.all([
+    esbuild.build(extensionConfig),
+    esbuild.build(cytoscapeConfig),
+  ]);
 }
