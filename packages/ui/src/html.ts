@@ -117,9 +117,13 @@ export function buildProjectHtml(projects: ProjectGraphs[], nonce?: string, cspS
     ? `https://cdn.jsdelivr.net ${cspSource}`
     : `https://cdn.jsdelivr.net 'unsafe-inline'`;
 
+  // Inline path (CLI/browser) must declare `DATA` itself by reading the JSON
+  // script tag below — buildMainJs() alone assumes `DATA` already exists as a
+  // global, which is only true for the VSCode WebView path (buildWebviewScript
+  // is loaded as a separate <script src>, after the JSON tag has parsed).
   const mainScript = scriptUri
     ? `<script src="${scriptUri}"></script>`
-    : `<script>${buildMainJs()}</script>`;
+    : `<script>${buildWebviewScript()}</script>`;
 
   const dataScript = `<script type="application/json" id="neosyringe-data">${dataJson}</script>`;
 

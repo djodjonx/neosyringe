@@ -59,4 +59,9 @@ describe('buildStandaloneHtml', () => {
     expect(html).not.toContain('ShouldBeHidden');
     expect(html).toContain('AppContainer');
   });
+
+  it('declares DATA in the inlined script (no scriptUri) — buildMainJs() alone references DATA as a global', () => {
+    const html = buildStandaloneHtml([graphWithNode]);
+    expect(html).toContain("const DATA = JSON.parse(document.getElementById('neosyringe-data')");
+  });
 });
