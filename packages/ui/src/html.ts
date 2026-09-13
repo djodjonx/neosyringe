@@ -403,6 +403,7 @@ function buildCytoscape(container, c) {
     if (e.target.data('isGroup')) return; // don't show detail for compound group
     const n = e.target.data();
     showDetail(n, c);
+    cy.edges().style({ 'line-color': '#45475a', 'target-arrow-color': '#45475a' });
     cy.elements().removeClass('highlighted');
     e.target.addClass('highlighted');
     cy.edges('[source = "' + n.id + '"]').style({ 'line-color': '#f38ba8', 'target-arrow-color': '#f38ba8' });
