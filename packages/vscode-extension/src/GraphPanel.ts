@@ -20,7 +20,7 @@ export class GraphPanel {
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
 
-  private constructor(extensionUri: vscode.Uri) {
+  private constructor(extensionUri: vscode.Uri, initialFilePath?: string) {
     this._extensionUri = extensionUri;
     this._panel = vscode.window.createWebviewPanel(
       'neosyringeGraph',
@@ -41,15 +41,19 @@ export class GraphPanel {
         this._loadContent();
       }
     });
-    this._loadContent();
+    this._loadContent(initialFilePath);
   }
 
-  static createOrShow(extensionUri: vscode.Uri): void {
+  static createOrShow(extensionUri: vscode.Uri, filePath?: string): void {
     if (GraphPanel._instance) {
       GraphPanel._instance._panel.reveal();
+      // Navigate to the specific file's container
+      if (filePath) {
+        GraphPanel._instance._panel.webview.postMessage({ command: 'selectByPath', path: filePath });
+      }
       return;
     }
-    GraphPanel._instance = new GraphPanel(extensionUri);
+    GraphPanel._instance = new GraphPanel(extensionUri, filePath);
   }
 
   static refresh(): void {
@@ -60,7 +64,7 @@ export class GraphPanel {
     GraphPanel._instance?._panel.dispose();
   }
 
-  private _loadContent(): void {
+  private _loadContent(initialFilePath?: string): void {
     this._panel.webview.html = '<p style="font-family:system-ui;padding:24px;background:#1e1e2e;color:#cdd6f4">Analyzing…</p>';
 
     try {
@@ -88,6 +92,14 @@ export class GraphPanel {
       const html = buildGraphHtml(this._panel.webview, nonce, cspSource, scriptUri.toString(), cytoscapeUri.toString());
       outputChannel.appendLine(`HTML generated, length: ${html.length}`);
       this._panel.webview.html = html;
+
+      // After load, navigate to the container from the clicked file
+      if (initialFilePath) {
+        // Give the webview time to initialize, then post the select message
+        setTimeout(() => {
+          this._panel.webview.postMessage({ command: 'selectByPath', path: initialFilePath });
+        }, 500);
+      }
     } catch (err) {
       this._panel.webview.html = errorPage(String(err));
     }

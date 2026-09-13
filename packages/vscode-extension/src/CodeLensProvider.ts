@@ -14,6 +14,7 @@ export class NeoSyringeCodeLensProvider implements vscode.CodeLensProvider {
         new vscode.CodeLens(range, {
           title: '$(type-hierarchy) Show Dependency Graph',
           command: 'neosyringe.showGraph',
+          arguments: [document.uri.fsPath],
         })
       );
     }

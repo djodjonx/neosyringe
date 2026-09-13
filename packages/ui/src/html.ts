@@ -466,6 +466,25 @@ document.addEventListener('click', function(e) {
   else if (t.dataset.action === 'openFile') openFile(t.dataset.path);
 });
 
+// Handle messages from the extension (e.g. navigate to a specific container)
+window.addEventListener('message', function(e) {
+  const msg = e.data;
+  if (!msg) return;
+  if (msg.command === 'selectByPath' && msg.path) {
+    // Find the project and tab matching the given source path
+    for (let p = 0; p < DATA.length; p++) {
+      for (let t = 0; t < DATA[p].containers.length; t++) {
+        if (DATA[p].containers[t].sourcePath === msg.path) {
+          activePkg = p;
+          activeTab = t;
+          render();
+          return;
+        }
+      }
+    }
+  }
+});
+
 render();
 `;
 }
