@@ -176,14 +176,14 @@ export function buildProjectHtml(projects: ProjectGraphs[], nonce?: string, cspS
     .file-link{color:#89b4fa;cursor:pointer;font-size:10px;text-transform:none;letter-spacing:0;font-weight:400}
     .file-link:hover{text-decoration:underline}
     .file-path{color:#585b70;font-size:10px;text-transform:none;letter-spacing:0;font-weight:400}
-    .detail-panel{position:absolute;bottom:0;left:0;right:0;background:#181825;border-top:1px solid #313244;padding:10px 16px;font-size:12px;display:none;gap:16px;align-items:center}
+    .detail-panel{background:#181825;border-top:1px solid #313244;padding:8px 16px;font-size:12px;display:none;gap:14px;align-items:center;flex-shrink:0}
     .detail-panel.visible{display:flex}
     .detail-name{font-weight:600;color:#cdd6f4}
     .detail-badge{padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}
     .badge-singleton{background:#a6e3a122;color:#a6e3a1;border:1px solid #a6e3a1}
     .badge-transient{background:#89b4fa22;color:#89b4fa;border:1px solid #89b4fa}
     .badge-factory{background:#fab38722;color:#fab387;border:1px solid #fab387}
-    .badge-value{background:#58587022;color:#a6adc8;border:1px solid #585b70}
+    .badge-usevalue{background:#58587022;color:#a6adc8;border:1px solid #585b70}
     .detail-deps{color:#a6adc8;font-size:11px}
     .detail-close{margin-left:auto;cursor:pointer;color:#585b70;font-size:16px;background:none;border:none;padding:0 4px}
     .statsbar{background:#181825;border-top:1px solid #313244;padding:5px 16px;display:flex;gap:18px;font-size:11px;color:#585b70;flex-shrink:0;overflow-x:auto}
@@ -209,20 +209,20 @@ export function buildProjectHtml(projects: ProjectGraphs[], nonce?: string, cspS
       <div class="legend-row"><span class="dot d-si"></span> Singleton</div>
       <div class="legend-row"><span class="dot d-tr"></span> Transient</div>
       <div class="legend-row"><span class="dot d-fa"></span> Factory</div>
-      <div class="legend-row"><span class="dot d-va"></span> Value</div>
+      <div class="legend-row"><span class="dot d-va"></span> useValue</div>
       <div class="legend-row" style="margin-top:6px"><span class="dot" style="background:none;border:1px dashed #585b70"></span> <span style="font-style:italic">Parent / external</span></div>
     </div>
   </aside>
   <div class="main">
     <div class="tabs" id="tabs"></div>
     <div class="graph-wrap">
-    <div class="graph-area" id="graph-area"></div>
-      <div class="detail-panel" id="detail">
-        <span class="detail-name" id="d-name"></span>
-        <span class="detail-badge" id="d-badge"></span>
-        <span class="detail-deps" id="d-deps"></span>
-        <button class="detail-close" data-action="closeDetail">✕</button>
-      </div>
+      <div class="graph-area" id="graph-area"></div>
+    </div>
+    <div class="detail-panel" id="detail">
+      <span class="detail-name" id="d-name"></span>
+      <span class="detail-badge" id="d-badge"></span>
+      <span class="detail-deps" id="d-deps"></span>
+      <button class="detail-close" data-action="closeDetail">✕</button>
     </div>
     <div class="statsbar" id="statsbar"></div>
   </div>
@@ -424,7 +424,7 @@ function openFile(path) { if (vscodeApi) vscodeApi.postMessage({ command: 'openF
 function showDetail(n) {
   document.getElementById('d-name').textContent = n.label;
   const badge = document.getElementById('d-badge');
-  const cls = n.type === 'factory' ? 'factory' : n.type === 'value' ? 'value' : n.lifecycle;
+  const cls = n.type === 'factory' ? 'factory' : n.type === 'value' ? 'usevalue' : n.lifecycle;
   badge.className = 'detail-badge badge-' + cls;
   badge.textContent = cls;
   const outgoing = cy.edges('[source = "' + n.id + '"]').length;
@@ -448,7 +448,7 @@ function renderStats() {
     (s.singleton ? '<span class="stat">Singletons: <b>' + s.singleton + '</b></span>' : '') +
     (s.transient  ? '<span class="stat">Transient: <b>' + s.transient + '</b></span>' : '') +
     (s.factory    ? '<span class="stat">Factories: <b>' + s.factory + '</b></span>' : '') +
-    (s.value      ? '<span class="stat">Values: <b>' + s.value + '</b></span>' : '') +
+    (s.value      ? '<span class="stat">useValue: <b>' + s.value + '</b></span>' : '') +
     (s.parent     ? '<span class="stat" style="color:#585b70">From parent: <b style="color:#a6adc8">' + s.parent + '</b></span>' : '');
 }
 
