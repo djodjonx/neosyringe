@@ -20,5 +20,5 @@
     }
   },
   "include": ["packages/*/src", "packages/*/tests", "tests"],
-  "exclude": ["docs", "examples", "node_modules", "dist"]
+  "exclude": ["docs", "examples", "node_modules", "dist", "tests/consumer-types"]
 }

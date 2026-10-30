@@ -93,7 +93,7 @@ describe('E2E - NeoSyringe Standalone', () => {
 
     // Verify generated code structure
     expect(code).toContain('class NeoContainer');
-    expect(code).toContain("'AppContainer'");
+    expect(code).toContain('"AppContainer"');
     expect(code).toContain('create_');
     expect(code).toContain('resolve');
     expect(code).toContain('this.instances');
@@ -237,7 +237,7 @@ describe('E2E - NeoSyringe Standalone', () => {
     `);
 
     expect(code).toContain('AppService');
-    expect(code).toContain("'AppContainer'");
+    expect(code).toContain('"AppContainer"');
     // Should reference parent container
     expect(code).toContain('sharedKernel');
   });

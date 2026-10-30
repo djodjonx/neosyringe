@@ -4,9 +4,16 @@ exports[`Generated Code Snapshots > should match snapshot for complex real-world
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+class NeoServiceNotFoundError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
+
 // -- Container --
 class NeoContainer {
   private instances = new Map<any, any>();
+  private overrides = new Map<any, () => any>();
+  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  
 
   // -- Factories --
   
@@ -35,39 +42,123 @@ class NeoContainer {
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
 
-  public resolve<T>(token: any): T {
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    if (result !== undefined) return result;
+  
 
-    // 2. Delegate to parent
-    if (this.parent) {
-        try {
-            return this.parent.resolve(token);
-        } catch (e) {
-            // Ignore error, try legacy
-        }
+  /**
+   * Replaces a token's provider for the lifetime of this container instance —
+   * for tests, not production wiring. The factory runs once (its result is
+   * cached like a singleton); call override() again to change it, or
+   * clearOverrides() to remove all overrides and fall back to the real
+   * registrations.
+   *
+   * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+   * shared singleton, so an override left in by mistake (or called from
+   * somewhere it shouldn't be) would silently change what every caller gets,
+   * for as long as the process runs. Throwing loudly here is cheaper than
+   * debugging that at 3am.
+   */
+  public override(token: any, factory: () => any): void {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+      throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+    }
+    this.overrides.set(token, factory);
+    this.instances.delete(token);
+  }
+
+  /** Removes all overrides set via override(), reverting to real registrations. */
+  public clearOverrides(): void {
+    this.overrides.clear();
+  }
+
+  /**
+   * Subscribes to container events — currently only 'resolve', fired with the
+   * token and the resolved instance every time resolve() succeeds (whether
+   * served from cache, freshly created, an override, or a parent/legacy
+   * container). Returns an unsubscribe function. A listener that throws is
+   * caught and ignored — a bug in an observability hook must never break the
+   * actual resolution it's observing.
+   */
+  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+    this.resolveListeners.add(listener);
+    return () => { this.resolveListeners.delete(listener); };
+  }
+
+  private notifyResolve(token: any, instance: any): void {
+    for (const listener of this.resolveListeners) {
+      try {
+        listener(token, instance);
+      } catch {
+        // A listener's own bug must never break the resolution it's observing.
+      }
+    }
+  }
+
+  public resolve<T>(token: any): T {
+    
+    // 0. An overridden token always wins, even over a cached real instance.
+    if (this.overrides.has(token)) {
+      if (!this.instances.has(token)) {
+        this.instances.set(token, this.overrides.get(token)!());
+      }
+      const overridden = this.instances.get(token);
+      this.notifyResolve(token, overridden);
+      return overridden;
     }
 
-    // 3. Delegate to legacy
+    // 1. Try to resolve locally (or create if singleton)
+    const result = this.resolveLocal(token);
+    if (result !== undefined) {
+      this.notifyResolve(token, result);
+      return result;
+    }
+
+    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+    // ends up here)
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
-            // Assume legacy container has resolve()
             try {
-                if (legacyContainer.resolve) return legacyContainer.resolve(token);
-            } catch (e) {
-                // Ignore
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    this.notifyResolve(token, legacyResult);
+                    return legacyResult;
+                }
+            } catch (e: any) {
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
 
-    throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
+
+  /**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  private static formatToken(token: any): string {
+    if (typeof token === 'function') return token.name || String(token);
+    if (typeof token !== 'string') return String(token);
+    const parts = token.split('_');
+    const last = parts[parts.length - 1];
+    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+      return parts.slice(0, -1).join('_');
+    }
+    return token;
+  }
+
+  public destroy(): void {
+    this.instances.clear();
+    this.overrides.clear();
+    this.resolveListeners.clear();
+  }
+
+  public resolveAll<T>(token: any): T[] { return []; }
 
   private resolveLocal(token: any): any {
     if (token === "ILogger_b37e3d0c") { 
@@ -121,14 +212,23 @@ class NeoContainer {
     return undefined;
   }
 
-  // For debugging/inspection
+  // For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
     return ["ILogger_b37e3d0c","IDatabase_b37e3d0c","ICache_b37e3d0c","UserRepository_b37e3d0c","UserService_b37e3d0c","AuthService_b37e3d0c"];
+  }
+
+  // Same token list as _graph, but with each token's own dependency edges —
+  // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+  // instead of just a flat list. Stripped by DCE in production, same as _graph.
+  public get _dependencyGraph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+    return [{"token":"ILogger_b37e3d0c","dependencies":[]},{"token":"IDatabase_b37e3d0c","dependencies":["ILogger_b37e3d0c"]},{"token":"ICache_b37e3d0c","dependencies":["ILogger_b37e3d0c"]},{"token":"UserRepository_b37e3d0c","dependencies":["IDatabase_b37e3d0c","ICache_b37e3d0c"]},{"token":"UserService_b37e3d0c","dependencies":["UserRepository_b37e3d0c","ILogger_b37e3d0c"]},{"token":"AuthService_b37e3d0c","dependencies":["UserService_b37e3d0c","ILogger_b37e3d0c"]}];
   }
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, undefined, 'RealWorldApp');
+export const c = new NeoContainer(undefined, "RealWorldApp");
 "
 `;
 
@@ -136,9 +236,16 @@ exports[`Generated Code Snapshots > should match snapshot for interface tokens 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+class NeoServiceNotFoundError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
+
 // -- Container --
 class NeoContainer {
   private instances = new Map<any, any>();
+  private overrides = new Map<any, () => any>();
+  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  
 
   // -- Factories --
   
@@ -147,39 +254,123 @@ class NeoContainer {
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
 
-  public resolve<T>(token: any): T {
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    if (result !== undefined) return result;
+  
 
-    // 2. Delegate to parent
-    if (this.parent) {
-        try {
-            return this.parent.resolve(token);
-        } catch (e) {
-            // Ignore error, try legacy
-        }
+  /**
+   * Replaces a token's provider for the lifetime of this container instance —
+   * for tests, not production wiring. The factory runs once (its result is
+   * cached like a singleton); call override() again to change it, or
+   * clearOverrides() to remove all overrides and fall back to the real
+   * registrations.
+   *
+   * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+   * shared singleton, so an override left in by mistake (or called from
+   * somewhere it shouldn't be) would silently change what every caller gets,
+   * for as long as the process runs. Throwing loudly here is cheaper than
+   * debugging that at 3am.
+   */
+  public override(token: any, factory: () => any): void {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+      throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+    }
+    this.overrides.set(token, factory);
+    this.instances.delete(token);
+  }
+
+  /** Removes all overrides set via override(), reverting to real registrations. */
+  public clearOverrides(): void {
+    this.overrides.clear();
+  }
+
+  /**
+   * Subscribes to container events — currently only 'resolve', fired with the
+   * token and the resolved instance every time resolve() succeeds (whether
+   * served from cache, freshly created, an override, or a parent/legacy
+   * container). Returns an unsubscribe function. A listener that throws is
+   * caught and ignored — a bug in an observability hook must never break the
+   * actual resolution it's observing.
+   */
+  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+    this.resolveListeners.add(listener);
+    return () => { this.resolveListeners.delete(listener); };
+  }
+
+  private notifyResolve(token: any, instance: any): void {
+    for (const listener of this.resolveListeners) {
+      try {
+        listener(token, instance);
+      } catch {
+        // A listener's own bug must never break the resolution it's observing.
+      }
+    }
+  }
+
+  public resolve<T>(token: any): T {
+    
+    // 0. An overridden token always wins, even over a cached real instance.
+    if (this.overrides.has(token)) {
+      if (!this.instances.has(token)) {
+        this.instances.set(token, this.overrides.get(token)!());
+      }
+      const overridden = this.instances.get(token);
+      this.notifyResolve(token, overridden);
+      return overridden;
     }
 
-    // 3. Delegate to legacy
+    // 1. Try to resolve locally (or create if singleton)
+    const result = this.resolveLocal(token);
+    if (result !== undefined) {
+      this.notifyResolve(token, result);
+      return result;
+    }
+
+    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+    // ends up here)
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
-            // Assume legacy container has resolve()
             try {
-                if (legacyContainer.resolve) return legacyContainer.resolve(token);
-            } catch (e) {
-                // Ignore
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    this.notifyResolve(token, legacyResult);
+                    return legacyResult;
+                }
+            } catch (e: any) {
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
 
-    throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
+
+  /**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  private static formatToken(token: any): string {
+    if (typeof token === 'function') return token.name || String(token);
+    if (typeof token !== 'string') return String(token);
+    const parts = token.split('_');
+    const last = parts[parts.length - 1];
+    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+      return parts.slice(0, -1).join('_');
+    }
+    return token;
+  }
+
+  public destroy(): void {
+    this.instances.clear();
+    this.overrides.clear();
+    this.resolveListeners.clear();
+  }
+
+  public resolveAll<T>(token: any): T[] { return []; }
 
   private resolveLocal(token: any): any {
     if (token === "ILogger_b37e3d0c") { 
@@ -193,14 +384,23 @@ class NeoContainer {
     return undefined;
   }
 
-  // For debugging/inspection
+  // For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
     return ["ILogger_b37e3d0c"];
+  }
+
+  // Same token list as _graph, but with each token's own dependency edges —
+  // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+  // instead of just a flat list. Stripped by DCE in production, same as _graph.
+  public get _dependencyGraph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+    return [{"token":"ILogger_b37e3d0c","dependencies":[]}];
   }
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, undefined, 'InterfaceApp');
+export const c = new NeoContainer(undefined, "InterfaceApp");
 "
 `;
 
@@ -208,50 +408,141 @@ exports[`Generated Code Snapshots > should match snapshot for legacy container 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+class NeoServiceNotFoundError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
+
 // -- Container --
 class NeoContainer {
   private instances = new Map<any, any>();
+  private overrides = new Map<any, () => any>();
+  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  
 
   // -- Factories --
   
   private create_NewService_b37e3d0c(): any {
-    return new Import_0.NewService(undefined);
+    return new Import_0.NewService(this.resolve("LegacyService_b37e3d0c"));
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
 
-  public resolve<T>(token: any): T {
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    if (result !== undefined) return result;
+  
 
-    // 2. Delegate to parent
-    if (this.parent) {
-        try {
-            return this.parent.resolve(token);
-        } catch (e) {
-            // Ignore error, try legacy
-        }
+  /**
+   * Replaces a token's provider for the lifetime of this container instance —
+   * for tests, not production wiring. The factory runs once (its result is
+   * cached like a singleton); call override() again to change it, or
+   * clearOverrides() to remove all overrides and fall back to the real
+   * registrations.
+   *
+   * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+   * shared singleton, so an override left in by mistake (or called from
+   * somewhere it shouldn't be) would silently change what every caller gets,
+   * for as long as the process runs. Throwing loudly here is cheaper than
+   * debugging that at 3am.
+   */
+  public override(token: any, factory: () => any): void {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+      throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+    }
+    this.overrides.set(token, factory);
+    this.instances.delete(token);
+  }
+
+  /** Removes all overrides set via override(), reverting to real registrations. */
+  public clearOverrides(): void {
+    this.overrides.clear();
+  }
+
+  /**
+   * Subscribes to container events — currently only 'resolve', fired with the
+   * token and the resolved instance every time resolve() succeeds (whether
+   * served from cache, freshly created, an override, or a parent/legacy
+   * container). Returns an unsubscribe function. A listener that throws is
+   * caught and ignored — a bug in an observability hook must never break the
+   * actual resolution it's observing.
+   */
+  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+    this.resolveListeners.add(listener);
+    return () => { this.resolveListeners.delete(listener); };
+  }
+
+  private notifyResolve(token: any, instance: any): void {
+    for (const listener of this.resolveListeners) {
+      try {
+        listener(token, instance);
+      } catch {
+        // A listener's own bug must never break the resolution it's observing.
+      }
+    }
+  }
+
+  public resolve<T>(token: any): T {
+    
+    // 0. An overridden token always wins, even over a cached real instance.
+    if (this.overrides.has(token)) {
+      if (!this.instances.has(token)) {
+        this.instances.set(token, this.overrides.get(token)!());
+      }
+      const overridden = this.instances.get(token);
+      this.notifyResolve(token, overridden);
+      return overridden;
     }
 
-    // 3. Delegate to legacy
+    // 1. Try to resolve locally (or create if singleton)
+    const result = this.resolveLocal(token);
+    if (result !== undefined) {
+      this.notifyResolve(token, result);
+      return result;
+    }
+
+    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+    // ends up here)
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
-            // Assume legacy container has resolve()
             try {
-                if (legacyContainer.resolve) return legacyContainer.resolve(token);
-            } catch (e) {
-                // Ignore
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    this.notifyResolve(token, legacyResult);
+                    return legacyResult;
+                }
+            } catch (e: any) {
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
 
-    throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
+
+  /**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  private static formatToken(token: any): string {
+    if (typeof token === 'function') return token.name || String(token);
+    if (typeof token !== 'string') return String(token);
+    const parts = token.split('_');
+    const last = parts[parts.length - 1];
+    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+      return parts.slice(0, -1).join('_');
+    }
+    return token;
+  }
+
+  public destroy(): void {
+    this.instances.clear();
+    this.overrides.clear();
+    this.resolveListeners.clear();
+  }
+
+  public resolveAll<T>(token: any): T[] { return []; }
 
   private resolveLocal(token: any): any {
     if (token === Import_0.NewService) { 
@@ -265,14 +556,23 @@ class NeoContainer {
     return undefined;
   }
 
-  // For debugging/inspection
+  // For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
     return ["NewService_b37e3d0c"];
+  }
+
+  // Same token list as _graph, but with each token's own dependency edges —
+  // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+  // instead of just a flat list. Stripped by DCE in production, same as _graph.
+  public get _dependencyGraph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+    return [{"token":"NewService_b37e3d0c","dependencies":["LegacyService_b37e3d0c"]}];
   }
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, [legacy], 'LegacyApp');
+export const c = new NeoContainer([legacy], "LegacyApp");
 "
 `;
 
@@ -280,9 +580,16 @@ exports[`Generated Code Snapshots > should match snapshot for mixed scopes 1`] =
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+class NeoServiceNotFoundError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
+
 // -- Container --
 class NeoContainer {
   private instances = new Map<any, any>();
+  private overrides = new Map<any, () => any>();
+  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  
 
   // -- Factories --
   
@@ -295,39 +602,123 @@ class NeoContainer {
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
 
-  public resolve<T>(token: any): T {
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    if (result !== undefined) return result;
+  
 
-    // 2. Delegate to parent
-    if (this.parent) {
-        try {
-            return this.parent.resolve(token);
-        } catch (e) {
-            // Ignore error, try legacy
-        }
+  /**
+   * Replaces a token's provider for the lifetime of this container instance —
+   * for tests, not production wiring. The factory runs once (its result is
+   * cached like a singleton); call override() again to change it, or
+   * clearOverrides() to remove all overrides and fall back to the real
+   * registrations.
+   *
+   * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+   * shared singleton, so an override left in by mistake (or called from
+   * somewhere it shouldn't be) would silently change what every caller gets,
+   * for as long as the process runs. Throwing loudly here is cheaper than
+   * debugging that at 3am.
+   */
+  public override(token: any, factory: () => any): void {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+      throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+    }
+    this.overrides.set(token, factory);
+    this.instances.delete(token);
+  }
+
+  /** Removes all overrides set via override(), reverting to real registrations. */
+  public clearOverrides(): void {
+    this.overrides.clear();
+  }
+
+  /**
+   * Subscribes to container events — currently only 'resolve', fired with the
+   * token and the resolved instance every time resolve() succeeds (whether
+   * served from cache, freshly created, an override, or a parent/legacy
+   * container). Returns an unsubscribe function. A listener that throws is
+   * caught and ignored — a bug in an observability hook must never break the
+   * actual resolution it's observing.
+   */
+  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+    this.resolveListeners.add(listener);
+    return () => { this.resolveListeners.delete(listener); };
+  }
+
+  private notifyResolve(token: any, instance: any): void {
+    for (const listener of this.resolveListeners) {
+      try {
+        listener(token, instance);
+      } catch {
+        // A listener's own bug must never break the resolution it's observing.
+      }
+    }
+  }
+
+  public resolve<T>(token: any): T {
+    
+    // 0. An overridden token always wins, even over a cached real instance.
+    if (this.overrides.has(token)) {
+      if (!this.instances.has(token)) {
+        this.instances.set(token, this.overrides.get(token)!());
+      }
+      const overridden = this.instances.get(token);
+      this.notifyResolve(token, overridden);
+      return overridden;
     }
 
-    // 3. Delegate to legacy
+    // 1. Try to resolve locally (or create if singleton)
+    const result = this.resolveLocal(token);
+    if (result !== undefined) {
+      this.notifyResolve(token, result);
+      return result;
+    }
+
+    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+    // ends up here)
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
-            // Assume legacy container has resolve()
             try {
-                if (legacyContainer.resolve) return legacyContainer.resolve(token);
-            } catch (e) {
-                // Ignore
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    this.notifyResolve(token, legacyResult);
+                    return legacyResult;
+                }
+            } catch (e: any) {
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
 
-    throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
+
+  /**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  private static formatToken(token: any): string {
+    if (typeof token === 'function') return token.name || String(token);
+    if (typeof token !== 'string') return String(token);
+    const parts = token.split('_');
+    const last = parts[parts.length - 1];
+    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+      return parts.slice(0, -1).join('_');
+    }
+    return token;
+  }
+
+  public destroy(): void {
+    this.instances.clear();
+    this.overrides.clear();
+    this.resolveListeners.clear();
+  }
+
+  public resolveAll<T>(token: any): T[] { return []; }
 
   private resolveLocal(token: any): any {
     if (token === Import_0.SingletonService) { 
@@ -342,14 +733,23 @@ class NeoContainer {
     return undefined;
   }
 
-  // For debugging/inspection
+  // For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
     return ["SingletonService_b37e3d0c","TransientService_b37e3d0c"];
+  }
+
+  // Same token list as _graph, but with each token's own dependency edges —
+  // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+  // instead of just a flat list. Stripped by DCE in production, same as _graph.
+  public get _dependencyGraph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+    return [{"token":"SingletonService_b37e3d0c","dependencies":[]},{"token":"TransientService_b37e3d0c","dependencies":[]}];
   }
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, undefined, 'ScopesApp');
+export const c = new NeoContainer(undefined, "ScopesApp");
 "
 `;
 
@@ -357,9 +757,16 @@ exports[`Generated Code Snapshots > should match snapshot for parent container 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+class NeoServiceNotFoundError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
+
 // -- Container --
 class NeoContainer {
   private instances = new Map<any, any>();
+  private overrides = new Map<any, () => any>();
+  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  
 
   // -- Factories --
   
@@ -368,39 +775,123 @@ class NeoContainer {
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
 
-  public resolve<T>(token: any): T {
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    if (result !== undefined) return result;
+  
 
-    // 2. Delegate to parent
-    if (this.parent) {
-        try {
-            return this.parent.resolve(token);
-        } catch (e) {
-            // Ignore error, try legacy
-        }
+  /**
+   * Replaces a token's provider for the lifetime of this container instance —
+   * for tests, not production wiring. The factory runs once (its result is
+   * cached like a singleton); call override() again to change it, or
+   * clearOverrides() to remove all overrides and fall back to the real
+   * registrations.
+   *
+   * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+   * shared singleton, so an override left in by mistake (or called from
+   * somewhere it shouldn't be) would silently change what every caller gets,
+   * for as long as the process runs. Throwing loudly here is cheaper than
+   * debugging that at 3am.
+   */
+  public override(token: any, factory: () => any): void {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+      throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+    }
+    this.overrides.set(token, factory);
+    this.instances.delete(token);
+  }
+
+  /** Removes all overrides set via override(), reverting to real registrations. */
+  public clearOverrides(): void {
+    this.overrides.clear();
+  }
+
+  /**
+   * Subscribes to container events — currently only 'resolve', fired with the
+   * token and the resolved instance every time resolve() succeeds (whether
+   * served from cache, freshly created, an override, or a parent/legacy
+   * container). Returns an unsubscribe function. A listener that throws is
+   * caught and ignored — a bug in an observability hook must never break the
+   * actual resolution it's observing.
+   */
+  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+    this.resolveListeners.add(listener);
+    return () => { this.resolveListeners.delete(listener); };
+  }
+
+  private notifyResolve(token: any, instance: any): void {
+    for (const listener of this.resolveListeners) {
+      try {
+        listener(token, instance);
+      } catch {
+        // A listener's own bug must never break the resolution it's observing.
+      }
+    }
+  }
+
+  public resolve<T>(token: any): T {
+    
+    // 0. An overridden token always wins, even over a cached real instance.
+    if (this.overrides.has(token)) {
+      if (!this.instances.has(token)) {
+        this.instances.set(token, this.overrides.get(token)!());
+      }
+      const overridden = this.instances.get(token);
+      this.notifyResolve(token, overridden);
+      return overridden;
     }
 
-    // 3. Delegate to legacy
+    // 1. Try to resolve locally (or create if singleton)
+    const result = this.resolveLocal(token);
+    if (result !== undefined) {
+      this.notifyResolve(token, result);
+      return result;
+    }
+
+    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+    // ends up here)
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
-            // Assume legacy container has resolve()
             try {
-                if (legacyContainer.resolve) return legacyContainer.resolve(token);
-            } catch (e) {
-                // Ignore
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    this.notifyResolve(token, legacyResult);
+                    return legacyResult;
+                }
+            } catch (e: any) {
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
 
-    throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
+
+  /**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  private static formatToken(token: any): string {
+    if (typeof token === 'function') return token.name || String(token);
+    if (typeof token !== 'string') return String(token);
+    const parts = token.split('_');
+    const last = parts[parts.length - 1];
+    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+      return parts.slice(0, -1).join('_');
+    }
+    return token;
+  }
+
+  public destroy(): void {
+    this.instances.clear();
+    this.overrides.clear();
+    this.resolveListeners.clear();
+  }
+
+  public resolveAll<T>(token: any): T[] { return []; }
 
   private resolveLocal(token: any): any {
     if (token === Import_0.AppService) { 
@@ -414,14 +905,23 @@ class NeoContainer {
     return undefined;
   }
 
-  // For debugging/inspection
+  // For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
     return ["AppService_b37e3d0c"];
+  }
+
+  // Same token list as _graph, but with each token's own dependency edges —
+  // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+  // instead of just a flat list. Stripped by DCE in production, same as _graph.
+  public get _dependencyGraph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+    return [{"token":"AppService_b37e3d0c","dependencies":[]}];
   }
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, [parent], 'ChildApp');
+export const c = new NeoContainer([parent], "ChildApp");
 "
 `;
 
@@ -429,9 +929,16 @@ exports[`Generated Code Snapshots > should match snapshot for property tokens 1`
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+class NeoServiceNotFoundError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
+
 // -- Container --
 class NeoContainer {
   private instances = new Map<any, any>();
+  private overrides = new Map<any, () => any>();
+  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  
 
   // -- Factories --
   
@@ -445,39 +952,123 @@ class NeoContainer {
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
 
-  public resolve<T>(token: any): T {
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    if (result !== undefined) return result;
+  
 
-    // 2. Delegate to parent
-    if (this.parent) {
-        try {
-            return this.parent.resolve(token);
-        } catch (e) {
-            // Ignore error, try legacy
-        }
+  /**
+   * Replaces a token's provider for the lifetime of this container instance —
+   * for tests, not production wiring. The factory runs once (its result is
+   * cached like a singleton); call override() again to change it, or
+   * clearOverrides() to remove all overrides and fall back to the real
+   * registrations.
+   *
+   * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+   * shared singleton, so an override left in by mistake (or called from
+   * somewhere it shouldn't be) would silently change what every caller gets,
+   * for as long as the process runs. Throwing loudly here is cheaper than
+   * debugging that at 3am.
+   */
+  public override(token: any, factory: () => any): void {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+      throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+    }
+    this.overrides.set(token, factory);
+    this.instances.delete(token);
+  }
+
+  /** Removes all overrides set via override(), reverting to real registrations. */
+  public clearOverrides(): void {
+    this.overrides.clear();
+  }
+
+  /**
+   * Subscribes to container events — currently only 'resolve', fired with the
+   * token and the resolved instance every time resolve() succeeds (whether
+   * served from cache, freshly created, an override, or a parent/legacy
+   * container). Returns an unsubscribe function. A listener that throws is
+   * caught and ignored — a bug in an observability hook must never break the
+   * actual resolution it's observing.
+   */
+  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+    this.resolveListeners.add(listener);
+    return () => { this.resolveListeners.delete(listener); };
+  }
+
+  private notifyResolve(token: any, instance: any): void {
+    for (const listener of this.resolveListeners) {
+      try {
+        listener(token, instance);
+      } catch {
+        // A listener's own bug must never break the resolution it's observing.
+      }
+    }
+  }
+
+  public resolve<T>(token: any): T {
+    
+    // 0. An overridden token always wins, even over a cached real instance.
+    if (this.overrides.has(token)) {
+      if (!this.instances.has(token)) {
+        this.instances.set(token, this.overrides.get(token)!());
+      }
+      const overridden = this.instances.get(token);
+      this.notifyResolve(token, overridden);
+      return overridden;
     }
 
-    // 3. Delegate to legacy
+    // 1. Try to resolve locally (or create if singleton)
+    const result = this.resolveLocal(token);
+    if (result !== undefined) {
+      this.notifyResolve(token, result);
+      return result;
+    }
+
+    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+    // ends up here)
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
-            // Assume legacy container has resolve()
             try {
-                if (legacyContainer.resolve) return legacyContainer.resolve(token);
-            } catch (e) {
-                // Ignore
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    this.notifyResolve(token, legacyResult);
+                    return legacyResult;
+                }
+            } catch (e: any) {
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
 
-    throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
+
+  /**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  private static formatToken(token: any): string {
+    if (typeof token === 'function') return token.name || String(token);
+    if (typeof token !== 'string') return String(token);
+    const parts = token.split('_');
+    const last = parts[parts.length - 1];
+    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+      return parts.slice(0, -1).join('_');
+    }
+    return token;
+  }
+
+  public destroy(): void {
+    this.instances.clear();
+    this.overrides.clear();
+    this.resolveListeners.clear();
+  }
+
+  public resolveAll<T>(token: any): T[] { return []; }
 
   private resolveLocal(token: any): any {
     if (token === "PropertyToken:ApiService.apiUrl") { 
@@ -499,14 +1090,23 @@ class NeoContainer {
     return undefined;
   }
 
-  // For debugging/inspection
+  // For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
     return ["PropertyToken:ApiService.apiUrl","ApiService_b37e3d0c"];
+  }
+
+  // Same token list as _graph, but with each token's own dependency edges —
+  // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+  // instead of just a flat list. Stripped by DCE in production, same as _graph.
+  public get _dependencyGraph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+    return [{"token":"PropertyToken:ApiService.apiUrl","dependencies":[]},{"token":"ApiService_b37e3d0c","dependencies":["PropertyToken:ApiService.apiUrl"]}];
   }
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, undefined, 'PropertyApp');
+export const c = new NeoContainer(undefined, "PropertyApp");
 "
 `;
 
@@ -514,9 +1114,16 @@ exports[`Generated Code Snapshots > should match snapshot for service with depen
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+class NeoServiceNotFoundError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
+
 // -- Container --
 class NeoContainer {
   private instances = new Map<any, any>();
+  private overrides = new Map<any, () => any>();
+  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  
 
   // -- Factories --
   
@@ -529,39 +1136,123 @@ class NeoContainer {
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
 
-  public resolve<T>(token: any): T {
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    if (result !== undefined) return result;
+  
 
-    // 2. Delegate to parent
-    if (this.parent) {
-        try {
-            return this.parent.resolve(token);
-        } catch (e) {
-            // Ignore error, try legacy
-        }
+  /**
+   * Replaces a token's provider for the lifetime of this container instance —
+   * for tests, not production wiring. The factory runs once (its result is
+   * cached like a singleton); call override() again to change it, or
+   * clearOverrides() to remove all overrides and fall back to the real
+   * registrations.
+   *
+   * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+   * shared singleton, so an override left in by mistake (or called from
+   * somewhere it shouldn't be) would silently change what every caller gets,
+   * for as long as the process runs. Throwing loudly here is cheaper than
+   * debugging that at 3am.
+   */
+  public override(token: any, factory: () => any): void {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+      throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+    }
+    this.overrides.set(token, factory);
+    this.instances.delete(token);
+  }
+
+  /** Removes all overrides set via override(), reverting to real registrations. */
+  public clearOverrides(): void {
+    this.overrides.clear();
+  }
+
+  /**
+   * Subscribes to container events — currently only 'resolve', fired with the
+   * token and the resolved instance every time resolve() succeeds (whether
+   * served from cache, freshly created, an override, or a parent/legacy
+   * container). Returns an unsubscribe function. A listener that throws is
+   * caught and ignored — a bug in an observability hook must never break the
+   * actual resolution it's observing.
+   */
+  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+    this.resolveListeners.add(listener);
+    return () => { this.resolveListeners.delete(listener); };
+  }
+
+  private notifyResolve(token: any, instance: any): void {
+    for (const listener of this.resolveListeners) {
+      try {
+        listener(token, instance);
+      } catch {
+        // A listener's own bug must never break the resolution it's observing.
+      }
+    }
+  }
+
+  public resolve<T>(token: any): T {
+    
+    // 0. An overridden token always wins, even over a cached real instance.
+    if (this.overrides.has(token)) {
+      if (!this.instances.has(token)) {
+        this.instances.set(token, this.overrides.get(token)!());
+      }
+      const overridden = this.instances.get(token);
+      this.notifyResolve(token, overridden);
+      return overridden;
     }
 
-    // 3. Delegate to legacy
+    // 1. Try to resolve locally (or create if singleton)
+    const result = this.resolveLocal(token);
+    if (result !== undefined) {
+      this.notifyResolve(token, result);
+      return result;
+    }
+
+    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+    // ends up here)
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
-            // Assume legacy container has resolve()
             try {
-                if (legacyContainer.resolve) return legacyContainer.resolve(token);
-            } catch (e) {
-                // Ignore
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    this.notifyResolve(token, legacyResult);
+                    return legacyResult;
+                }
+            } catch (e: any) {
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
 
-    throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
+
+  /**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  private static formatToken(token: any): string {
+    if (typeof token === 'function') return token.name || String(token);
+    if (typeof token !== 'string') return String(token);
+    const parts = token.split('_');
+    const last = parts[parts.length - 1];
+    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+      return parts.slice(0, -1).join('_');
+    }
+    return token;
+  }
+
+  public destroy(): void {
+    this.instances.clear();
+    this.overrides.clear();
+    this.resolveListeners.clear();
+  }
+
+  public resolveAll<T>(token: any): T[] { return []; }
 
   private resolveLocal(token: any): any {
     if (token === Import_0.Logger) { 
@@ -583,14 +1274,23 @@ class NeoContainer {
     return undefined;
   }
 
-  // For debugging/inspection
+  // For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
     return ["Logger_b37e3d0c","UserService_b37e3d0c"];
+  }
+
+  // Same token list as _graph, but with each token's own dependency edges —
+  // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+  // instead of just a flat list. Stripped by DCE in production, same as _graph.
+  public get _dependencyGraph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+    return [{"token":"Logger_b37e3d0c","dependencies":[]},{"token":"UserService_b37e3d0c","dependencies":["Logger_b37e3d0c"]}];
   }
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, undefined, 'UserApp');
+export const c = new NeoContainer(undefined, "UserApp");
 "
 `;
 
@@ -598,9 +1298,16 @@ exports[`Generated Code Snapshots > should match snapshot for simple service 1`]
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+class NeoServiceNotFoundError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+}
+
 // -- Container --
 class NeoContainer {
   private instances = new Map<any, any>();
+  private overrides = new Map<any, () => any>();
+  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  
 
   // -- Factories --
   
@@ -609,39 +1316,123 @@ class NeoContainer {
   }
 
   constructor(
-    private parent?: any,
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
 
-  public resolve<T>(token: any): T {
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    if (result !== undefined) return result;
+  
 
-    // 2. Delegate to parent
-    if (this.parent) {
-        try {
-            return this.parent.resolve(token);
-        } catch (e) {
-            // Ignore error, try legacy
-        }
+  /**
+   * Replaces a token's provider for the lifetime of this container instance —
+   * for tests, not production wiring. The factory runs once (its result is
+   * cached like a singleton); call override() again to change it, or
+   * clearOverrides() to remove all overrides and fall back to the real
+   * registrations.
+   *
+   * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+   * shared singleton, so an override left in by mistake (or called from
+   * somewhere it shouldn't be) would silently change what every caller gets,
+   * for as long as the process runs. Throwing loudly here is cheaper than
+   * debugging that at 3am.
+   */
+  public override(token: any, factory: () => any): void {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+      throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+    }
+    this.overrides.set(token, factory);
+    this.instances.delete(token);
+  }
+
+  /** Removes all overrides set via override(), reverting to real registrations. */
+  public clearOverrides(): void {
+    this.overrides.clear();
+  }
+
+  /**
+   * Subscribes to container events — currently only 'resolve', fired with the
+   * token and the resolved instance every time resolve() succeeds (whether
+   * served from cache, freshly created, an override, or a parent/legacy
+   * container). Returns an unsubscribe function. A listener that throws is
+   * caught and ignored — a bug in an observability hook must never break the
+   * actual resolution it's observing.
+   */
+  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+    this.resolveListeners.add(listener);
+    return () => { this.resolveListeners.delete(listener); };
+  }
+
+  private notifyResolve(token: any, instance: any): void {
+    for (const listener of this.resolveListeners) {
+      try {
+        listener(token, instance);
+      } catch {
+        // A listener's own bug must never break the resolution it's observing.
+      }
+    }
+  }
+
+  public resolve<T>(token: any): T {
+    
+    // 0. An overridden token always wins, even over a cached real instance.
+    if (this.overrides.has(token)) {
+      if (!this.instances.has(token)) {
+        this.instances.set(token, this.overrides.get(token)!());
+      }
+      const overridden = this.instances.get(token);
+      this.notifyResolve(token, overridden);
+      return overridden;
     }
 
-    // 3. Delegate to legacy
+    // 1. Try to resolve locally (or create if singleton)
+    const result = this.resolveLocal(token);
+    if (result !== undefined) {
+      this.notifyResolve(token, result);
+      return result;
+    }
+
+    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+    // ends up here)
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
-            // Assume legacy container has resolve()
             try {
-                if (legacyContainer.resolve) return legacyContainer.resolve(token);
-            } catch (e) {
-                // Ignore
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    this.notifyResolve(token, legacyResult);
+                    return legacyResult;
+                }
+            } catch (e: any) {
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
 
-    throw new Error(\`[\${this.name}] Service not found or token not registered: \${token}\`);
+    throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
+
+  /**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  private static formatToken(token: any): string {
+    if (typeof token === 'function') return token.name || String(token);
+    if (typeof token !== 'string') return String(token);
+    const parts = token.split('_');
+    const last = parts[parts.length - 1];
+    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+      return parts.slice(0, -1).join('_');
+    }
+    return token;
+  }
+
+  public destroy(): void {
+    this.instances.clear();
+    this.overrides.clear();
+    this.resolveListeners.clear();
+  }
+
+  public resolveAll<T>(token: any): T[] { return []; }
 
   private resolveLocal(token: any): any {
     if (token === Import_0.SimpleService) { 
@@ -655,13 +1446,22 @@ class NeoContainer {
     return undefined;
   }
 
-  // For debugging/inspection
+  // For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
     return ["SimpleService_b37e3d0c"];
+  }
+
+  // Same token list as _graph, but with each token's own dependency edges —
+  // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+  // instead of just a flat list. Stripped by DCE in production, same as _graph.
+  public get _dependencyGraph() {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+    return [{"token":"SimpleService_b37e3d0c","dependencies":[]}];
   }
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, undefined, 'SimpleApp');
+export const c = new NeoContainer(undefined, "SimpleApp");
 "
 `;

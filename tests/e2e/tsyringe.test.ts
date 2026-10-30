@@ -84,7 +84,7 @@ describe('E2E - NeoSyringe with tsyringe', () => {
       // Verify code structure
       expect(code).toContain('class NeoContainer');
       expect(code).toContain('[legacy]');
-      expect(code).toContain("'AppWithTsyringe'");
+      expect(code).toContain('"AppWithTsyringe"');
       expect(code).toContain('this.legacy');
       expect(code).toContain('legacyContainer.resolve');
     });
@@ -112,7 +112,7 @@ describe('E2E - NeoSyringe with tsyringe', () => {
             { token: UserService }
           ]
         });
-      `)).toThrow(/Missing binding.*MissingService/);
+      `)).toThrow(/Missing injection: 'MissingService'/);
     });
 
     it('should prevent duplicate registration of tsyringe tokens', () => {

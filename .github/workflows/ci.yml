@@ -33,6 +33,9 @@ jobs:
       - name: Test with coverage
         run: pnpm test:coverage
 
+      - name: Test CI contracts
+        run: pnpm test:ci
+
       - name: Upload coverage to Codecov
         if: matrix.node-version == 20
         uses: codecov/codecov-action@v4
@@ -52,3 +55,67 @@ jobs:
       - name: Audit dependencies
         run: pnpm audit --audit-level=high
         continue-on-error: true
+
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 22
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run e2e
+        run: pnpm test:e2e
+
+  consumer-types:
+    name: Consumer types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 22
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Positive consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/positive
+
+      - name: Negative consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative --expect-file expected-diagnostic.txt
+
+  distribution:
+    name: Distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 22
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Check published entries
+        run: node scripts/ci/check-dist.mjs
+
+  required:
+    name: Required checks
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [test, security, e2e, consumer-types, distribution]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail unless every needed job succeeded
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: node scripts/ci/required-results.mjs

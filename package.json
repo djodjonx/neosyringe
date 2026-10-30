@@ -9,6 +9,7 @@
     "build": "pnpm --filter './packages/**' run build",
     "test": "pnpm -r run test",
     "test:e2e": "vitest run tests/e2e",
+    "test:ci": "vitest run tests/ci",
     "lint": "oxlint .",
     "typecheck": "tsc --noEmit",
     "test:coverage": "pnpm -r run test --coverage",
@@ -38,7 +39,8 @@
     "verdaccio": "^6.5.2",
     "vitepress": "^1.6.4",
     "vitepress-plugin-mermaid": "^2.0.17",
-    "vitest": "^4.0.17"
+    "vitest": "^4.0.17",
+    "yaml": "2.8.2"
   },
   "packageManager": "pnpm@10.19.0"
 }
