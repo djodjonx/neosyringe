@@ -235,7 +235,7 @@ class NeoContainer {
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, "RealWorldApp");
+export const c = /* @__PURE__ */ new NeoContainer(undefined, "RealWorldApp");
 "
 `;
 
@@ -414,7 +414,7 @@ class NeoContainer {
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, "InterfaceApp");
+export const c = /* @__PURE__ */ new NeoContainer(undefined, "InterfaceApp");
 "
 `;
 
@@ -593,7 +593,7 @@ class NeoContainer {
 }
 
 // -- Container Instance --
-export const c = new NeoContainer([legacy], "LegacyApp");
+export const c = /* @__PURE__ */ new NeoContainer([legacy], "LegacyApp");
 "
 `;
 
@@ -777,7 +777,7 @@ class NeoContainer {
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, "ScopesApp");
+export const c = /* @__PURE__ */ new NeoContainer(undefined, "ScopesApp");
 "
 `;
 
@@ -956,7 +956,7 @@ class NeoContainer {
 }
 
 // -- Container Instance --
-export const c = new NeoContainer([parent], "ChildApp");
+export const c = /* @__PURE__ */ new NeoContainer([parent], "ChildApp");
 "
 `;
 
@@ -1148,7 +1148,7 @@ class NeoContainer {
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, "PropertyApp");
+export const c = /* @__PURE__ */ new NeoContainer(undefined, "PropertyApp");
 "
 `;
 
@@ -1339,7 +1339,7 @@ class NeoContainer {
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, "UserApp");
+export const c = /* @__PURE__ */ new NeoContainer(undefined, "UserApp");
 "
 `;
 
@@ -1518,6 +1518,6 @@ class NeoContainer {
 }
 
 // -- Container Instance --
-export const c = new NeoContainer(undefined, "SimpleApp");
+export const c = /* @__PURE__ */ new NeoContainer(undefined, "SimpleApp");
 "
 `;

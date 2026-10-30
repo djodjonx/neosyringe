@@ -69,7 +69,7 @@ describe('Plugin — multi-container per file', () => {
     const result = transform(SAME_FILE_CODE, FILE) ?? SAME_FILE_CODE;
     // Generator produces class NeoContainer that is instantiated for the parent
     expect(result).toContain('class NeoContainer');
-    expect(result).toContain('const sharedKernel = new NeoContainer');
+    expect(result).toContain('const sharedKernel = /* @__PURE__ */ new NeoContainer');
   });
 
   it('emits a NeoContainer class for the child (container)', () => {

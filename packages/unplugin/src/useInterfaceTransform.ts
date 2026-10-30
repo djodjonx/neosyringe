@@ -2,6 +2,100 @@ import * as ts from 'typescript';
 import { formatUnsupportedMarker, NeoTokenError, resolveNeoMarker, TokenResolverService } from '@djodjonx/neosyringe-core/analyzer';
 import { hasNeoSyringeMarkers } from './markerUtils';
 
+type SourceEdit = { start: number; end: number; text: string };
+
+/**
+ * The call's result is read by a property, element, call, tag or non-null
+ * chain. Marking it PURE lets the bundler delete that later effect.
+ * `as`, `satisfies`, `<T>` and parentheses are not a read. Emit drops them,
+ * so the check walks through them and only then looks for a chain.
+ */
+function partialCallFeedsChain(node: ts.Node): boolean {
+  let current = node;
+  let chained = false;
+  for (;;) {
+    const parent = current.parent;
+    if (!parent) return chained;
+    if (
+      (ts.isParenthesizedExpression(parent) ||
+        ts.isAsExpression(parent) ||
+        ts.isSatisfiesExpression(parent) ||
+        ts.isTypeAssertionExpression(parent)) &&
+      parent.expression === current
+    ) {
+      current = parent;
+      continue;
+    }
+    if (
+      (ts.isPropertyAccessExpression(parent) ||
+        ts.isElementAccessExpression(parent) ||
+        ts.isNonNullExpression(parent)) &&
+      parent.expression === current
+    ) {
+      chained = true;
+      current = parent;
+      continue;
+    }
+    if (ts.isCallExpression(parent) && parent.expression === current) {
+      chained = true;
+      current = parent;
+      continue;
+    }
+    if (ts.isTaggedTemplateExpression(parent) && parent.tag === current) {
+      chained = true;
+      current = parent;
+      continue;
+    }
+    return chained;
+  }
+}
+
+/**
+ * Insert offsets on `sourceFile` (the text of `code`). A chained call is
+ * skipped: its result is already read. A non-string marker is ignored here;
+ * transformUseInterfaceCalls reports it.
+ */
+export function collectDefinePartialConfigPureEdits(
+  sourceFile: ts.SourceFile,
+  checker: ts.TypeChecker,
+): SourceEdit[] {
+  const edits: SourceEdit[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const marker = resolveNeoMarker(checker, node);
+      if (marker === 'definePartialConfig' && !partialCallFeedsChain(node)) {
+        const start = node.getStart(sourceFile);
+        edits.push({ start, end: start, text: '/* @__PURE__ */ ' });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return edits;
+}
+
+export function applySourceEdits(code: string, edits: readonly SourceEdit[]): string {
+  let result = code;
+  for (const edit of [...edits].sort((a, b) => b.start - a.start)) {
+    result = result.slice(0, edit.start) + edit.text + result.slice(edit.end);
+  }
+  return result;
+}
+
+/**
+ * Marks a definePartialConfig call imported from @djodjonx/neosyringe so a
+ * bundler can drop it when nothing reads the result. A local function with
+ * the same name is left untouched. The call is not replaced by its argument.
+ * The comment is inserted at getStart. The rest of the call text stays.
+ */
+export function annotateDefinePartialConfigCalls(
+  code: string,
+  sourceFile: ts.SourceFile,
+  checker: ts.TypeChecker,
+): string {
+  return applySourceEdits(code, collectDefinePartialConfigPureEdits(sourceFile, checker));
+}
+
 export type UsedTokenEntry = {
   file: string;
   line: number;

@@ -87,7 +87,7 @@ describe('E2E - Generated Code Validation', () => {
         });
       `);
 
-      expect(code).toMatch(/export const \w+ = new NeoContainer/);
+      expect(code).toMatch(/export const \w+ = \/\* @__PURE__ \*\/ new NeoContainer/);
     });
   });
 

@@ -161,7 +161,7 @@ describe('Generator', () => {
       variableExportModifier: 'export'
     };
     const codeExport = new Generator(graphExport).generate();
-    expect(codeExport).toContain('export const myContainer = new NeoContainer');
+    expect(codeExport).toContain('export const myContainer = /* @__PURE__ */ new NeoContainer');
     expect(codeExport).not.toContain('export default');
 
     // Test 'export default' modifier
@@ -174,7 +174,7 @@ describe('Generator', () => {
       variableExportModifier: 'export default'
     };
     const codeDefault = new Generator(graphDefault).generate();
-    expect(codeDefault).toContain('const container = new NeoContainer');
+    expect(codeDefault).toContain('const container = /* @__PURE__ */ new NeoContainer');
     expect(codeDefault).toContain('export default container;');
 
     // Test 'none' modifier (no export)
@@ -187,7 +187,7 @@ describe('Generator', () => {
       variableExportModifier: 'none'
     };
     const codeNone = new Generator(graphNone).generate();
-    expect(codeNone).toContain('const privateContainer = new NeoContainer');
+    expect(codeNone).toContain('const privateContainer = /* @__PURE__ */ new NeoContainer');
     expect(codeNone).not.toContain('export');
 
     // Test undefined (defaults to export for backward compatibility)
@@ -199,12 +199,12 @@ describe('Generator', () => {
       exportedVariableName: 'legacyContainer'
     };
     const codeUndefined = new Generator(graphUndefined).generate();
-    expect(codeUndefined).toContain('export const legacyContainer = new NeoContainer');
+    expect(codeUndefined).toContain('export const legacyContainer = /* @__PURE__ */ new NeoContainer');
   });
 
   it('should handle export default without variable name', () => {
     // When user writes: export default defineBuilderConfig({ ... })
-    // We should generate: export default new NeoContainer(...)
+    // We should generate: export default /* @__PURE__ */ new NeoContainer(...)
     const graph: DependencyGraph = {
       containerId: "TestContainer", nodes: new Map([
         ['Service', createMockNode('Service', [], 'S', '/src/s.ts')]
@@ -214,7 +214,7 @@ describe('Generator', () => {
       // Note: no exportedVariableName
     };
     const code = new Generator(graph).generate();
-    expect(code).toContain('export default new NeoContainer');
+    expect(code).toContain('export default /* @__PURE__ */ new NeoContainer');
     expect(code).not.toContain('const container =');
   });
 

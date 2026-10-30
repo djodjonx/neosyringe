@@ -5,7 +5,7 @@ import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
 import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
 import { Generator, resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
-import { transformUseInterfaceCalls, type UsedTokenEntry } from './useInterfaceTransform';
+import { annotateDefinePartialConfigCalls, applySourceEdits, collectDefinePartialConfigPureEdits, transformUseInterfaceCalls, type UsedTokenEntry } from './useInterfaceTransform';
 import { callsCanReachNeoSyringe, hasNeoSyringeMarkers } from './markerUtils';
 import { serializeGraph } from '@djodjonx/neosyringe-ui';
 import type { SerializableGraph } from '@djodjonx/neosyringe-ui';
@@ -144,6 +144,9 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
 
         const program = ts.createProgram([id], options, compilerHost, previousProgram);
         previousProgram = program;
+        const checker = program.getTypeChecker();
+        // unplugin.test.ts stubs a program that has no getSourceFile.
+        const sourceFile = typeof program.getSourceFile === 'function' ? program.getSourceFile(id) : undefined;
         const analyzer = new Analyzer(program);
 
         // extractAll() returns one graph per defineBuilderConfig call (parents included).
@@ -206,31 +209,31 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
             }
           }
 
-          // Build replacements: sort descending by variableStatementStart (right-to-left)
-          // so earlier offsets remain valid as we splice.
-          const replacements = [...thisFileGraphs].sort(
-            (a, b) => b.variableStatementStart! - a.variableStatementStart!
-          );
-
-          let result = code;
-          for (const graph of replacements) {
+          // One right-to-left pass: container splices and partial inserts.
+          // An insert inside a splice range is skipped. That text is replaced.
+          const edits: { start: number; end: number; text: string }[] = [];
+          for (const graph of thisFileGraphs) {
             const generator = new Generator(graph, true, undefined, emitDebugHelpers);
             const containerClass = generator.generate();
             const instantiation = generator.generateInstantiation();
-            // Slice positions are from the CURRENT result, but since we process
-            // right-to-left, content to the left has not yet been modified.
-            const varDecl = result.slice(graph.variableStatementStart!, graph.defineBuilderConfigStart!);
-            const replacement = containerClass + '\n' + varDecl + instantiation;
-
-            result =
-              result.slice(0, graph.variableStatementStart!) +
-              replacement +
-              result.slice(graph.defineBuilderConfigEnd!);
-
+            const varDecl = code.slice(graph.variableStatementStart!, graph.defineBuilderConfigStart!);
+            edits.push({
+              start: graph.variableStatementStart!,
+              end: graph.defineBuilderConfigEnd!,
+              text: containerClass + '\n' + varDecl + instantiation,
+            });
             if (graph.exportedVariableName) {
               generatedContainerVars.add(graph.exportedVariableName);
             }
           }
+
+          const splices = edits.map((edit) => ({ start: edit.start, end: edit.end }));
+          const pureEdits = sourceFile
+            ? collectDefinePartialConfigPureEdits(sourceFile, checker)
+            : [];
+          const partialEdits = pureEdits.filter(
+            (edit) => !splices.some((range) => edit.start >= range.start && edit.start < range.end),
+          );
 
           // Update devtools graph store for this file (replaces on HMR re-transform)
           if (options?.devtools) {
@@ -240,13 +243,19 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
           }
 
           // Transform any remaining useInterface<T>() call sites (injection sites)
-          const finalCode = transformUseInterfaceCalls(result, id, options, usedTokens);
-          return finalCode ?? result;
+          const withPurePartials = applySourceEdits(code, [...edits, ...partialEdits]);
+          const finalCode = transformUseInterfaceCalls(withPurePartials, id, options, usedTokens);
+          return finalCode ?? withPurePartials;
         }
 
       // 2. Transform useInterface<T>() calls to tokenId strings (for non-container files)
       // Collect used tokens for validation at build end
-      return transformUseInterfaceCalls(code, id, options, usedTokens);
+      const withPurePartials = sourceFile
+        ? annotateDefinePartialConfigCalls(code, sourceFile, checker)
+        : code;
+      const rewritten = transformUseInterfaceCalls(withPurePartials, id, options, usedTokens);
+      if (rewritten !== null) return rewritten;
+      return withPurePartials === code ? null : withPurePartials;
     },
 
     /**
