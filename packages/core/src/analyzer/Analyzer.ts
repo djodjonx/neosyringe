@@ -228,7 +228,7 @@ export class Analyzer {
       const errorFormatter: IErrorFormatter = new ErrorFormatter();
       const dependencyAnalyzer = new DependencyAnalyzer(this.checker, this.tokenResolverService);
       this._modularServices = {
-        configCollector: new ConfigCollector(this.program, this.checker),
+        configCollector: new ConfigCollector(this.program, this.checker, this.tokenResolverService),
         tokenResolver: new TokenResolver(),
         validator: new CompositeValidator([
           new DuplicateValidator(errorFormatter),

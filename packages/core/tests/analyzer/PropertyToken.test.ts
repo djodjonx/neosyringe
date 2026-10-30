@@ -26,10 +26,19 @@ describe('Analyzer - PropertyToken Support', () => {
   };
 
   const findPropertyToken = (graph: any, className: string, paramName: string) => {
-    const key = `PropertyToken:${className}.${paramName}`;
-    const value = graph.nodes.get(key);
-    return value ? { key, value } : undefined;
+    const prefix = `PropertyToken:${className}.${paramName}_`;
+    for (const [key, value] of graph.nodes) {
+      if (typeof key === 'string' && key.startsWith(prefix) && /^[0-9a-f]{8}$/.test(key.slice(prefix.length))) {
+        return { key, value };
+      }
+    }
+    return undefined;
   };
+
+  const hasPropertyDependency = (deps: string[] | undefined, className: string, paramName: string) =>
+    (deps ?? []).some((dependency) =>
+      new RegExp(`^PropertyToken:${className}\\.${paramName}_[0-9a-f]{8}$`).test(dependency),
+    );
 
   const findClassNode = (graph: any, className: string) => {
     for (const [key, value] of graph.nodes) {
@@ -70,13 +79,13 @@ describe('Analyzer - PropertyToken Support', () => {
     // Should have PropertyToken nodes
     const apiUrlNode = findNodeByName(graph, 'ApiService.apiUrl');
     expect(apiUrlNode).toBeDefined();
-    expect(apiUrlNode?.key).toBe('PropertyToken:ApiService.apiUrl');
+    expect(apiUrlNode?.key).toMatch(/^PropertyToken:ApiService\.apiUrl_[0-9a-f]{8}$/);
     expect(apiUrlNode?.value.service.type).toBe('factory');
     expect(apiUrlNode?.value.service.isValueToken).toBe(true);
 
     const maxRetriesNode = findNodeByName(graph, 'ApiService.maxRetries');
     expect(maxRetriesNode).toBeDefined();
-    expect(maxRetriesNode?.key).toBe('PropertyToken:ApiService.maxRetries');
+    expect(maxRetriesNode?.key).toMatch(/^PropertyToken:ApiService\.maxRetries_[0-9a-f]{8}$/);
   });
 
 it('should auto-wire class with PropertyToken dependencies', () => {
@@ -108,7 +117,7 @@ it('should auto-wire class with PropertyToken dependencies', () => {
     const apiServiceNode = findClassNode(graph, 'ApiService');
 
     expect(apiServiceNode).toBeDefined();
-    expect(apiServiceNode?.value.dependencies).toContain('PropertyToken:ApiService.apiUrl');
+    expect(hasPropertyDependency(apiServiceNode?.value.dependencies, 'ApiService', 'apiUrl')).toBe(true);
   });
 
   it('should not collide between different classes with same param name', () => {
@@ -147,16 +156,16 @@ it('should auto-wire class with PropertyToken dependencies', () => {
     const apiUrlNode = findPropertyToken(graph, 'ApiService', 'url');
     const authUrlNode = findPropertyToken(graph, 'AuthService', 'url');
 
-    expect(apiUrlNode?.key).toBe('PropertyToken:ApiService.url');
-    expect(authUrlNode?.key).toBe('PropertyToken:AuthService.url');
+    expect(apiUrlNode?.key).toMatch(/^PropertyToken:ApiService\.url_[0-9a-f]{8}$/);
+    expect(authUrlNode?.key).toMatch(/^PropertyToken:AuthService\.url_[0-9a-f]{8}$/);
     expect(apiUrlNode?.key).not.toBe(authUrlNode?.key);
 
     // Each class should reference its own token
     const apiServiceNode = findClassNode(graph, 'ApiService');
     const authServiceNode = findClassNode(graph, 'AuthService');
 
-    expect(apiServiceNode?.value.dependencies).toContain('PropertyToken:ApiService.url');
-    expect(authServiceNode?.value.dependencies).toContain('PropertyToken:AuthService.url');
+    expect(hasPropertyDependency(apiServiceNode?.value.dependencies, 'ApiService', 'url')).toBe(true);
+    expect(hasPropertyDependency(authServiceNode?.value.dependencies, 'AuthService', 'url')).toBe(true);
   });
 
   it('should mix PropertyTokens with class dependencies', () => {
@@ -196,7 +205,7 @@ it('should auto-wire class with PropertyToken dependencies', () => {
     expect(apiServiceNode).toBeDefined();
 
     // Should have both PropertyToken and Interface as dependencies
-    expect(apiServiceNode?.value.dependencies).toContain('PropertyToken:ApiService.apiUrl');
+    expect(hasPropertyDependency(apiServiceNode?.value.dependencies, 'ApiService', 'apiUrl')).toBe(true);
     expect(apiServiceNode?.value.dependencies.some((d: string) => d.includes('ILogger'))).toBe(true);
   });
 });

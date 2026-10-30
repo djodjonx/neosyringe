@@ -1,9 +1,11 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
+import { NeoTokenError } from '../errors/NeoTokenError';
 import type { TokenId } from '../types';
 import { HashUtils } from './HashUtils';
 import { type ILogger, consoleLogger } from './Logger';
 import { resolveNeoMarker } from './markerProvenance';
+import { TOKEN_DESCRIPTOR_SCHEMA, canonicalDescriptor, canonicalParts } from './tokenDescriptor';
 
 /**
  * Service for resolving TypeScript nodes to token IDs.
@@ -29,11 +31,36 @@ import { resolveNeoMarker } from './markerProvenance';
  */
 export class TokenResolverService {
   private static readonly MAX_ALIAS_CHAIN_DEPTH = 20;
+  private readonly hashFn: ((value: string) => string) | undefined;
+  private readonly descriptors = new Map<string, string>();
 
   constructor(
     private readonly checker: ts.TypeChecker,
-    private readonly logger: ILogger = consoleLogger
-  ) {}
+    private readonly logger: ILogger = consoleLogger,
+    options?: { hash?: (value: string) => string },
+  ) {
+    this.hashFn = options?.hash;
+  }
+
+  /**
+   * Records `descriptor` as the owner of `id`.
+   * The same text is a no-op. A different text throws before the map changes.
+   */
+  claim(id: string, descriptor: string): void {
+    const next = descriptor;
+    const previous = this.descriptors.get(id);
+    if (previous === undefined) {
+      this.descriptors.set(id, next);
+      return;
+    }
+    if (previous === next) return;
+    throw new NeoTokenError('NEO_TOKEN_COLLISION', `NEO_TOKEN_COLLISION: ${previous} <> ${next}`);
+  }
+
+  /** Canonical descriptor. Same text as `canonicalDescriptor`, and nothing is claimed. */
+  describeType(type: ts.Type): string {
+    return canonicalDescriptor(this.checker, type);
+  }
 
   /**
    * Resolves a node to its original initializer expression.
@@ -283,9 +310,8 @@ export class TokenResolverService {
 
     const typeNode = node.typeArguments[0];
     const type = this.checker.getTypeFromTypeNode(typeNode);
-
-    // Return the type ID directly (e.g., "ILogger_a1b2c3d4")
-    return this.getTypeId(type);
+    const interfaceParts = canonicalParts(this.checker, type);
+    return this.emit(interfaceParts.name, interfaceParts.descriptor);
   }
 
   /**
@@ -323,19 +349,29 @@ export class TokenResolverService {
       throw new Error('useProperty second argument must be a string literal.');
     }
 
-    const className = classArg.text;
     const paramName = nameArg.text;
+    const classType = this.checker.getTypeAtLocation(classArg);
+    return this.getPropertyTokenId(classType, paramName);
+  }
 
-    // Use the original format for backward compatibility
-    return `PropertyToken:${className}.${paramName}`;
+  /**
+   * Property token id: class declaration identity plus the parameter name.
+   * Format: `PropertyToken:${className}.${param}_${hash}`.
+   */
+  getPropertyTokenId(classType: ts.Type, paramName: string): TokenId {
+    const classParts = canonicalParts(this.checker, classType, { valueClass: true });
+    const propDescriptor = `${TOKEN_DESCRIPTOR_SCHEMA}|prop|${classParts.descriptor}|${escapeParam(paramName)}`;
+    const propHash = HashUtils.hashDescriptor(propDescriptor, this.hashFn);
+    const propId = `PropertyToken:${classParts.name}.${paramName}_${propHash}`;
+    this.claim(propId, propDescriptor);
+    return propId;
   }
 
   /**
    * Generates a unique type ID for a TypeScript type.
    *
-   * Uses the symbol name combined with a file hash to ensure uniqueness
-   * across different files. Falls back to the type string representation
-   * if no symbol is available.
+   * The id is the declaration name plus a short hash of the canonical descriptor.
+   * A form that cannot be canonised throws {@link NeoTokenError}.
    *
    * @param type - TypeScript type to generate ID for
    * @returns Unique type ID
@@ -351,35 +387,11 @@ export class TokenResolverService {
    * class Logger { }
    * const typeId = service.getTypeId(loggerType);
    * // Returns: "Logger_x9y8z7w6"
-   *
-   * // Anonymous type
-   * const typeId = service.getTypeId(anonymousType);
-   * // Returns: "{ log: (msg: string) => void }" (type string)
    * ```
    */
   getTypeId(type: ts.Type): TokenId {
-    const symbol = type.getSymbol() || type.aliasSymbol;
-
-    if (!symbol) {
-      return this.checker.typeToString(type);
-    }
-
-    const name = symbol.getName();
-
-    // Guard against internal property names leaking as Token IDs
-    // This happens if resolution fails and we fall back to the InterfaceToken type itself
-    if (name === '__type' || name === 'InterfaceToken' || name === '__brand') {
-      return this.checker.typeToString(type);
-    }
-
-    const declarations = symbol.getDeclarations();
-    if (declarations && declarations.length > 0) {
-      const sourceFile = declarations[0].getSourceFile();
-      return HashUtils.generateTokenId(symbol, sourceFile);
-    }
-
-    // For types without distinct declarations, just use the name
-    return symbol.getName();
+    const parts = canonicalParts(this.checker, type);
+    return this.emit(parts.name, parts.descriptor);
   }
 
   /**
@@ -400,16 +412,14 @@ export class TokenResolverService {
    * ```
    */
   getTypeIdFromConstructor(type: ts.Type): TokenId {
-    const constructSignatures = type.getConstructSignatures();
-    let instanceType: ts.Type;
+    const parts = canonicalParts(this.checker, type, { valueClass: true });
+    return this.emit(parts.name, parts.descriptor);
+  }
 
-    if (constructSignatures.length > 0) {
-      instanceType = constructSignatures[0].getReturnType();
-    } else {
-      instanceType = type;
-    }
-
-    return this.getTypeId(instanceType);
+  private emit(name: string, descriptor: string): TokenId {
+    const id = `${name}_${HashUtils.hashDescriptor(descriptor, this.hashFn)}`;
+    this.claim(id, descriptor);
+    return id;
   }
 
   /**
@@ -489,4 +499,13 @@ export class TokenResolverService {
     }
     return current;
   }
+}
+
+function escapeParam(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/;/g, '\\;')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n');
 }

@@ -1,8 +1,15 @@
 import * as ts from 'typescript';
-import { formatUnsupportedMarker, HashUtils, resolveNeoMarker } from '@djodjonx/neosyringe-core/analyzer';
+import { formatUnsupportedMarker, NeoTokenError, resolveNeoMarker, TokenResolverService } from '@djodjonx/neosyringe-core/analyzer';
 import { hasNeoSyringeMarkers } from './markerUtils';
 
-export type UsedTokenEntry = { file: string; line: number; column: number; interfaceName: string };
+export type UsedTokenEntry = {
+  file: string;
+  line: number;
+  column: number;
+  interfaceName: string;
+  /** Full canonical descriptor, kept so a later file can detect a hash collision. */
+  descriptor: string;
+};
 
 const LIB_SOURCE_CACHE = Symbol('libSourceCache');
 
@@ -56,12 +63,16 @@ function needsTokenRewrite(code: string): boolean {
  * Transforms useInterface<T>() and useProperty() calls into token strings.
  * Positions come from the source file parsed from `code` (the text after any
  * container splice), so they are never taken from an earlier string.
+ *
+ * `options.hash` is for tests. A constant hash puts two descriptors on one id
+ * so a cross-file collision can be asserted.
  */
 export function transformUseInterfaceCalls(
   code: string,
   id: string,
   compilerOptions: ts.CompilerOptions,
-  usedTokens?: Map<string, UsedTokenEntry>
+  usedTokens?: Map<string, UsedTokenEntry>,
+  options?: { hash?: (value: string) => string },
 ): string | null {
   if (!needsTokenRewrite(code)) return null;
 
@@ -88,6 +99,7 @@ export function transformUseInterfaceCalls(
   const program = ts.createProgram([id], compilerOptions, compilerHost);
   const checker = program.getTypeChecker();
   if (typeof checker.getSymbolAtLocation !== 'function') return null;
+  const resolver = new TokenResolverService(checker, undefined, options);
 
   const replacements: { start: number; end: number; text: string }[] = [];
 
@@ -103,32 +115,31 @@ export function transformUseInterfaceCalls(
         const nodeEnd = node.getEnd();
         const typeArg = node.typeArguments[0];
         const type = checker.getTypeFromTypeNode(typeArg);
-        const symbol = type.getSymbol();
+        const tokenId = resolver.getTypeId(type);
+        const descriptor = resolver.describeType(type);
 
-        if (symbol) {
-          const declarations = symbol.getDeclarations();
-          let tokenId: string;
+        replacements.push({
+          start: nodeStart,
+          end: nodeEnd,
+          text: `"${tokenId}"`,
+        });
 
-          if (declarations && declarations.length > 0) {
-            const declSourceFile = declarations[0].getSourceFile();
-            tokenId = HashUtils.generateTokenId(symbol, declSourceFile);
-          } else {
-            tokenId = symbol.getName();
+        if (usedTokens) {
+          const previous = usedTokens.get(tokenId);
+          if (previous && previous.descriptor !== descriptor) {
+            throw new NeoTokenError(
+              'NEO_TOKEN_COLLISION',
+              `NEO_TOKEN_COLLISION: ${previous.descriptor} <> ${descriptor}`,
+            );
           }
-
-          replacements.push({
-            start: nodeStart,
-            end: nodeEnd,
-            text: `"${tokenId}"`,
-          });
-
-          if (usedTokens && !usedTokens.has(tokenId)) {
+          if (!previous) {
             const line = sourceFile.getLineAndCharacterOfPosition(nodeStart);
             usedTokens.set(tokenId, {
               file: id,
               line: line.line + 1,
               column: line.character + 1,
-              interfaceName: symbol.getName(),
+              interfaceName: type.getSymbol()?.getName() ?? tokenId,
+              descriptor,
             });
           }
         }
@@ -145,7 +156,8 @@ export function transformUseInterfaceCalls(
         ) {
           throw new Error(formatUnsupportedMarker(node));
         }
-        const tokenId = `PropertyToken:${classArg.text}.${nameArg.text}`;
+        const classType = checker.getTypeAtLocation(classArg);
+        const tokenId = resolver.getPropertyTokenId(classType, nameArg.text);
         replacements.push({
           start: node.getStart(sourceFile),
           end: node.getEnd(),

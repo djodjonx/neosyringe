@@ -58,8 +58,8 @@ describe('useInterface Token Generation', () => {
     console.log(code);
 
     // TokenId should include the file path to avoid collisions
-    expect(code).toContain('ILogger_f88a961a');
-    expect(code).toContain('if (token === "ILogger_f88a961a")');
+    expect(code).toContain('ILogger_0b29e614');
+    expect(code).toContain('if (token === "ILogger_0b29e614")');
   });
 
   it('should work with useInterface defined as const', () => {
@@ -86,8 +86,8 @@ describe('useInterface Token Generation', () => {
     console.log(code);
 
     // Should generate the same tokenId whether inline or via const
-    expect(code).toContain('IOperationTracker_f88a961a');
-    expect(code).toContain('if (token === "IOperationTracker_f88a961a")');
+    expect(code).toContain('IOperationTracker_abbe07a2');
+    expect(code).toContain('if (token === "IOperationTracker_abbe07a2")');
   });
 
   it('should generate same tokenId for inline vs const useInterface', () => {
@@ -133,12 +133,12 @@ describe('useInterface Token Generation', () => {
     console.log(constCode);
 
     // Both should generate the same tokenId with full path
-    expect(inlineCode).toContain('IEventBus_f88a961a');
-    expect(constCode).toContain('IEventBus_f88a961a');
+    expect(inlineCode).toContain('IEventBus_67764429');
+    expect(constCode).toContain('IEventBus_67764429');
 
     // Both should have identical resolve checks
-    expect(inlineCode).toContain('if (token === "IEventBus_f88a961a")');
-    expect(constCode).toContain('if (token === "IEventBus_f88a961a")');
+    expect(inlineCode).toContain('if (token === "IEventBus_67764429")');
+    expect(constCode).toContain('if (token === "IEventBus_67764429")');
   });
 });
 

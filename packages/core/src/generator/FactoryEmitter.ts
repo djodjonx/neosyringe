@@ -65,7 +65,7 @@ export function resolveConstructorArgs(
       return 'undefined';
     }
 
-    if (depNode.service.isInterfaceToken) {
+    if (depNode.service.isInterfaceToken || depNode.service.isValueToken) {
       return `this.resolve(${JSON.stringify(depNode.service.tokenId)})`;
     } else if (depNode.service.tokenSymbol) {
       return `this.resolve(${getImport(depNode.service.tokenSymbol)})`;

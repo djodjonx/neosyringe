@@ -339,6 +339,7 @@ describe('MissingDependencyValidator', () => {
     it('should ignore useValue provider', () => {
       const source = `
         import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
+        class Config {}
         export const builder = defineBuilderConfig({
           injections: [
             {
@@ -360,6 +361,7 @@ describe('MissingDependencyValidator', () => {
     it('should check useFactory provider dependencies', () => {
       const source = `
         import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
+        interface IUserService {}
         class Repository {}
 
         export const builder = defineBuilderConfig({

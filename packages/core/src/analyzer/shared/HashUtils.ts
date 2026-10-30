@@ -122,6 +122,15 @@ export class HashUtils {
    * // Returns: "ILogger_x9y8z7w6" (different file = different hash)
    * ```
    */
+  /**
+   * Shortens a canonical descriptor to 8 hex characters.
+   * `hashFn` is a test seam. Production calls omit it and use MD5.
+   */
+  static hashDescriptor(text: string, hashFn?: (value: string) => string): string {
+    const full = hashFn ? hashFn(text) : crypto.createHash('md5').update(text).digest('hex');
+    return full.slice(0, 8);
+  }
+
   static generateTokenId(symbol: ts.Symbol, sourceFile: ts.SourceFile): string {
     const name = symbol.getName();
     const hash = this.hashFilePath(sourceFile.fileName);

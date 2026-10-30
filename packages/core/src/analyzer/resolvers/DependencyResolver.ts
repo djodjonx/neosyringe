@@ -101,7 +101,7 @@ export class DependencyResolver {
       | undefined;
     if (!classDecl) return;
 
-    const className = classDecl.name?.getText() ?? 'Anonymous';
+    const classType = classDecl.name ? this.checker.getTypeAtLocation(classDecl.name) : undefined;
 
     // Find constructor
     const constructor = classDecl.members.find((m) =>
@@ -115,7 +115,7 @@ export class DependencyResolver {
 
     // Analyze each constructor parameter
     for (const param of constructor.parameters) {
-      const dependency = this.resolveParameter(param, className, graph);
+      const dependency = this.resolveParameter(param, graph, classType);
       if (dependency) {
         node.dependencies.push(dependency);
         if (this.isOptionalParameter(param)) {
@@ -149,8 +149,8 @@ export class DependencyResolver {
    * 3. Skip parameters without type annotations
    *
    * @param param - Constructor parameter to resolve
-   * @param className - Name of the class containing the constructor
    * @param graph - Dependency graph to check for property tokens
+   * @param classType - Instance type of the class that declares the parameter
    * @returns Token ID or undefined if not resolvable
    *
    * @example
@@ -170,8 +170,8 @@ export class DependencyResolver {
    */
   private resolveParameter(
     param: ts.ParameterDeclaration,
-    className: string,
-    graph: DependencyGraph
+    graph: DependencyGraph,
+    classType: ts.Type | undefined,
   ): TokenId | undefined {
     const paramName = param.name.getText();
     const typeNode = param.type;
@@ -184,8 +184,10 @@ export class DependencyResolver {
 
     // 1. Check if there's a PropertyToken for this class.parameter
     // Property tokens are used for primitives (string, number, etc.)
-    const propertyTokenId = `PropertyToken:${className}.${paramName}`;
-    if (graph.nodes.has(propertyTokenId)) {
+    const propertyTokenId = classType
+      ? this.tokenResolverService.getPropertyTokenId(classType, paramName)
+      : undefined;
+    if (propertyTokenId && graph.nodes.has(propertyTokenId)) {
       return propertyTokenId;
     }
 

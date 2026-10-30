@@ -89,8 +89,9 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
           function useInterface<T>(): any { return null; }
           function defineBuilderConfig(c: any) { return c; }
           import Login from './auth-service';
+          interface IAuth {}
           export const container = defineBuilderConfig({
-            injections: [{ token: useInterface<any>(), provider: Login }]
+            injections: [{ token: useInterface<IAuth>(), provider: Login }]
           });
         `,
       };
