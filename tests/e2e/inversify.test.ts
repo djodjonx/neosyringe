@@ -83,7 +83,7 @@ describe('E2E - NeoSyringe with InversifyJS', () => {
 
       expect(code).toContain('class NeoContainer');
       expect(code).toContain('[legacy]');
-      expect(code).toContain("'ReportingApp'");
+      expect(code).toContain('"ReportingApp"');
     });
   });
 

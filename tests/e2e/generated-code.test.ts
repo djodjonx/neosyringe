@@ -373,9 +373,9 @@ it('should generate PropertyToken resolution', () => {
         });
       `);
 
-      // Should have parent delegation logic
-      expect(code).toContain('this.parent');
-      expect(code).toMatch(/if \(this\.parent\)/);
+      // Parent delegation is emitted on this.legacy (packages/core/src/generator/Generator.ts:385).
+      expect(code).toContain('this.legacy');
+      expect(code).toMatch(/if \(this\.legacy\)/);
     });
   });
 
@@ -497,7 +497,7 @@ it('should generate PropertyToken resolution', () => {
             // MissingDependency NOT registered!
           ]
         });
-      `)).toThrow(/Missing binding/);
+      `)).toThrow(/Missing injection: 'MissingDependency'/);
     });
 
     it('should detect duplicate registrations', () => {
@@ -664,7 +664,7 @@ it('should generate PropertyToken resolution', () => {
       `);
 
       expect(code).toContain('AppService');
-      expect(code).toContain("'Application'");
+      expect(code).toContain('"Application"');
       expect(code).toContain('domainContainer');
     });
   });
