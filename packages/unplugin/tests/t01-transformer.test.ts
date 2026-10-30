@@ -1,11 +1,83 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import ts from 'typescript';
+
+// Default libs are parsed by a real ts.Program on every transform. Keep one SourceFile per .d.ts.
+const libSourceFiles = new Map<string, ts.SourceFile>();
+
+function cachedLibPath(fileName: string): string | undefined {
+  const norm = fileName.replace(/\\/g, '/');
+  if (!norm.endsWith('.d.ts')) return undefined;
+  if (norm.includes('/node_modules/') || norm.includes('/typescript/lib/')) return norm;
+  return undefined;
+}
+
+function cacheLibHost(host: ts.CompilerHost): ts.CompilerHost {
+  const read = host.getSourceFile.bind(host);
+  return {
+    ...host,
+    getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile) {
+      const key = cachedLibPath(fileName);
+      if (key && !shouldCreateNewSourceFile) {
+        const hit = libSourceFiles.get(key);
+        if (hit) return hit;
+        const created = read(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+        if (created) libSourceFiles.set(key, created);
+        return created;
+      }
+      return read(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+    },
+  };
+}
+
+function createCachedProgram(
+  rootNames: readonly string[],
+  options: ts.CompilerOptions,
+  host?: ts.CompilerHost,
+  oldProgram?: ts.Program,
+): ts.Program {
+  return ts.createProgram(rootNames, options, cacheLibHost(host ?? ts.createCompilerHost(options)), oldProgram);
+}
+
+// The transformer calls tsInstance.createProgram. Hand it this object so those programs reuse the cache.
+const tsWithLibCache = new Proxy(ts, {
+  get(target, prop, receiver) {
+    if (prop === 'createProgram') return createCachedProgram;
+    if (prop === 'createCompilerHost') {
+      return (options: ts.CompilerOptions, setParentNodes?: boolean) => (
+        cacheLibHost(target.createCompilerHost(options, setParentNodes))
+      );
+    }
+    return Reflect.get(target, prop, receiver);
+  },
+}) as typeof ts;
+
+function prewarmLibSourceCache(): void {
+  const configPath = ts.findConfigFile(process.cwd(), ts.sys.fileExists, 'tsconfig.json');
+  if (!configPath) throw new Error('tsconfig.json introuvable');
+  const readConfig = ts.readConfigFile(configPath, ts.sys.readFile);
+  const parsed = ts.parseJsonConfigFileContent(readConfig.config, ts.sys, process.cwd());
+  const entry = path.join(tmpdir(), `t01-lib-cache-${process.pid}.ts`);
+  const source = `import '@djodjonx/neosyringe';\nexport {};\n`;
+  const host = cacheLibHost(ts.createCompilerHost(parsed.options));
+  const readSource = host.getSourceFile.bind(host);
+  host.fileExists = (fileName) => fileName === entry || ts.sys.fileExists(fileName);
+  host.readFile = (fileName) => (fileName === entry ? source : ts.sys.readFile(fileName));
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    if (fileName === entry) return ts.createSourceFile(fileName, source, languageVersion, true);
+    return readSource(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  };
+  createCachedProgram([entry], parsed.options, host).getTypeChecker();
+}
 
 describe('T01 ts-patch transformer provenance', () => {
   const dirs: string[] = [];
+
+  beforeAll(() => {
+    prewarmLibSourceCache();
+  });
 
   afterEach(() => {
     for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -31,9 +103,9 @@ export const c = builder({
     if (!configPath) throw new Error('tsconfig.json introuvable');
     const read = ts.readConfigFile(configPath, ts.sys.readFile);
     const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, process.cwd());
-    const program = ts.createProgram([consumerPath], parsed.options);
+    const program = createCachedProgram([consumerPath], parsed.options);
     const { default: neoSyringeTransformer } = await import('../src/transformer');
-    const next = neoSyringeTransformer(program, undefined, {}, { ts } as never);
+    const next = neoSyringeTransformer(program, undefined, {}, { ts: tsWithLibCache } as never);
     const output = next.getSourceFile(consumerPath)?.text ?? '';
     expect(output).not.toContain('builder(');
     expect(output).toContain('class NeoContainer');
@@ -64,9 +136,9 @@ export const c = b({
     if (!configPath) throw new Error('tsconfig.json introuvable');
     const read = ts.readConfigFile(configPath, ts.sys.readFile);
     const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, process.cwd());
-    const program = ts.createProgram([consumerPath, plainPath], parsed.options);
+    const program = createCachedProgram([consumerPath, plainPath], parsed.options);
     const { default: neoSyringeTransformer } = await import('../src/transformer');
-    const next = neoSyringeTransformer(program, undefined, {}, { ts } as never);
+    const next = neoSyringeTransformer(program, undefined, {}, { ts: tsWithLibCache } as never);
     const consumerOut = next.getSourceFile(consumerPath)?.text ?? '';
     const plainOut = next.getSourceFile(plainPath)?.text ?? '';
     expect(consumerOut).not.toContain('export const c = b(');

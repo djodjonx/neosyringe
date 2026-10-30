@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { resolveNeoMarker } from '@djodjonx/neosyringe-core/analyzer';
 import { neoSyringePlugin } from '../src/index';
@@ -38,14 +38,14 @@ function transpile(source: string): string {
 }
 
 function virtualProgram(files: Map<string, string>, options: ts.CompilerOptions): ts.Program {
-  const host = ts.createCompilerHost(options);
-  const originalGetSourceFile = host.getSourceFile.bind(host);
+  const host = cacheLibHost(ts.createCompilerHost(options));
+  const readCached = host.getSourceFile.bind(host);
   host.fileExists = (fileName) => files.has(fileName) || ts.sys.fileExists(fileName);
   host.readFile = (fileName) => (files.has(fileName) ? files.get(fileName) : ts.sys.readFile(fileName));
-  host.getSourceFile = (fileName, languageVersion) => {
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
     const text = files.get(fileName);
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
-    return originalGetSourceFile(fileName, languageVersion);
+    return readCached(fileName, languageVersion, onError, shouldCreateNewSourceFile);
   };
   return ts.createProgram([...files.keys()], options, host);
 }
@@ -88,12 +88,67 @@ function load(javascript: string, req: (id: string) => unknown): Record<string, 
   return exportsObject;
 }
 
+// Default libs are parsed by a real ts.Program on every transform. Keep one SourceFile per .d.ts.
+const libSourceFiles = new Map<string, ts.SourceFile>();
+
+function cachedLibPath(fileName: string): string | undefined {
+  const norm = fileName.replace(/\\/g, '/');
+  if (!norm.endsWith('.d.ts')) return undefined;
+  if (norm.includes('/node_modules/') || norm.includes('/typescript/lib/')) return norm;
+  return undefined;
+}
+
+function cacheLibHost(host: ts.CompilerHost): ts.CompilerHost {
+  const read = host.getSourceFile.bind(host);
+  return {
+    ...host,
+    getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile) {
+      const key = cachedLibPath(fileName);
+      if (key && !shouldCreateNewSourceFile) {
+        const hit = libSourceFiles.get(key);
+        if (hit) return hit;
+        const created = read(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+        if (created) libSourceFiles.set(key, created);
+        return created;
+      }
+      return read(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+    },
+  };
+}
+
 describe('T01 plugin provenance', () => {
   const dirs: string[] = [];
+  // One instance reuses its program cache. P22 keeps its own instance.
+  const plugin = neoSyringePlugin.vite();
+
+  beforeAll(() => {
+    const id = path.join(tmpdir(), `t01-lib-prewarm-${process.pid}.ts`);
+    const code = [
+      "import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';",
+      'export interface IPort { id: number }',
+      'class Impl implements IPort { id = 1 }',
+      'export const port = useInterface<IPort>();',
+      'export const c = defineBuilderConfig({',
+      '  injections: [{ token: port, provider: Impl }],',
+      '});',
+      '',
+    ].join('\n');
+    pluginTransform(plugin, code, id);
+    endBuild(plugin);
+  });
+
+  beforeEach(() => {
+    const configFile = ts.findConfigFile(process.cwd(), ts.sys.fileExists, 'tsconfig.json');
+    if (configFile) TSContext.projectRoot = path.dirname(configFile);
+  });
 
   afterEach(() => {
-    TSContext.reset();
-    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+    try {
+      endBuild(plugin);
+    } finally {
+      TSContext.reset();
+      for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('T01-P4b-tokens-file', () => {
@@ -135,7 +190,6 @@ export function run() {
     writeFileSync(tokensPath, tokensSource);
     writeFileSync(containerPath, containerSource);
 
-    const plugin = neoSyringePlugin.vite();
     const tokensOut = pluginTransform(plugin, tokensSource, tokensPath);
     const containerOut = pluginTransform(plugin, containerSource, containerPath);
     endBuild(plugin);
@@ -192,7 +246,6 @@ export function run() {
     writeFileSync(barrelPath, barrelSource);
     writeFileSync(consumerPath, consumerSource);
 
-    const plugin = neoSyringePlugin.vite();
     let output = '';
     let failure = '';
     try {
@@ -230,7 +283,6 @@ export function run() {
       'export const c = neo[key]({ injections: [] });',
       '',
     ].join('\n');
-    const plugin = neoSyringePlugin.vite();
     let caught: Error | undefined;
     try {
       // @ts-expect-error unplugin hook is callable in tests
@@ -269,7 +321,6 @@ export function run() {
     writeFileSync(barrelPath, barrelSource);
     writeFileSync(consumerPath, consumerSource);
 
-    const plugin = neoSyringePlugin.vite();
     const output = pluginTransform(plugin, consumerSource, consumerPath);
     endBuild(plugin);
     expect(output).not.toContain('export const c = b(');
@@ -317,7 +368,6 @@ export function run() {
     writeFileSync(barrelPath, barrelSource);
     writeFileSync(consumerPath, consumerSource);
 
-    const plugin = neoSyringePlugin.vite();
     const output = pluginTransform(plugin, consumerSource, consumerPath);
     endBuild(plugin);
     expect(output).not.toContain('neo.defineBuilderConfig');
@@ -375,7 +425,6 @@ export function run() {
     writeFileSync(barrelPath, barrelSource);
     writeFileSync(consumerPath, consumerSource);
 
-    const plugin = neoSyringePlugin.vite();
     const output = pluginTransform(plugin, consumerSource, consumerPath);
     endBuild(plugin);
     expect(output).not.toMatch(/useInterface\s*(<|\()/);
@@ -430,7 +479,6 @@ export type Keep = BuilderType;
 `;
     writeFileSync(consumerPath, consumerSource);
 
-    const plugin = neoSyringePlugin.vite();
     const output = pluginTransform(plugin, consumerSource, consumerPath);
     endBuild(plugin);
     expect(output).toContain('foreign({ ok: 1 })');
@@ -464,7 +512,6 @@ export const m = Math.max(1, 2);
     writeFileSync(badPath, badSource);
     writeFileSync(importerPath, importerSource);
 
-    const plugin = neoSyringePlugin.vite();
     let thrown = '';
     let output: string | undefined;
     try {
@@ -519,7 +566,6 @@ export const c = d({
     writeFileSync(expdefPath, expdefSource);
     writeFileSync(expdefConsumerPath, expdefConsumerSource);
 
-    const plugin = neoSyringePlugin.vite();
     const output = pluginTransform(plugin, consumerSource, consumerPath);
     const expdefOut = pluginTransform(plugin, expdefConsumerSource, expdefConsumerPath);
     endBuild(plugin);
@@ -591,7 +637,6 @@ export function run() {
     writeFileSync(starAsConsumerPath, starAsSource);
     writeFileSync(starNamedConsumerPath, starNamedSource);
 
-    const plugin = neoSyringePlugin.vite();
     const starAsOut = pluginTransform(plugin, starAsSource, starAsConsumerPath);
     const starNamedOut = pluginTransform(plugin, starNamedSource, starNamedConsumerPath);
     endBuild(plugin);
@@ -653,7 +698,6 @@ export const built = ns.defineBuilderConfig({ ok: 4 });
     writeFileSync(foreignConsumer, foreignSource);
     writeFileSync(otherPkgConsumer, otherPkgSource);
 
-    const plugin = neoSyringePlugin.vite();
     let localResult: unknown;
     let foreignResult: unknown;
     let otherPkgResult: unknown;
@@ -694,6 +738,7 @@ export const c = b({
     writeFileSync(xPath, source);
     writeFileSync(yPath, source);
 
+    // Own instance: the same-length edit must miss this build's source cache.
     const plugin = neoSyringePlugin.vite();
     try {
       const xOut = pluginTransform(plugin, source, xPath);
@@ -744,7 +789,6 @@ export function run() {
     writeFileSync(chainConsumerPath, chainConsumerSource);
     writeFileSync(nsPath, nsSource);
 
-    const plugin = neoSyringePlugin.vite();
     let directOut = '';
     let aliasOut = '';
     let chainOut = '';
@@ -858,7 +902,6 @@ export const built = d({ ok: 1 });
     writeFileSync(otherConsumer, otherSource);
     writeFileSync(eqConsumer, eqSource);
 
-    const plugin = neoSyringePlugin.vite();
     let localResult: unknown;
     let otherResult: unknown;
     let eqResult: unknown;

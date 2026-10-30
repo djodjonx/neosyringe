@@ -4,6 +4,24 @@ import { hasNeoSyringeMarkers } from './markerUtils';
 
 export type UsedTokenEntry = { file: string; line: number; column: number; interfaceName: string };
 
+const LIB_SOURCE_CACHE = Symbol('libSourceCache');
+
+function reusableDeclaration(fileName: string): string | undefined {
+  const norm = fileName.replace(/\\/g, '/');
+  if (!norm.endsWith('.d.ts')) return undefined;
+  if (norm.includes('/node_modules/') || norm.includes('/typescript/lib/')) return norm;
+  return undefined;
+}
+
+function libSourceCache(options: ts.CompilerOptions): Map<string, ts.SourceFile> {
+  const holder = options as ts.CompilerOptions & { [LIB_SOURCE_CACHE]?: Map<string, ts.SourceFile> };
+  const existing = holder[LIB_SOURCE_CACHE];
+  if (existing) return existing;
+  const created = new Map<string, ts.SourceFile>();
+  Object.defineProperty(holder, LIB_SOURCE_CACHE, { value: created });
+  return created;
+}
+
 const CONTAINER_MARKER_NAMES: ReadonlySet<string> = new Set([
   'defineBuilderConfig',
   'definePartialConfig',
@@ -49,13 +67,22 @@ export function transformUseInterfaceCalls(
 
   const sourceFile = ts.createSourceFile(id, code, ts.ScriptTarget.Latest, true);
 
+  // One parsed copy of each lib .d.ts per compiler-options object. The plugin keeps that
+  // object for the build, so a second file does not parse the default library again.
+  const libSources = libSourceCache(compilerOptions);
   const compilerHost = ts.createCompilerHost(compilerOptions);
   const originalGetSourceFile = compilerHost.getSourceFile;
-  compilerHost.getSourceFile = (fileName, languageVersion) => {
-    if (fileName === id) {
-      return sourceFile;
+  compilerHost.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    if (fileName === id) return sourceFile;
+    const key = reusableDeclaration(fileName);
+    if (!key || shouldCreateNewSourceFile) {
+      return originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
     }
-    return originalGetSourceFile(fileName, languageVersion);
+    const hit = libSources.get(key);
+    if (hit) return hit;
+    const created = originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+    if (created) libSources.set(key, created);
+    return created;
   };
 
   const program = ts.createProgram([id], compilerOptions, compilerHost);
