@@ -108,7 +108,8 @@ function packageOrigin(fileName: string): string | undefined {
   return `pkg/${scopeName}/${parts.slice(1).join('/')}`;
 }
 
-function declarationOrigin(fileName: string): string {
+/** Project-relative POSIX origin shared by token identity and container identity. */
+export function declarationOrigin(fileName: string): string {
   const normalized = fileName.replace(/\\/g, '/');
   if (isDefaultLib(normalized)) return `lib/${path.posix.basename(normalized)}`;
   const packaged = packageOrigin(normalized);

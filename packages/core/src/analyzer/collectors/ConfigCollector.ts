@@ -3,8 +3,10 @@ import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
 import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError } from '../types';
 import { HashUtils, TokenResolverService, DEFAULT_EXPORT_CONTAINER_NAME } from '../shared';
+import { containerKeyFor, stampRegistration } from '../shared/registrationGraph';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 import { InjectionParser } from '../parsers/InjectionParser';
+import { DependencyAnalyzer } from '../validators/DependencyAnalyzer';
 
 /**
  * Interface for collecting configurations from source files.
@@ -35,6 +37,7 @@ export interface IConfigCollector {
 export class ConfigCollector implements IConfigCollector {
   private readonly tokenResolverService: TokenResolverService;
   private readonly injectionParser: InjectionParser;
+  private readonly dependencyAnalyzer: DependencyAnalyzer;
   private readonly identifierIndexByFile = new Map<string, Map<string, ts.Identifier>>();
 
   constructor(
@@ -44,6 +47,7 @@ export class ConfigCollector implements IConfigCollector {
   ) {
     this.tokenResolverService = tokenResolverService ?? new TokenResolverService(checker);
     this.injectionParser = new InjectionParser(checker, this.tokenResolverService);
+    this.dependencyAnalyzer = new DependencyAnalyzer(checker, this.tokenResolverService);
   }
 
   collect(): Map<string, ConfigGraph> {
@@ -64,6 +68,7 @@ export class ConfigCollector implements IConfigCollector {
     // Validate no duplicate containerIds in the same file; errors are attached
     // to the offending config's valueErrors instead of thrown, so LSP keeps running.
     this.validateContainerIdCollisions(containerIdsByFile);
+    this.restampDependencyEdges(configs);
 
     return configs;
   }
@@ -119,10 +124,9 @@ export class ConfigCollector implements IConfigCollector {
     if (TSContext.ts.isCallExpression(node)) {
       const config = this.tryParseConfig(node, sourceFile);
       if (config) {
-        // Global key uses fileName:name to guarantee uniqueness across all files.
-        // Per-file key uses name:position to allow the same name in different
-        // files without collision during the intra-file duplicate-id check.
-        const uniqueKey = `${sourceFile.fileName}:${config.name}`;
+        // Identity is the container key (relative path + position + text), not the name.
+        // Per-file key uses name:position so the same name in another file is not a duplicate.
+        const uniqueKey = config.containerKey ?? `${sourceFile.fileName}:${config.name}`;
         configs.set(uniqueKey, config);
         if (fileConfigs) {
           const fileUniqueKey = `${config.name}:${node.getStart()}`;
@@ -178,9 +182,11 @@ export class ConfigCollector implements IConfigCollector {
 
     // Generate unique container ID from 'name' field or hash
     const containerId = this.generateContainerId(configArg, sourceFile, node.getStart());
+    const containerKey = containerKeyFor(node);
 
     // Collect injections and detect internal duplicates
     const { injections: localInjections, duplicates, valueErrors, multiInjections } = this.collectInjections(configArg, sourceFile);
+    this.stampCollected(localInjections, multiInjections, duplicates, containerKey);
 
     // Get extends and useContainer (for builders only)
     const extendsRefs = type === 'builder' ? this.getExtendsRefs(configArg) : [];
@@ -201,6 +207,7 @@ export class ConfigCollector implements IConfigCollector {
 
     return {
       containerId,
+      containerKey,
       name,
       type,
       sourceFile,
@@ -295,6 +302,108 @@ export class ConfigCollector implements IConfigCollector {
     }
 
     return { injections, duplicates, valueErrors, multiInjections };
+  }
+
+  private stampCollected(
+    localInjections: Map<TokenId, InjectionInfo>,
+    multiInjections: Map<TokenId, InjectionInfo[]> | undefined,
+    duplicates: InjectionInfo[],
+    containerKey: string,
+  ): void {
+    const stamp = (info: InjectionInfo) => {
+      stampRegistration(info.definition, info.node, containerKey);
+    };
+    for (const info of localInjections.values()) stamp(info);
+    if (multiInjections) {
+      for (const infos of multiInjections.values()) {
+        for (const info of infos) stamp(info);
+      }
+    }
+    for (const info of duplicates) stamp(info);
+  }
+
+  /** Same token set as the missing-dependency check: local, extends, and parent. */
+  private restampDependencyEdges(configs: Map<string, ConfigGraph>): void {
+    const byName = new Map<string, ConfigGraph>();
+    for (const config of configs.values()) {
+      if (!byName.has(config.name)) byName.set(config.name, config);
+    }
+    for (const config of configs.values()) {
+      const known = new Set<TokenId>();
+      const multi = new Set<TokenId>();
+      this.collectStampTokens(config, byName, known, multi);
+      this.writeDependencyEdges(config, known, multi);
+    }
+  }
+
+  private collectStampTokens(
+    config: ConfigGraph,
+    byName: Map<string, ConfigGraph>,
+    known: Set<TokenId>,
+    multi: Set<TokenId>,
+  ): void {
+    for (const tokenId of config.localInjections.keys()) known.add(tokenId);
+    if (config.multiInjections) {
+      for (const tokenId of config.multiInjections.keys()) {
+        known.add(tokenId);
+        multi.add(tokenId);
+      }
+    }
+    if (config.expectedExternalTokens) {
+      for (const tokenId of config.expectedExternalTokens) known.add(tokenId);
+    }
+    if (config.legacyParentTokens) {
+      for (const tokenId of config.legacyParentTokens) known.add(tokenId);
+    }
+    if (config.type !== 'builder') return;
+    this.addParentTokens(config, byName, known, new Set());
+    for (const ref of config.extendsRefs) this.addPartialTokens(byName.get(ref), known, multi);
+  }
+
+  private addParentTokens(
+    config: ConfigGraph,
+    byName: Map<string, ConfigGraph>,
+    known: Set<TokenId>,
+    seen: Set<string>,
+  ): void {
+    const ref = config.useContainerRef;
+    if (!ref || seen.has(ref)) return;
+    const parent = byName.get(ref);
+    if (!parent) return;
+    seen.add(ref);
+    for (const tokenId of parent.localInjections.keys()) known.add(tokenId);
+    for (const partialName of parent.extendsRefs) {
+      const partial = byName.get(partialName);
+      if (!partial) continue;
+      for (const tokenId of partial.localInjections.keys()) known.add(tokenId);
+    }
+    this.addParentTokens(parent, byName, known, seen);
+  }
+
+  private addPartialTokens(
+    partial: ConfigGraph | undefined,
+    known: Set<TokenId>,
+    multi: Set<TokenId>,
+  ): void {
+    if (!partial) return;
+    for (const tokenId of partial.localInjections.keys()) known.add(tokenId);
+    if (!partial.multiInjections) return;
+    for (const tokenId of partial.multiInjections.keys()) multi.add(tokenId);
+  }
+
+  private writeDependencyEdges(config: ConfigGraph, known: Set<TokenId>, multi: Set<TokenId>): void {
+    const stamp = (info: InjectionInfo) => {
+      const edges = this.dependencyAnalyzer.edgesFor(info.definition, known);
+      for (const edge of edges) edge.multi = multi.has(edge.tokenId);
+      info.definition.dependencyEdges = edges;
+    };
+    for (const info of config.localInjections.values()) stamp(info);
+    if (config.multiInjections) {
+      for (const infos of config.multiInjections.values()) {
+        for (const info of infos) stamp(info);
+      }
+    }
+    for (const info of config.duplicates) stamp(info);
   }
 
   private parseInjection(
