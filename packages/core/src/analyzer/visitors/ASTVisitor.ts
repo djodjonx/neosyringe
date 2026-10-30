@@ -1,5 +1,6 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
+import { resolveNeoMarker } from '../shared/markerProvenance';
 
 /**
  * Results collected by the ASTVisitor during traversal.
@@ -50,6 +51,8 @@ export class ASTVisitor {
   private partialConfigs: ts.CallExpression[] = [];
   private extendsReferences = new Set<string>();
 
+  constructor(private readonly checker: ts.TypeChecker) {}
+
   /**
    * Visits an AST node and collects all DI-related information.
    *
@@ -95,11 +98,11 @@ export class ASTVisitor {
    * @param node - Call expression to analyze
    */
   private handleCallExpression(node: ts.CallExpression): void {
-    const funcName = this.getFunctionName(node);
+    const marker = resolveNeoMarker(this.checker, node);
 
-    if (funcName === 'defineBuilderConfig') {
+    if (marker === 'defineBuilderConfig') {
       this.builderConfigs.push(node);
-    } else if (funcName === 'definePartialConfig') {
+    } else if (marker === 'definePartialConfig') {
       this.partialConfigs.push(node);
     }
   }
@@ -131,28 +134,6 @@ export class ASTVisitor {
         }
       }
     }
-  }
-
-  /**
-   * Extracts the function name from a call expression.
-   *
-   * Handles direct identifiers (e.g., `defineBuilderConfig()`)
-   * and returns undefined for complex expressions.
-   *
-   * @param node - Call expression to analyze
-   * @returns Function name or undefined
-   *
-   * @example
-   * ```typescript
-   * defineBuilderConfig()      // Returns: 'defineBuilderConfig'
-   * obj.method()               // Returns: undefined
-   * ```
-   */
-  private getFunctionName(node: ts.CallExpression): string | undefined {
-    if (TSContext.ts.isIdentifier(node.expression)) {
-      return node.expression.text;
-    }
-    return undefined;
   }
 
   /**

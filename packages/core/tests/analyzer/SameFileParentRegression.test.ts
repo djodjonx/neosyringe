@@ -13,6 +13,7 @@ import { Analyzer } from '../../src/analyzer/Analyzer';
 const FILE = 'container.ts';
 
 const CODE = `
+  import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
   function defineBuilderConfig(c: any): any { return c; }
   function useInterface<T>(): any { return null; }
 

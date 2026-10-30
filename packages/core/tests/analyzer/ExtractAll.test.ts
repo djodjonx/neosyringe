@@ -15,6 +15,7 @@ function makeProgram(code: string) {
 }
 
 const SAME_FILE_CODE = `
+  import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
   function defineBuilderConfig(c: any): any { return c; }
   function useInterface<T>(): any { return null; }
 
@@ -77,6 +78,7 @@ describe('Analyzer.extractAll()', () => {
 
   it('single-container file still returns one graph (non-regression)', () => {
     const code = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any): any { return c; }
       function useInterface<T>(): any { return null; }
       interface IFoo { foo(): void; }

@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import type { PluginConfig, ProgramTransformerExtras } from 'ts-patch';
-import { Analyzer, HashUtils } from '@djodjonx/neosyringe-core/analyzer';
+import { Analyzer, formatUnsupportedMarker, HashUtils, resolveNeoMarker, sourceFileUsesMarker } from '@djodjonx/neosyringe-core/analyzer';
 import { Generator, GraphValidator, resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
 import { transformUseInterfaceCalls } from './useInterfaceTransform';
 import { hasNeoSyringeMarkers } from './markerUtils';
@@ -28,6 +28,45 @@ import { hasNeoSyringeMarkers } from './markerUtils';
  * }
  * ```
  */
+/**
+ * A mocked checker has no getSymbolAtLocation. Tests that stub the program
+ * still name the marker as an identifier. A real checker uses provenance,
+ * so a local homonym and the runtime helper declaration stay untouched.
+ */
+function sourceDeclaresBuilder(sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
+  if (typeof checker.getSymbolAtLocation !== 'function') {
+    let found = false;
+    const visit = (node: ts.Node): void => {
+      if (found) return;
+      if (ts.isIdentifier(node) && node.text === 'defineBuilderConfig') {
+        found = true;
+        return;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+    return found;
+  }
+
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(node)) {
+      const marker = resolveNeoMarker(checker, node);
+      if (marker && typeof marker === 'object') {
+        throw new Error(formatUnsupportedMarker(node));
+      }
+      if (marker === 'defineBuilderConfig') {
+        found = true;
+        return;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return found;
+}
+
 export default function neoSyringeTransformer(
   program: ts.Program,
   host: ts.CompilerHost | undefined,
@@ -65,10 +104,15 @@ export default function neoSyringeTransformer(
       continue;
     }
 
+    const checker = program.getTypeChecker();
+    if (typeof checker.getSymbolAtLocation === 'function' && !sourceFileUsesMarker(checker, sourceFile)) {
+      continue;
+    }
+
     let transformedCode = code;
 
     // --- Container transformation ---
-    if (code.includes('defineBuilderConfig')) {
+    if (sourceDeclaresBuilder(sourceFile, program.getTypeChecker())) {
       // Use a per-file sub-program so the Analyzer sees only this container file.
       const fileProgram = getFileProgram(fileName);
       const analyzer = new Analyzer(fileProgram);

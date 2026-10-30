@@ -2,6 +2,7 @@ import type * as ts from 'typescript';
 import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
 import type { AnalysisError, DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../types';
+import { resolveNeoMarker } from '../shared/markerProvenance';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { HashUtils } from '../shared/HashUtils';
 import { InjectionParser, type ParsedInjection } from './InjectionParser';
@@ -400,11 +401,7 @@ export class ConfigParser {
    * Checks if a call expression is definePartialConfig.
    */
   private isDefinePartialConfigCall(node: ts.CallExpression): boolean {
-    const expression = node.expression;
-    if (TSContext.ts.isIdentifier(expression)) {
-      return expression.text === 'definePartialConfig';
-    }
-    return false;
+    return resolveNeoMarker(this.checker, node) === 'definePartialConfig';
   }
 
   /**

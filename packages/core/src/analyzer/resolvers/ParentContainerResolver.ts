@@ -76,14 +76,14 @@ export class ParentContainerResolver {
 
       if (TSContext.ts.isCallExpression(init)) {
         // Check if it's a NeoSyringe config call
-        if (CallExpressionUtils.isDefineBuilderConfig(init) ||
-            CallExpressionUtils.isDefinePartialConfig(init)) {
+        if (CallExpressionUtils.isDefineBuilderConfig(init, this.checker) ||
+            CallExpressionUtils.isDefinePartialConfig(init, this.checker)) {
           this.extractFromNeoSyringeContainer(init, containerIdentifier.text, graph);
           return;
         }
 
         // Check if it's declareContainerTokens<{...}>()
-        if (CallExpressionUtils.isDeclareContainerTokens(init)) {
+        if (CallExpressionUtils.isDeclareContainerTokens(init, this.checker)) {
           this.extractFromDeclaredTokens(init, graph);
           return;
         }

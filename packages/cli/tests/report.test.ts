@@ -50,6 +50,7 @@ describe('CLI report — buildJsonReport', () => {
   it('reports ok: false with structured file/line/column/type/message per error', () => {
     const fileName = '/project/container.ts';
     const source = `
+      import { definePartialConfig } from '@djodjonx/neosyringe';
       class Repository {}
       class UserService {
         constructor(private repo: Repository) {}

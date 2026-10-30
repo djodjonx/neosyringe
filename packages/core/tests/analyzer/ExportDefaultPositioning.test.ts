@@ -24,6 +24,7 @@ describe('Analyzer — export default defineBuilderConfig() positioning', () => 
   }
 
   const CODE = `
+    import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
     function defineBuilderConfig(c: any): any { return c; }
     function useInterface<T>(): any { return null; }
     interface ILogger { log(msg: string): void; }

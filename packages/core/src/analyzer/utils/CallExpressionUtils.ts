@@ -1,5 +1,6 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
+import { resolveNeoMarker } from '../shared/markerProvenance';
 
 /**
  * Utility functions for identifying specific call expressions in the AST.
@@ -27,7 +28,10 @@ export class CallExpressionUtils {
    * CallExpressionUtils.isDefineBuilderConfig(node); // true
    * ```
    */
-  static isDefineBuilderConfig(node: ts.CallExpression): boolean {
+  static isDefineBuilderConfig(node: ts.CallExpression, checker?: ts.TypeChecker): boolean {
+    if (checker && typeof checker.getSymbolAtLocation === 'function') {
+      return resolveNeoMarker(checker, node) === 'defineBuilderConfig';
+    }
     const expression = node.expression;
     return TSContext.ts.isIdentifier(expression) && expression.text === 'defineBuilderConfig';
   }
@@ -44,7 +48,10 @@ export class CallExpressionUtils {
    * CallExpressionUtils.isDefinePartialConfig(node); // true
    * ```
    */
-  static isDefinePartialConfig(node: ts.CallExpression): boolean {
+  static isDefinePartialConfig(node: ts.CallExpression, checker?: ts.TypeChecker): boolean {
+    if (checker && typeof checker.getSymbolAtLocation === 'function') {
+      return resolveNeoMarker(checker, node) === 'definePartialConfig';
+    }
     const expression = node.expression;
     return TSContext.ts.isIdentifier(expression) && expression.text === 'definePartialConfig';
   }
@@ -63,7 +70,10 @@ export class CallExpressionUtils {
    * CallExpressionUtils.isDeclareContainerTokens(node); // true
    * ```
    */
-  static isDeclareContainerTokens(node: ts.CallExpression): boolean {
+  static isDeclareContainerTokens(node: ts.CallExpression, checker?: ts.TypeChecker): boolean {
+    if (checker && typeof checker.getSymbolAtLocation === 'function') {
+      return resolveNeoMarker(checker, node) === 'declareContainerTokens';
+    }
     return TSContext.ts.isIdentifier(node.expression) &&
            node.expression.text === 'declareContainerTokens';
   }
@@ -74,9 +84,9 @@ export class CallExpressionUtils {
    * @param node - The call expression to check
    * @returns True if the call is a NeoSyringe config function
    */
-  static isConfigCall(node: ts.CallExpression): boolean {
-    return this.isDefineBuilderConfig(node) ||
-           this.isDefinePartialConfig(node) ||
-           this.isDeclareContainerTokens(node);
+  static isConfigCall(node: ts.CallExpression, checker?: ts.TypeChecker): boolean {
+    return this.isDefineBuilderConfig(node, checker) ||
+           this.isDefinePartialConfig(node, checker) ||
+           this.isDeclareContainerTokens(node, checker);
   }
 }

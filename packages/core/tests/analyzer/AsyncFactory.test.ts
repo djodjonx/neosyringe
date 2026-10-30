@@ -12,6 +12,7 @@ const createProgram = (fileName: string, content: string) => {
 describe('Analyzer - async factories', () => {
   it('should detect async arrow function factory and set isAsync', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -38,6 +39,7 @@ describe('Analyzer - async factories', () => {
 
   it('should set isAsync for async function expression', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -62,6 +64,7 @@ describe('Analyzer - async factories', () => {
 
   it('should NOT set isAsync for sync factory', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -86,6 +89,7 @@ describe('Analyzer - async factories', () => {
 
   it('should emit an error for async factory with lifecycle: transient', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 

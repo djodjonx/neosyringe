@@ -23,6 +23,7 @@ describe('MissingDependencyValidator', () => {
   describe('partialConfig', () => {
     it('should detect missing constructor dependency in partialConfig', () => {
       const source = `
+        import { definePartialConfig } from '@djodjonx/neosyringe';
         class Repository {}
 
         class UserService {
@@ -48,6 +49,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should not error when all dependencies are present', () => {
       const source = `
+        import { definePartialConfig } from '@djodjonx/neosyringe';
         class Repository {}
 
         class UserService {
@@ -72,6 +74,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should not flag an unregistered `?` constructor param as missing (optional dependency)', () => {
       const source = `
+        import { definePartialConfig } from '@djodjonx/neosyringe';
         class Repository {}
 
         class UserService {
@@ -95,6 +98,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should handle multiple missing dependencies', () => {
       const source = `
+        import { definePartialConfig } from '@djodjonx/neosyringe';
         class Repository {}
         class Logger {}
 
@@ -124,6 +128,7 @@ describe('MissingDependencyValidator', () => {
   describe('defineBuilder', () => {
     it('should detect missing dependency not in parent', () => {
       const source = `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         class Repository {}
         class Logger {}
 
@@ -156,6 +161,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should resolve dependency from parent', () => {
       const source = `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         class Repository {}
 
         class UserService {
@@ -186,6 +192,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should resolve dependency from extends', () => {
       const source = `
+        import { defineBuilderConfig, definePartialConfig } from '@djodjonx/neosyringe';
         class Repository {}
 
         class UserService {
@@ -216,6 +223,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should handle recursive extends', () => {
       const source = `
+        import { defineBuilderConfig, definePartialConfig } from '@djodjonx/neosyringe';
         class Repository {}
         class Logger {}
 
@@ -256,6 +264,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should combine parent and extends', () => {
       const source = `
+        import { defineBuilderConfig, definePartialConfig } from '@djodjonx/neosyringe';
         class Repository {}
         class Logger {}
 
@@ -299,6 +308,7 @@ describe('MissingDependencyValidator', () => {
   describe('providers', () => {
     it('should check useClass provider', () => {
       const source = `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         interface IRepository {}
         class Repository {}
 
@@ -328,6 +338,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should ignore useValue provider', () => {
       const source = `
+        import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
         export const builder = defineBuilderConfig({
           injections: [
             {
@@ -348,6 +359,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should check useFactory provider dependencies', () => {
       const source = `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         class Repository {}
 
         export const builder = defineBuilderConfig({
@@ -376,6 +388,7 @@ describe('MissingDependencyValidator', () => {
   describe('property tokens', () => {
     it('should not report false missing dependency when primitive param is covered by a useProperty token', () => {
       const source = `
+        import { definePartialConfig, useProperty } from '@djodjonx/neosyringe';
         class DatabaseService {
           constructor(private connectionString: string) {}
         }
@@ -403,6 +416,7 @@ describe('MissingDependencyValidator', () => {
   describe('edge cases', () => {
     it('should handle class with no constructor', () => {
       const source = `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         class SimpleService {}
 
         export const builder = defineBuilderConfig({
@@ -422,6 +436,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should handle constructor with no parameters', () => {
       const source = `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         class SimpleService {
           constructor() {}
         }
@@ -443,6 +458,7 @@ describe('MissingDependencyValidator', () => {
 
     it('should skip parameters without type annotation', () => {
       const source = `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         class UserService {
           constructor(param) {} // No type annotation
         }
@@ -467,6 +483,7 @@ describe('MissingDependencyValidator', () => {
   describe('multi-registration as dependency source', () => {
     it('should NOT report missing when dep is satisfied by a multi-registration (modular path)', () => {
       const source = `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         interface IPlugin { run(): void; }
         interface IRepository { query(): void; }
         class PluginA implements IPlugin { run() {} }
@@ -529,6 +546,7 @@ describe('MissingDependencyValidator', () => {
           }
         `,
         'container.ts': `
+          import { defineBuilderConfig } from '@djodjonx/neosyringe';
           import { UserService } from './service';
           function defineBuilderConfig(c: any) { return c; }
           export const container = defineBuilderConfig({
@@ -555,6 +573,7 @@ describe('MissingDependencyValidator', () => {
           }
         `,
         'container.ts': `
+          import { defineBuilderConfig } from '@djodjonx/neosyringe';
           import Login from './login';
           function defineBuilderConfig(c: any) { return c; }
           export const container = defineBuilderConfig({

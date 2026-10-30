@@ -23,6 +23,7 @@ describe('Legacy Container Integration', () => {
     it('should extract tokens from declareContainerTokens type argument', () => {
       const fileName = 'legacy-tokens.ts';
       const fileContent = `
+        import { defineBuilderConfig, declareContainerTokens } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function declareContainerTokens<T>(container: any): T { return container; }
 
@@ -77,6 +78,7 @@ describe('Legacy Container Integration', () => {
     it('should fail validation if legacy token is not declared', () => {
       const fileName = 'missing-legacy.ts';
       const fileContent = `
+        import { defineBuilderConfig, declareContainerTokens } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function declareContainerTokens<T>(container: any): T { return container; }
 
@@ -114,6 +116,7 @@ describe('Legacy Container Integration', () => {
     it('should prevent duplicate registration of legacy tokens', () => {
       const fileName = 'duplicate-legacy.ts';
       const fileContent = `
+        import { defineBuilderConfig, declareContainerTokens } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function declareContainerTokens<T>(container: any): T { return container; }
 
@@ -145,6 +148,7 @@ describe('Legacy Container Integration', () => {
     it('should generate code with legacy container delegation', () => {
       const fileName = 'generate-legacy.ts';
       const fileContent = `
+        import { defineBuilderConfig, declareContainerTokens } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function declareContainerTokens<T>(container: any): T { return container; }
 
@@ -190,6 +194,7 @@ describe('Legacy Container Integration', () => {
     it('should allow mixing NeoSyringe and legacy dependencies', () => {
       const fileName = 'mixed.ts';
       const fileContent = `
+        import { defineBuilderConfig, declareContainerTokens, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function declareContainerTokens<T>(container: any): T { return container; }
         function useInterface<T>(): any { return null; }
@@ -241,6 +246,7 @@ describe('Legacy Container Integration', () => {
     it('should handle multiple legacy containers', () => {
       const fileName = 'multi-legacy.ts';
       const fileContent = `
+        import { defineBuilderConfig, declareContainerTokens } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function declareContainerTokens<T>(container: any): T { return container; }
 

@@ -12,6 +12,7 @@ const createProgram = (fileName: string, content: string) => {
 describe('Analyzer - multi registrations', () => {
   it('should collect multi-registrations in multiNodes', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -42,6 +43,7 @@ describe('Analyzer - multi registrations', () => {
 
   it('should emit a duplicate error when one has multi and one does not', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -65,6 +67,7 @@ describe('Analyzer - multi registrations', () => {
 
   it('should route useValue multi-registrations to multiNodes', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -93,6 +96,7 @@ describe('Analyzer - multi registrations', () => {
 
   it('should not treat multi-registrations as duplicates', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 

@@ -3,6 +3,7 @@ import { TSContext } from '../../TSContext';
 import type { TokenId } from '../types';
 import { HashUtils } from './HashUtils';
 import { type ILogger, consoleLogger } from './Logger';
+import { resolveNeoMarker } from './markerProvenance';
 
 /**
  * Service for resolving TypeScript nodes to token IDs.
@@ -227,8 +228,7 @@ export class TokenResolverService {
    */
   isUseInterfaceCall(node: ts.Expression | undefined): node is ts.CallExpression {
     if (!node || !TSContext.ts.isCallExpression(node)) return false;
-    const expr = node.expression;
-    return TSContext.ts.isIdentifier(expr) && expr.text === 'useInterface';
+    return resolveNeoMarker(this.checker, node) === 'useInterface';
   }
 
   /**
@@ -247,8 +247,7 @@ export class TokenResolverService {
    */
   isUsePropertyCall(node: ts.Expression | undefined): node is ts.CallExpression {
     if (!node || !TSContext.ts.isCallExpression(node)) return false;
-    const expr = node.expression;
-    return TSContext.ts.isIdentifier(expr) && expr.text === 'useProperty';
+    return resolveNeoMarker(this.checker, node) === 'useProperty';
   }
 
   /**
