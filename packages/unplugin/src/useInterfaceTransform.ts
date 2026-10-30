@@ -7,6 +7,8 @@ type SourceEdit = { start: number; end: number; text: string };
 /**
  * The call's result is read by a property, element, call, tag or non-null
  * chain. Marking it PURE lets the bundler delete that later effect.
+ * `as`, `satisfies`, `<T>` and parentheses are not a read. Emit drops them,
+ * so the check walks through them and only then looks for a chain.
  */
 function partialCallFeedsChain(node: ts.Node): boolean {
   let current = node;
@@ -14,6 +16,16 @@ function partialCallFeedsChain(node: ts.Node): boolean {
   for (;;) {
     const parent = current.parent;
     if (!parent) return chained;
+    if (
+      (ts.isParenthesizedExpression(parent) ||
+        ts.isAsExpression(parent) ||
+        ts.isSatisfiesExpression(parent) ||
+        ts.isTypeAssertionExpression(parent)) &&
+      parent.expression === current
+    ) {
+      current = parent;
+      continue;
+    }
     if (
       (ts.isPropertyAccessExpression(parent) ||
         ts.isElementAccessExpression(parent) ||
