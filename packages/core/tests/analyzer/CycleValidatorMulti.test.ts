@@ -15,6 +15,7 @@ describe('CycleValidator — multi-injection tokens', () => {
     // PluginA requires IPlugin in its constructor, and is registered as the
     // multi-provider for IPlugin → IPlugin_hash → IPlugin_hash cycle.
     const source = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       interface IPlugin { run(): void; }
       class PluginA implements IPlugin {
         constructor(private p: IPlugin) {}
@@ -40,6 +41,7 @@ describe('CycleValidator — multi-injection tokens', () => {
 
   it('should not raise a false positive when multi and local tokens do not cycle', () => {
     const source = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       interface IPlugin { run(): void; }
       class ServiceB {}
       class PluginA implements IPlugin {
@@ -64,6 +66,7 @@ describe('CycleValidator — multi-injection tokens', () => {
     // in their constructor. This creates a self-cycle for the multi-injection token
     // with 2 providers — both should generate errors, not just the first one.
     const source = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       interface IPlugin { run(): void; }
       class PluginA implements IPlugin {
         constructor(private p: IPlugin) {}

@@ -43,6 +43,7 @@ describe('Analyzer - PropertyToken Support', () => {
   it('should detect useProperty(Class, paramName) token', () => {
     const fileName = 'property-token.ts';
     const fileContent = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useProperty<T>(cls: any, name: string): any { return null; }
 
@@ -81,6 +82,7 @@ describe('Analyzer - PropertyToken Support', () => {
 it('should auto-wire class with PropertyToken dependencies', () => {
     const fileName = 'property-autowire.ts';
     const fileContent = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useProperty<T>(cls: any, name: string): any { return null; }
 
@@ -112,6 +114,7 @@ it('should auto-wire class with PropertyToken dependencies', () => {
   it('should not collide between different classes with same param name', () => {
     const fileName = 'property-no-collision.ts';
     const fileContent = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useProperty<T>(cls: any, name: string): any { return null; }
 
@@ -159,6 +162,7 @@ it('should auto-wire class with PropertyToken dependencies', () => {
   it('should mix PropertyTokens with class dependencies', () => {
     const fileName = 'property-mixed.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       function useInterface<T>(): any { return null; }

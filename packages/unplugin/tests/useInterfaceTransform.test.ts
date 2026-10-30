@@ -136,6 +136,7 @@ describe('useInterface Transformation', () => {
 
   it('should track useInterface<T>() calls in usedTokens map when provided', () => {
     const input = `
+      import { useInterface } from '@djodjonx/neosyringe';
       interface IMyService { getValue(): string; }
       function useInterface<T>(): any { return null; }
 

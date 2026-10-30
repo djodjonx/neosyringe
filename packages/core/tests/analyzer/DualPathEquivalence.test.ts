@@ -29,6 +29,7 @@ describe('DualPathEquivalence', () => {
   describe('Missing dependency detection', () => {
     it('modular path should detect missing dependencies, legacy defers to Generator', () => {
       const source = `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         class Repository {}
         class Logger {}
 
@@ -74,6 +75,7 @@ describe('DualPathEquivalence', () => {
   describe('Duplicate registration detection', () => {
     it('should detect duplicates in both paths', () => {
       const source = `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         class Logger {}
 
         export const container = defineBuilderConfig({
@@ -170,6 +172,7 @@ describe('DualPathEquivalence', () => {
   describe('Valid configuration', () => {
     it('should produce no errors in both paths for valid config', () => {
       const source = `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         class Repository {}
         class Logger {}
 
@@ -213,6 +216,7 @@ describe('DualPathEquivalence', () => {
   describe('Cycle detection', () => {
     it('modular path detects cycles at analysis, legacy at generation', () => {
       const source = `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         class ServiceA {
           constructor(private b: ServiceB) {}
         }

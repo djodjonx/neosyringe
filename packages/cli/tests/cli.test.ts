@@ -26,6 +26,7 @@ describe('CLI - Validation Logic', () => {
   describe('Validation Success', () => {
     it('should pass validation for valid configuration', () => {
       const program = createProgram('valid.ts', `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         class A {}
         class B { constructor(a: A) {} }
@@ -44,6 +45,7 @@ describe('CLI - Validation Logic', () => {
 
     it('should report correct service count', () => {
       const program = createProgram('count.ts', `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         class A {}
         class B {}
@@ -71,6 +73,7 @@ describe('CLI - Validation Logic', () => {
   describe('Validation Errors', () => {
     it('should detect circular dependency', () => {
       const program = createProgram('circular.ts', `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         class A { constructor(b: B) {} }
         class B { constructor(a: A) {} }
@@ -88,6 +91,7 @@ describe('CLI - Validation Logic', () => {
 
     it('should detect missing binding', () => {
       const program = createProgram('missing.ts', `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         class Missing {}
         class A { constructor(m: Missing) {} }
@@ -105,6 +109,7 @@ describe('CLI - Validation Logic', () => {
 
     it('should detect duplicate registration', () => {
       const program = createProgram('duplicate.ts', `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         class A {}
         export const c = defineBuilderConfig({
@@ -128,6 +133,7 @@ describe('CLI - Validation Logic', () => {
   describe('Error Message Quality', () => {
     it('should include service names in circular error', () => {
       const program = createProgram('circular-names.ts', `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         class UserService { constructor(o: OrderService) {} }
         class OrderService { constructor(u: UserService) {} }
@@ -151,6 +157,7 @@ describe('CLI - Validation Logic', () => {
 
     it('should include dependent service in missing error', () => {
       const program = createProgram('missing-names.ts', `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         class DatabaseConnection {}
         class UserRepository { constructor(db: DatabaseConnection) {} }
@@ -176,6 +183,7 @@ describe('CLI - Validation Logic', () => {
   describe('Complex Scenarios', () => {
     it('should handle valid complex graph', () => {
       const program = createProgram('complex.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -208,6 +216,7 @@ describe('CLI - Validation Logic', () => {
 
     it('should detect circular in complex graph', () => {
       const program = createProgram('complex-circular.ts', `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
 
         class A { constructor(d: D) {} }
@@ -236,6 +245,7 @@ describe('CLI - Validation Logic', () => {
   describe('Scoped Injections', () => {
     it('should pass validation with scoped: true override', () => {
       const program = createProgram('scoped-valid.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -264,6 +274,7 @@ describe('CLI - Validation Logic', () => {
 
     it('should fail validation without scoped: true', () => {
       const program = createProgram('scoped-invalid.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -292,6 +303,7 @@ describe('CLI - Validation Logic', () => {
 
     it('should suggest scoped: true in error message', () => {
       const program = createProgram('scoped-suggest.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 

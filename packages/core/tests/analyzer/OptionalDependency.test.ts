@@ -26,6 +26,7 @@ describe('Optional dependencies (build path — Analyzer.extract()/GraphValidato
   it('does not flag an unregistered `?` constructor param as missing', () => {
     const fileName = 'optional-question.ts';
     const fileContent = `
+      import { defineBuilderConfig } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       interface ITelemetry { track(event: string): void; }
       class UserService {
@@ -48,6 +49,7 @@ describe('Optional dependencies (build path — Analyzer.extract()/GraphValidato
     // how virtually every real consumer project (and this repo itself) builds.
     const fileName = 'optional-union.ts';
     const fileContent = `
+      import { defineBuilderConfig } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       interface ITelemetry { track(event: string): void; }
       class UserService {
@@ -72,6 +74,7 @@ describe('Optional dependencies (build path — Analyzer.extract()/GraphValidato
   it('still flags a non-optional unregistered constructor param as missing', () => {
     const fileName = 'required.ts';
     const fileContent = `
+      import { defineBuilderConfig } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       interface ITelemetry { track(event: string): void; }
       class UserService {
@@ -88,6 +91,7 @@ describe('Optional dependencies (build path — Analyzer.extract()/GraphValidato
   it('still wires an optional dependency normally when it IS registered', () => {
     const fileName = 'optional-registered.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
       interface ITelemetry { track(event: string): void; }

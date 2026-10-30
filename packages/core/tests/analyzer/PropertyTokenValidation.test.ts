@@ -25,6 +25,7 @@ describe('useProperty<T> provider type validation', () => {
 
   it('errors when provider returns string but useProperty<number> expects number', () => {
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Login { constructor(public tokenExpired: number) {} }
@@ -46,6 +47,7 @@ describe('useProperty<T> provider type validation', () => {
 
   it('errors when provider returns number but useProperty<string> expects string', () => {
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Service { constructor(public url: string) {} }
@@ -67,6 +69,7 @@ describe('useProperty<T> provider type validation', () => {
 
   it('errors when provider returns boolean but useProperty<number> expects number', () => {
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Service { constructor(public maxRetries: number) {} }
@@ -86,6 +89,7 @@ describe('useProperty<T> provider type validation', () => {
 
   it('errors when provider returns object but useProperty<string> expects string', () => {
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Service { constructor(public name: string) {} }
@@ -107,6 +111,7 @@ describe('useProperty<T> provider type validation', () => {
 
   it('accepts provider returning number for useProperty<number>', () => {
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Login { constructor(public tokenExpired: number) {} }
@@ -126,6 +131,7 @@ describe('useProperty<T> provider type validation', () => {
 
   it('accepts provider returning string for useProperty<string>', () => {
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Service { constructor(public url: string) {} }
@@ -145,6 +151,7 @@ describe('useProperty<T> provider type validation', () => {
 
   it('accepts provider returning boolean for useProperty<boolean>', () => {
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Service { constructor(public enabled: boolean) {} }
@@ -164,6 +171,7 @@ describe('useProperty<T> provider type validation', () => {
 
   it('accepts provider via variable reference returning correct type', () => {
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Service { constructor(public port: number) {} }
@@ -185,6 +193,7 @@ describe('useProperty<T> provider type validation', () => {
   it('accepts provider returning subtype (string literal) for useProperty<string>', () => {
     // string literals are assignable to string
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Service { constructor(public env: string) {} }
@@ -208,6 +217,7 @@ describe('useProperty<T> provider type validation', () => {
     // async () => 42 has return type Promise<number>. Validating Promise<number> against number
     // would be a false positive — the runtime unwraps it via initialize(). We skip the check.
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Login { constructor(public tokenExpired: number) {} }
@@ -228,6 +238,7 @@ describe('useProperty<T> provider type validation', () => {
     // provider: SomeClass is a class (construct signature only, no call signature)
     // useProperty requires a factory function — this should be an explicit error.
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Login { constructor(public tokenExpired: number) {} }
@@ -250,6 +261,7 @@ describe('useProperty<T> provider type validation', () => {
 
   it('also reports the error via the modular LSP path (extractForFile)', () => {
     const code = `
+      import { defineBuilderConfig, useProperty } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useProperty<T>(cls: any, name: string): any { return null; }
       class Login { constructor(public tokenExpired: number) {} }

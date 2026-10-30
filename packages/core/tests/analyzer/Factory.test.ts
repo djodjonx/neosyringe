@@ -34,6 +34,7 @@ describe('Analyzer - Factory Support', () => {
   it('should detect arrow function factory with useFactory: true', () => {
     const fileName = 'factory-explicit.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -67,6 +68,7 @@ describe('Analyzer - Factory Support', () => {
   it('should auto-detect arrow function as factory without useFactory flag', () => {
     const fileName = 'factory-auto.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -100,6 +102,7 @@ describe('Analyzer - Factory Support', () => {
   it('should detect factory with class dependency', () => {
     const fileName = 'factory-deps.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -139,6 +142,7 @@ describe('Analyzer - Factory Support', () => {
   it('should support factory with transient scope', () => {
     const fileName = 'factory-transient.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -169,6 +173,7 @@ describe('Analyzer - Factory Support', () => {
   it('should not treat class as factory', () => {
     const fileName = 'not-factory.ts';
     const fileContent = `
+      import { defineBuilderConfig } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
 
       class UserService {}

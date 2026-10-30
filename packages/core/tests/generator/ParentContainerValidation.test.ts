@@ -21,6 +21,7 @@ describe('GraphValidator - Parent Container Support', () => {
   it('should not throw missing binding error when dependency is in parent container', () => {
     const fileName = 'parent-container.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -63,6 +64,7 @@ describe('GraphValidator - Parent Container Support', () => {
   it('should throw missing binding error when dependency is not in parent or local', () => {
     const fileName = 'missing-binding.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -103,6 +105,7 @@ describe('GraphValidator - Parent Container Support', () => {
   it('should extract tokens from declareContainerTokens', () => {
     const fileName = 'legacy-container.ts';
     const fileContent = `
+      import { defineBuilderConfig, declareContainerTokens } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function declareContainerTokens<T>(container: any): T { return container; }
 
@@ -148,6 +151,7 @@ describe('GraphValidator - Parent Container Support', () => {
   it('should handle multi-level parent hierarchy', () => {
     const fileName = 'multi-level.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -203,6 +207,7 @@ describe('GraphValidator - Parent Container Support', () => {
   it('should not detect false cycle with parent dependencies', () => {
     const fileName = 'no-false-cycle.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -244,6 +249,7 @@ describe('GraphValidator - Parent Container Support', () => {
   it('should throw duplicate error when local token is already in parent', () => {
     const fileName = 'duplicate-parent.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 

@@ -13,6 +13,7 @@ const createProgram = (fileName: string, content: string) => {
 describe('resolveAll — Analyzer to Generator integration', () => {
   it('should generate resolveAll with all multi-providers', () => {
     const program = createProgram('container.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -50,6 +51,7 @@ describe('resolveAll — Analyzer to Generator integration', () => {
 
   it('should not include multi-tokens in regular resolve()', () => {
     const program = createProgram('container.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 

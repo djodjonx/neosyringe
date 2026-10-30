@@ -13,6 +13,7 @@ const createProgram = (fileName: string, content: string) => {
 describe('Async factories — Analyzer to Generator integration', () => {
   it('should generate initialize() for async factory', () => {
     const program = createProgram('container.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -57,6 +58,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
 
   it('should generate a cascading initialize() when a sync child uses a useContainer parent with async factories', () => {
     const program = createProgram('container.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -99,6 +101,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
 
   it('should NOT generate initialize() for all-sync container', () => {
     const program = createProgram('container.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -121,6 +124,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
 
   it('should emit error for async factory with transient lifecycle', () => {
     const program = createProgram('container.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -146,6 +150,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
 
   it('should reset _initialized in destroy() to allow re-initialization in tests', () => {
     const program = createProgram('container.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 

@@ -50,7 +50,8 @@ describe('TokenResolverService', () => {
 
   describe('isUseInterfaceCall', () => {
     it('should identify useInterface call', () => {
-      const sourceCode = `const token = useInterface<ILogger>();`;
+      const sourceCode = `import { useInterface } from '@djodjonx/neosyringe';
+const token = useInterface<ILogger>();`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
 
       const callExpr = findNode(sourceFile, ts.isCallExpression);
@@ -74,7 +75,8 @@ describe('TokenResolverService', () => {
 
   describe('isUsePropertyCall', () => {
     it('should identify useProperty call', () => {
-      const sourceCode = `const token = useProperty<string>(MyClass, 'prop');`;
+      const sourceCode = `import { useProperty } from '@djodjonx/neosyringe';
+const token = useProperty<string>(MyClass, 'prop');`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
 
@@ -83,7 +85,8 @@ describe('TokenResolverService', () => {
     });
 
     it('should return false for non-useProperty calls', () => {
-      const sourceCode = `const token = useInterface<ILogger>();`;
+      const sourceCode = `import { useInterface } from '@djodjonx/neosyringe';
+const token = useInterface<ILogger>();`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
 
@@ -95,6 +98,7 @@ describe('TokenResolverService', () => {
   describe('extractInterfaceTokenId', () => {
     it('should extract token ID from useInterface call', () => {
       const sourceCode = `
+        import { useInterface } from '@djodjonx/neosyringe';
         interface ILogger { }
         const token = useInterface<ILogger>();
       `;
@@ -111,7 +115,8 @@ describe('TokenResolverService', () => {
     });
 
     it('should throw error if type argument is missing', () => {
-      const sourceCode = `const token = useInterface();`;
+      const sourceCode = `import { useInterface } from '@djodjonx/neosyringe';
+const token = useInterface();`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
 
@@ -126,7 +131,8 @@ describe('TokenResolverService', () => {
 
   describe('extractPropertyTokenId', () => {
     it('should extract token ID from useProperty call', () => {
-      const sourceCode = `const token = useProperty<string>(DatabaseService, 'connectionString');`;
+      const sourceCode = `import { useProperty } from '@djodjonx/neosyringe';
+const token = useProperty<string>(DatabaseService, 'connectionString');`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
 
@@ -138,7 +144,8 @@ describe('TokenResolverService', () => {
     });
 
     it('should throw error if arguments are missing', () => {
-      const sourceCode = `const token = useProperty<string>();`;
+      const sourceCode = `import { useProperty } from '@djodjonx/neosyringe';
+const token = useProperty<string>();`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
 
@@ -151,7 +158,8 @@ describe('TokenResolverService', () => {
     });
 
     it('should throw error if first argument is not identifier', () => {
-      const sourceCode = `const token = useProperty<string>("notIdentifier", 'prop');`;
+      const sourceCode = `import { useProperty } from '@djodjonx/neosyringe';
+const token = useProperty<string>("notIdentifier", 'prop');`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
 
@@ -166,7 +174,8 @@ describe('TokenResolverService', () => {
 
   describe('resolveToInitializer', () => {
     it('should return call expression as-is', () => {
-      const sourceCode = `const token = useInterface<ILogger>();`;
+      const sourceCode = `import { useInterface } from '@djodjonx/neosyringe';
+const token = useInterface<ILogger>();`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
 
@@ -179,6 +188,7 @@ describe('TokenResolverService', () => {
 
     it('should resolve identifier to its initializer', () => {
       const sourceCode = `
+        import { useInterface } from '@djodjonx/neosyringe';
         const myToken = useInterface<ILogger>();
         const token = myToken;
       `;
@@ -209,7 +219,8 @@ describe('TokenResolverService', () => {
     });
 
     it('should unwrap type assertions', () => {
-      const sourceCode = `const token = useInterface<ILogger>() as any;`;
+      const sourceCode = `import { useInterface } from '@djodjonx/neosyringe';
+const token = useInterface<ILogger>() as any;`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
 
@@ -222,7 +233,8 @@ describe('TokenResolverService', () => {
     });
 
     it('should unwrap parenthesized expressions', () => {
-      const sourceCode = `const token = (useInterface<ILogger>());`;
+      const sourceCode = `import { useInterface } from '@djodjonx/neosyringe';
+const token = (useInterface<ILogger>());`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
 
@@ -285,6 +297,7 @@ describe('TokenResolverService', () => {
   describe('resolveTokenId', () => {
     it('should resolve useInterface call', () => {
       const sourceCode = `
+        import { useInterface } from '@djodjonx/neosyringe';
         interface ILogger { }
         const token = useInterface<ILogger>();
       `;
@@ -299,7 +312,8 @@ describe('TokenResolverService', () => {
     });
 
     it('should resolve useProperty call', () => {
-      const sourceCode = `const token = useProperty<string>(MyClass, 'prop');`;
+      const sourceCode = `import { useProperty } from '@djodjonx/neosyringe';
+const token = useProperty<string>(MyClass, 'prop');`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
 

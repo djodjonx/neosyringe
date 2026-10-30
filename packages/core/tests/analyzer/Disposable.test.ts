@@ -13,6 +13,7 @@ const createProgram = (fileName: string, content: string) => {
 describe('Analyzer - disposable detection', () => {
   it('should set isDisposable for class with dispose(): void', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       class DbConnection {
         query(sql: string) { return []; }
@@ -33,6 +34,7 @@ describe('Analyzer - disposable detection', () => {
 
   it('should set isAsyncDisposable for class with dispose(): Promise<void>', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       class RedisClient {
         async dispose(): Promise<void> { /* disconnect */ }
@@ -51,6 +53,7 @@ describe('Analyzer - disposable detection', () => {
 
   it('should NOT set isDisposable for class without dispose()', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       class SimpleService { doWork() {} }
       export const container = defineBuilderConfig({
@@ -67,6 +70,7 @@ describe('Analyzer - disposable detection', () => {
 
   it('should NOT set isDisposable for factory registrations', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
       interface IConnection { query(): any; }

@@ -1,4 +1,4 @@
-import { defineBuilderConfig, useInterface } from '../../../neosyringe/src/index.js';
+import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
 
 interface ILogger {
   log(msg: string): void;

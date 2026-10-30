@@ -29,6 +29,7 @@ describe('FactoryEmitter — parent/legacy container wiring', () => {
   it('wires an interface-token dependency satisfied by a useContainer parent via this.resolve(), not undefined', () => {
     const fileName = 'parent-wiring.ts';
     const fileContent = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -68,6 +69,7 @@ describe('FactoryEmitter — parent/legacy container wiring', () => {
   it('wires a dependency satisfied by a declareContainerTokens legacy container via this.resolve()', () => {
     const fileName = 'legacy-wiring.ts';
     const fileContent = `
+      import { defineBuilderConfig, declareContainerTokens } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function declareContainerTokens<T>(container: any): T { return container; }
 
@@ -103,6 +105,7 @@ describe('FactoryEmitter — parent/legacy container wiring', () => {
   it('wires a bare class token from the parent via this.resolve(<the class>), not undefined', () => {
     const fileName = 'parent-class-token.ts';
     const fileContent = `
+      import { defineBuilderConfig } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
 
       class SharedRepo { find() { return null; } }

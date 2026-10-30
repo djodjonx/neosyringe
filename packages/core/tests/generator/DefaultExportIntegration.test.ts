@@ -34,6 +34,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const files = {
         'login.ts': `export default class Login {}`,
         'container.ts': `
+          import { defineBuilderConfig } from '@djodjonx/neosyringe';
           import Login from './login';
           function defineBuilderConfig(c: any) { return c; }
           export const container = defineBuilderConfig({
@@ -59,6 +60,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const files = {
         'auth-service.ts': `export default class AuthService {}`,
         'container.ts': `
+          import { defineBuilderConfig } from '@djodjonx/neosyringe';
           import Login from './auth-service';
           function defineBuilderConfig(c: any) { return c; }
           export const container = defineBuilderConfig({
@@ -83,6 +85,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const files = {
         'auth-service.ts': `export default class AuthService {}`,
         'container.ts': `
+          import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
           function useInterface<T>(): any { return null; }
           function defineBuilderConfig(c: any) { return c; }
           import Login from './auth-service';
@@ -108,6 +111,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const files = {
         'auth-service.ts': `export class AuthService {}`,
         'container.ts': `
+          import { defineBuilderConfig } from '@djodjonx/neosyringe';
           import { AuthService } from './auth-service';
           function defineBuilderConfig(c: any) { return c; }
           export const container = defineBuilderConfig({
@@ -133,6 +137,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const files = {
         'login.ts': `export default class Login {}`,
         'container.ts': `
+          import { defineBuilderConfig } from '@djodjonx/neosyringe';
           import Login from './login';
           function defineBuilderConfig(c: any) { return c; }
           export const container = defineBuilderConfig({
@@ -157,6 +162,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const files = {
         'auth-service.ts': `export default class AuthService {}`,
         'container.ts': `
+          import { defineBuilderConfig } from '@djodjonx/neosyringe';
           import Login from './auth-service';
           function defineBuilderConfig(c: any) { return c; }
           export const container = defineBuilderConfig({
@@ -181,6 +187,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const files = {
         'auth-service.ts': `export default class AuthService {}`,
         'container.ts': `
+          import { defineBuilderConfig } from '@djodjonx/neosyringe';
           import Login from './auth-service';
           function defineBuilderConfig(c: any) { return c; }
           export const container = defineBuilderConfig({
@@ -205,6 +212,7 @@ describe('DefaultExport integration (InjectionParser → Analyzer → Generator)
       const files = {
         'auth-service.ts': `export class AuthService {}`,
         'container.ts': `
+          import { defineBuilderConfig } from '@djodjonx/neosyringe';
           import { AuthService } from './auth-service';
           function defineBuilderConfig(c: any) { return c; }
           export const container = defineBuilderConfig({

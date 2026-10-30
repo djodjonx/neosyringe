@@ -27,6 +27,7 @@ describe('definePartialConfig — expects field', () => {
 
   it('suppresses missing-dep errors for tokens declared in expects (interface token)', () => {
     const code = `
+      import { definePartialConfig, useInterface } from '@djodjonx/neosyringe';
       function definePartialConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -45,6 +46,7 @@ describe('definePartialConfig — expects field', () => {
 
   it('still errors on deps that are missing AND not in expects', () => {
     const code = `
+      import { definePartialConfig, useInterface } from '@djodjonx/neosyringe';
       function definePartialConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -68,6 +70,7 @@ describe('definePartialConfig — expects field', () => {
 
   it('still errors on missing deps when expects is absent (regression)', () => {
     const code = `
+      import { definePartialConfig, useInterface } from '@djodjonx/neosyringe';
       function definePartialConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -87,6 +90,7 @@ describe('definePartialConfig — expects field', () => {
 
   it('supports class tokens in expects', () => {
     const code = `
+      import { definePartialConfig } from '@djodjonx/neosyringe';
       function definePartialConfig(c: any) { return c; }
       class CacheClient {}
       class Login { constructor(private cache: CacheClient) {} }
@@ -103,6 +107,7 @@ describe('definePartialConfig — expects field', () => {
 
   it('suppresses errors via the LSP modular path (extractForFile)', () => {
     const code = `
+      import { definePartialConfig, useInterface } from '@djodjonx/neosyringe';
       function definePartialConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -131,6 +136,7 @@ describe('definePartialConfig — expects field', () => {
     const files = {
       'interfaces.ts': `export interface ICacheClient { get(k: string): string; }`,
       'partial.ts': `
+        import { definePartialConfig, useInterface } from '@djodjonx/neosyringe';
         import type { ICacheClient } from './interfaces';
         function definePartialConfig(c: any) { return c; }
         function useInterface<T>(): any { return null; }
@@ -141,6 +147,7 @@ describe('definePartialConfig — expects field', () => {
         });
       `,
       'container.ts': `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         import type { ICacheClient } from './interfaces';
         import { userPartial } from './partial';
         function defineBuilderConfig(c: any) { return c; }
@@ -162,6 +169,7 @@ describe('definePartialConfig — expects field', () => {
     const files = {
       'interfaces.ts': `export interface ICacheClient { get(k: string): string; }`,
       'partial.ts': `
+        import { definePartialConfig, useInterface } from '@djodjonx/neosyringe';
         import type { ICacheClient } from './interfaces';
         function definePartialConfig(c: any) { return c; }
         function useInterface<T>(): any { return null; }
@@ -172,6 +180,7 @@ describe('definePartialConfig — expects field', () => {
         });
       `,
       'container.ts': `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         import { userPartial } from './partial';
         function defineBuilderConfig(c: any) { return c; }
         export const appContainer = defineBuilderConfig({
@@ -191,6 +200,7 @@ describe('definePartialConfig — expects field', () => {
     const files = {
       'interfaces.ts': `export interface ICacheClient { get(k: string): string; }`,
       'cache-partial.ts': `
+        import { definePartialConfig, useInterface } from '@djodjonx/neosyringe';
         import type { ICacheClient } from './interfaces';
         function definePartialConfig(c: any) { return c; }
         function useInterface<T>(): any { return null; }
@@ -200,6 +210,7 @@ describe('definePartialConfig — expects field', () => {
         });
       `,
       'user-partial.ts': `
+        import { definePartialConfig, useInterface } from '@djodjonx/neosyringe';
         import type { ICacheClient } from './interfaces';
         function definePartialConfig(c: any) { return c; }
         function useInterface<T>(): any { return null; }
@@ -210,6 +221,7 @@ describe('definePartialConfig — expects field', () => {
         });
       `,
       'container.ts': `
+        import { defineBuilderConfig } from '@djodjonx/neosyringe';
         import { cachePartial } from './cache-partial';
         import { userPartial } from './user-partial';
         function defineBuilderConfig(c: any) { return c; }

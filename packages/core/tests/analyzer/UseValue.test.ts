@@ -13,6 +13,7 @@ const createProgram = (fileName: string, fileContent: string) => {
 describe('Analyzer - useValue', () => {
   it('should detect useValue and set type to value', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -35,6 +36,7 @@ describe('Analyzer - useValue', () => {
 
   it('should reject useValue with useInterface<string>() and suggest useProperty', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -53,6 +55,7 @@ describe('Analyzer - useValue', () => {
 
   it('should reject useValue with useInterface<number>()', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 
@@ -70,6 +73,7 @@ describe('Analyzer - useValue', () => {
 
   it('should ignore lifecycle for useValue (always singleton)', () => {
     const program = createProgram('test.ts', `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
       function useInterface<T>(): any { return null; }
 

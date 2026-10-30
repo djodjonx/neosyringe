@@ -39,6 +39,7 @@ describe('useInterface Token Generation', () => {
 
   it('should generate resolve check with full tokenId including path', () => {
     const code = generateCode(`
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -63,6 +64,7 @@ describe('useInterface Token Generation', () => {
 
   it('should work with useInterface defined as const', () => {
     const code = generateCode(`
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -91,6 +93,7 @@ describe('useInterface Token Generation', () => {
   it('should generate same tokenId for inline vs const useInterface', () => {
     // Test with inline
     const inlineCode = generateCode(`
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 
@@ -107,6 +110,7 @@ describe('useInterface Token Generation', () => {
 
     // Test with const
     const constCode = generateCode(`
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(config: any) { return config; }
       function useInterface<T>(): any { return null; }
 

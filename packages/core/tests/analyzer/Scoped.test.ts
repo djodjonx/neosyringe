@@ -28,6 +28,7 @@ describe('Scoped Injection', () => {
   describe('Analyzer - scoped detection', () => {
     it('should detect scoped: true in injection', () => {
       const program = createProgram('scoped.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -54,6 +55,7 @@ describe('Scoped Injection', () => {
 
     it('should detect scoped: false (default) when not specified', () => {
       const program = createProgram('not-scoped.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -80,6 +82,7 @@ describe('Scoped Injection', () => {
 
     it('should allow duplicate registration when scoped: true in same container', () => {
       const program = createProgram('scoped-same.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -103,6 +106,7 @@ describe('Scoped Injection', () => {
   describe('GraphValidator - scoped with parent', () => {
     it('should throw duplicate error without scoped: true', () => {
       const program = createProgram('duplicate.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -131,6 +135,7 @@ describe('Scoped Injection', () => {
 
     it('should NOT throw duplicate error with scoped: true', () => {
       const program = createProgram('scoped-override.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -159,6 +164,7 @@ describe('Scoped Injection', () => {
 
     it('should suggest scoped: true in error message', () => {
       const program = createProgram('suggest-scoped.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -194,6 +200,7 @@ describe('Scoped Injection', () => {
   describe('Generator - scoped code generation', () => {
     it('should generate local factory for scoped token', () => {
       const program = createProgram('gen-scoped.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -229,6 +236,7 @@ describe('Scoped Injection', () => {
 
     it('should resolve scoped token locally before parent', () => {
       const program = createProgram('resolve-local.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -268,6 +276,7 @@ describe('Scoped Injection', () => {
   describe('Scoped with different scopes (singleton/transient)', () => {
     it('should allow scoped + transient', () => {
       const program = createProgram('scoped-transient.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -306,6 +315,7 @@ describe('Scoped Injection', () => {
 
     it('should generate transient code for scoped transient token', () => {
       const program = createProgram('gen-scoped-transient.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -345,6 +355,7 @@ describe('Scoped Injection', () => {
   describe('Complex scenarios', () => {
     it('should work with multi-level hierarchy', () => {
       const program = createProgram('multi-level.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 
@@ -391,6 +402,7 @@ describe('Scoped Injection', () => {
 
     it('should work with factory + scoped', () => {
       const program = createProgram('factory-scoped.ts', `
+        import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
         function defineBuilderConfig(config: any) { return config; }
         function useInterface<T>(): any { return null; }
 

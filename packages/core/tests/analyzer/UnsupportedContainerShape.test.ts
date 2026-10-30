@@ -22,6 +22,7 @@ describe('Analyzer — unsupported defineBuilderConfig() shapes', () => {
   }
 
   const BARE_RETURN_CODE = `
+    import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
     function defineBuilderConfig(c: any): any { return c; }
     function useInterface<T>(): any { return null; }
     interface ILogger { log(msg: string): void; }
@@ -49,6 +50,7 @@ describe('Analyzer — unsupported defineBuilderConfig() shapes', () => {
 
   it('does not throw for the supported const-then-return shape', () => {
     const code = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any): any { return c; }
       function useInterface<T>(): any { return null; }
       interface ILogger { log(msg: string): void; }
@@ -70,6 +72,7 @@ describe('Analyzer — unsupported defineBuilderConfig() shapes', () => {
 
   it('does not throw for export default defineBuilderConfig(...)', () => {
     const code = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any): any { return c; }
       function useInterface<T>(): any { return null; }
       interface ILogger { log(msg: string): void; }
