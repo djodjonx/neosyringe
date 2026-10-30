@@ -187,6 +187,8 @@ function namedFromSymbol(
   const resolved = resolveAlias(checker, symbol);
   const declaration = canonicalDeclaration(resolved);
   if (isFunctionOrBlockLocal(declaration)) return unsupported('local-declaration');
+  // packages/core/src/analyzer/shared/tokenDescriptor.ts:166 does not walk a ClassExpression.
+  if (TSContext.ts.isClassExpression(declaration)) return unsupported('class-expression');
   const declName = qualifiedDeclarationName(declaration, resolved.getName());
   const origin = declarationOrigin(declaration.getSourceFile().fileName);
   const argBody = argumentDescriptors.length === 0 ? '' : pack(argumentDescriptors);
@@ -257,6 +259,36 @@ function literalParts(type: ts.Type): CanonicalParts | undefined {
   return undefined;
 }
 
+/**
+ * Empty marks on a mutable form keep the plain text (`v1|tuple|...`, `v1|array|...`).
+ * A rest, optional or readonly form changes the text, so the two cannot share an id.
+ */
+function sequenceDescriptor(
+  kind: string,
+  parts: readonly string[],
+  marks: readonly string[],
+  readonlyForm: boolean,
+): string {
+  const tagged = marks.every((mark) => mark === '')
+    ? parts
+    : parts.map((part, index) => `${marks[index] ?? ''}${part}`);
+  if (!readonlyForm && tagged === parts) return composite(kind, parts);
+  return composite(readonlyForm ? `${kind}-ro` : kind, tagged);
+}
+
+function tupleMarks(type: ts.Type): { marks: string[]; readonlyForm: boolean } {
+  const target = (type as ts.TupleTypeReference).target;
+  const required = TSContext.ts.ElementFlags.Required;
+  const marks = (target?.elementFlags ?? []).map((flag) => (flag === required ? '' : String(flag)));
+  return { marks, readonlyForm: target?.readonly === true };
+}
+
+function arrayMarks(type: ts.Type): { marks: string[]; readonlyForm: boolean } {
+  const target = (type as ts.TypeReference).target;
+  const name = type.getSymbol()?.getName() ?? target?.getSymbol()?.getName();
+  return { marks: [], readonlyForm: name === 'ReadonlyArray' };
+}
+
 /** TypeScript's own names (`__object`, `__function`, `__class`). `__type` stays skippable so a named alias of a type literal can still be recovered. */
 function isStructuralAnonymousSymbol(symbol: ts.Symbol): boolean {
   const name = symbol.getName();
@@ -309,13 +341,15 @@ function describeType(
   if (checker.isTupleType(type)) {
     const parts = checker.getTypeArguments(type as ts.TypeReference)
       .map((part) => describeType(checker, part, depth + 1, false).descriptor);
-    return { name: 'Tuple', descriptor: composite('tuple', parts) };
+    const shape = tupleMarks(type);
+    return { name: 'Tuple', descriptor: sequenceDescriptor('tuple', parts, shape.marks, shape.readonlyForm) };
   }
   if (checker.isArrayType(type)) {
     const inner = checker.getTypeArguments(type as ts.TypeReference)[0];
     if (!inner) return anonymousObject();
     const element = describeType(checker, inner, depth + 1, false);
-    return { name: 'Array', descriptor: composite('array', [element.descriptor]) };
+    const shape = arrayMarks(type);
+    return { name: 'Array', descriptor: sequenceDescriptor('array', [element.descriptor], shape.marks, shape.readonlyForm) };
   }
 
   const symbol = type.getSymbol();
