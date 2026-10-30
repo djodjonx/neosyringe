@@ -171,4 +171,20 @@ describe('CI workflows', () => {
     });
     expect(success.status).toBe(0);
   });
+
+  it('T13-A06 jobs that run repo scripts check out first', () => {
+    const files = ['.github/workflows/ci.yml', '.github/workflows/release.yml'];
+    for (const file of files) {
+      const jobs = loadJobs(file);
+      for (const [name, job] of Object.entries(jobs)) {
+        const checkoutAt = job.steps.findIndex((step) => step.uses?.startsWith('actions/checkout') === true);
+        for (const [index, step] of job.steps.entries()) {
+          const command = step.run ?? '';
+          if (!command.startsWith('node scripts/') && !command.startsWith('pnpm ')) continue;
+          expect(checkoutAt, `${file} ${name}`).toBeGreaterThanOrEqual(0);
+          expect(checkoutAt, `${file} ${name}`).toBeLessThan(index);
+        }
+      }
+    }
+  });
 });
