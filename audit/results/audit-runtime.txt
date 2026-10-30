@@ -1,0 +1,16 @@
+node: v24.7.0
+command: node audit-runtime.mjs
+cwd: .
+exit: 0
+qualification: exit 0 n'est pas une réussite du contrat ; comparer la sortie à audit/BASELINE.md | {"name":"baseline","compile":"passed","result":{"logger":"real","singleton":true}} | {"name":"override","compile":"passed","result":{"before":"mock","after":"mock"}} | {"name":"async","compile":"passed","phase":"runtime","error":"[NeoContainer] This container has async services — call `await container.initialize()` before the first resolve()."} | {"name":"scoped","compile":"passed","result":{"direct":"mock","throughService":"real"}} | {"name":"factory_missing","compile":"passed","phase":"runtime","error":"[NeoContainer] Service not found or token not registered: Missing"} | {"name":"wrong_container","compile":"passed","phase":"runtime","error":"[NeoContainer] Service not found or token not registered: ILogger"}
+--- stdout ---
+{"name":"baseline","compile":"passed","result":{"logger":"real","singleton":true}}
+{"name":"override","compile":"passed","result":{"before":"mock","after":"mock"}}
+{"name":"async","compile":"passed","phase":"runtime","error":"[NeoContainer] This container has async services — call `await container.initialize()` before the first resolve()."}
+{"name":"scoped","compile":"passed","result":{"direct":"mock","throughService":"real"}}
+{"name":"factory_missing","compile":"passed","phase":"runtime","error":"[NeoContainer] Service not found or token not registered: Missing"}
+{"name":"wrong_container","compile":"passed","phase":"runtime","error":"[NeoContainer] Service not found or token not registered: ILogger"}
+
+--- stderr ---
+(node:36344) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)

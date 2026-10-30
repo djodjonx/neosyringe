@@ -1,0 +1,761 @@
+
+> neosyringe-monorepo@0.0.1 test /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais
+> pnpm -r run test
+
+Scope: 7 of 8 workspace projects
+packages/core test$ vitest run
+packages/neosyringe test$ vitest run
+packages/neosyringe test:  RUN  v4.0.17 /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/neosyringe
+packages/core test:  RUN  v4.0.17 /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/core
+packages/neosyringe test:  ✓ tests/index.test.ts (3 tests) 1ms
+packages/neosyringe test:  Test Files  1 passed (1)
+packages/neosyringe test:       Tests  3 passed (3)
+packages/neosyringe test:    Start at  13:17:49
+packages/neosyringe test:    Duration  131ms (transform 17ms, setup 0ms, import 27ms, tests 1ms, environment 0ms)
+packages/neosyringe test: Done
+packages/core test:  ✓ tests/generator/Generator.test.ts (19 tests) 5ms
+packages/core test:  ✓ tests/shared/HashUtils.test.ts (16 tests) 672ms
+packages/core test:        ✓ should generate different IDs for same symbol in different files  407ms
+packages/core test:  ✓ tests/analyzer/DuplicateConfigNames.test.ts (2 tests) 677ms
+packages/core test:      ✓ should use first occurrence when two configs share the same variable name  418ms
+packages/core test:  ✓ tests/generator/ParentContainerCodegen.test.ts (4 tests) 784ms
+packages/core test:      ✓ wires an interface-token dependency satisfied by a useContainer parent via this.resolve(), not undefined  384ms
+packages/core test:  ✓ tests/analyzer/DualPathEquivalence.test.ts (5 tests) 889ms
+packages/core test:        ✓ modular path should detect missing dependencies, legacy defers to Generator  355ms
+packages/core test:  ✓ tests/analyzer/PropertyToken.test.ts (4 tests) 995ms
+packages/core test:      ✓ should detect useProperty(Class, paramName) token  414ms
+packages/core test:  ✓ tests/generator/DisposableGenerator.test.ts (6 tests) 6ms
+packages/core test:  ✓ tests/generator/ParentContainerValidation.test.ts (6 tests) 1230ms
+packages/core test:      ✓ should not throw missing binding error when dependency is in parent container  396ms
+packages/core test:  ✓ tests/generator/FactoryGenerator.test.ts (5 tests) 3ms
+packages/core test:  ✓ tests/analyzer/LegacyContainer.test.ts (6 tests) 1241ms
+packages/core test:        ✓ should extract tokens from declareContainerTokens type argument  377ms
+packages/core test:  ✓ tests/analyzer/TypeValidation.test.ts (3 tests) 29ms
+packages/core test:  ✓ tests/analyzer/PartialExpects.test.ts (8 tests) 1474ms
+packages/core test:      ✓ suppresses missing-dep errors for tokens declared in expects (interface token)  390ms
+packages/core test:  ✓ tests/generator/DefaultExportIntegration.test.ts (8 tests) 1397ms
+packages/core test:        ✓ captures the local import alias when class name equals the alias  352ms
+packages/core test:  ✓ tests/generator/Override.test.ts (9 tests) 139ms
+packages/core test:  ✓ tests/analyzer/AsyncFactoryIntegration.test.ts (5 tests) 930ms
+packages/core test:  ✓ tests/generator/GraphValidator.test.ts (7 tests) 7ms
+packages/core test:  ✓ tests/generator/MultiRegistrationGenerator.test.ts (5 tests) 3ms
+packages/core test:  ✓ tests/generator/AsyncFactoryGenerator.test.ts (5 tests) 3ms
+packages/core test: stdout | tests/generator/UseInterfaceToken.test.ts > useInterface Token Generation > should generate resolve check with full tokenId including path
+packages/core test: Generated code for ILogger:
+packages/core test: import * as Import_0 from 'useinterface-test.ts';
+packages/core test: class NeoServiceNotFoundError extends Error {
+packages/core test:   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+packages/core test: }
+packages/core test: // -- Container --
+packages/core test: class NeoContainer {
+packages/core test:   private instances = new Map<any, any>();
+packages/core test:   private overrides = new Map<any, () => any>();
+packages/core test:   private resolveListeners = new Set<(token: any, instance: any) => void>();
+packages/core test:   
+packages/core test:   // -- Factories --
+packages/core test:   
+packages/core test:   private create_ILogger_f88a961a(): any {
+packages/core test:     return new Import_0.ConsoleLogger();
+packages/core test:   }
+packages/core test:   constructor(
+packages/core test:     private legacy?: any[],
+packages/core test:     private name: string = 'NeoContainer'
+packages/core test:   ) {}
+packages/core test:   
+packages/core test:   /**
+packages/core test:    * Replaces a token's provider for the lifetime of this container instance —
+packages/core test:    * for tests, not production wiring. The factory runs once (its result is
+packages/core test:    * cached like a singleton); call override() again to change it, or
+packages/core test:    * clearOverrides() to remove all overrides and fall back to the real
+packages/core test:    * registrations.
+packages/core test:    *
+packages/core test:    * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+packages/core test:    * shared singleton, so an override left in by mistake (or called from
+packages/core test:    * somewhere it shouldn't be) would silently change what every caller gets,
+packages/core test:    * for as long as the process runs. Throwing loudly here is cheaper than
+packages/core test:    * debugging that at 3am.
+packages/core test:    */
+packages/core test:   public override(token: any, factory: () => any): void {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+packages/core test:       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+packages/core test:     }
+packages/core test:     this.overrides.set(token, factory);
+packages/core test:     this.instances.delete(token);
+packages/core test:   }
+packages/core test:   /** Removes all overrides set via override(), reverting to real registrations. */
+packages/core test:   public clearOverrides(): void {
+packages/core test:     this.overrides.clear();
+packages/core test:   }
+packages/core test:   /**
+packages/core test:    * Subscribes to container events — currently only 'resolve', fired with the
+packages/core test:    * token and the resolved instance every time resolve() succeeds (whether
+packages/core test:    * served from cache, freshly created, an override, or a parent/legacy
+packages/core test:    * container). Returns an unsubscribe function. A listener that throws is
+packages/core test:    * caught and ignored — a bug in an observability hook must never break the
+packages/core test:    * actual resolution it's observing.
+packages/core test:    */
+packages/core test:   public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+packages/core test:     this.resolveListeners.add(listener);
+packages/core test:     return () => { this.resolveListeners.delete(listener); };
+packages/core test:   }
+packages/core test:   private notifyResolve(token: any, instance: any): void {
+packages/core test:     for (const listener of this.resolveListeners) {
+packages/core test:       try {
+packages/core test:         listener(token, instance);
+packages/core test:       } catch {
+packages/core test:         // A listener's own bug must never break the resolution it's observing.
+packages/core test:       }
+packages/core test:     }
+packages/core test:   }
+packages/core test:   public resolve<T>(token: any): T {
+packages/core test:     
+packages/core test:     // 0. An overridden token always wins, even over a cached real instance.
+packages/core test:     if (this.overrides.has(token)) {
+packages/core test:       if (!this.instances.has(token)) {
+packages/core test:         this.instances.set(token, this.overrides.get(token)!());
+packages/core test:       }
+packages/core test:       const overridden = this.instances.get(token);
+packages/core test:       this.notifyResolve(token, overridden);
+packages/core test:       return overridden;
+packages/core test:     }
+packages/core test:     // 1. Try to resolve locally (or create if singleton)
+packages/core test:     const result = this.resolveLocal(token);
+packages/core test:     if (result !== undefined) {
+packages/core test:       this.notifyResolve(token, result);
+packages/core test:       return result;
+packages/core test:     }
+packages/core test:     // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+packages/core test:     // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+packages/core test:     // ends up here)
+packages/core test:     if (this.legacy) {
+packages/core test:         for (const legacyContainer of this.legacy) {
+packages/core test:             try {
+packages/core test:                 if (legacyContainer.resolve) {
+packages/core test:                     const legacyResult = legacyContainer.resolve(token);
+packages/core test:                     this.notifyResolve(token, legacyResult);
+packages/core test:                     return legacyResult;
+packages/core test:                 }
+packages/core test:             } catch (e: any) {
+packages/core test:                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
+packages/core test:             }
+packages/core test:         }
+packages/core test:     }
+packages/core test:     throw new NeoServiceNotFoundError(`[${this.name}] Service not found or token not registered: ${NeoContainer.formatToken(token)}`);
+packages/core test:   }
+packages/core test:   /**
+packages/core test:    * Formats a token for error messages: a class token becomes its declared
+packages/core test:    * name (not its entire stringified source), and a string token has its
+packages/core test:    * trailing content-hash suffix stripped (not the raw hashed id).
+packages/core test:    */
+packages/core test:   private static formatToken(token: any): string {
+packages/core test:     if (typeof token === 'function') return token.name || String(token);
+packages/core test:     if (typeof token !== 'string') return String(token);
+packages/core test:     const parts = token.split('_');
+packages/core test:     const last = parts[parts.length - 1];
+packages/core test:     if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+packages/core test:       return parts.slice(0, -1).join('_');
+packages/core test:     }
+packages/core test:     return token;
+packages/core test:   }
+packages/core test:   public destroy(): void {
+packages/core test:     this.instances.clear();
+packages/core test:     this.overrides.clear();
+packages/core test:     this.resolveListeners.clear();
+packages/core test:   }
+packages/core test:   public resolveAll<T>(token: any): T[] { return []; }
+packages/core test:   private resolveLocal(token: any): any {
+packages/core test:     if (token === "ILogger_f88a961a") { 
+packages/core test:             if (!this.instances.has("ILogger_f88a961a")) {
+packages/core test:                 const instance = this.create_ILogger_f88a961a();
+packages/core test:                 this.instances.set("ILogger_f88a961a", instance);
+packages/core test:                 return instance;
+packages/core test:             }
+packages/core test:             return this.instances.get("ILogger_f88a961a");
+packages/core test:            }
+packages/core test:     return undefined;
+packages/core test:   }
+packages/core test:   // For debugging/inspection — token IDs are stripped by DCE in production
+packages/core test:   public get _graph() {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+packages/core test:     return ["ILogger_f88a961a"];
+packages/core test:   }
+packages/core test:   // Same token list as _graph, but with each token's own dependency edges —
+packages/core test:   // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+packages/core test:   // instead of just a flat list. Stripped by DCE in production, same as _graph.
+packages/core test:   public get _dependencyGraph() {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+packages/core test:     return [{"token":"ILogger_f88a961a","dependencies":[]}];
+packages/core test:   }
+packages/core test: }
+packages/core test: // -- Container Instance --
+packages/core test: export const c = new NeoContainer(undefined, "App");
+packages/core test:  ✓ tests/shared/CallExpressionUtils.test.ts (11 tests) 8ms
+packages/core test:  ✓ tests/analyzer/PropertyTokenValidation.test.ts (12 tests) 1919ms
+packages/core test:      ✓ errors when provider returns string but useProperty<number> expects number  359ms
+packages/core test:  ✓ tests/analyzer/Factory.test.ts (5 tests) 915ms
+packages/core test:  ✓ tests/analyzer/Scoped.test.ts (12 tests) 1885ms
+packages/core test:        ✓ should detect scoped: true in injection  383ms
+packages/core test:  ✓ tests/generator/OnResolve.test.ts (7 tests) 144ms
+packages/core test: stdout | tests/generator/UseInterfaceToken.test.ts > useInterface Token Generation > should work with useInterface defined as const
+packages/core test: Generated code for IOperationTracker (via const):
+packages/core test: import * as Import_0 from 'useinterface-test.ts';
+packages/core test: class NeoServiceNotFoundError extends Error {
+packages/core test:   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+packages/core test: }
+packages/core test: // -- Container --
+packages/core test: class NeoContainer {
+packages/core test:   private instances = new Map<any, any>();
+packages/core test:   private overrides = new Map<any, () => any>();
+packages/core test:   private resolveListeners = new Set<(token: any, instance: any) => void>();
+packages/core test:   
+packages/core test:   // -- Factories --
+packages/core test:   
+packages/core test:   private create_IOperationTracker_f88a961a(): any {
+packages/core test:     return new Import_0.OperationTracker();
+packages/core test:   }
+packages/core test:   constructor(
+packages/core test:     private legacy?: any[],
+packages/core test:     private name: string = 'NeoContainer'
+packages/core test:   ) {}
+packages/core test:   
+packages/core test:   /**
+packages/core test:    * Replaces a token's provider for the lifetime of this container instance —
+packages/core test:    * for tests, not production wiring. The factory runs once (its result is
+packages/core test:    * cached like a singleton); call override() again to change it, or
+packages/core test:    * clearOverrides() to remove all overrides and fall back to the real
+packages/core test:    * registrations.
+packages/core test:    *
+packages/core test:    * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+packages/core test:    * shared singleton, so an override left in by mistake (or called from
+packages/core test:    * somewhere it shouldn't be) would silently change what every caller gets,
+packages/core test:    * for as long as the process runs. Throwing loudly here is cheaper than
+packages/core test:    * debugging that at 3am.
+packages/core test:    */
+packages/core test:   public override(token: any, factory: () => any): void {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+packages/core test:       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+packages/core test:     }
+packages/core test:     this.overrides.set(token, factory);
+packages/core test:     this.instances.delete(token);
+packages/core test:   }
+packages/core test:   /** Removes all overrides set via override(), reverting to real registrations. */
+packages/core test:   public clearOverrides(): void {
+packages/core test:     this.overrides.clear();
+packages/core test:   }
+packages/core test:   /**
+packages/core test:    * Subscribes to container events — currently only 'resolve', fired with the
+packages/core test:    * token and the resolved instance every time resolve() succeeds (whether
+packages/core test:    * served from cache, freshly created, an override, or a parent/legacy
+packages/core test:    * container). Returns an unsubscribe function. A listener that throws is
+packages/core test:    * caught and ignored — a bug in an observability hook must never break the
+packages/core test:    * actual resolution it's observing.
+packages/core test:    */
+packages/core test:   public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+packages/core test:     this.resolveListeners.add(listener);
+packages/core test:     return () => { this.resolveListeners.delete(listener); };
+packages/core test:   }
+packages/core test:   private notifyResolve(token: any, instance: any): void {
+packages/core test:     for (const listener of this.resolveListeners) {
+packages/core test:       try {
+packages/core test:         listener(token, instance);
+packages/core test:       } catch {
+packages/core test:         // A listener's own bug must never break the resolution it's observing.
+packages/core test:       }
+packages/core test:     }
+packages/core test:   }
+packages/core test:   public resolve<T>(token: any): T {
+packages/core test:     
+packages/core test:     // 0. An overridden token always wins, even over a cached real instance.
+packages/core test:     if (this.overrides.has(token)) {
+packages/core test:       if (!this.instances.has(token)) {
+packages/core test:         this.instances.set(token, this.overrides.get(token)!());
+packages/core test:       }
+packages/core test:       const overridden = this.instances.get(token);
+packages/core test:       this.notifyResolve(token, overridden);
+packages/core test:       return overridden;
+packages/core test:     }
+packages/core test:     // 1. Try to resolve locally (or create if singleton)
+packages/core test:     const result = this.resolveLocal(token);
+packages/core test:     if (result !== undefined) {
+packages/core test:       this.notifyResolve(token, result);
+packages/core test:       return result;
+packages/core test:     }
+packages/core test:     // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+packages/core test:     // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+packages/core test:     // ends up here)
+packages/core test:     if (this.legacy) {
+packages/core test:         for (const legacyContainer of this.legacy) {
+packages/core test:             try {
+packages/core test:                 if (legacyContainer.resolve) {
+packages/core test:                     const legacyResult = legacyContainer.resolve(token);
+packages/core test:                     this.notifyResolve(token, legacyResult);
+packages/core test:                     return legacyResult;
+packages/core test:                 }
+packages/core test:             } catch (e: any) {
+packages/core test:                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
+packages/core test:             }
+packages/core test:         }
+packages/core test:     }
+packages/core test:     throw new NeoServiceNotFoundError(`[${this.name}] Service not found or token not registered: ${NeoContainer.formatToken(token)}`);
+packages/core test:   }
+packages/core test:   /**
+packages/core test:    * Formats a token for error messages: a class token becomes its declared
+packages/core test:    * name (not its entire stringified source), and a string token has its
+packages/core test:    * trailing content-hash suffix stripped (not the raw hashed id).
+packages/core test:    */
+packages/core test:   private static formatToken(token: any): string {
+packages/core test:     if (typeof token === 'function') return token.name || String(token);
+packages/core test:     if (typeof token !== 'string') return String(token);
+packages/core test:     const parts = token.split('_');
+packages/core test:     const last = parts[parts.length - 1];
+packages/core test:     if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+packages/core test:       return parts.slice(0, -1).join('_');
+packages/core test:     }
+packages/core test:     return token;
+packages/core test:   }
+packages/core test:   public destroy(): void {
+packages/core test:     this.instances.clear();
+packages/core test:     this.overrides.clear();
+packages/core test:     this.resolveListeners.clear();
+packages/core test:   }
+packages/core test:   public resolveAll<T>(token: any): T[] { return []; }
+packages/core test:   private resolveLocal(token: any): any {
+packages/core test:     if (token === "IOperationTracker_f88a961a") { return this.create_IOperationTracker_f88a961a(); }
+packages/core test:     return undefined;
+packages/core test:   }
+packages/core test:   // For debugging/inspection — token IDs are stripped by DCE in production
+packages/core test:   public get _graph() {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+packages/core test:     return ["IOperationTracker_f88a961a"];
+packages/core test:   }
+packages/core test:   // Same token list as _graph, but with each token's own dependency edges —
+packages/core test:   // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+packages/core test:   // instead of just a flat list. Stripped by DCE in production, same as _graph.
+packages/core test:   public get _dependencyGraph() {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+packages/core test:     return [{"token":"IOperationTracker_f88a961a","dependencies":[]}];
+packages/core test:   }
+packages/core test: }
+packages/core test: // -- Container Instance --
+packages/core test: export const c = new NeoContainer(undefined, "App");
+packages/core test:  ✓ tests/analyzer/OptionalDependency.test.ts (4 tests) 795ms
+packages/core test:  ✓ tests/analyzer/MultiContainer.test.ts (9 tests) 2272ms
+packages/core test:        ✓ should generate containerId from name field  458ms
+packages/core test:        ✓ should generate hash-based containerId when no name field  304ms
+packages/core test:        ✓ should generate different hashes for different content  359ms
+packages/core test: stdout | tests/generator/UseInterfaceToken.test.ts > useInterface Token Generation > should generate same tokenId for inline vs const useInterface
+packages/core test: === INLINE ===
+packages/core test: import * as Import_0 from 'useinterface-test.ts';
+packages/core test: class NeoServiceNotFoundError extends Error {
+packages/core test:   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+packages/core test: }
+packages/core test: // -- Container --
+packages/core test: class NeoContainer {
+packages/core test:   private instances = new Map<any, any>();
+packages/core test:   private overrides = new Map<any, () => any>();
+packages/core test:   private resolveListeners = new Set<(token: any, instance: any) => void>();
+packages/core test:   
+packages/core test:   // -- Factories --
+packages/core test:   
+packages/core test:   private create_IEventBus_f88a961a(): any {
+packages/core test:     return new Import_0.InMemoryEventBus();
+packages/core test:   }
+packages/core test:   constructor(
+packages/core test:     private legacy?: any[],
+packages/core test:     private name: string = 'NeoContainer'
+packages/core test:   ) {}
+packages/core test:   
+packages/core test:   /**
+packages/core test:    * Replaces a token's provider for the lifetime of this container instance —
+packages/core test:    * for tests, not production wiring. The factory runs once (its result is
+packages/core test:    * cached like a singleton); call override() again to change it, or
+packages/core test:    * clearOverrides() to remove all overrides and fall back to the real
+packages/core test:    * registrations.
+packages/core test:    *
+packages/core test:    * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+packages/core test:    * shared singleton, so an override left in by mistake (or called from
+packages/core test:    * somewhere it shouldn't be) would silently change what every caller gets,
+packages/core test:    * for as long as the process runs. Throwing loudly here is cheaper than
+packages/core test:    * debugging that at 3am.
+packages/core test:    */
+packages/core test:   public override(token: any, factory: () => any): void {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+packages/core test:       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+packages/core test:     }
+packages/core test:     this.overrides.set(token, factory);
+packages/core test:     this.instances.delete(token);
+packages/core test:   }
+packages/core test:   /** Removes all overrides set via override(), reverting to real registrations. */
+packages/core test:   public clearOverrides(): void {
+packages/core test:     this.overrides.clear();
+packages/core test:   }
+packages/core test:   /**
+packages/core test:    * Subscribes to container events — currently only 'resolve', fired with the
+packages/core test:    * token and the resolved instance every time resolve() succeeds (whether
+packages/core test:    * served from cache, freshly created, an override, or a parent/legacy
+packages/core test:    * container). Returns an unsubscribe function. A listener that throws is
+packages/core test:    * caught and ignored — a bug in an observability hook must never break the
+packages/core test:    * actual resolution it's observing.
+packages/core test:    */
+packages/core test:   public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+packages/core test:     this.resolveListeners.add(listener);
+packages/core test:     return () => { this.resolveListeners.delete(listener); };
+packages/core test:   }
+packages/core test:   private notifyResolve(token: any, instance: any): void {
+packages/core test:     for (const listener of this.resolveListeners) {
+packages/core test:       try {
+packages/core test:         listener(token, instance);
+packages/core test:       } catch {
+packages/core test:         // A listener's own bug must never break the resolution it's observing.
+packages/core test:       }
+packages/core test:     }
+packages/core test:   }
+packages/core test:   public resolve<T>(token: any): T {
+packages/core test:     
+packages/core test:     // 0. An overridden token always wins, even over a cached real instance.
+packages/core test:     if (this.overrides.has(token)) {
+packages/core test:       if (!this.instances.has(token)) {
+packages/core test:         this.instances.set(token, this.overrides.get(token)!());
+packages/core test:       }
+packages/core test:       const overridden = this.instances.get(token);
+packages/core test:       this.notifyResolve(token, overridden);
+packages/core test:       return overridden;
+packages/core test:     }
+packages/core test:     // 1. Try to resolve locally (or create if singleton)
+packages/core test:     const result = this.resolveLocal(token);
+packages/core test:     if (result !== undefined) {
+packages/core test:       this.notifyResolve(token, result);
+packages/core test:       return result;
+packages/core test:     }
+packages/core test:     // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+packages/core test:     // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+packages/core test:     // ends up here)
+packages/core test:     if (this.legacy) {
+packages/core test:         for (const legacyContainer of this.legacy) {
+packages/core test:             try {
+packages/core test:                 if (legacyContainer.resolve) {
+packages/core test:                     const legacyResult = legacyContainer.resolve(token);
+packages/core test:                     this.notifyResolve(token, legacyResult);
+packages/core test:                     return legacyResult;
+packages/core test:                 }
+packages/core test:             } catch (e: any) {
+packages/core test:                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
+packages/core test:             }
+packages/core test:         }
+packages/core test:     }
+packages/core test:     throw new NeoServiceNotFoundError(`[${this.name}] Service not found or token not registered: ${NeoContainer.formatToken(token)}`);
+packages/core test:   }
+packages/core test:   /**
+packages/core test:    * Formats a token for error messages: a class token becomes its declared
+packages/core test:    * name (not its entire stringified source), and a string token has its
+packages/core test:    * trailing content-hash suffix stripped (not the raw hashed id).
+packages/core test:    */
+packages/core test:   private static formatToken(token: any): string {
+packages/core test:     if (typeof token === 'function') return token.name || String(token);
+packages/core test:     if (typeof token !== 'string') return String(token);
+packages/core test:     const parts = token.split('_');
+packages/core test:     const last = parts[parts.length - 1];
+packages/core test:     if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+packages/core test:       return parts.slice(0, -1).join('_');
+packages/core test:     }
+packages/core test:     return token;
+packages/core test:   }
+packages/core test:   public destroy(): void {
+packages/core test:     this.instances.clear();
+packages/core test:     this.overrides.clear();
+packages/core test:     this.resolveListeners.clear();
+packages/core test:   }
+packages/core test:   public resolveAll<T>(token: any): T[] { return []; }
+packages/core test:   private resolveLocal(token: any): any {
+packages/core test:     if (token === "IEventBus_f88a961a") { 
+packages/core test:             if (!this.instances.has("IEventBus_f88a961a")) {
+packages/core test:                 const instance = this.create_IEventBus_f88a961a();
+packages/core test:                 this.instances.set("IEventBus_f88a961a", instance);
+packages/core test:                 return instance;
+packages/core test:             }
+packages/core test:             return this.instances.get("IEventBus_f88a961a");
+packages/core test:            }
+packages/core test:     return undefined;
+packages/core test:   }
+packages/core test:   // For debugging/inspection — token IDs are stripped by DCE in production
+packages/core test:   public get _graph() {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+packages/core test:     return ["IEventBus_f88a961a"];
+packages/core test:   }
+packages/core test:   // Same token list as _graph, but with each token's own dependency edges —
+packages/core test:   // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+packages/core test:   // instead of just a flat list. Stripped by DCE in production, same as _graph.
+packages/core test:   public get _dependencyGraph() {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+packages/core test:     return [{"token":"IEventBus_f88a961a","dependencies":[]}];
+packages/core test:   }
+packages/core test: }
+packages/core test: // -- Container Instance --
+packages/core test: export const c = new NeoContainer(undefined, "App");
+packages/core test: === CONST ===
+packages/core test: import * as Import_0 from 'useinterface-test.ts';
+packages/core test: class NeoServiceNotFoundError extends Error {
+packages/core test:   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
+packages/core test: }
+packages/core test: // -- Container --
+packages/core test: class NeoContainer {
+packages/core test:   private instances = new Map<any, any>();
+packages/core test:   private overrides = new Map<any, () => any>();
+packages/core test:   private resolveListeners = new Set<(token: any, instance: any) => void>();
+packages/core test:   
+packages/core test:   // -- Factories --
+packages/core test:   
+packages/core test:   private create_IEventBus_f88a961a(): any {
+packages/core test:     return new Import_0.InMemoryEventBus();
+packages/core test:   }
+packages/core test:   constructor(
+packages/core test:     private legacy?: any[],
+packages/core test:     private name: string = 'NeoContainer'
+packages/core test:   ) {}
+packages/core test:   
+packages/core test:   /**
+packages/core test:    * Replaces a token's provider for the lifetime of this container instance —
+packages/core test:    * for tests, not production wiring. The factory runs once (its result is
+packages/core test:    * cached like a singleton); call override() again to change it, or
+packages/core test:    * clearOverrides() to remove all overrides and fall back to the real
+packages/core test:    * registrations.
+packages/core test:    *
+packages/core test:    * Disabled when NODE_ENV=production: a container is commonly a long-lived,
+packages/core test:    * shared singleton, so an override left in by mistake (or called from
+packages/core test:    * somewhere it shouldn't be) would silently change what every caller gets,
+packages/core test:    * for as long as the process runs. Throwing loudly here is cheaper than
+packages/core test:    * debugging that at 3am.
+packages/core test:    */
+packages/core test:   public override(token: any, factory: () => any): void {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+packages/core test:       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
+packages/core test:     }
+packages/core test:     this.overrides.set(token, factory);
+packages/core test:     this.instances.delete(token);
+packages/core test:   }
+packages/core test:   /** Removes all overrides set via override(), reverting to real registrations. */
+packages/core test:   public clearOverrides(): void {
+packages/core test:     this.overrides.clear();
+packages/core test:   }
+packages/core test:   /**
+packages/core test:    * Subscribes to container events — currently only 'resolve', fired with the
+packages/core test:    * token and the resolved instance every time resolve() succeeds (whether
+packages/core test:    * served from cache, freshly created, an override, or a parent/legacy
+packages/core test:    * container). Returns an unsubscribe function. A listener that throws is
+packages/core test:    * caught and ignored — a bug in an observability hook must never break the
+packages/core test:    * actual resolution it's observing.
+packages/core test:    */
+packages/core test:   public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+packages/core test:     this.resolveListeners.add(listener);
+packages/core test:     return () => { this.resolveListeners.delete(listener); };
+packages/core test:   }
+packages/core test:   private notifyResolve(token: any, instance: any): void {
+packages/core test:     for (const listener of this.resolveListeners) {
+packages/core test:       try {
+packages/core test:         listener(token, instance);
+packages/core test:       } catch {
+packages/core test:         // A listener's own bug must never break the resolution it's observing.
+packages/core test:       }
+packages/core test:     }
+packages/core test:   }
+packages/core test:   public resolve<T>(token: any): T {
+packages/core test:     
+packages/core test:     // 0. An overridden token always wins, even over a cached real instance.
+packages/core test:     if (this.overrides.has(token)) {
+packages/core test:       if (!this.instances.has(token)) {
+packages/core test:         this.instances.set(token, this.overrides.get(token)!());
+packages/core test:       }
+packages/core test:       const overridden = this.instances.get(token);
+packages/core test:       this.notifyResolve(token, overridden);
+packages/core test:       return overridden;
+packages/core test:     }
+packages/core test:     // 1. Try to resolve locally (or create if singleton)
+packages/core test:     const result = this.resolveLocal(token);
+packages/core test:     if (result !== undefined) {
+packages/core test:       this.notifyResolve(token, result);
+packages/core test:       return result;
+packages/core test:     }
+packages/core test:     // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+packages/core test:     // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+packages/core test:     // ends up here)
+packages/core test:     if (this.legacy) {
+packages/core test:         for (const legacyContainer of this.legacy) {
+packages/core test:             try {
+packages/core test:                 if (legacyContainer.resolve) {
+packages/core test:                     const legacyResult = legacyContainer.resolve(token);
+packages/core test:                     this.notifyResolve(token, legacyResult);
+packages/core test:                     return legacyResult;
+packages/core test:                 }
+packages/core test:             } catch (e: any) {
+packages/core test:                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
+packages/core test:             }
+packages/core test:         }
+packages/core test:     }
+packages/core test:     throw new NeoServiceNotFoundError(`[${this.name}] Service not found or token not registered: ${NeoContainer.formatToken(token)}`);
+packages/core test:   }
+packages/core test:   /**
+packages/core test:    * Formats a token for error messages: a class token becomes its declared
+packages/core test:    * name (not its entire stringified source), and a string token has its
+packages/core test:    * trailing content-hash suffix stripped (not the raw hashed id).
+packages/core test:    */
+packages/core test:   private static formatToken(token: any): string {
+packages/core test:     if (typeof token === 'function') return token.name || String(token);
+packages/core test:     if (typeof token !== 'string') return String(token);
+packages/core test:     const parts = token.split('_');
+packages/core test:     const last = parts[parts.length - 1];
+packages/core test:     if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
+packages/core test:       return parts.slice(0, -1).join('_');
+packages/core test:     }
+packages/core test:     return token;
+packages/core test:   }
+packages/core test:   public destroy(): void {
+packages/core test:     this.instances.clear();
+packages/core test:     this.overrides.clear();
+packages/core test:     this.resolveListeners.clear();
+packages/core test:   }
+packages/core test:   public resolveAll<T>(token: any): T[] { return []; }
+packages/core test:   private resolveLocal(token: any): any {
+packages/core test:     if (token === "IEventBus_f88a961a") { 
+packages/core test:             if (!this.instances.has("IEventBus_f88a961a")) {
+packages/core test:                 const instance = this.create_IEventBus_f88a961a();
+packages/core test:                 this.instances.set("IEventBus_f88a961a", instance);
+packages/core test:                 return instance;
+packages/core test:             }
+packages/core test:             return this.instances.get("IEventBus_f88a961a");
+packages/core test:            }
+packages/core test:     return undefined;
+packages/core test:   }
+packages/core test:   // For debugging/inspection — token IDs are stripped by DCE in production
+packages/core test:   public get _graph() {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+packages/core test:     return ["IEventBus_f88a961a"];
+packages/core test:   }
+packages/core test:   // Same token list as _graph, but with each token's own dependency edges —
+packages/core test:   // enough to render an actual dependency graph (e.g. as DOT or mermaid)
+packages/core test:   // instead of just a flat list. Stripped by DCE in production, same as _graph.
+packages/core test:   public get _dependencyGraph() {
+packages/core test:     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
+packages/core test:     return [{"token":"IEventBus_f88a961a","dependencies":[]}];
+packages/core test:   }
+packages/core test: }
+packages/core test: // -- Container Instance --
+packages/core test: export const c = new NeoContainer(undefined, "App");
+packages/core test:  ✓ tests/generator/UseInterfaceToken.test.ts (3 tests) 745ms
+packages/core test:      ✓ should generate same tokenId for inline vs const useInterface  333ms
+packages/core test:  ✓ tests/analyzer/MultiRegistration.test.ts (4 tests) 810ms
+packages/core test:  ✓ tests/generator/ExternalGenerator.test.ts (1 test) 4ms
+packages/core test:  ✓ tests/analyzer/AsyncFactory.test.ts (4 tests) 823ms
+packages/core test:  ✓ tests/analyzer/MissingDependency.test.ts (19 tests) 2824ms
+packages/core test:        ✓ should detect missing constructor dependency in partialConfig  394ms
+packages/core test:  ✓ tests/analyzer/AnalyzerDeclarative.test.ts (2 tests) 579ms
+packages/core test:      ✓ should extract injections from defineBuilderConfig  323ms
+packages/core test:  ✓ tests/generator/UseValueGenerator.test.ts (3 tests) 2ms
+packages/core test:  ✓ tests/analyzer/MultiRegistrationIntegration.test.ts (2 tests) 558ms
+packages/core test:      ✓ should generate resolveAll with all multi-providers  325ms
+packages/core test:  ✓ tests/analyzer/AnalyzerSafety.test.ts (2 tests) 505ms
+packages/core test:  ✓ tests/analyzer/CycleValidatorMulti.test.ts (3 tests) 705ms
+packages/core test:      ✓ should detect a self-cycle where a multi token depends on itself  330ms
+packages/core test:  ✓ tests/analyzer/Disposable.test.ts (4 tests) 849ms
+packages/core test:      ✓ should set isDisposable for class with dispose(): void  328ms
+packages/core test:  ✓ tests/analyzer/UnsupportedContainerShape.test.ts (4 tests) 1114ms
+packages/core test:      ✓ does not throw for the supported const-then-return shape  318ms
+packages/core test:      ✓ does not throw for export default defineBuilderConfig(...)  312ms
+packages/core test:  ✓ tests/analyzer/UseValue.test.ts (4 tests) 870ms
+packages/core test:      ✓ should detect useValue and set type to value  363ms
+packages/core test:  ✓ tests/generator/GeneratorDeclarative.test.ts (1 test) 2ms
+packages/core test:  ✓ tests/shared/TokenResolverService.test.ts (23 tests) 3301ms
+packages/core test:        ✓ should identify useInterface call  325ms
+packages/core test:  ✓ tests/analyzer/Analyzer.test.ts (2 tests) 519ms
+packages/core test:      ✓ should extract dependency graph from fixture  337ms
+packages/core test:  ✓ tests/generator/TopologicalSorter.test.ts (5 tests) 4ms
+packages/core test:  ✓ tests/analyzer/ExtractAll.test.ts (6 tests) 1102ms
+packages/core test:      ✓ returns one graph per defineBuilderConfig (parents included)  324ms
+packages/core test:  ✓ tests/analyzer/SameFileParentRegression.test.ts (2 tests) 503ms
+packages/core test:      ✓ extractAll(): TokenService token appears in some graph.nodes (not only parentProvidedTokens)  337ms
+packages/core test:  ✓ tests/analyzer/Partials.test.ts (1 test) 269ms
+packages/core test:  ✓ tests/generator/GraphValidatorSafety.test.ts (2 tests) 2ms
+packages/core test:  ✓ tests/analyzer/TokenUtils.test.ts (7 tests) 4ms
+packages/core test:  ✓ tests/analyzer/InterfaceId.test.ts (1 test) 185ms
+packages/core test:  ✓ tests/generator/DebugConfig.test.ts (4 tests) 2ms
+packages/core test:  ✓ tests/analyzer/UseValueIntegration.test.ts (2 tests) 269ms
+packages/core test:  ✓ tests/analyzer/ExternalAnalyzer.test.ts (1 test) 145ms
+packages/core test:  ✓ tests/analyzer/ExportDefaultPositioning.test.ts (2 tests) 242ms
+packages/core test:  ✓ tests/analyzer/NamedContainer.test.ts (2 tests) 199ms
+packages/core test:  Test Files  53 passed (53)
+packages/core test:       Tests  299 passed (299)
+packages/core test:    Start at  13:17:49
+packages/core test:    Duration  4.20s (transform 3.01s, setup 13.73s, import 4.73s, tests 35.56s, environment 4ms)
+packages/core test: Done
+packages/ui test$ vitest run
+packages/lsp test$ vitest run
+packages/ui test:  RUN  v4.0.17 /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/ui
+packages/lsp test:  RUN  v4.0.17 /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/lsp
+packages/ui test:  ✓ tests/mermaid.test.ts (8 tests) 2ms
+packages/ui test:  ✓ tests/serialize.test.ts (4 tests) 2ms
+packages/ui test:  ✓ tests/html.test.ts (8 tests) 2ms
+packages/ui test:  Test Files  3 passed (3)
+packages/ui test:       Tests  20 passed (20)
+packages/ui test:    Start at  13:17:53
+packages/ui test:    Duration  101ms (transform 84ms, setup 0ms, import 104ms, tests 6ms, environment 0ms)
+packages/ui test: Done
+packages/lsp test:  ✓ tests/logger.test.ts (19 tests) 4ms
+packages/lsp test:  ✓ tests/lsp.test.ts (6 tests) 3ms
+packages/lsp test:  ✓ tests/LSPMultiAndAsync.test.ts (6 tests) 28ms
+packages/lsp test:  ✓ tests/LSPDiagnostics.test.ts (7 tests) 29ms
+packages/lsp test:  Test Files  4 passed (4)
+packages/lsp test:       Tests  38 passed (38)
+packages/lsp test:    Start at  13:17:53
+packages/lsp test:    Duration  367ms (transform 365ms, setup 0ms, import 867ms, tests 64ms, environment 0ms)
+packages/lsp test: Done
+packages/unplugin test$ vitest run
+packages/cli test$ vitest run
+packages/unplugin test:  RUN  v4.0.17 /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/unplugin
+packages/cli test:  RUN  v4.0.17 /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/cli
+packages/unplugin test:  ✓ tests/markerUtils.test.ts (4 tests) 1ms
+packages/unplugin test:  ✓ tests/devtools.test.ts (3 tests) 2ms
+packages/cli test:  ✓ tests/graphExport.test.ts (5 tests) 2ms
+packages/unplugin test:  ✓ tests/transformer.test.ts (5 tests) 15ms
+packages/unplugin test:  ✓ tests/unplugin.test.ts (4 tests) 2ms
+packages/unplugin test: stdout | tests/useInterfaceTransform.test.ts > useInterface Transformation > should transform useInterface<T>() to tokenId string
+packages/unplugin test: Transformed: 
+packages/unplugin test:       interface ILogger { log(msg: string): void; }
+packages/unplugin test:       function useInterface<T>(): any { return null; }
+packages/unplugin test:       export const LoggerToken = "ILogger_0fe990bf";
+packages/unplugin test:     
+packages/unplugin test: stdout | tests/useInterfaceTransform.test.ts > useInterface Transformation > should transform multiple useInterface calls
+packages/unplugin test: Transformed: 
+packages/unplugin test:       interface ILogger { log(msg: string): void; }
+packages/unplugin test:       interface IEventBus { publish(event: any): void; }
+packages/unplugin test:       function useInterface<T>(): any { return null; }
+packages/unplugin test:       export const TOKENS = {
+packages/unplugin test:         Logger: "ILogger_0fe990bf",
+packages/unplugin test:         EventBus: "IEventBus_0fe990bf"
+packages/unplugin test:       };
+packages/unplugin test:     
+packages/unplugin test:  ✓ tests/bareReturnRejection.test.ts (1 test) 14ms
+packages/unplugin test: stdout | tests/useInterfaceTransform.test.ts > useInterface Transformation > should transform useInterface in resolve() calls
+packages/unplugin test: Transformed: 
+packages/unplugin test:       interface IOperationTracker { operationId: string; }
+packages/unplugin test:       function useInterface<T>(): any { return null; }
+packages/unplugin test:       // This is what users should write
+packages/unplugin test:       const tracker = container.resolve("IOperationTracker_0fe990bf");
+packages/unplugin test:     
+packages/unplugin test:  ✓ tests/crossFileClassToken.test.ts (2 tests) 24ms
+packages/unplugin test:  ✓ tests/useInterfaceTransform.test.ts (4 tests) 182ms
+packages/unplugin test:  ✓ tests/crossFileParent.test.ts (3 tests) 192ms
+packages/cli test:  ✓ tests/report.test.ts (7 tests) 138ms
+packages/unplugin test:  ✓ tests/debugOption.test.ts (4 tests) 406ms
+packages/unplugin test:  ✓ tests/multiContainer.test.ts (7 tests) 784ms
+packages/unplugin test:  ✓ tests/transformerDebugOption.test.ts (4 tests) 951ms
+packages/unplugin test:      ✓ strips the data by default outside production (opt-in, not opt-out)  388ms
+packages/unplugin test:  Test Files  11 passed (11)
+packages/unplugin test:       Tests  41 passed (41)
+packages/unplugin test:    Start at  13:17:54
+packages/unplugin test:    Duration  1.35s (transform 863ms, setup 0ms, import 3.09s, tests 2.58s, environment 1ms)
+packages/unplugin test: Done
+packages/cli test:  ✓ tests/cli.test.ts (12 tests) 774ms
+packages/cli test:  Test Files  3 passed (3)
+packages/cli test:       Tests  24 passed (24)
+packages/cli test:    Start at  13:17:54
+packages/cli test:    Duration  1.29s (transform 502ms, setup 0ms, import 944ms, tests 913ms, environment 0ms)
+packages/cli test: Done

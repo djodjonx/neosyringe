@@ -1,0 +1,12 @@
+node: v24.7.0
+command: node audit-devtools.mjs
+cwd: .
+exit: 0
+qualification: exit 0 n'est pas une réussite du contrat ; comparer la sortie à audit/BASELINE.md | [NeoSyringe] Devtools available at /__neosyringe/ | {"middlewareInstalled":true,"graphs":[]}
+--- stdout ---
+[NeoSyringe] Devtools available at /__neosyringe/
+{"middlewareInstalled":true,"graphs":[]}
+
+--- stderr ---
+(node:36374) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)

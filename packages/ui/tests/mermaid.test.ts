@@ -65,4 +65,17 @@ describe('graphToMermaid', () => {
     const result = graphToMermaid(graph([{ tokenId: 'F', type: 'factory' }]));
     expect(result).toContain(':::factory');
   });
+
+  it('gives a value node the value class and keeps factory and lifecycle classes', () => {
+    const result = graphToMermaid(graph([
+      { tokenId: 'Config', type: 'value', lifecycle: 'singleton' },
+      { tokenId: 'Maker', type: 'factory', lifecycle: 'transient' },
+      { tokenId: 'ExplicitSvc', type: 'explicit', lifecycle: 'transient' },
+      { tokenId: 'AutoSvc', type: 'autowire', lifecycle: 'singleton' },
+    ]));
+    expect(result).toContain('  Config["Config\\n[singleton]"]:::value');
+    expect(result).toContain('  Maker["Maker\\n[transient]"]:::factory');
+    expect(result).toContain('  ExplicitSvc["ExplicitSvc\\n[transient]"]:::transient');
+    expect(result).toContain('  AutoSvc["AutoSvc\\n[singleton]"]:::singleton');
+  });
 });
