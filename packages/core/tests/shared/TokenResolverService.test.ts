@@ -132,6 +132,7 @@ const token = useInterface();`;
   describe('extractPropertyTokenId', () => {
     it('should extract token ID from useProperty call', () => {
       const sourceCode = `import { useProperty } from '@djodjonx/neosyringe';
+class DatabaseService {}
 const token = useProperty<string>(DatabaseService, 'connectionString');`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
@@ -139,7 +140,7 @@ const token = useProperty<string>(DatabaseService, 'connectionString');`;
       const callExpr = findNode(sourceFile, ts.isCallExpression);
       if (callExpr) {
         const tokenId = testService.extractPropertyTokenId(callExpr);
-        expect(tokenId).toBe("PropertyToken:DatabaseService.connectionString");
+        expect(tokenId).toMatch(/^PropertyToken:DatabaseService\.connectionString_[0-9a-f]{8}$/);
       }
     });
 
@@ -265,7 +266,7 @@ const token = (useInterface<ILogger>());`;
       }
     });
 
-    it('should return type string for anonymous types', () => {
+    it('should reject anonymous object types', () => {
       const sourceCode = `const x: { log: () => void } = null as any;`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
@@ -273,8 +274,7 @@ const token = (useInterface<ILogger>());`;
       const varDecl = findNode(sourceFile, ts.isVariableDeclaration);
       if (varDecl && varDecl.type) {
         const type = testChecker.getTypeFromTypeNode(varDecl.type);
-        const typeId = testService.getTypeId(type);
-        expect(typeId).toContain('log');
+        expect(() => testService.getTypeId(type)).toThrow('NEO_TOKEN_UNSUPPORTED: anonymous-object');
       }
     });
 
@@ -313,6 +313,7 @@ const token = (useInterface<ILogger>());`;
 
     it('should resolve useProperty call', () => {
       const sourceCode = `import { useProperty } from '@djodjonx/neosyringe';
+class MyClass {}
 const token = useProperty<string>(MyClass, 'prop');`;
       const { sourceFile, checker: testChecker } = createProgramFromSource(sourceCode);
       const testService = new TokenResolverService(testChecker);
@@ -320,7 +321,7 @@ const token = useProperty<string>(MyClass, 'prop');`;
       const callExpr = findNode(sourceFile, ts.isCallExpression);
       if (callExpr) {
         const tokenId = testService.resolveTokenId(callExpr);
-        expect(tokenId).toBe("PropertyToken:MyClass.prop");
+        expect(tokenId).toMatch(/^PropertyToken:MyClass\.prop_[0-9a-f]{8}$/);
       }
     });
 

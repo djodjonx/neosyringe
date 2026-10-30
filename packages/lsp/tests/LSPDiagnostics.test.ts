@@ -69,6 +69,7 @@ describe('LSP Diagnostics Integration', () => {
     const fileName = path.resolve('/tmp/missing-test.ts');
     const fileContent = `
       import { defineBuilderConfig } from '@djodjonx/neosyringe';
+      interface B {}
       class A { constructor(b: B) {} }
       export const container = defineBuilderConfig({
         injections: [

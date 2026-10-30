@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as ts from 'typescript';
 import { neoSyringePlugin } from '../src/index';
@@ -151,17 +154,37 @@ describe('Plugin — multi-container per file', () => {
   });
 
   it('buildEnd does not throw when a parent token is used at an injection site', () => {
-    const GRAPHQL_FILE = '/project/src/plugins/graphql.ts';
-    const GRAPHQL_CODE = `
+    const dir = mkdtempSync(path.join(tmpdir(), 'neo-parent-token-'));
+    const tokensFile = path.join(dir, 'tokens.ts');
+    const containerFile = path.join(dir, 'container.ts');
+    const graphqlFile = path.join(dir, 'graphql.ts');
+    writeFileSync(tokensFile, 'export interface IToken { verify(t: string): boolean; }\n');
+    const containerCode = `
+      import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
+      import { IToken } from './tokens';
+      class JwtToken implements IToken { verify(t: string) { return true; } }
+      export const sharedKernel = defineBuilderConfig({
+        name: 'SharedKernel',
+        injections: [{ token: useInterface<IToken>(), provider: JwtToken }],
+      });
+      export const container = defineBuilderConfig({ useContainer: sharedKernel });
+    `;
+    const graphqlCode = `
       import { useInterface } from '@djodjonx/neosyringe';
-      import { IToken } from './interfaces';
+      import { IToken } from './tokens';
       const token = useInterface<IToken>();
     `;
+    writeFileSync(containerFile, containerCode);
+    writeFileSync(graphqlFile, graphqlCode);
 
-    const { transform, buildEnd } = makeBuildEnd();
-    transform(SAME_FILE_CODE, FILE);
-    transform(GRAPHQL_CODE, GRAPHQL_FILE);
-    expect(() => buildEnd()).not.toThrow();
+    try {
+      const { transform, buildEnd } = makeBuildEnd();
+      transform(containerCode, containerFile);
+      transform(graphqlCode, graphqlFile);
+      expect(() => buildEnd()).not.toThrow();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('buildEnd DOES throw for a genuinely unregistered token', () => {

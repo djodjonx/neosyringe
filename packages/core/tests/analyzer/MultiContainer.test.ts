@@ -281,6 +281,7 @@ describe('Multi-Container per File', () => {
     it('should generate different hashes for different content', () => {
       const source1 = `
         import { defineBuilderConfig } from '@djodjonx/neosyringe';
+        class ServiceA {}
 
         export const container = defineBuilderConfig({
           injections: [{ token: ServiceA }]
@@ -289,6 +290,7 @@ describe('Multi-Container per File', () => {
 
       const source2 = `
         import { defineBuilderConfig } from '@djodjonx/neosyringe';
+        class ServiceB {}
 
         export const container = defineBuilderConfig({
           injections: [{ token: ServiceB }]

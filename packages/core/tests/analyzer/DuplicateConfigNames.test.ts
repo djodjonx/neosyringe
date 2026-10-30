@@ -49,8 +49,9 @@ describe('Analyzer - Duplicate Config Names (buildNameIndex)', () => {
       import { defineBuilderConfig } from '@djodjonx/neosyringe';
       import { sharedConfig as config1 } from './file1';
       
+      interface First {}
       class MainService {
-        constructor(private first: any) {}
+        constructor(private first: First) {}
       }
       
       export const main = defineBuilderConfig({
