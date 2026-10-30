@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import type { PluginConfig, ProgramTransformerExtras } from 'ts-patch';
 import { Analyzer, formatUnsupportedMarker, HashUtils, resolveNeoMarker, sourceFileUsesMarker } from '@djodjonx/neosyringe-core/analyzer';
 import { Generator, GraphValidator, resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
-import { transformUseInterfaceCalls } from './useInterfaceTransform';
+import { applySourceEdits, collectDefinePartialConfigPureEdits, transformUseInterfaceCalls } from './useInterfaceTransform';
 import { hasNeoSyringeMarkers } from './markerUtils';
 
 /**
@@ -109,10 +109,12 @@ export default function neoSyringeTransformer(
       continue;
     }
 
-    let transformedCode = code;
+    // Offsets are on `code` before the splice. A checker without
+    // getSymbolAtLocation cannot classify a call (mocked programs).
+    let splice: { start: number; end: number; text: string } | undefined;
 
     // --- Container transformation ---
-    if (sourceDeclaresBuilder(sourceFile, program.getTypeChecker())) {
+    if (sourceDeclaresBuilder(sourceFile, checker)) {
       // Use a per-file sub-program so the Analyzer sees only this container file.
       const fileProgram = getFileProgram(fileName);
       const analyzer = new Analyzer(fileProgram);
@@ -137,21 +139,29 @@ export default function neoSyringeTransformer(
         const containerClass = generator.generate();
         const instantiation = generator.generateInstantiation();
 
-        const codeBeforeStatement = code.slice(0, graph.variableStatementStart);
-        const codeAfterDefineBuilder = code.slice(graph.defineBuilderConfigEnd);
         const variableDeclaration = code.slice(
           graph.variableStatementStart,
           graph.defineBuilderConfigStart,
         );
 
-        transformedCode =
-          codeBeforeStatement +
-          containerClass + '\n' +
-          variableDeclaration +
-          instantiation +
-          codeAfterDefineBuilder;
+        splice = {
+          start: graph.variableStatementStart,
+          end: graph.defineBuilderConfigEnd,
+          text: containerClass + '\n' + variableDeclaration + instantiation,
+        };
       }
     }
+
+    const edits: { start: number; end: number; text: string }[] = [];
+    if (splice) edits.push(splice);
+    if (typeof checker.getSymbolAtLocation === 'function') {
+      for (const edit of collectDefinePartialConfigPureEdits(sourceFile, checker)) {
+        if (!splice || edit.start < splice.start || edit.start >= splice.end) {
+          edits.push(edit);
+        }
+      }
+    }
+    let transformedCode = edits.length > 0 ? applySourceEdits(code, edits) : code;
 
     // --- useInterface transformation ---
     const withUseInterface = transformUseInterfaceCalls(transformedCode, fileName, compilerOptions);

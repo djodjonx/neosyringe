@@ -439,11 +439,18 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   /**
    * Generates only the instantiation expression: new NeoContainer(...)
    * This is used to replace defineBuilderConfig(...) in the source.
+   * The comment lets a bundler drop a container that nothing reads.
+   * initialize(), destroy() and provider construction stay unmarked.
    */
   public generateInstantiation(): string {
     const legacyArgs = this.graph.legacyContainers ? `[${this.graph.legacyContainers.join(', ')}]` : 'undefined';
     const nameArg = this.graph.containerName ? JSON.stringify(this.graph.containerName) : 'undefined';
-    return `new ${this.containerClassName}(${legacyArgs}, ${nameArg})`;
+    return this.annotatePureInstantiation(`new ${this.containerClassName}(${legacyArgs}, ${nameArg})`);
+  }
+
+  /** A bundler drops an unused `new` only when this comment marks the call. */
+  private annotatePureInstantiation(expression: string): string {
+    return `/* @__PURE__ */ ${expression}`;
   }
 
   /**
