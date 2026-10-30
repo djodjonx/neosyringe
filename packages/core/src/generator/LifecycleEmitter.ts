@@ -55,6 +55,21 @@ export function generateInitializeMethod(graph: DependencyGraph, sorted: TokenId
 }
 
 /**
+ * Sync containers still expose initialize(). It is not `async` and it does not
+ * touch `_initialized`: those shapes belong to containers that have async work.
+ */
+export function generateSyncInitializeMethod(): string {
+  return 'public initialize(): Promise<void> { return Promise.resolve(); }';
+}
+
+/** createScope is on the public type. This build has no scope behaviour yet. */
+export function generateCreateScopeMethod(): string {
+  return `public createScope(): this {
+    throw new Error('createScope() is not implemented yet in this build');
+  }`;
+}
+
+/**
  * Generates the destroy() method.
  * Calls dispose() on cached singleton services in reverse dependency order.
  * Becomes async if any service has isAsyncDisposable.
@@ -93,9 +108,14 @@ export function generateDestroyMethod(
   lines.push('this.overrides.clear();');
   lines.push('this.resolveListeners.clear();');
 
-  const asyncKw = hasAsyncDisposable ? 'async ' : '';
-  const ret = hasAsyncDisposable ? 'Promise<void>' : 'void';
-  return `public ${asyncKw}destroy(): ${ret} {
+  if (hasAsyncDisposable) {
+    return `public async destroy(): Promise<void> {
     ${lines.join('\n    ')}
+  }`;
+  }
+
+  return `public destroy(): Promise<void> {
+    ${lines.join('\n    ')}
+    return Promise.resolve();
   }`;
 }
