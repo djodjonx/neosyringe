@@ -254,6 +254,43 @@ function transformerText(file: string): string {
   return next.getSourceFile(file)?.text ?? '';
 }
 
+interface WrappedChainCalls {
+  asCalls: number;
+  satisfiesCalls: number;
+  parenAsCalls: number;
+  assertionCalls: number;
+}
+
+// tsc retire `as`, `satisfies`, `<T>` et les parenthèses. Le bundle exécute cette émission.
+async function runTransformerBundle(entry: string, dir: string): Promise<WrappedChainCalls> {
+  const emitted = ts.transpileModule(transformerText(entry), {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+      removeComments: false,
+    },
+  }).outputText;
+  const emittedFile = path.join(dir, 'emitted.mjs');
+  writeFileSync(emittedFile, emitted);
+  const built = await esbuild.build({
+    entryPoints: [emittedFile],
+    bundle: true,
+    write: false,
+    format: 'esm',
+    target: 'es2022',
+    platform: 'browser',
+    treeShaking: true,
+    legalComments: 'none',
+    alias: { '@djodjonx/neosyringe': runtimePath() },
+    logLevel: 'silent',
+  });
+  const output = built.outputFiles?.[0];
+  if (!output) throw new Error('esbuild n\'a pas émis de fichier');
+  const bundleFile = path.join(dir, 'transformer-bundle.mjs');
+  writeFileSync(bundleFile, output.text);
+  return importRun(bundleFile) as Promise<WrappedChainCalls>;
+}
+
 const moduleLoadEntry = `import { defineBuilderConfig } from '@djodjonx/neosyringe';
 import { Unused } from './unused';
 const unusedContainer = defineBuilderConfig({ injections: [{ token: Unused }] });
@@ -461,21 +498,99 @@ export function run(): number {
   it('T14-P9-chain-shapes', () => {
     const source = `import { definePartialConfig } from '@djodjonx/neosyringe';
 
+type Shape = { injections: never[] };
 export const prop = definePartialConfig({ injections: [] }).injections;
 export const elem = definePartialConfig({ injections: [] })['injections'];
 export const nonNull = definePartialConfig({ injections: [] })!.injections;
 export const tagged = definePartialConfig({ injections: [] })\`x\`;
 export const called = definePartialConfig({ injections: [] })();
+export const asChain = (definePartialConfig({ injections: [] }) as Shape).injections;
+export const satisfiesChain = (definePartialConfig({ injections: [] }) satisfies Shape).injections;
+export const parenAs = ((definePartialConfig({ injections: [] }) as Shape)).injections;
+export const asserted = (<Shape>definePartialConfig({ injections: [] })).injections;
 export const plain = definePartialConfig({ injections: [] });
 `;
     const expected = `import { definePartialConfig } from '@djodjonx/neosyringe';
 
+type Shape = { injections: never[] };
 export const prop = definePartialConfig({ injections: [] }).injections;
 export const elem = definePartialConfig({ injections: [] })['injections'];
 export const nonNull = definePartialConfig({ injections: [] })!.injections;
 export const tagged = definePartialConfig({ injections: [] })\`x\`;
 export const called = definePartialConfig({ injections: [] })();
+export const asChain = (definePartialConfig({ injections: [] }) as Shape).injections;
+export const satisfiesChain = (definePartialConfig({ injections: [] }) satisfies Shape).injections;
+export const parenAs = ((definePartialConfig({ injections: [] }) as Shape)).injections;
+export const asserted = (<Shape>definePartialConfig({ injections: [] })).injections;
 export const plain = /* @__PURE__ */ definePartialConfig({ injections: [] });
+`;
+    const { entry } = writeFixture(source);
+    expect(pluginText(entry)).toBe(expected);
+    expect(transformerText(entry)).toBe(expected);
+  });
+
+  it('T14-P9-wrapped-chain-effect', async () => {
+    const source = `import { definePartialConfig, type PartialConfig } from '@djodjonx/neosyringe';
+
+let asCalls = 0;
+function asEffect(): PartialConfig {
+  asCalls += 1;
+  return { injections: [] };
+}
+let satisfiesCalls = 0;
+function satisfiesEffect(): PartialConfig {
+  satisfiesCalls += 1;
+  return { injections: [] };
+}
+let parenAsCalls = 0;
+function parenAsEffect(): PartialConfig {
+  parenAsCalls += 1;
+  return { injections: [] };
+}
+let assertionCalls = 0;
+function assertionEffect(): PartialConfig {
+  assertionCalls += 1;
+  return { injections: [] };
+}
+
+(definePartialConfig(asEffect()) as PartialConfig).injections!.forEach(() => {});
+(definePartialConfig(satisfiesEffect()) satisfies PartialConfig).injections!.forEach(() => {});
+((definePartialConfig(parenAsEffect()) as PartialConfig)).injections!.forEach(() => {});
+(<PartialConfig>definePartialConfig(assertionEffect())).injections!.forEach(() => {});
+
+export function run(): { asCalls: number; satisfiesCalls: number; parenAsCalls: number; assertionCalls: number } {
+  return { asCalls, satisfiesCalls, parenAsCalls, assertionCalls };
+}
+`;
+    const once: WrappedChainCalls = {
+      asCalls: 1,
+      satisfiesCalls: 1,
+      parenAsCalls: 1,
+      assertionCalls: 1,
+    };
+    const { dir, entry } = writeFixture(source);
+    expect(await runTransformerBundle(entry, dir)).toEqual(once);
+    const proof = await bundleFixture(source);
+    expect(proof.esbuildRun).toEqual(once);
+    expect(proof.rollupRun).toEqual(once);
+  });
+
+  it('T14-P9-plain-wrapper', () => {
+    const source = `import { definePartialConfig } from '@djodjonx/neosyringe';
+
+type X = { injections?: readonly unknown[] };
+export const p = definePartialConfig({ injections: [] }) as X;
+export const q = definePartialConfig({ injections: [] }) satisfies X;
+export const r = (definePartialConfig({ injections: [] }) as X);
+export const s = <X>definePartialConfig({ injections: [] });
+`;
+    const expected = `import { definePartialConfig } from '@djodjonx/neosyringe';
+
+type X = { injections?: readonly unknown[] };
+export const p = /* @__PURE__ */ definePartialConfig({ injections: [] }) as X;
+export const q = /* @__PURE__ */ definePartialConfig({ injections: [] }) satisfies X;
+export const r = (/* @__PURE__ */ definePartialConfig({ injections: [] }) as X);
+export const s = <X>/* @__PURE__ */ definePartialConfig({ injections: [] });
 `;
     const { entry } = writeFixture(source);
     expect(pluginText(entry)).toBe(expected);
