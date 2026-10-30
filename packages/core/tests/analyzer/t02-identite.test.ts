@@ -24,6 +24,7 @@ const SIBLING = '/a/sibling/extra.ts';
 const MERGE_B_FILE = path.join(process.cwd(), 't02-virtual/merge-b.ts');
 const MERGE_A_FILE = path.join(process.cwd(), 't02-virtual/merge-a.ts');
 const SCOPE_FILE = path.join(process.cwd(), 't02-virtual/scope.ts');
+const CLASS_EXPR_FILE = path.join(process.cwd(), 't02-virtual/class-expr.ts');
 const PKG_WIDGET_FILE = '/t02-nm/node_modules/acme/index.d.ts';
 
 const PORT_SOURCE = `
@@ -63,6 +64,13 @@ const files = new Map<string, string>([
     export const nest1: Repo<[Pair<A, [B, C]>]> = null!;
     export const nest2: Repo<[Pair<A, [B]>, C]> = null!;
     export const repoDate: Repo<Date> = null!;
+    export const plainTuple: Repo<[A, B]> = null!;
+    export const restTuple: Repo<[A, ...B[]]> = null!;
+    export const optionalTuple: Repo<[A, B?]> = null!;
+    export const undefTuple: Repo<[A, B | undefined]> = null!;
+    export const readonlyTuple: Repo<readonly [A, B]> = null!;
+    export const plainArray: Repo<A[]> = null!;
+    export const readonlyArray: Repo<ReadonlyArray<A>> = null!;
     export function localHolder() {
       interface LocalToken { id: string }
       class LocalClass { id = 1; }
@@ -71,6 +79,14 @@ const files = new Map<string, string>([
       const localClass: LocalClass = null!;
       return { token: useInterface<LocalToken>(), classToken: useInterface<LocalClass>() };
     }
+  `],
+  [CLASS_EXPR_FILE, `
+    export const e1 = class Foo { id = 1; };
+    export const e2 = class Foo { id = 2; };
+    export const e1Instance: InstanceType<typeof e1> = null!;
+    export class Foo { id = 3; }
+    export const namedFoo: Foo = null!;
+    export const namedCtor: typeof Foo = null!;
   `],
   [PKG_WIDGET_FILE, `
     export interface Widget { id: string }
@@ -254,6 +270,21 @@ function classValueType(fileName: string, className: string): ts.Type {
   visit(sourceOf(fileName));
   if (!nameNode) throw new Error(`token de classe absent: ${className}`);
   return checker.getTypeAtLocation(nameNode);
+}
+
+function valueType(fileName: string, name: string): ts.Type {
+  let declaration: ts.VariableDeclaration | undefined;
+  const visit = (node: ts.Node): void => {
+    if (declaration) return;
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) {
+      declaration = node;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceOf(fileName));
+  if (!declaration) throw new Error(`valeur absente: ${name}`);
+  return checker.getTypeAtLocation(declaration.name);
 }
 
 function functionParameterType(fileName: string, functionName: string): ts.Type {
@@ -536,6 +567,45 @@ describe('T02 identité des tokens', () => {
     expect(program.getRootFileNames().indexOf(MERGE_B_FILE)).toBeLessThan(program.getRootFileNames().indexOf(MERGE_A_FILE));
     expect(text).toContain('merge-a.ts');
     expect(text).not.toContain('merge-b.ts');
+  });
+
+  it('T02-P21 les formes tuple et tableau ne partagent pas un id', () => {
+    const service = new TokenResolverService(checker);
+    const id = (name: string): string => service.getTypeId(variableType(SCOPE_FILE, name));
+    const plainTuple = id('plainTuple');
+    const restTuple = id('restTuple');
+    const optionalTuple = id('optionalTuple');
+    const undefTuple = id('undefTuple');
+    const readonlyTuple = id('readonlyTuple');
+    const plainArray = id('plainArray');
+    const readonlyArray = id('readonlyArray');
+    expect(plainTuple).not.toBe(restTuple);
+    expect(optionalTuple).not.toBe(undefTuple);
+    expect(plainTuple).not.toBe(readonlyTuple);
+    expect(plainArray).not.toBe(readonlyArray);
+    expect(plainTuple).toBe('Repo_520a3cb4');
+    expect(plainArray).toBe('Repo_7d0bc632');
+  });
+
+  it('T02-P22 une class expression lève NEO_TOKEN_UNSUPPORTED', () => {
+    const service = new TokenResolverService(checker);
+    const assertClassExpression = (run: () => unknown): void => {
+      try {
+        run();
+      } catch (error) {
+        expect(error).toBeInstanceOf(NeoTokenError);
+        expect((error as NeoTokenError).code).toBe('NEO_TOKEN_UNSUPPORTED');
+        expect((error as Error).message).toBe('NEO_TOKEN_UNSUPPORTED: class-expression');
+        return;
+      }
+      expect.fail('class-expression');
+    };
+    assertClassExpression(() => service.getTypeIdFromConstructor(valueType(CLASS_EXPR_FILE, 'e1')));
+    assertClassExpression(() => service.getTypeIdFromConstructor(valueType(CLASS_EXPR_FILE, 'e2')));
+    assertClassExpression(() => service.getTypeId(variableType(CLASS_EXPR_FILE, 'e1Instance')));
+    const named = service.getTypeId(variableType(CLASS_EXPR_FILE, 'namedFoo'));
+    expect(named).toMatch(/^Foo_[0-9a-f]{8}$/);
+    expect(service.getTypeIdFromConstructor(variableType(CLASS_EXPR_FILE, 'namedCtor'))).toBe(named);
   });
 
   it('T02-schema le descripteur commence par v1', () => {

@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import ts from 'typescript';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
+import { Analyzer, NeoTokenError } from '@djodjonx/neosyringe-core/analyzer';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
-import { transformUseInterfaceCalls } from '../src/useInterfaceTransform';
+import { transformUseInterfaceCalls, type UsedTokenEntry } from '../src/useInterfaceTransform';
 
 const FILES: Record<string, string> = {
   'types.ts': `
@@ -112,5 +112,45 @@ describe('T02 parité du transform', () => {
     for (const id of [...repoIds, ...portIds, ...propertyIds]) {
       expect(graphIds).toContain(id);
     }
+  });
+
+  it('T02-P23 une collision de hash entre fichiers lève NEO_TOKEN_COLLISION', () => {
+    const options: ts.CompilerOptions = {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      strict: true,
+    };
+    const hash = { hash: () => 'aaaaaaaa' };
+    const sourceOf = (field: string): string => `
+      import { useInterface } from '@djodjonx/neosyringe';
+      export interface Port { ${field} }
+      function useInterface<T>(): T { return null!; }
+      export const token = useInterface<Port>();
+    `;
+    const leftId = path.join(dir, 'left-collision.ts');
+    const rightId = path.join(dir, 'right-collision.ts');
+    const usedTokens = new Map<string, UsedTokenEntry>();
+    const left = transformUseInterfaceCalls(sourceOf('a: string'), leftId, options, usedTokens, hash);
+    expect(left).toMatch(/Port_[0-9a-f]{8}/);
+    let thrown: unknown;
+    try {
+      transformUseInterfaceCalls(sourceOf('b: number'), rightId, options, usedTokens, hash);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(NeoTokenError);
+    expect((thrown as NeoTokenError).code).toBe('NEO_TOKEN_COLLISION');
+    const message = (thrown as Error).message;
+    const stored = [...usedTokens.values()][0]?.descriptor;
+    expect(message).toContain(stored);
+    expect(message).toContain(' <> ');
+    const next = message.split(' <> ')[1];
+    expect(next).not.toBe(stored);
+    expect(stored).toContain('left-collision.ts');
+    expect(next).toContain('right-collision.ts');
+    expect(() => {
+      transformUseInterfaceCalls(sourceOf('a: string'), leftId, options, usedTokens, hash);
+    }).not.toThrow();
   });
 });
