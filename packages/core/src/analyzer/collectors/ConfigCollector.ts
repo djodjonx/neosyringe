@@ -3,6 +3,7 @@ import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
 import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError } from '../types';
 import { HashUtils, TokenResolverService, DEFAULT_EXPORT_CONTAINER_NAME } from '../shared';
+import { resolveNeoMarker } from '../shared/markerProvenance';
 import { InjectionParser } from '../parsers/InjectionParser';
 
 /**
@@ -146,24 +147,16 @@ export class ConfigCollector implements IConfigCollector {
     node: ts.CallExpression,
     sourceFile: ts.SourceFile
   ): ConfigGraph | null {
-    const funcName = this.getFunctionName(node);
+    const marker = resolveNeoMarker(this.checker, node);
 
-    if (funcName === 'defineBuilderConfig') {
+    if (marker === 'defineBuilderConfig') {
       return this.parseConfig(node, sourceFile, 'builder');
     }
 
-    if (funcName === 'definePartialConfig') {
+    if (marker === 'definePartialConfig') {
       return this.parseConfig(node, sourceFile, 'partial');
     }
 
-    return null;
-  }
-
-  private getFunctionName(node: ts.CallExpression): string | null {
-    const expression = node.expression;
-    if (TSContext.ts.isIdentifier(expression)) {
-      return expression.text;
-    }
     return null;
   }
 
@@ -409,11 +402,7 @@ export class ConfigCollector implements IConfigCollector {
     ) {
       const callExpr = declaration.initializer;
 
-      // Check if it's declareContainerTokens
-      if (
-        TSContext.ts.isIdentifier(callExpr.expression) &&
-        callExpr.expression.text === 'declareContainerTokens'
-      ) {
+      if (resolveNeoMarker(this.checker, callExpr) === 'declareContainerTokens') {
         return this.extractDeclaredTokens(callExpr);
       }
     }

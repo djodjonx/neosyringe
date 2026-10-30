@@ -285,7 +285,7 @@ export class Analyzer {
 
     // Single pass: collect parent container names, extends refs, and config call sites
     // This replaces three separate AST traversals with one.
-    const visitor = new ASTVisitor();
+    const visitor = new ASTVisitor(this.checker);
     for (const sourceFile of this.program.getSourceFiles()) {
       if (sourceFile.isDeclarationFile) continue;
       visitor.visit(sourceFile);
@@ -325,7 +325,7 @@ export class Analyzer {
     const { parentContainerNames } = this.getLegacyServices();
 
     // Pass 1: collect metadata — parent names, extends refs, all call sites
-    const visitor = new ASTVisitor();
+    const visitor = new ASTVisitor(this.checker);
     for (const sourceFile of this.program.getSourceFiles()) {
       if (sourceFile.isDeclarationFile) continue;
       visitor.visit(sourceFile);
@@ -514,7 +514,7 @@ export class Analyzer {
     const extendsReferences = this._extendsReferences;
 
     if (TSContext.ts.isCallExpression(node)) {
-      if (CallExpressionUtils.isDefineBuilderConfig(node)) {
+      if (CallExpressionUtils.isDefineBuilderConfig(node, this.checker)) {
         const parent = node.parent;
 
         if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
@@ -535,7 +535,7 @@ export class Analyzer {
         graph.defineBuilderConfigEnd = node.getEnd();
         this.parseBuilderConfig(node, graph);
 
-      } else if (CallExpressionUtils.isDefinePartialConfig(node)) {
+      } else if (CallExpressionUtils.isDefinePartialConfig(node, this.checker)) {
         const parent = node.parent;
         if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
           const partialName = parent.name.text;

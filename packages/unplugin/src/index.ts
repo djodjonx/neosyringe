@@ -6,7 +6,7 @@ import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
 import { Generator, resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { transformUseInterfaceCalls, type UsedTokenEntry } from './useInterfaceTransform';
-import { hasNeoSyringeMarkers } from './markerUtils';
+import { callsCanReachNeoSyringe, hasNeoSyringeMarkers } from './markerUtils';
 import { serializeGraph } from '@djodjonx/neosyringe-ui';
 import type { SerializableGraph } from '@djodjonx/neosyringe-ui';
 import { createDevtoolsMiddleware } from './devtools';
@@ -55,6 +55,8 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
   // Graphs keyed by source file for the devtools middleware.
   // Map ensures re-transforming a file (HMR) replaces its entry rather than accumulating.
   const devtoolsGraphs = new Map<string, SerializableGraph>();
+  let previousProgram: ts.Program | undefined;
+  const cachedSources = new Map<string, { stamp: string; source: ts.SourceFile }>();
 
   // Cache tsconfig parsing — tsconfig doesn't change during a build
   let compilerOptions: ts.CompilerOptions | undefined;
@@ -88,13 +90,24 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
     },
 
     transform(code, id) {
-      // Quick exit for files that don't reference NeoSyringe APIs — avoids tsconfig load
+      // No value import and no marker-shaped call: skip before reading tsconfig.
       if (!hasNeoSyringeMarkers(code)) return;
+
+      // Missing tsconfig is an error only when a call can reach a marker.
+      // An unrelated value import must not throw (ADR007: no false negative once one can).
+      if (!compilerOptions && !ts.findConfigFile(process.cwd(), ts.sys.fileExists, 'tsconfig.json')) {
+        const probe: ts.CompilerOptions = {
+          module: ts.ModuleKind.ESNext,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          target: ts.ScriptTarget.ES2020,
+        };
+        if (!callsCanReachNeoSyringe(code, id, probe)) return undefined;
+      }
 
       const options = getCompilerOptions();
 
-      // Handle files containing container definitions
-      if (code.includes('defineBuilderConfig')) {
+      // Aliases have no literal marker name. Skip the program when no call can reach one.
+      if (!callsCanReachNeoSyringe(code, id, options)) return undefined;
         // Create a custom compilerHost that serves the current file's code
         // (otherwise createProgram can't read test code that doesn't exist on disk)
         const norm = (p: string) => p.replace(/\\/g, '/');
@@ -106,7 +119,14 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
             }
             try {
               const sourceText = ts.sys.readFile(fileName);
-              return sourceText ? ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true) : undefined;
+              if (!sourceText) return undefined;
+              // Same-length edits (watch / HMR) must miss. One entry per file, replaced in place.
+              const stamp = sourceText;
+              const cached = cachedSources.get(fileName);
+              if (cached && cached.stamp === stamp) return cached.source;
+              const created = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true);
+              cachedSources.set(fileName, { stamp, source: created });
+              return created;
             } catch {
               return undefined;
             }
@@ -122,20 +142,23 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
           getNewLine: () => '\n',
         };
 
-        const program = ts.createProgram([id], options, compilerHost);
+        const program = ts.createProgram([id], options, compilerHost, previousProgram);
+        previousProgram = program;
         const analyzer = new Analyzer(program);
 
         // extractAll() returns one graph per defineBuilderConfig call (parents included).
         // Graphs from imported files are used for token registration only.
         const allGraphs = analyzer.extractAll();
 
-        // Check for analysis errors (duplicates, type mismatches) across all graphs
+        // Errors belong to the file that declares the container, not to an importer.
         for (const graph of allGraphs) {
           if (graph.errors && graph.errors.length > 0) {
+            const graphFile = (graph.sourceFileName ?? id).replace(/\\/g, '/');
+            if (graphFile !== id.replace(/\\/g, '/')) continue;
             const messages = graph.errors.map(e => `[neosyringe-plugin] ${e.message}`).join('\n');
             const buildError = new Error(messages) as Error & { file?: string };
             buildError.name = graph.errors[0].type === 'duplicate' ? 'DuplicateRegistrationError' : 'TypeMismatchError';
-            buildError.file = id;
+            buildError.file = graph.sourceFileName ?? id;
             throw buildError;
           }
         }
@@ -220,7 +243,6 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
           const finalCode = transformUseInterfaceCalls(result, id, options, usedTokens);
           return finalCode ?? result;
         }
-      }
 
       // 2. Transform useInterface<T>() calls to tokenId strings (for non-container files)
       // Collect used tokens for validation at build end
