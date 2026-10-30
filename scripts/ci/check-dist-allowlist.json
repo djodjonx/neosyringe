@@ -1,0 +1,15 @@
+[
+  {
+    "package": "@djodjonx/neosyringe-core",
+    "paths": [
+      "dist/index.cjs",
+      "dist/index.mjs",
+      "dist/index.d.mts",
+      "./dist/index.d.mts",
+      "./dist/index.mjs",
+      "./dist/index.cjs"
+    ],
+    "reason": "Declared root index is not emitted (packages/core/package.json:7-14). Follow-up is T15.",
+    "followUp": "T15"
+  }
+]
