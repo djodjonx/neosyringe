@@ -1,0 +1,19 @@
+node: v24.7.0
+command: node audit-edge-cases.mjs
+cwd: .
+exit: 0
+qualification: exit 0 n'est pas une réussite du contrat ; comparer la sortie à audit/BASELINE.md | {"name":"concurrent_init","transformed":true,"result":{"factoryCalls":2,"cachedId":2}} | {"name":"multi_async","transformed":true,"result":{"initializeType":"undefined","itemTypes":[{"promise":true},{"promise":true}]}} | {"name":"multi_dispose","transformed":true,"result":{"created":2,"disposed":0}} | {"name":"generic_tokens","transformed":true,"result":{"value":{"total":42}}} | {"name":"property_variable","phase":"transform_or_module_execution","error":"NeoSyringe: useProperty(Api, 'url') called at runtime. The build plugin is missing."} | {"name":"inherited_constructor","transformed":true,"result":{"injected":false}} | {"name":"alias_marker","phase":"transform_or_module_execution","error":"NeoSyringe: defineBuilderConfig() called at runtime. This library requires the compiler plugin to generate the container. Ensure the plugin is configured in your build system (Vite, Rollup, Webpack)."} | {"name":"namespace_marker","phase":"transform_or_module_execution","error":"NeoSyringe: defineBuilderConfig() called at runtime. This library requires the compiler plugin to generate the container. Ensure the plugin is configured in your build system (Vite, Rollup, Webpack)."} | {"name":"false_positive_marker","transformed":true,"result":{"constructorName":"NeoContainer_5e07e591"}}
+--- stdout ---
+{"name":"concurrent_init","transformed":true,"result":{"factoryCalls":2,"cachedId":2}}
+{"name":"multi_async","transformed":true,"result":{"initializeType":"undefined","itemTypes":[{"promise":true},{"promise":true}]}}
+{"name":"multi_dispose","transformed":true,"result":{"created":2,"disposed":0}}
+{"name":"generic_tokens","transformed":true,"result":{"value":{"total":42}}}
+{"name":"property_variable","phase":"transform_or_module_execution","error":"NeoSyringe: useProperty(Api, 'url') called at runtime. The build plugin is missing."}
+{"name":"inherited_constructor","transformed":true,"result":{"injected":false}}
+{"name":"alias_marker","phase":"transform_or_module_execution","error":"NeoSyringe: defineBuilderConfig() called at runtime. This library requires the compiler plugin to generate the container. Ensure the plugin is configured in your build system (Vite, Rollup, Webpack)."}
+{"name":"namespace_marker","phase":"transform_or_module_execution","error":"NeoSyringe: defineBuilderConfig() called at runtime. This library requires the compiler plugin to generate the container. Ensure the plugin is configured in your build system (Vite, Rollup, Webpack)."}
+{"name":"false_positive_marker","transformed":true,"result":{"constructorName":"NeoContainer_5e07e591"}}
+
+--- stderr ---
+(node:36353) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)

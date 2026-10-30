@@ -1,0 +1,10 @@
+Shell des journaux baseline-build.txt, baseline-typecheck.txt, baseline-test.txt, baseline-lint.txt et baseline-e2e.txt.
+node -v: v22.23.2
+node binary: /Users/jonathan/Library/pnpm/node
+pnpm -v: 10.19.0
+install: pnpm install --frozen-lockfile --ignore-scripts
+commands: pnpm build, pnpm typecheck, pnpm test, pnpm lint, pnpm test:e2e
+Shell de la relance finale de T00.
+node -v: v24.7.0
+pnpm -v: 10.19.0
+pnpm exec node -v: v24.7.0

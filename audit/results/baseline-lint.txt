@@ -1,0 +1,98 @@
+
+> neosyringe-monorepo@0.0.1 lint /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais
+> oxlint .
+
+
+  ! eslint(no-unused-vars): Variable 'testService' is declared but never used. Unused variables should start with a '_'.
+     ,-[packages/core/tests/shared/TokenResolverService.test.ts:383:13]
+ 382 |       const mockLogger: ILogger = { warn: vi.fn() };
+ 383 |       const testService = new TokenResolverService(testChecker, mockLogger);
+     :             ^^^^^|^^^^^
+     :                  `-- 'testService' is declared here
+ 384 | 
+     `----
+  help: Consider removing this declaration.
+
+  ! eslint(no-unused-vars): Variable 'dagre' is declared but never used. Unused variables should start with a '_'.
+   ,-[packages/vscode-extension/src/cytoscape-bundle.js:3:7]
+ 2 | const cytoscape = require('cytoscape');
+ 3 | const dagre = require('dagre');
+   :       ^^|^^
+   :         `-- 'dagre' is declared here
+ 4 | const cytoscapeDagre = require('cytoscape-dagre');
+   `----
+  help: Consider removing this declaration.
+
+  ! eslint(no-unused-vars): Type 'CreateCatInput' is imported but never used.
+   ,-[examples/nestjs/src/domain/i-cat-repository.ts:1:20]
+ 1 | import type { Cat, CreateCatInput } from './cat.entity';
+   :                    ^^^^^^^|^^^^^^
+   :                           `-- 'CreateCatInput' is imported here
+ 2 | 
+   `----
+  help: Consider removing this import.
+
+  ! eslint(no-unused-vars): Variable 'n' is declared but never used. Unused variables should start with a '_'.
+     ,-[packages/ui/src/html.ts:112:9]
+ 111 | 
+ 112 |   const n = nonce ?? getNonce();
+     :         |
+     :         `-- 'n' is declared here
+ 113 | 
+     `----
+  help: Consider removing this declaration.
+
+  ! eslint(no-unused-vars): Variable 'matches' is declared but never used. Unused variables should start with a '_'.
+     ,-[packages/vscode-extension/src/GraphPanel.ts:116:11]
+ 115 |   for (const folder of workspaceFolders) {
+ 116 |     const matches = vscode.workspace.findFiles(
+     :           ^^^|^^^
+     :              `-- 'matches' is declared here
+ 117 |       new vscode.RelativePattern(folder, '**/tsconfig.json'),
+     `----
+  help: Consider removing this declaration.
+
+  ! eslint(no-unused-vars): Variable 'hasSecondService' is declared but never used. Unused variables should start with a '_'.
+     ,-[packages/core/tests/analyzer/DuplicateConfigNames.test.ts:114:11]
+ 113 |     );
+ 114 |     const hasSecondService = Array.from(graph.nodes.keys()).some((k: any) => 
+     :           ^^^^^^^^|^^^^^^^
+     :                   `-- 'hasSecondService' is declared here
+ 115 |       k.includes('SecondService')
+     `----
+  help: Consider removing this declaration.
+
+  ! eslint(no-unused-vars): Parameter 'msg' is declared but never used. Unused parameters should start with a '_'.
+   ,-[packages/unplugin/tests/__fixtures__/debug-option/container.ts:4:46]
+ 3 | interface ILogger { log(msg: string): void; }
+ 4 | class ConsoleLogger implements ILogger { log(msg: string) {} }
+   :                                              ^|^
+   :                                               `-- 'msg' is declared here
+ 5 | 
+   `----
+  help: Consider removing this parameter.
+
+  ! eslint(no-unused-vars): Variable 'tokenId' is declared but never used. Unused variables should start with a '_'.
+     ,-[packages/unplugin/tests/useInterfaceTransform.test.ts:163:17]
+ 162 |     let foundEntry: UsedTokenEntry | undefined;
+ 163 |     for (const [tokenId, entry] of usedTokens) {
+     :                 ^^^|^^^
+     :                    `-- 'tokenId' is declared here
+ 164 |       if (entry.interfaceName === 'IMyService') {
+     `----
+  help: Consider removing this declaration.
+
+  ! eslint(no-unused-vars): Identifier 'HashUtils' is imported but never used.
+   ,-[packages/unplugin/src/transformer.ts:3:20]
+ 2 | import type { PluginConfig, ProgramTransformerExtras } from 'ts-patch';
+ 3 | import { Analyzer, HashUtils } from '@djodjonx/neosyringe-core/analyzer';
+   :                    ^^^^|^^^^
+   :                        `-- 'HashUtils' is imported here
+ 4 | import { Generator, GraphValidator, resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
+   `----
+  help: Consider removing this import.
+
+  ! File is too long to fit on the screen
+
+Found 1763 warnings and 0 errors.
+Finished in 43ms on 235 files with 90 rules using 16 threads.

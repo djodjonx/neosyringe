@@ -1,0 +1,4 @@
+
+> neosyringe-monorepo@0.0.1 typecheck /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais
+> tsc --noEmit
+

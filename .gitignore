@@ -45,3 +45,10 @@ docs/superpowers/
 .verdaccio-storage/
 .verdaccio-htpasswd
 .worktrees/
+# Historical audit scripts copied to the repo root while audit/run-historical.mjs runs
+/audit-runtime.mjs
+/audit-edge-cases.mjs
+/audit-types.mjs
+/audit-devtools.mjs
+/audit-tree-shaking.mjs
+/.audit-tree-shaking/

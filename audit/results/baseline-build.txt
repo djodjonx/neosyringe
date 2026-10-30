@@ -1,0 +1,125 @@
+
+> neosyringe-monorepo@0.0.1 build /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais
+> pnpm --filter './packages/**' run build
+
+Scope: 7 of 8 workspace projects
+packages/core build$ tsdown
+packages/neosyringe build$ tsdown
+packages/neosyringe build: ℹ tsdown v0.20.0-beta.3 powered by rolldown v1.0.0-beta.60
+packages/core build: ℹ tsdown v0.20.0-beta.3 powered by rolldown v1.0.0-beta.60
+packages/neosyringe build: ℹ config file: /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/neosyringe/tsdown.config.ts 
+packages/core build: ℹ config file: /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/core/tsdown.config.ts 
+packages/core build: ℹ entry: src/analyzer/index.ts, src/generator/index.ts, src/TSContext.ts
+packages/core build: ℹ tsconfig: ../../tsconfig.json
+packages/core build: ℹ Build start
+packages/neosyringe build: ℹ entry: src/index.ts, src/types.ts
+packages/neosyringe build: ℹ tsconfig: ../../tsconfig.json
+packages/neosyringe build: ℹ Build start
+packages/neosyringe build: ℹ [CJS] dist/types.cjs  3.62 kB │ gzip: 1.45 kB
+packages/neosyringe build: ℹ [CJS] dist/index.cjs  0.35 kB │ gzip: 0.16 kB
+packages/neosyringe build: ℹ [CJS] 2 files, total: 3.97 kB
+packages/neosyringe build: ℹ [CJS] dist/types.d.cts  11.47 kB │ gzip: 3.70 kB
+packages/neosyringe build: ℹ [CJS] dist/index.d.cts   0.59 kB │ gzip: 0.21 kB
+packages/neosyringe build: ℹ [CJS] 2 files, total: 12.06 kB
+packages/neosyringe build: ✔ Build complete in 367ms
+packages/neosyringe build: ℹ [ESM] dist/types.mjs     3.50 kB │ gzip: 1.43 kB
+packages/neosyringe build: ℹ [ESM] dist/index.mjs     0.23 kB │ gzip: 0.13 kB
+packages/neosyringe build: ℹ [ESM] dist/types.d.mts  11.47 kB │ gzip: 3.70 kB
+packages/neosyringe build: ℹ [ESM] dist/index.d.mts   0.59 kB │ gzip: 0.21 kB
+packages/neosyringe build: ℹ [ESM] 4 files, total: 15.78 kB
+packages/neosyringe build: ✔ Build complete in 368ms
+packages/neosyringe build: Done
+packages/core build: ℹ [CJS] dist/generator/index.cjs      34.82 kB │ gzip:  9.76 kB
+packages/core build: ℹ [CJS] dist/analyzer/index.cjs        1.48 kB │ gzip:  0.40 kB
+packages/core build: ℹ [CJS] dist/TSContext.cjs             0.11 kB │ gzip:  0.09 kB
+packages/core build: ℹ [CJS] dist/Analyzer-D54icJQw.cjs   118.06 kB │ gzip: 25.78 kB
+packages/core build: ℹ [CJS] dist/TSContext-BKJRieS6.cjs    2.65 kB │ gzip:  1.17 kB
+packages/core build: ℹ [CJS] 5 files, total: 157.12 kB
+packages/core build: ℹ [CJS] dist/analyzer/index.d.cts   45.92 kB │ gzip: 11.36 kB
+packages/core build: ℹ [CJS] dist/generator/index.d.cts  12.52 kB │ gzip:  4.04 kB
+packages/core build: ℹ [CJS] dist/TSContext.d.cts         1.31 kB │ gzip:  0.65 kB
+packages/core build: ℹ [CJS] dist/types-COZgPBO8.d.cts   10.95 kB │ gzip:  3.52 kB
+packages/core build: ℹ [CJS] 4 files, total: 70.70 kB
+packages/core build: ✔ Build complete in 486ms
+packages/core build: ℹ [ESM] dist/generator/index.mjs      34.20 kB │ gzip:  9.71 kB
+packages/core build: ℹ [ESM] dist/analyzer/index.mjs        1.03 kB │ gzip:  0.42 kB
+packages/core build: ℹ [ESM] dist/TSContext.mjs             0.08 kB │ gzip:  0.08 kB
+packages/core build: ℹ [ESM] dist/Analyzer-rDMGsgcM.mjs   113.19 kB │ gzip: 25.55 kB
+packages/core build: ℹ [ESM] dist/TSContext-BuprVNfQ.mjs    1.41 kB │ gzip:  0.69 kB
+packages/core build: ℹ [ESM] dist/analyzer/index.d.mts     45.95 kB │ gzip: 11.36 kB
+packages/core build: ℹ [ESM] dist/generator/index.d.mts    12.52 kB │ gzip:  4.04 kB
+packages/core build: ℹ [ESM] dist/TSContext.d.mts           1.31 kB │ gzip:  0.65 kB
+packages/core build: ℹ [ESM] dist/types-DUAdAiiV.d.mts     10.95 kB │ gzip:  3.52 kB
+packages/core build: ℹ [ESM] 9 files, total: 220.65 kB
+packages/core build: ✔ Build complete in 489ms
+packages/core build: Done
+packages/lsp build$ tsdown
+packages/ui build$ tsdown
+packages/lsp build: ℹ tsdown v0.20.0-beta.3 powered by rolldown v1.0.0-beta.60
+packages/lsp build: ℹ config file: /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/lsp/tsdown.config.ts 
+packages/lsp build: ℹ entry: src/index.ts
+packages/lsp build: ℹ tsconfig: ../../tsconfig.json
+packages/lsp build: ℹ Build start
+packages/ui build: ℹ tsdown v0.20.0-beta.3 powered by rolldown v1.0.0-beta.60
+packages/ui build: ℹ config file: /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/ui/tsdown.config.ts 
+packages/ui build: ℹ entry: src/index.ts
+packages/ui build: ℹ tsconfig: ../../tsconfig.json
+packages/ui build: ℹ Build start
+packages/lsp build: ℹ dist/index.cjs  7.68 kB │ gzip: 2.56 kB
+packages/lsp build: ℹ 1 files, total: 7.68 kB
+packages/lsp build: ℹ dist/index.d.cts  0.24 kB │ gzip: 0.18 kB
+packages/lsp build: ℹ 1 files, total: 0.24 kB
+packages/lsp build: ✔ Build complete in 306ms
+packages/lsp build: Done
+packages/ui build: ℹ [CJS] dist/index.cjs  24.23 kB │ gzip: 7.62 kB
+packages/ui build: ℹ [CJS] 1 files, total: 24.23 kB
+packages/ui build: ℹ [CJS] dist/index.d.cts  2.47 kB │ gzip: 1.05 kB
+packages/ui build: ℹ [CJS] 1 files, total: 2.47 kB
+packages/ui build: ✔ Build complete in 316ms
+packages/ui build: ℹ [ESM] dist/index.mjs    24.10 kB │ gzip: 7.60 kB
+packages/ui build: ℹ [ESM] dist/index.d.mts   2.47 kB │ gzip: 1.05 kB
+packages/ui build: ℹ [ESM] 2 files, total: 26.58 kB
+packages/ui build: ✔ Build complete in 317ms
+packages/ui build: Done
+packages/cli build$ tsdown
+packages/unplugin build$ tsdown
+packages/vscode-extension build$ node esbuild.mjs
+packages/cli build: ℹ tsdown v0.20.0-beta.3 powered by rolldown v1.0.0-beta.60
+packages/cli build: ℹ config file: /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/cli/tsdown.config.ts 
+packages/cli build: ℹ entry: src/index.ts
+packages/cli build: ℹ tsconfig: ../../tsconfig.json
+packages/cli build: ℹ Build start
+packages/unplugin build: ℹ tsdown v0.20.0-beta.3 powered by rolldown v1.0.0-beta.60
+packages/unplugin build: ℹ config file: /Users/jonathan/projects/neo-syringe-worktrees/chore-syringe-corrections-00-reference-et-harnais/packages/unplugin/tsdown.config.ts 
+packages/unplugin build: ℹ entry: src/index.ts, src/transformer.ts
+packages/unplugin build: ℹ tsconfig: ../../tsconfig.json
+packages/unplugin build: ℹ Build start
+packages/vscode-extension build:   media/cytoscape.js  565.4kb
+packages/vscode-extension build: ⚡ Done in 51ms
+packages/cli build: ℹ Granting execute permission to dist/index.mjs
+packages/cli build: ℹ dist/index.mjs    5.68 kB │ gzip: 2.15 kB
+packages/cli build: ℹ dist/index.d.mts  0.01 kB │ gzip: 0.03 kB
+packages/cli build: ℹ 2 files, total: 5.69 kB
+packages/cli build: ✔ Build complete in 306ms
+packages/cli build: Done
+packages/vscode-extension build:   dist/extension.js       9.7mb ⚠️
+packages/vscode-extension build:   dist/extension.js.map  13.8mb
+packages/vscode-extension build: ⚡ Done in 329ms
+packages/vscode-extension build: Done
+packages/unplugin build: ℹ [CJS] dist/index.cjs                 8.19 kB │ gzip: 2.67 kB
+packages/unplugin build: ℹ [CJS] dist/transformer.cjs           4.23 kB │ gzip: 1.49 kB
+packages/unplugin build: ℹ [CJS] dist/markerUtils-Bjv6cxT8.cjs  4.32 kB │ gzip: 1.69 kB
+packages/unplugin build: ℹ [CJS] 3 files, total: 16.73 kB
+packages/unplugin build: ℹ [CJS] dist/index.d.cts        1.46 kB │ gzip: 0.76 kB
+packages/unplugin build: ℹ [CJS] dist/transformer.d.cts  1.13 kB │ gzip: 0.61 kB
+packages/unplugin build: ℹ [CJS] 2 files, total: 2.60 kB
+packages/unplugin build: ✔ Build complete in 537ms
+packages/unplugin build: ℹ [ESM] dist/index.mjs                 7.64 kB │ gzip: 2.61 kB
+packages/unplugin build: ℹ [ESM] dist/transformer.mjs           4.07 kB │ gzip: 1.47 kB
+packages/unplugin build: ℹ [ESM] dist/markerUtils-DSkD4ZDC.mjs  2.83 kB │ gzip: 1.22 kB
+packages/unplugin build: ℹ [ESM] dist/index.d.mts               1.46 kB │ gzip: 0.76 kB
+packages/unplugin build: ℹ [ESM] dist/transformer.d.mts         1.16 kB │ gzip: 0.62 kB
+packages/unplugin build: ℹ [ESM] 5 files, total: 17.15 kB
+packages/unplugin build: ✔ Build complete in 539ms
+packages/unplugin build: Done
+pnpm build  6.19s user 0.74s system 209% cpu 3.302 total
