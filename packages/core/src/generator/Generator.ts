@@ -5,7 +5,7 @@ import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analy
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, type GetImport } from './FactoryEmitter';
 import { generateResolveCases, generateResolveAllMethod, buildAsyncResolveGuard } from './ResolveEmitter';
-import { hasAsyncFactories, generateInitializeMethod, generateDestroyMethod } from './LifecycleEmitter';
+import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateDestroyMethod, generateCreateScopeMethod } from './LifecycleEmitter';
 import { TSContext } from '../TSContext';
 import { HashUtils } from '../analyzer/shared/HashUtils';
 
@@ -250,7 +250,10 @@ export class Generator {
     const resolveCases = generateResolveCases(this.graph, sorted, getImport);
     const multiFactories = generateMultiFactories(this.graph, getImport, getForeignImport);
     const resolveAllMethod = generateResolveAllMethod(this.graph, getImport, hasAsync);
-    const initializeMethod = hasAsync ? generateInitializeMethod(this.graph, sorted) : '';
+    const initializeMethod = hasAsync
+      ? generateInitializeMethod(this.graph, sorted)
+      : generateSyncInitializeMethod();
+    const createScopeMethod = generateCreateScopeMethod();
     const destroyMethod = generateDestroyMethod(this.graph, sorted, getImport);
 
     // Generate import lines for:
@@ -311,6 +314,8 @@ class ${this.containerClassName} {
 
   ${initializeMethod}
 
+  ${createScopeMethod}
+
   /**
    * Replaces a token's provider for the lifetime of this container instance —
    * for tests, not production wiring. The factory runs once (its result is
@@ -324,17 +329,19 @@ class ${this.containerClassName} {
    * for as long as the process runs. Throwing loudly here is cheaper than
    * debugging that at 3am.
    */
-  public override(token: any, factory: () => any): void {
+  public override(token: any, factory: () => any): Promise<void> {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
     }
     this.overrides.set(token, factory);
     this.instances.delete(token);
+    return Promise.resolve();
   }
 
   /** Removes all overrides set via override(), reverting to real registrations. */
-  public clearOverrides(): void {
+  public clearOverrides(): Promise<void> {
     this.overrides.clear();
+    return Promise.resolve();
   }
 
   /**

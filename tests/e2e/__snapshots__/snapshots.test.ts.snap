@@ -46,7 +46,11 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  
+  public initialize(): Promise<void> { return Promise.resolve(); }
+
+  public createScope(): this {
+    throw new Error('createScope() is not implemented yet in this build');
+  }
 
   /**
    * Replaces a token's provider for the lifetime of this container instance —
@@ -61,17 +65,19 @@ class NeoContainer {
    * for as long as the process runs. Throwing loudly here is cheaper than
    * debugging that at 3am.
    */
-  public override(token: any, factory: () => any): void {
+  public override(token: any, factory: () => any): Promise<void> {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
     }
     this.overrides.set(token, factory);
     this.instances.delete(token);
+    return Promise.resolve();
   }
 
   /** Removes all overrides set via override(), reverting to real registrations. */
-  public clearOverrides(): void {
+  public clearOverrides(): Promise<void> {
     this.overrides.clear();
+    return Promise.resolve();
   }
 
   /**
@@ -152,10 +158,11 @@ class NeoContainer {
     return token;
   }
 
-  public destroy(): void {
+  public destroy(): Promise<void> {
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] { return []; }
@@ -258,7 +265,11 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  
+  public initialize(): Promise<void> { return Promise.resolve(); }
+
+  public createScope(): this {
+    throw new Error('createScope() is not implemented yet in this build');
+  }
 
   /**
    * Replaces a token's provider for the lifetime of this container instance —
@@ -273,17 +284,19 @@ class NeoContainer {
    * for as long as the process runs. Throwing loudly here is cheaper than
    * debugging that at 3am.
    */
-  public override(token: any, factory: () => any): void {
+  public override(token: any, factory: () => any): Promise<void> {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
     }
     this.overrides.set(token, factory);
     this.instances.delete(token);
+    return Promise.resolve();
   }
 
   /** Removes all overrides set via override(), reverting to real registrations. */
-  public clearOverrides(): void {
+  public clearOverrides(): Promise<void> {
     this.overrides.clear();
+    return Promise.resolve();
   }
 
   /**
@@ -364,10 +377,11 @@ class NeoContainer {
     return token;
   }
 
-  public destroy(): void {
+  public destroy(): Promise<void> {
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] { return []; }
@@ -430,7 +444,11 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  
+  public initialize(): Promise<void> { return Promise.resolve(); }
+
+  public createScope(): this {
+    throw new Error('createScope() is not implemented yet in this build');
+  }
 
   /**
    * Replaces a token's provider for the lifetime of this container instance —
@@ -445,17 +463,19 @@ class NeoContainer {
    * for as long as the process runs. Throwing loudly here is cheaper than
    * debugging that at 3am.
    */
-  public override(token: any, factory: () => any): void {
+  public override(token: any, factory: () => any): Promise<void> {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
     }
     this.overrides.set(token, factory);
     this.instances.delete(token);
+    return Promise.resolve();
   }
 
   /** Removes all overrides set via override(), reverting to real registrations. */
-  public clearOverrides(): void {
+  public clearOverrides(): Promise<void> {
     this.overrides.clear();
+    return Promise.resolve();
   }
 
   /**
@@ -536,10 +556,11 @@ class NeoContainer {
     return token;
   }
 
-  public destroy(): void {
+  public destroy(): Promise<void> {
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] { return []; }
@@ -606,7 +627,11 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  
+  public initialize(): Promise<void> { return Promise.resolve(); }
+
+  public createScope(): this {
+    throw new Error('createScope() is not implemented yet in this build');
+  }
 
   /**
    * Replaces a token's provider for the lifetime of this container instance —
@@ -621,17 +646,19 @@ class NeoContainer {
    * for as long as the process runs. Throwing loudly here is cheaper than
    * debugging that at 3am.
    */
-  public override(token: any, factory: () => any): void {
+  public override(token: any, factory: () => any): Promise<void> {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
     }
     this.overrides.set(token, factory);
     this.instances.delete(token);
+    return Promise.resolve();
   }
 
   /** Removes all overrides set via override(), reverting to real registrations. */
-  public clearOverrides(): void {
+  public clearOverrides(): Promise<void> {
     this.overrides.clear();
+    return Promise.resolve();
   }
 
   /**
@@ -712,10 +739,11 @@ class NeoContainer {
     return token;
   }
 
-  public destroy(): void {
+  public destroy(): Promise<void> {
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] { return []; }
@@ -779,7 +807,11 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  
+  public initialize(): Promise<void> { return Promise.resolve(); }
+
+  public createScope(): this {
+    throw new Error('createScope() is not implemented yet in this build');
+  }
 
   /**
    * Replaces a token's provider for the lifetime of this container instance —
@@ -794,17 +826,19 @@ class NeoContainer {
    * for as long as the process runs. Throwing loudly here is cheaper than
    * debugging that at 3am.
    */
-  public override(token: any, factory: () => any): void {
+  public override(token: any, factory: () => any): Promise<void> {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
     }
     this.overrides.set(token, factory);
     this.instances.delete(token);
+    return Promise.resolve();
   }
 
   /** Removes all overrides set via override(), reverting to real registrations. */
-  public clearOverrides(): void {
+  public clearOverrides(): Promise<void> {
     this.overrides.clear();
+    return Promise.resolve();
   }
 
   /**
@@ -885,10 +919,11 @@ class NeoContainer {
     return token;
   }
 
-  public destroy(): void {
+  public destroy(): Promise<void> {
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] { return []; }
@@ -956,7 +991,11 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  
+  public initialize(): Promise<void> { return Promise.resolve(); }
+
+  public createScope(): this {
+    throw new Error('createScope() is not implemented yet in this build');
+  }
 
   /**
    * Replaces a token's provider for the lifetime of this container instance —
@@ -971,17 +1010,19 @@ class NeoContainer {
    * for as long as the process runs. Throwing loudly here is cheaper than
    * debugging that at 3am.
    */
-  public override(token: any, factory: () => any): void {
+  public override(token: any, factory: () => any): Promise<void> {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
     }
     this.overrides.set(token, factory);
     this.instances.delete(token);
+    return Promise.resolve();
   }
 
   /** Removes all overrides set via override(), reverting to real registrations. */
-  public clearOverrides(): void {
+  public clearOverrides(): Promise<void> {
     this.overrides.clear();
+    return Promise.resolve();
   }
 
   /**
@@ -1062,10 +1103,11 @@ class NeoContainer {
     return token;
   }
 
-  public destroy(): void {
+  public destroy(): Promise<void> {
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] { return []; }
@@ -1140,7 +1182,11 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  
+  public initialize(): Promise<void> { return Promise.resolve(); }
+
+  public createScope(): this {
+    throw new Error('createScope() is not implemented yet in this build');
+  }
 
   /**
    * Replaces a token's provider for the lifetime of this container instance —
@@ -1155,17 +1201,19 @@ class NeoContainer {
    * for as long as the process runs. Throwing loudly here is cheaper than
    * debugging that at 3am.
    */
-  public override(token: any, factory: () => any): void {
+  public override(token: any, factory: () => any): Promise<void> {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
     }
     this.overrides.set(token, factory);
     this.instances.delete(token);
+    return Promise.resolve();
   }
 
   /** Removes all overrides set via override(), reverting to real registrations. */
-  public clearOverrides(): void {
+  public clearOverrides(): Promise<void> {
     this.overrides.clear();
+    return Promise.resolve();
   }
 
   /**
@@ -1246,10 +1294,11 @@ class NeoContainer {
     return token;
   }
 
-  public destroy(): void {
+  public destroy(): Promise<void> {
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] { return []; }
@@ -1320,7 +1369,11 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  
+  public initialize(): Promise<void> { return Promise.resolve(); }
+
+  public createScope(): this {
+    throw new Error('createScope() is not implemented yet in this build');
+  }
 
   /**
    * Replaces a token's provider for the lifetime of this container instance —
@@ -1335,17 +1388,19 @@ class NeoContainer {
    * for as long as the process runs. Throwing loudly here is cheaper than
    * debugging that at 3am.
    */
-  public override(token: any, factory: () => any): void {
+  public override(token: any, factory: () => any): Promise<void> {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
       throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
     }
     this.overrides.set(token, factory);
     this.instances.delete(token);
+    return Promise.resolve();
   }
 
   /** Removes all overrides set via override(), reverting to real registrations. */
-  public clearOverrides(): void {
+  public clearOverrides(): Promise<void> {
     this.overrides.clear();
+    return Promise.resolve();
   }
 
   /**
@@ -1426,10 +1481,11 @@ class NeoContainer {
     return token;
   }
 
-  public destroy(): void {
+  public destroy(): Promise<void> {
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] { return []; }
