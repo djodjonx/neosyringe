@@ -1,6 +1,11 @@
 export { HashUtils } from './HashUtils';
 export { TokenResolverService } from './TokenResolverService';
 export {
+  TOKEN_DESCRIPTOR_SCHEMA,
+  canonicalDescriptor,
+  canonicalParts,
+} from './tokenDescriptor';
+export {
   formatUnsupportedMarker,
   NEO_SYRINGE_SPECIFIER,
   resolveNeoMarker,

@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { formatUnsupportedMarker, HashUtils, resolveNeoMarker } from '@djodjonx/neosyringe-core/analyzer';
+import { formatUnsupportedMarker, resolveNeoMarker, TokenResolverService } from '@djodjonx/neosyringe-core/analyzer';
 import { hasNeoSyringeMarkers } from './markerUtils';
 
 export type UsedTokenEntry = { file: string; line: number; column: number; interfaceName: string };
@@ -88,6 +88,7 @@ export function transformUseInterfaceCalls(
   const program = ts.createProgram([id], compilerOptions, compilerHost);
   const checker = program.getTypeChecker();
   if (typeof checker.getSymbolAtLocation !== 'function') return null;
+  const resolver = new TokenResolverService(checker);
 
   const replacements: { start: number; end: number; text: string }[] = [];
 
@@ -103,34 +104,22 @@ export function transformUseInterfaceCalls(
         const nodeEnd = node.getEnd();
         const typeArg = node.typeArguments[0];
         const type = checker.getTypeFromTypeNode(typeArg);
-        const symbol = type.getSymbol();
+        const tokenId = resolver.getTypeId(type);
 
-        if (symbol) {
-          const declarations = symbol.getDeclarations();
-          let tokenId: string;
+        replacements.push({
+          start: nodeStart,
+          end: nodeEnd,
+          text: `"${tokenId}"`,
+        });
 
-          if (declarations && declarations.length > 0) {
-            const declSourceFile = declarations[0].getSourceFile();
-            tokenId = HashUtils.generateTokenId(symbol, declSourceFile);
-          } else {
-            tokenId = symbol.getName();
-          }
-
-          replacements.push({
-            start: nodeStart,
-            end: nodeEnd,
-            text: `"${tokenId}"`,
+        if (usedTokens && !usedTokens.has(tokenId)) {
+          const line = sourceFile.getLineAndCharacterOfPosition(nodeStart);
+          usedTokens.set(tokenId, {
+            file: id,
+            line: line.line + 1,
+            column: line.character + 1,
+            interfaceName: type.getSymbol()?.getName() ?? tokenId,
           });
-
-          if (usedTokens && !usedTokens.has(tokenId)) {
-            const line = sourceFile.getLineAndCharacterOfPosition(nodeStart);
-            usedTokens.set(tokenId, {
-              file: id,
-              line: line.line + 1,
-              column: line.character + 1,
-              interfaceName: symbol.getName(),
-            });
-          }
         }
       }
 
@@ -145,7 +134,8 @@ export function transformUseInterfaceCalls(
         ) {
           throw new Error(formatUnsupportedMarker(node));
         }
-        const tokenId = `PropertyToken:${classArg.text}.${nameArg.text}`;
+        const classType = checker.getTypeAtLocation(classArg);
+        const tokenId = resolver.getPropertyTokenId(classType, nameArg.text);
         replacements.push({
           start: node.getStart(sourceFile),
           end: node.getEnd(),

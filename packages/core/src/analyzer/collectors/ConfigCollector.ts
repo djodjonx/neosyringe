@@ -39,9 +39,10 @@ export class ConfigCollector implements IConfigCollector {
 
   constructor(
     private program: ts.Program,
-    private checker: ts.TypeChecker
+    private checker: ts.TypeChecker,
+    tokenResolverService?: TokenResolverService,
   ) {
-    this.tokenResolverService = new TokenResolverService(checker);
+    this.tokenResolverService = tokenResolverService ?? new TokenResolverService(checker);
     this.injectionParser = new InjectionParser(checker, this.tokenResolverService);
   }
 

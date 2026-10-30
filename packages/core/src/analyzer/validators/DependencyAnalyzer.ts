@@ -90,7 +90,9 @@ export class DependencyAnalyzer {
     const classDecl = declarations.find(d => TSContext.ts.isClassDeclaration(d)) as ts.ClassDeclaration | undefined;
     if (!classDecl) return dependencies;
 
-    const className = classDecl.name?.text ?? 'Anonymous';
+    const classType = classDecl.name
+      ? this.checker.getTypeAtLocation(classDecl.name)
+      : undefined;
 
     const constructor = classDecl.members.find(
       m => TSContext.ts.isConstructorDeclaration(m)
@@ -103,11 +105,11 @@ export class DependencyAnalyzer {
       if (!typeNode) continue; // No type annotation — cannot determine dependency
 
       // Check for property token first (matches DependencyResolver behavior)
-      if (knownTokenIds) {
+      if (knownTokenIds && classType) {
         const paramName = TSContext.ts.isIdentifier(param.name)
           ? param.name.text
           : param.name.getText();
-        const propertyTokenId: TokenId = `PropertyToken:${className}.${paramName}`;
+        const propertyTokenId = this.tokenResolverService.getPropertyTokenId(classType, paramName);
         if (knownTokenIds.has(propertyTokenId)) {
           dependencies.push(propertyTokenId);
           continue;
