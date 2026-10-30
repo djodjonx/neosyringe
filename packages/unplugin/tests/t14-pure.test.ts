@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 
 // The plugin imports @djodjonx/neosyringe-core from dist. These tests follow src
 // so a mutation of Generator.ts is visible without a rebuild.
@@ -17,7 +17,15 @@ import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { neoSyringePlugin } from '../src/index';
 import neoSyringeTransformer from '../src/transformer';
 
+// Real esbuild, Rollup and TypeScript program builds are slower on CI under
+// coverage (measured up to 6.8 s). Scoped to this file; the worker resets it.
+vi.setConfig({ testTimeout: 30_000 });
+
 const SENTINEL = 'UNUSED_DEPENDENCY_SENTINEL_t14';
+
+afterAll(() => {
+  vi.resetConfig();
+});
 
 const dirs: string[] = [];
 
@@ -84,6 +92,17 @@ async function importRun(file: string): Promise<unknown> {
   return loaded.run();
 }
 
+async function minifyBundle(code: string): Promise<string> {
+  const transformed = await esbuild.transform(code, {
+    target: 'es2022',
+    format: 'esm',
+    minify: true,
+    legalComments: 'none',
+    treeShaking: false,
+  });
+  return transformed.code;
+}
+
 async function bundleFixture(
   entrySource: string,
   unusedSource?: string,
@@ -92,34 +111,31 @@ async function bundleFixture(
   const { dir, entry } = writeFixture(entrySource, unusedSource, sideEffects);
   const runtime = runtimePath();
   const alias = { '@djodjonx/neosyringe': runtime };
-  const plugin = neoSyringePlugin.esbuild({ debug: false });
-  const shared = {
+
+  // One plugin build. Minify is a text transform: it does not create a program.
+  const built = await esbuild.build({
     entryPoints: [entry],
     bundle: true,
     write: false,
-    format: 'esm' as const,
-    target: 'es2022' as const,
-    platform: 'browser' as const,
+    format: 'esm',
+    target: 'es2022',
+    platform: 'browser',
     treeShaking: true,
-    legalComments: 'none' as const,
+    legalComments: 'none',
     define: { 'process.env.NODE_ENV': '"production"' },
     alias,
-    logLevel: 'silent' as const,
-    plugins: [plugin],
-  };
-  const minified = await esbuild.build({ ...shared, minify: true });
-  const unminified = await esbuild.build({
-    ...shared,
-    plugins: [neoSyringePlugin.esbuild({ debug: false })],
+    logLevel: 'silent',
     minify: false,
+    plugins: [neoSyringePlugin.esbuild({ debug: false })],
   });
-  if (!minified.outputFiles || !unminified.outputFiles) {
-    throw new Error('esbuild n\'a pas émis de fichier');
-  }
-  const esbuildMin = minified.outputFiles[0].text;
-  const esbuildRaw = unminified.outputFiles[0].text;
+  const output = built.outputFiles?.[0];
+  if (!output) throw new Error('esbuild n\'a pas émis de fichier');
+  const esbuildRaw = output.text;
+  const esbuildMin = await minifyBundle(esbuildRaw);
   const esbuildFile = path.join(dir, 'esbuild.mjs');
   writeFileSync(esbuildFile, esbuildMin);
+  Reflect.set(globalThis, '__t14Loads', 0);
+  const esbuildRun = await importRun(esbuildFile);
 
   const resolution: Plugin = {
     name: 'fixture-resolution',
@@ -150,9 +166,9 @@ async function bundleFixture(
     },
   };
 
-  let rollupBuild: RollupBuild | undefined;
   let rollupRaw = '';
   let rollupMin = '';
+  let rollupBuild: RollupBuild | undefined;
   try {
     rollupBuild = await rollup({
       input: entry,
@@ -166,32 +182,31 @@ async function bundleFixture(
     const chunk = generated.output[0];
     if (!chunk || chunk.type !== 'chunk') throw new Error('Rollup n\'a pas émis un chunk');
     rollupRaw = chunk.code;
-    rollupMin = (await esbuild.transform(rollupRaw, {
-      target: 'es2022',
-      format: 'esm',
-      minify: true,
-      legalComments: 'none',
-      treeShaking: false,
-    })).code;
+    rollupMin = await minifyBundle(rollupRaw);
   } finally {
     await rollupBuild?.close();
   }
 
   const rollupFile = path.join(dir, 'rollup.mjs');
   writeFileSync(rollupFile, rollupMin);
-  // Each bundle starts from 0 so a kept module effect reads as 1, not a leftover.
-  Reflect.set(globalThis, '__t14Loads', 0);
-  const esbuildRun = await importRun(esbuildFile);
   Reflect.set(globalThis, '__t14Loads', 0);
   const rollupRun = await importRun(rollupFile);
-  return { esbuildMin, esbuildRaw, rollupMin, rollupRaw, esbuildRun, rollupRun, entry };
+
+  return {
+    esbuildMin,
+    esbuildRaw,
+    rollupMin,
+    rollupRaw,
+    esbuildRun,
+    rollupRun,
+    entry,
+  };
 }
 
 function expectSentinelAbsent(proof: BundleProof): void {
-  expect(proof.esbuildMin).not.toContain(SENTINEL);
-  expect(proof.esbuildRaw).not.toContain(SENTINEL);
-  expect(proof.rollupMin).not.toContain(SENTINEL);
-  expect(proof.rollupRaw).not.toContain(SENTINEL);
+  const texts = [proof.esbuildMin, proof.esbuildRaw, proof.rollupMin, proof.rollupRaw];
+  expect(texts.length).toBeGreaterThan(0);
+  for (const text of texts) expect(text).not.toContain(SENTINEL);
 }
 
 function neoContainerClasses(source: string): string[] {
@@ -218,12 +233,22 @@ function pluginText(file: string): string {
   return source;
 }
 
-function transformerText(file: string): string {
+let cachedFixtureOptions: ts.CompilerOptions | undefined;
+
+function fixtureCompilerOptions(): ts.CompilerOptions {
+  if (cachedFixtureOptions) return cachedFixtureOptions;
   const configPath = ts.findConfigFile(repoRoot(), ts.sys.fileExists, 'tsconfig.json');
   if (!configPath) throw new Error('tsconfig.json introuvable');
   const read = ts.readConfigFile(configPath, ts.sys.readFile);
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, repoRoot());
-  const program = ts.createProgram([file], parsed.options);
+  // The transformer's own programs re-parse every default lib. These fixtures
+  // only need the repo paths, so the DOM lib is skipped.
+  cachedFixtureOptions = { ...parsed.options, noLib: true, types: [] };
+  return cachedFixtureOptions;
+}
+
+function transformerText(file: string): string {
+  const program = ts.createProgram([file], fixtureCompilerOptions());
   const config: PluginConfig = {};
   const next = neoSyringeTransformer(program, undefined, config, { ts });
   return next.getSourceFile(file)?.text ?? '';
