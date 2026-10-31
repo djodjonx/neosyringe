@@ -1,5 +1,22 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.6.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.6.1...neosyringe-plugin-v0.6.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* **core:** canonical token identity without silent collision (T02) ([#37](https://github.com/djodjonx/neosyringe/issues/37)) ([c8be9d5](https://github.com/djodjonx/neosyringe/commit/c8be9d5e65f8fd170ba7bfd65e8aff3b9047913b))
+* **unplugin:** annotate generated containers and definePartialConfig calls as PURE (T14) ([#36](https://github.com/djodjonx/neosyringe/issues/36)) ([33dc374](https://github.com/djodjonx/neosyringe/commit/33dc3741921fce3a464d6493b33f3d9072971286))
+* **unplugin:** recognise NeoSyringe markers by symbol provenance (T01) ([#35](https://github.com/djodjonx/neosyringe/issues/35)) ([f997f0f](https://github.com/djodjonx/neosyringe/commit/f997f0f253d7ba703ce8982fe57f48d5b3932282))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.2.1
+    * @djodjonx/neosyringe-ui bumped to 0.3.0
+
 ## [0.6.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.6.0...neosyringe-plugin-v0.6.1) (2026-09-12)
 
 
