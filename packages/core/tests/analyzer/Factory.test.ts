@@ -46,7 +46,7 @@ describe('Analyzer - Factory Support', () => {
         injections: [
           {
             token: useInterface<IConfig>(),
-            provider: (container: any) => ({ apiUrl: 'http://api.example.com' }),
+            dependencies: [], provider: (container: any) => ({ apiUrl: 'http://api.example.com' }),
             useFactory: true
           }
         ]
@@ -80,7 +80,7 @@ describe('Analyzer - Factory Support', () => {
         injections: [
           {
             token: useInterface<IDatabase>(),
-            provider: (c: any) => {
+            dependencies: [], provider: (c: any) => {
               return { connect: () => console.log('connected') };
             }
           }
@@ -113,13 +113,15 @@ describe('Analyzer - Factory Support', () => {
         log(msg: string) { console.log(msg); }
       }
 
+      const loggerToken = useInterface<ILogger>();
+
       export const config = defineBuilderConfig({
         injections: [
-          { token: useInterface<ILogger>(), provider: ConsoleLogger },
+          { token: loggerToken, provider: ConsoleLogger },
           {
             token: useInterface<IService>(),
-            provider: (container: any) => {
-              const logger = container.resolve('ILogger');
+            dependencies: [loggerToken], provider: (container: any) => {
+              const logger = container.resolve(loggerToken);
               return { run: () => logger.log('running') };
             }
           }
@@ -154,7 +156,7 @@ describe('Analyzer - Factory Support', () => {
         injections: [
           {
             token: useInterface<IRequest>(),
-            provider: () => ({ id: ++counter }),
+            dependencies: [], provider: () => ({ id: ++counter }),
             lifecycle: 'transient'
           }
         ]

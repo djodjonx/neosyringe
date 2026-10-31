@@ -131,7 +131,7 @@ describe('T02 e2e identité', () => {
         }
         export const c = defineBuilderConfig({
           injections: [
-            { token: useProperty<string>(Api, 'secret'), provider: () => 'alpha' },
+            { token: useProperty<string>(Api, 'secret'), dependencies: [], provider: () => 'alpha' },
             { token: Api },
           ],
         });
@@ -146,7 +146,7 @@ describe('T02 e2e identité', () => {
         }
         export const c = defineBuilderConfig({
           injections: [
-            { token: useProperty<string>(Api, 'secret'), provider: () => 'beta' },
+            { token: useProperty<string>(Api, 'secret'), dependencies: [], provider: () => 'beta' },
             { token: Api },
           ],
         });

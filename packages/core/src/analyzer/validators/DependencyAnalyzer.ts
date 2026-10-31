@@ -7,7 +7,7 @@ import type {
   TokenId,
   ServiceDefinition,
 } from '../types';
-import { resolveConstructorSignature } from '../shared/registrationGraph';
+import { declaredFactoryEdges, resolveConstructorSignature } from '../shared/registrationGraph';
 import { TokenResolverService } from '../shared/TokenResolverService';
 
 /**
@@ -32,9 +32,8 @@ export class DependencyAnalyzer {
     definition: ServiceDefinition,
     knownTokenIds?: Set<TokenId>
   ): TokenId[] {
-    // Factories handle their own dependencies via container.resolve()
     if (definition.type === 'factory') {
-      return [];
+      return declaredFactoryEdges(definition);
     }
 
     // No implementation symbol means no dependencies to analyze

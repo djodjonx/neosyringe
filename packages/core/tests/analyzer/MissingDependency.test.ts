@@ -344,6 +344,7 @@ describe('MissingDependencyValidator', () => {
           injections: [
             {
               token: useProperty<string>(Config, 'apiKey'),
+              dependencies: [],
               provider: { useValue: 'test-key' }
             }
           ]
@@ -399,6 +400,7 @@ describe('MissingDependencyValidator', () => {
           injections: [
             {
               token: useProperty<string>(DatabaseService, 'connectionString'),
+              dependencies: [],
               provider: { useValue: 'postgres://localhost/db' }
             },
             { token: DatabaseService }

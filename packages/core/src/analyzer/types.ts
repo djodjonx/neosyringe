@@ -93,7 +93,24 @@ export interface ServiceDefinition {
 
   /** Container key that captured a `useValue`, when this registration is a value. */
   capturedInContainerId?: string;
+
+  /** Declared factory resolutions. Absent when this registration is not a factory. */
+  factoryDependencies?: FactoryDependency[];
+
+  /** Compatible mode: the factory has no dependencies list, so its subgraph cannot be shaken. */
+  opaque?: boolean;
 }
+
+/** One entry of a factory `dependencies` list. `containerId` is `containerKeyFor` of the config. */
+export interface FactoryDependency {
+  tokenId: TokenId;
+  all: boolean;
+  source: string;
+  containerId: string;
+}
+
+/** `strict` requires a dependencies list. `compatible` keeps a historical factory and marks it opaque. */
+export type ValidationMode = 'strict' | 'compatible';
 
 /** One constructor parameter demand. `paramIndex` is the source position. */
 export interface DependencyEdge {
@@ -210,6 +227,9 @@ export interface InjectionInfo {
 
   /** True when registered with multi: true */
   isMulti: boolean;
+
+  /** Warnings produced while parsing this injection. The registration is kept. */
+  warnings?: AnalysisError[];
 }
 
 // ============================================================================
@@ -381,6 +401,16 @@ export interface ErrorContext {
   chain?: string[];
 }
 
+/** Machine-readable diagnostic codes this analyzer emits. */
+export type DiagnosticCode =
+  | 'NEO_CONFIG_UNSUPPORTED'
+  | 'NEO_FACTORY_DEPENDENCIES_REQUIRED'
+  | 'NEO_MISSING_PROVIDER'
+  | 'NEO_CYCLE'
+  | 'NEO_UNDECLARED_FACTORY_DEP'
+  | 'NEO_FACTORY_CONTEXT_EXPIRED'
+  | 'NEO_ASYNC_TRANSIENT';
+
 /**
  * An error detected during dependency graph analysis.
  */
@@ -388,8 +418,11 @@ export interface AnalysisError {
   /** Type of error. */
   type: AnalysisErrorType;
 
-  /** Stable diagnostic code for constructor shapes the analyzer refuses. */
-  code?: 'NEO_CONFIG_UNSUPPORTED';
+  /** Stable diagnostic code. Messages may change; codes do not. */
+  code?: DiagnosticCode;
+
+  /** `warning` in compatible mode. Absent means an error. */
+  severity?: 'error' | 'warning';
 
   /** Error message. */
   message: string;

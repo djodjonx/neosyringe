@@ -244,7 +244,7 @@ it('should resolve class dependencies on interfaces', () => {
           injections: [
             {
               token: useInterface<IConfig>(),
-              provider: () => ({ url: 'http://localhost' })
+              dependencies: [], provider: () => ({ url: 'http://localhost' })
             }
           ]
         });
@@ -263,7 +263,7 @@ it('should resolve class dependencies on interfaces', () => {
           injections: [
             {
               token: useInterface<IService>(),
-              provider: (container) => ({ value: 42 }),
+              dependencies: [], provider: (container) => ({ value: 42 }),
               useFactory: true
             }
           ]
@@ -287,7 +287,7 @@ it('should generate PropertyToken resolution', () => {
 
         export const c = defineBuilderConfig({
           injections: [
-            { token: apiUrl, provider: () => 'http://api.example.com' },
+            { token: apiUrl, dependencies: [], provider: () => 'http://api.example.com' },
             { token: ApiService }
           ]
         });
@@ -320,9 +320,9 @@ it('should generate PropertyToken resolution', () => {
 
         export const c = defineBuilderConfig({
           injections: [
-            { token: host, provider: () => 'localhost' },
-            { token: port, provider: () => 3000 },
-            { token: debug, provider: () => true },
+            { token: host, dependencies: [], provider: () => 'localhost' },
+            { token: port, dependencies: [], provider: () => 3000 },
+            { token: debug, dependencies: [], provider: () => true },
             { token: ConfigService }
           ]
         });
@@ -587,13 +587,15 @@ it('should generate PropertyToken resolution', () => {
 
         class ConsoleLogger implements ILogger { log(msg: string) {} }
 
+        const loggerToken = useInterface<ILogger>();
+
         export const c = defineBuilderConfig({
           injections: [
-            { token: useInterface<ILogger>(), provider: ConsoleLogger },
+            { token: loggerToken, provider: ConsoleLogger },
             {
               token: useInterface<IConfig>(),
-              provider: (container) => {
-                const logger = this.resolve('ILogger');
+              dependencies: [loggerToken], provider: (container) => {
+                const logger = container.resolve(loggerToken);
                 logger.log('Creating config');
                 return { apiUrl: 'http://api.com' };
               },
@@ -1068,7 +1070,7 @@ it('should generate PropertyToken resolution', () => {
           injections: [
             {
               token: useInterface<IDatabase>(),
-              provider: async (container) => {
+              dependencies: [], provider: async (container) => {
                 // Simulate async initialization
                 return { connect: async () => {} };
               },

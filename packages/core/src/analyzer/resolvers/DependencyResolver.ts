@@ -1,7 +1,7 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
 import type { DependencyGraph, DependencyNode } from '../types';
-import { resolveConstructorSignature } from '../shared/registrationGraph';
+import { declaredFactoryEdges, resolveConstructorSignature } from '../shared/registrationGraph';
 import { TokenResolverService } from '../shared/TokenResolverService';
 
 /**
@@ -56,6 +56,12 @@ export class DependencyResolver {
     for (const node of graph.nodes.values()) {
       this.resolve(node, graph);
     }
+    if (!graph.multiNodes) return;
+    for (const nodes of graph.multiNodes.values()) {
+      for (const node of nodes) {
+        if (node.service.type === 'factory') this.applyFactoryEdges(node);
+      }
+    }
   }
 
   /**
@@ -87,7 +93,11 @@ export class DependencyResolver {
     // Factories handle their own dependencies via container.resolve()
     // We don't need to analyze them statically
     // Values are constants with no constructor to analyze
-    if (node.service.type === 'factory' || node.service.type === 'value') {
+    if (node.service.type === 'factory') {
+      this.applyFactoryEdges(node);
+      return;
+    }
+    if (node.service.type === 'value') {
       return;
     }
 
@@ -136,5 +146,9 @@ export class DependencyResolver {
         sourceFile,
       });
     }
+  }
+
+  private applyFactoryEdges(node: DependencyNode): void {
+    node.dependencies = declaredFactoryEdges(node.service);
   }
 }
