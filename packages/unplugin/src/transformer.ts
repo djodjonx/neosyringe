@@ -1,9 +1,9 @@
 import * as ts from 'typescript';
 import type { PluginConfig, ProgramTransformerExtras } from 'ts-patch';
-import { Analyzer, formatUnsupportedMarker, HashUtils, resolveNeoMarker, sourceFileUsesMarker } from '@djodjonx/neosyringe-core/analyzer';
-import { Generator, GraphValidator, resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
-import { applySourceEdits, collectDefinePartialConfigPureEdits, transformUseInterfaceCalls } from './useInterfaceTransform';
+import { resolveProjectConfig } from '@djodjonx/neosyringe-core/analyzer';
+import { resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
 import { hasNeoSyringeMarkers } from './markerUtils';
+import { blockingConfigMessage, runCompilationSession, type SessionState } from './session';
 
 /**
  * ts-patch–compatible TypeScript **Program** transformer for NeoSyringe.
@@ -28,43 +28,27 @@ import { hasNeoSyringeMarkers } from './markerUtils';
  * }
  * ```
  */
-/**
- * A mocked checker has no getSymbolAtLocation. Tests that stub the program
- * still name the marker as an identifier. A real checker uses provenance,
- * so a local homonym and the runtime helper declaration stay untouched.
- */
-function sourceDeclaresBuilder(sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
-  if (typeof checker.getSymbolAtLocation !== 'function') {
-    let found = false;
-    const visit = (node: ts.Node): void => {
-      if (found) return;
-      if (ts.isIdentifier(node) && node.text === 'defineBuilderConfig') {
-        found = true;
-        return;
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(sourceFile);
-    return found;
+function programWithHostTexts(
+  program: ts.Program,
+  options: ts.CompilerOptions,
+  tsInstance: typeof ts,
+): ts.Program {
+  const texts = new Map<string, string>();
+  for (const sourceFile of program.getSourceFiles()) {
+    if (!sourceFile.isDeclarationFile) texts.set(sourceFile.fileName, sourceFile.text);
   }
-
-  let found = false;
-  const visit = (node: ts.Node): void => {
-    if (found) return;
-    if (ts.isCallExpression(node)) {
-      const marker = resolveNeoMarker(checker, node);
-      if (marker && typeof marker === 'object') {
-        throw new Error(formatUnsupportedMarker(node));
-      }
-      if (marker === 'defineBuilderConfig') {
-        found = true;
-        return;
-      }
-    }
-    ts.forEachChild(node, visit);
+  const host = tsInstance.createCompilerHost(options);
+  const readSource = host.getSourceFile.bind(host);
+  const readFile = host.readFile.bind(host);
+  const fileExists = host.fileExists.bind(host);
+  host.fileExists = (fileName) => texts.has(fileName) || fileExists(fileName);
+  host.readFile = (fileName) => texts.get(fileName) ?? readFile(fileName);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    const text = texts.get(fileName);
+    if (text !== undefined) return tsInstance.createSourceFile(fileName, text, languageVersion, true);
+    return readSource(fileName, languageVersion, onError, shouldCreateNewSourceFile);
   };
-  visit(sourceFile);
-  return found;
+  return tsInstance.createProgram(program.getRootFileNames(), options, host);
 }
 
 export default function neoSyringeTransformer(
@@ -80,98 +64,45 @@ export default function neoSyringeTransformer(
   // "forced off in production, no escape hatch" behavior is identical
   // regardless of which one a project uses.
   const emitDebugHelpers = resolveDebugFlag(config.debug);
+  const project = typeof config.project === 'string' && config.project.length > 0 ? config.project : undefined;
 
-  // Map of fileName -> transformed source text
-  const transformedSources = new Map<string, string>();
-
-  // Cache per-file programs for the duration of this transformation call.
-  // Avoids creating a new ts.Program for each container file in the same build.
-  const fileProgramCache = new Map<string, ts.Program>();
-  function getFileProgram(fileName: string): ts.Program {
-    if (!fileProgramCache.has(fileName)) {
-      fileProgramCache.set(fileName, tsInstance.createProgram([fileName], compilerOptions));
+  let analysisProgram = program;
+  let analysisOptions = compilerOptions;
+  if (project) {
+    const resolved = resolveProjectConfig(process.cwd(), project);
+    const messages = blockingConfigMessage(resolved.parseErrors, tsInstance);
+    if (messages !== undefined) {
+      throw new Error(`[neosyringe-transformer]\n  ${messages}`);
     }
-    return fileProgramCache.get(fileName)!;
+    analysisOptions = resolved.options;
+    analysisProgram = programWithHostTexts(program, analysisOptions, tsInstance);
   }
 
-  for (const sourceFile of program.getSourceFiles()) {
+  const transformedSources = new Map<string, string>();
+  const state: SessionState = {
+    registeredTokens: new Set(),
+    usedTokens: new Map(),
+    generatedContainerVars: new Set(),
+    devtoolsGraphs: new Map(),
+    cachedSources: new Map(),
+  };
+
+  for (const sourceFile of analysisProgram.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue;
-
-    const code = sourceFile.text;
-    const fileName = sourceFile.fileName;
-
-    if (!hasNeoSyringeMarkers(code)) {
-      continue;
-    }
-
-    const checker = program.getTypeChecker();
-    if (typeof checker.getSymbolAtLocation === 'function' && !sourceFileUsesMarker(checker, sourceFile)) {
-      continue;
-    }
-
-    // Offsets are on `code` before the splice. A checker without
-    // getSymbolAtLocation cannot classify a call (mocked programs).
-    let splice: { start: number; end: number; text: string } | undefined;
-
-    // --- Container transformation ---
-    if (sourceDeclaresBuilder(sourceFile, checker)) {
-      // Use a per-file sub-program so the Analyzer sees only this container file.
-      const fileProgram = getFileProgram(fileName);
-      const analyzer = new Analyzer(fileProgram);
-      const graph = analyzer.extract();
-      // Needed by Generator to compute relative import paths for default export namespace imports
-      graph.sourceFileName = fileName;
-
-      if (
-        graph.nodes.size > 0 &&
-        graph.defineBuilderConfigStart !== undefined &&
-        graph.defineBuilderConfigEnd !== undefined &&
-        graph.variableStatementStart !== undefined
-      ) {
-        const validator = new GraphValidator();
-        const validationResult = validator.validateAll(graph);
-        if (!validationResult.valid) {
-          const messages = validationResult.errors.map(e => e.message).join('\n  ');
-          throw new Error(`[neosyringe-transformer]\n  ${messages}`);
-        }
-
-        const generator = new Generator(graph, true, undefined, emitDebugHelpers);
-        const containerClass = generator.generate();
-        const instantiation = generator.generateInstantiation();
-
-        const variableDeclaration = code.slice(
-          graph.variableStatementStart,
-          graph.defineBuilderConfigStart,
-        );
-
-        splice = {
-          start: graph.variableStatementStart,
-          end: graph.defineBuilderConfigEnd,
-          text: containerClass + '\n' + variableDeclaration + instantiation,
-        };
-      }
-    }
-
-    const edits: { start: number; end: number; text: string }[] = [];
-    if (splice) edits.push(splice);
-    if (typeof checker.getSymbolAtLocation === 'function') {
-      for (const edit of collectDefinePartialConfigPureEdits(sourceFile, checker)) {
-        if (!splice || edit.start < splice.start || edit.start >= splice.end) {
-          edits.push(edit);
-        }
-      }
-    }
-    let transformedCode = edits.length > 0 ? applySourceEdits(code, edits) : code;
-
-    // --- useInterface transformation ---
-    const withUseInterface = transformUseInterfaceCalls(transformedCode, fileName, compilerOptions);
-    if (withUseInterface !== null) {
-      transformedCode = withUseInterface;
-    }
-
-    if (transformedCode !== code) {
-      transformedSources.set(fileName, transformedCode);
-    }
+    if (!hasNeoSyringeMarkers(sourceFile.text)) continue;
+    const output = runCompilationSession({
+      code: sourceFile.text,
+      id: sourceFile.fileName,
+      project,
+      cwd: process.cwd(),
+      emitDebugHelpers,
+      devtools: false,
+      state,
+      errorPrefix: '[neosyringe-transformer]',
+      hostProgram: analysisProgram,
+      hostSource: sourceFile,
+    });
+    if (output.code !== sourceFile.text) transformedSources.set(sourceFile.fileName, output.code);
   }
 
   if (transformedSources.size === 0) {

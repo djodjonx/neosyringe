@@ -1,4 +1,6 @@
 export * from './Analyzer';
+export { resolveProjectConfig } from '../resolveProjectConfig';
+export type { ResolvedProjectConfig } from '../resolveProjectConfig';
 export * from './types';
 export * from './shared';
 

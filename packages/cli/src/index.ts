@@ -14,8 +14,7 @@
  * ```
  */
 import * as ts from 'typescript';
-import { resolve } from 'node:path';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
+import { Analyzer, resolveProjectConfig } from '@djodjonx/neosyringe-core/analyzer';
 import { parseArgs, buildJsonReport } from './report';
 import { exportGraphHtml, exportMermaid } from './graphExport';
 
@@ -28,12 +27,18 @@ function main() {
   const { project: projectArg, json, graph, mermaid } = parseArgs(process.argv.slice(2));
   const cwd = process.cwd();
 
-  const tsconfigPath = projectArg
-    ? resolve(cwd, projectArg)
-    : ts.findConfigFile(cwd, ts.sys.fileExists, 'tsconfig.json');
-
-  if (!tsconfigPath) {
-    const message = 'Could not find tsconfig.json. Use --project <path> to specify one.';
+  let tsconfigPath: string;
+  let options: ts.CompilerOptions;
+  let fileNames: string[];
+  let parseErrors: readonly ts.Diagnostic[];
+  try {
+    const resolved = resolveProjectConfig(cwd, projectArg, 'Use --project <path>.');
+    tsconfigPath = resolved.configPath;
+    options = resolved.options;
+    fileNames = resolved.fileNames;
+    parseErrors = resolved.parseErrors;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     if (json) {
       console.log(JSON.stringify({ ok: false, errorCount: 0, errors: [], fatal: message }));
     } else {
@@ -43,23 +48,6 @@ function main() {
   }
 
   if (!json) console.log(`Analyzing project: ${tsconfigPath}`);
-
-  const { config, error: configReadError } = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
-  if (configReadError) {
-    const message = `Could not read tsconfig: ${ts.flattenDiagnosticMessageText(configReadError.messageText, '\n')}`;
-    if (json) {
-      console.log(JSON.stringify({ ok: false, errorCount: 0, errors: [], fatal: message }));
-    } else {
-      console.error(`❌ ${message}`);
-    }
-    process.exit(1);
-  }
-
-  const { options, fileNames, errors: parseErrors } = ts.parseJsonConfigFileContent(
-    config,
-    ts.sys,
-    cwd
-  );
 
   if (parseErrors.length > 0) {
     const messages = parseErrors.map(e => ts.flattenDiagnosticMessageText(e.messageText, '\n'));

@@ -37,7 +37,15 @@ describe('Plugin — cross-file bare class token wiring', () => {
   function makeTransform() {
     const plugin = neoSyringePlugin.vite();
     // @ts-expect-error - testing specific method
-    return plugin.transform as (code: string, id: string) => string | undefined;
+    const transform = plugin.transform as (code: string, id: string) => unknown;
+    return (code: string, id: string): string | undefined => {
+      const result = transform(code, id);
+      if (typeof result === 'string') return result;
+      if (result && typeof result === 'object' && 'code' in result && typeof (result as { code: unknown }).code === 'string') {
+        return (result as { code: string }).code;
+      }
+      return undefined;
+    };
   }
 
   it('wires the auto-wired consumer to the cross-file class token via an explicit import, not undefined', () => {

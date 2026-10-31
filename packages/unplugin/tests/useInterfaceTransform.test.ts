@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import * as ts from 'typescript';
 import { HashUtils } from '../../core/src/analyzer/shared/HashUtils.js';
-import { transformUseInterfaceCalls, type UsedTokenEntry } from '../src/useInterfaceTransform.js';
+import { collectUseSiteEdits, type UsedTokenEntry } from '../src/useInterfaceTransform.js';
 
 // Import the transform function (we need to extract it or test the plugin directly)
 
@@ -149,7 +149,19 @@ describe('useInterface Transformation', () => {
       module: ts.ModuleKind.ESNext,
     };
 
-    const output = transformUseInterfaceCalls(input, 'test-service.ts', compilerOptions, usedTokens);
+    const sourceFile = ts.createSourceFile('test-service.ts', input, ts.ScriptTarget.Latest, true);
+    const host = ts.createCompilerHost(compilerOptions);
+    const original = host.getSourceFile.bind(host);
+    host.getSourceFile = (name, languageVersion, onError, shouldCreate) => {
+      if (name === 'test-service.ts') return sourceFile;
+      return original(name, languageVersion, onError, shouldCreate);
+    };
+    const program = ts.createProgram(['test-service.ts'], compilerOptions, host);
+    const edits = collectUseSiteEdits(sourceFile, program.getTypeChecker(), usedTokens);
+    let output = input;
+    for (const edit of [...edits].sort((a, b) => b.start - a.start)) {
+      output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
+    }
 
     // Verify transformation happened
     expect(output).toBeDefined();

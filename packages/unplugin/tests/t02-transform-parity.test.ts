@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { Analyzer, NeoTokenError } from '@djodjonx/neosyringe-core/analyzer';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
-import { transformUseInterfaceCalls, type UsedTokenEntry } from '../src/useInterfaceTransform';
+import { collectUseSiteEdits, type SourceEdit, type UsedTokenEntry } from '../src/useInterfaceTransform';
 
 const FILES: Record<string, string> = {
   'types.ts': `
@@ -62,6 +62,32 @@ function ids(source: string, pattern: RegExp): string[] {
   return [...source.matchAll(pattern)].map((match) => match[0]);
 }
 
+function applyEdits(code: string, edits: readonly SourceEdit[]): string {
+  let result = code;
+  for (const edit of [...edits].sort((a, b) => b.start - a.start)) {
+    result = result.slice(0, edit.start) + edit.text + result.slice(edit.end);
+  }
+  return result;
+}
+
+function editsOf(
+  code: string,
+  fileName: string,
+  options: ts.CompilerOptions,
+  usedTokens?: Map<string, UsedTokenEntry>,
+  hash?: (value: string) => string,
+): SourceEdit[] {
+  const sourceFile = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
+  const host = ts.createCompilerHost(options);
+  const original = host.getSourceFile.bind(host);
+  host.getSourceFile = (name, languageVersion, onError, shouldCreate) => {
+    if (name === fileName) return sourceFile;
+    return original(name, languageVersion, onError, shouldCreate);
+  };
+  const program = ts.createProgram([fileName], options, host);
+  return collectUseSiteEdits(sourceFile, program.getTypeChecker(), usedTokens, hash ? { hash } : undefined);
+}
+
 describe('T02 parité du transform', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 't02-parity-'));
   let transformed = '';
@@ -94,7 +120,10 @@ describe('T02 parité du transform', () => {
     const analyzer = new Analyzer(program);
     graphIds = [...analyzer.extract().nodes.keys()];
     const appName = path.join(dir, 'app.ts');
-    transformed = transformUseInterfaceCalls(FILES['app.ts'], appName, options) ?? FILES['app.ts'];
+    const appFile = program.getSourceFile(appName);
+    transformed = appFile
+      ? applyEdits(FILES['app.ts'], collectUseSiteEdits(appFile, program.getTypeChecker()))
+      : FILES['app.ts'];
   });
 
   afterAll(() => {
@@ -131,11 +160,13 @@ describe('T02 parité du transform', () => {
     const leftId = path.join(dir, 'left-collision.ts');
     const rightId = path.join(dir, 'right-collision.ts');
     const usedTokens = new Map<string, UsedTokenEntry>();
-    const left = transformUseInterfaceCalls(sourceOf('a: string'), leftId, options, usedTokens, hash);
+    const leftCode = sourceOf('a: string');
+    const left = applyEdits(leftCode, editsOf(leftCode, leftId, options, usedTokens, hash.hash));
     expect(left).toMatch(/Port_[0-9a-f]{8}/);
     let thrown: unknown;
     try {
-      transformUseInterfaceCalls(sourceOf('b: number'), rightId, options, usedTokens, hash);
+      const rightCode = sourceOf('b: number');
+      editsOf(rightCode, rightId, options, usedTokens, hash.hash);
     } catch (error) {
       thrown = error;
     }
@@ -150,7 +181,8 @@ describe('T02 parité du transform', () => {
     expect(stored).toContain('left-collision.ts');
     expect(next).toContain('right-collision.ts');
     expect(() => {
-      transformUseInterfaceCalls(sourceOf('a: string'), leftId, options, usedTokens, hash);
+      const again = sourceOf('a: string');
+      editsOf(again, leftId, options, usedTokens, hash.hash);
     }).not.toThrow();
   });
 });

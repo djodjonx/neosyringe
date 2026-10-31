@@ -1,15 +1,9 @@
 import { createUnplugin } from 'unplugin';
 import * as ts from 'typescript';
-import * as path from 'path';
-import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
-import { GraphValidator } from '@djodjonx/neosyringe-core/generator';
-import { Generator, resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
-import { TSContext } from '@djodjonx/neosyringe-core/context';
-import { annotateDefinePartialConfigCalls, applySourceEdits, collectDefinePartialConfigPureEdits, transformUseInterfaceCalls, type UsedTokenEntry } from './useInterfaceTransform';
+import { resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
 import { callsCanReachNeoSyringe, hasNeoSyringeMarkers } from './markerUtils';
-import { serializeGraph } from '@djodjonx/neosyringe-ui';
-import type { SerializableGraph } from '@djodjonx/neosyringe-ui';
 import { createDevtoolsMiddleware } from './devtools';
+import { moduleExtension, programFileName, runCompilationSession, shouldTransformId, type SessionState } from './session';
 
 /** Options accepted by every bundler entry point (`.vite()`, `.rollup()`, `.webpack()`, `.esbuild()`). */
 export interface NeoSyringePluginOptions {
@@ -26,6 +20,11 @@ export interface NeoSyringePluginOptions {
    * or with non-Vite bundlers.
    */
   devtools?: boolean;
+  /**
+   * tsconfig to compile with. Resolved from the working directory.
+   * When omitted, the nearest tsconfig.json is used.
+   */
+  project?: string;
 }
 
 /**
@@ -47,35 +46,15 @@ export interface NeoSyringePluginOptions {
  */
 export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions | undefined = {}) => {
   // Per-build registries — scoped to the factory instance, safe for parallel builds
-  const registeredTokens = new Set<string>();
-  const usedTokens = new Map<string, UsedTokenEntry>();
-  const generatedContainerVars = new Set<string>(); // variable names that were code-generated
   const emitDebugHelpers = resolveDebugFlag(options.debug);
-
-  // Graphs keyed by source file for the devtools middleware.
-  // Map ensures re-transforming a file (HMR) replaces its entry rather than accumulating.
-  const devtoolsGraphs = new Map<string, SerializableGraph>();
-  let previousProgram: ts.Program | undefined;
-  const cachedSources = new Map<string, { stamp: string; source: ts.SourceFile }>();
-
-  // Cache tsconfig parsing — tsconfig doesn't change during a build
-  let compilerOptions: ts.CompilerOptions | undefined;
-
-  function getCompilerOptions(): ts.CompilerOptions {
-    if (compilerOptions) return compilerOptions;
-    const configFile = ts.findConfigFile(process.cwd(), ts.sys.fileExists, 'tsconfig.json');
-    if (!configFile) {
-      throw new Error(
-        '[NeoSyringe] Could not find tsconfig.json. ' +
-        'Make sure a tsconfig.json exists in your project root.'
-      );
-    }
-    // Set the stable project root so HashUtils produces the same token IDs as the LSP plugin.
-    TSContext.projectRoot = path.dirname(configFile);
-    const { config } = ts.readConfigFile(configFile, ts.sys.readFile);
-    compilerOptions = ts.parseJsonConfigFileContent(config, ts.sys, process.cwd()).options;
-    return compilerOptions;
-  }
+  const project = options.project || undefined;
+  const state: SessionState = {
+    registeredTokens: new Set(),
+    usedTokens: new Map(),
+    generatedContainerVars: new Set(),
+    devtoolsGraphs: new Map(),
+    cachedSources: new Map(),
+  };
 
   return {
     name: 'neosyringe-plugin',
@@ -86,176 +65,42 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
     enforce: 'pre' as const,
 
     transformInclude(id) {
-      return id.endsWith('.ts') || id.endsWith('.tsx');
+      return shouldTransformId(id);
     },
 
     transform(code, id) {
-      // No value import and no marker-shaped call: skip before reading tsconfig.
+      const extension = moduleExtension(id);
+      if (extension === '.mts' || extension === '.cts') {
+        if (callsCanReachNeoSyringe(code, programFileName(id), {})) {
+          throw new Error(`[NeoSyringe] ${extension} is not supported. Supported extensions: .ts, .tsx.`);
+        }
+        return undefined;
+      }
+      if (extension !== '.ts' && extension !== '.tsx') return undefined;
       if (!hasNeoSyringeMarkers(code)) return;
 
       // Missing tsconfig is an error only when a call can reach a marker.
-      // An unrelated value import must not throw (ADR007: no false negative once one can).
-      if (!compilerOptions && !ts.findConfigFile(process.cwd(), ts.sys.fileExists, 'tsconfig.json')) {
+      if (!project && !state.resolved && !ts.findConfigFile(process.cwd(), ts.sys.fileExists, 'tsconfig.json')) {
         const probe: ts.CompilerOptions = {
           module: ts.ModuleKind.ESNext,
           moduleResolution: ts.ModuleResolutionKind.Bundler,
           target: ts.ScriptTarget.ES2020,
         };
-        if (!callsCanReachNeoSyringe(code, id, probe)) return undefined;
+        if (!callsCanReachNeoSyringe(code, programFileName(id), probe)) return undefined;
       }
 
-      const options = getCompilerOptions();
-
-      // Aliases have no literal marker name. Skip the program when no call can reach one.
-      if (!callsCanReachNeoSyringe(code, id, options)) return undefined;
-        // Create a custom compilerHost that serves the current file's code
-        // (otherwise createProgram can't read test code that doesn't exist on disk)
-        const norm = (p: string) => p.replace(/\\/g, '/');
-        
-        const compilerHost: ts.CompilerHost = {
-          getSourceFile: (fileName) => {
-            if (norm(fileName) === norm(id)) {
-              return ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
-            }
-            try {
-              const sourceText = ts.sys.readFile(fileName);
-              if (!sourceText) return undefined;
-              // Same-length edits (watch / HMR) must miss. One entry per file, replaced in place.
-              const stamp = sourceText;
-              const cached = cachedSources.get(fileName);
-              if (cached && cached.stamp === stamp) return cached.source;
-              const created = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true);
-              cachedSources.set(fileName, { stamp, source: created });
-              return created;
-            } catch {
-              return undefined;
-            }
-          },
-          getDefaultLibFileName: (opts) => ts.getDefaultLibFileName(opts),
-          writeFile: () => {},
-          getCurrentDirectory: () => process.cwd(),
-          getDirectories: (path) => ts.sys.getDirectories(path),
-          fileExists: (fileName) => norm(fileName) === norm(id) || ts.sys.fileExists(fileName),
-          readFile: (fileName) => norm(fileName) === norm(id) ? code : ts.sys.readFile(fileName),
-          getCanonicalFileName: (fileName) => fileName,
-          useCaseSensitiveFileNames: () => ts.sys.useCaseSensitiveFileNames,
-          getNewLine: () => '\n',
-        };
-
-        const program = ts.createProgram([id], options, compilerHost, previousProgram);
-        previousProgram = program;
-        const checker = program.getTypeChecker();
-        // unplugin.test.ts stubs a program that has no getSourceFile.
-        const sourceFile = typeof program.getSourceFile === 'function' ? program.getSourceFile(id) : undefined;
-        const analyzer = new Analyzer(program);
-
-        // extractAll() returns one graph per defineBuilderConfig call (parents included).
-        // Graphs from imported files are used for token registration only.
-        const allGraphs = analyzer.extractAll();
-
-        // Errors belong to the file that declares the container, not to an importer.
-        for (const graph of allGraphs) {
-          if (graph.errors && graph.errors.length > 0) {
-            const graphFile = (graph.sourceFileName ?? id).replace(/\\/g, '/');
-            if (graphFile !== id.replace(/\\/g, '/')) continue;
-            const messages = graph.errors.map(e => `[neosyringe-plugin] ${e.message}`).join('\n');
-            const buildError = new Error(messages) as Error & { file?: string };
-            buildError.name = graph.errors[0].type === 'duplicate' ? 'DuplicateRegistrationError' : 'TypeMismatchError';
-            buildError.file = graph.sourceFileName ?? id;
-            throw buildError;
-          }
-        }
-
-        // Register tokens from ALL graphs (local + multi + parent-provided for legacy containers)
-        for (const graph of allGraphs) {
-          for (const tokenId of graph.nodes.keys()) registeredTokens.add(tokenId);
-          if (graph.multiNodes) {
-            for (const tokenId of graph.multiNodes.keys()) registeredTokens.add(tokenId);
-          }
-          // parentProvidedTokens: necessary for legacy containers (declareContainerTokens)
-          // that have no defineBuilderConfig of their own. NeoSyringe parent tokens are
-          // covered by their own graph above, so this is redundant-but-harmless for them.
-          if (graph.parentProvidedTokens) {
-            for (const tokenId of graph.parentProvidedTokens) registeredTokens.add(tokenId);
-          }
-        }
-
-        // Normalize the current file path to forward slashes.
-        // Webpack passes this.resource with backslashes on Windows while TypeScript
-        // always uses forward slashes internally — without this, no container would
-        // be generated on Windows (filter below would never match).
-        const normalizedId = id.replace(/\\/g, '/');
-
-        // Generate and collect replacements for graphs in THIS file only
-        // (imported-file graphs are excluded — they are processed when their own file
-        //  is transformed).
-        const thisFileGraphs = allGraphs.filter(
-          g => g.sourceFileName === normalizedId &&
-               g.defineBuilderConfigStart !== undefined &&
-               g.defineBuilderConfigEnd !== undefined &&
-               g.variableStatementStart !== undefined
-        );
-
-        if (thisFileGraphs.length > 0) {
-          // Validate each graph independently
-          const validator = new GraphValidator();
-          for (const graph of thisFileGraphs) {
-            const validationResult = validator.validateAll(graph);
-            if (!validationResult.valid) {
-              const messages = validationResult.errors.map(e => e.message).join('\n  ');
-              const buildError = new Error(`[neosyringe-plugin]\n  ${messages}`) as Error & { file?: string };
-              buildError.file = id;
-              throw buildError;
-            }
-          }
-
-          // One right-to-left pass: container splices and partial inserts.
-          // An insert inside a splice range is skipped. That text is replaced.
-          const edits: { start: number; end: number; text: string }[] = [];
-          for (const graph of thisFileGraphs) {
-            const generator = new Generator(graph, true, undefined, emitDebugHelpers);
-            const containerClass = generator.generate();
-            const instantiation = generator.generateInstantiation();
-            const varDecl = code.slice(graph.variableStatementStart!, graph.defineBuilderConfigStart!);
-            edits.push({
-              start: graph.variableStatementStart!,
-              end: graph.defineBuilderConfigEnd!,
-              text: containerClass + '\n' + varDecl + instantiation,
-            });
-            if (graph.exportedVariableName) {
-              generatedContainerVars.add(graph.exportedVariableName);
-            }
-          }
-
-          const splices = edits.map((edit) => ({ start: edit.start, end: edit.end }));
-          const pureEdits = sourceFile
-            ? collectDefinePartialConfigPureEdits(sourceFile, checker)
-            : [];
-          const partialEdits = pureEdits.filter(
-            (edit) => !splices.some((range) => edit.start >= range.start && edit.start < range.end),
-          );
-
-          // Update devtools graph store for this file (replaces on HMR re-transform)
-          if (options?.devtools) {
-            for (const g of thisFileGraphs) {
-              devtoolsGraphs.set(g.sourceFileName ?? id, serializeGraph(g));
-            }
-          }
-
-          // Transform any remaining useInterface<T>() call sites (injection sites)
-          const withPurePartials = applySourceEdits(code, [...edits, ...partialEdits]);
-          const finalCode = transformUseInterfaceCalls(withPurePartials, id, options, usedTokens);
-          return finalCode ?? withPurePartials;
-        }
-
-      // 2. Transform useInterface<T>() calls to tokenId strings (for non-container files)
-      // Collect used tokens for validation at build end
-      const withPurePartials = sourceFile
-        ? annotateDefinePartialConfigCalls(code, sourceFile, checker)
-        : code;
-      const rewritten = transformUseInterfaceCalls(withPurePartials, id, options, usedTokens);
-      if (rewritten !== null) return rewritten;
-      return withPurePartials === code ? null : withPurePartials;
+      const output = runCompilationSession({
+        code,
+        id,
+        project,
+        cwd: process.cwd(),
+        emitDebugHelpers,
+        devtools: options.devtools === true,
+        state,
+        errorPrefix: '[neosyringe-plugin]',
+      });
+      if (output.code === code && output.map == null) return undefined;
+      return output;
     },
 
     /**
@@ -265,8 +110,8 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
     buildEnd() {
       const errors: string[] = [];
 
-      for (const [tokenId, usage] of usedTokens) {
-        if (!registeredTokens.has(tokenId)) {
+      for (const [tokenId, usage] of state.usedTokens) {
+        if (!state.registeredTokens.has(tokenId)) {
           errors.push(
             `[NeoSyringe] Unregistered token: useInterface<${usage.interfaceName}>() at ${usage.file}:${usage.line}:${usage.column}\n` +
             `  Token "${tokenId}" is not registered in any container.\n` +
@@ -276,9 +121,9 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       }
 
       if (errors.length > 0) {
-        registeredTokens.clear();
-        usedTokens.clear();
-        generatedContainerVars.clear();
+        state.registeredTokens.clear();
+        state.usedTokens.clear();
+        state.generatedContainerVars.clear();
 
         throw new Error(
           `\n${'='.repeat(60)}\n` +
@@ -289,15 +134,15 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
         );
       }
 
-      registeredTokens.clear();
-      usedTokens.clear();
-      generatedContainerVars.clear();
+      state.registeredTokens.clear();
+      state.usedTokens.clear();
+      state.generatedContainerVars.clear();
     },
 
     vite: {
       configureServer(server) {
         if (!options?.devtools) return;
-        const middleware = createDevtoolsMiddleware(() => [...devtoolsGraphs.values()]);
+        const middleware = createDevtoolsMiddleware(() => [...state.devtoolsGraphs.values()]);
         server.middlewares.use(middleware);
         // eslint-disable-next-line no-console
         console.log('[NeoSyringe] Devtools available at /__neosyringe/');

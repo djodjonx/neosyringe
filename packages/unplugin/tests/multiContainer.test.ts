@@ -18,19 +18,43 @@ vi.mock('typescript', async (importOriginal) => {
 
 const FILE = '/project/src/container.ts';
 
+type PluginHooks = {
+  transform: (code: string, id: string) => unknown;
+  buildEnd: () => void;
+};
+
+function hasCallableHooks(plugin: object): plugin is PluginHooks {
+  if (!('transform' in plugin) || !('buildEnd' in plugin)) return false;
+  return typeof plugin.transform === 'function' && typeof plugin.buildEnd === 'function';
+}
+
+function pluginHooks(): PluginHooks {
+  const plugin = neoSyringePlugin.vite();
+  if (Array.isArray(plugin) || !hasCallableHooks(plugin)) {
+    throw new Error('hooks transform et buildEnd attendus');
+  }
+  return plugin;
+}
+
+function resultCode(result: unknown): string | undefined {
+  if (typeof result === 'string') return result;
+  if (result && typeof result === 'object' && 'code' in result && typeof (result as { code: unknown }).code === 'string') {
+    return (result as { code: string }).code;
+  }
+  return undefined;
+}
+
 function makeTransform() {
   // Fresh plugin instance per test to reset registeredTokens / usedTokens
-  const plugin = neoSyringePlugin.vite();
-  // @ts-expect-error - testing specific method
-  return plugin.transform as (code: string, id: string) => string | undefined;
+  const { transform } = pluginHooks();
+  return (code: string, id: string): string | undefined => resultCode(transform(code, id));
 }
 
 function makeBuildEnd() {
-  const plugin = neoSyringePlugin.vite();
+  const hooks = pluginHooks();
   return {
-    // @ts-expect-error - testing specific method
-    transform: plugin.transform as (code: string, id: string) => string | undefined,
-    buildEnd: (plugin as any).buildEnd as () => void,
+    transform: (code: string, id: string): string | undefined => resultCode(hooks.transform(code, id)),
+    buildEnd: hooks.buildEnd,
   };
 }
 

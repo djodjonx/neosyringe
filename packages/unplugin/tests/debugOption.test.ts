@@ -37,8 +37,13 @@ describe('Plugin — debug option', () => {
   function transformWith(options?: { debug?: boolean }) {
     const plugin = neoSyringePlugin.vite(options);
     // @ts-expect-error - testing specific method
-    const transform = plugin.transform as (code: string, id: string) => string | undefined;
-    return transform(CODE, FILE) ?? CODE;
+    const transform = plugin.transform as (code: string, id: string) => unknown;
+    const result = transform(CODE, FILE);
+    if (typeof result === 'string') return result;
+    if (result && typeof result === 'object' && 'code' in result && typeof (result as { code: unknown }).code === 'string') {
+      return (result as { code: string }).code;
+    }
+    return CODE;
   }
 
   it('strips the data by default outside production (opt-in, not opt-out)', () => {
