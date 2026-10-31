@@ -77,7 +77,7 @@ describe('Analyzer - disposable detection', () => {
       export const container = defineBuilderConfig({
         injections: [{
           token: useInterface<IConnection>(),
-          provider: () => ({ query: () => [], dispose: () => {} }),
+          dependencies: [], provider: () => ({ query: () => [], dispose: () => {} }),
           useFactory: true
         }]
       });

@@ -54,7 +54,7 @@ function historicalAudit(from: string): string {
   return `
 import { defineBuilderConfig, useInterface } from '${from}';
 interface ILogger { name: string }
-const c = defineBuilderConfig({ injections: [{ token: useInterface<ILogger>(), provider: async () => ({ name: 'real' }), useFactory: true }] });
+const c = defineBuilderConfig({ injections: [{ token: useInterface<ILogger>(), dependencies: [], provider: async () => ({ name: 'real' }), useFactory: true }] });
 c.initialize();
 c.override(useInterface<ILogger>(), () => ({ name: 'mock' }));
 c.clearOverrides();
@@ -72,7 +72,7 @@ const tokenInterface = useInterface<ILogger>();
 const c = defineBuilderConfig({
   injections: [
     { token: Logger },
-    { token: tokenInterface, provider: () => ({ name: 'port' }), useFactory: true },
+    { token: tokenInterface, dependencies: [], provider: () => ({ name: 'port' }), useFactory: true },
   ],
 });
 const logger = c.resolve(Logger);
@@ -142,7 +142,7 @@ const c = defineBuilderConfig({
   injections: [{
     token: clientToken,
     useFactory: true,
-    provider: async () => ({ endpoint: '/api' }),
+    dependencies: [], provider: async () => ({ endpoint: '/api' }),
   }],
 });
 const client = c.resolve(clientToken);
@@ -156,7 +156,7 @@ defineBuilderConfig({
   injections: [{
     token: clientToken,
     useFactory: true,
-    provider: async () => 1,
+    dependencies: [], provider: async () => 1,
   }],
 });
 `;
@@ -187,7 +187,7 @@ defineBuilderConfig({
   injections: [
     { token: Logger },
     { token: useInterface<ILogger>(), provider: ConsoleLogger },
-    { token: useInterface<ILogger>(), provider: () => ({ name: 'f' }), useFactory: true },
+    { token: useInterface<ILogger>(), dependencies: [], provider: () => ({ name: 'f' }), useFactory: true },
     { token: useInterface<ILogger>(), useValue: { name: 'v' } },
     { token: useInterface<ILogger>(), provider: ConsoleLogger, multi: true },
     { token: useInterface<ILogger>(), provider: ConsoleLogger, scoped: true },
@@ -312,7 +312,7 @@ interface ILogger { name: string }
 class Logger { name = 'app'; }
 const injections = [
   { token: Logger },
-  { token: useInterface<ILogger>(), provider: () => ({ name: 'f' }), useFactory: true },
+  { token: useInterface<ILogger>(), dependencies: [], provider: () => ({ name: 'f' }), useFactory: true },
   { token: useInterface<ILogger>(), useValue: { name: 'v' } },
 ] as const;
 defineBuilderConfig({ injections });
@@ -390,7 +390,8 @@ class Logger { name = 'app'; }
 class Logger2 { name = 'other'; }
 defineBuilderConfig({
   injections: [
-    { token: Logger2, provider: (c) => {
+    { token: Logger },
+    { token: Logger2, dependencies: [Logger], provider: (c) => {
       type _C = Assert<Equal<typeof c, FactoryContext>>;
       return c.resolve(Logger);
     }, useFactory: true },

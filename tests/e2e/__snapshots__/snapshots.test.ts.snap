@@ -979,7 +979,39 @@ class NeoContainer {
   
   private create_PropertyToken_ApiService_apiUrl_8db03951(): any {
     const userFactory = () => 'http://localhost';
-    return userFactory(this);
+    const __neoAllowed = new Map([]);
+    let __neoExpired = false;
+    const __neoExpire = () => { __neoExpired = true; };
+    const __neoFail = (code, detail) => {
+      const error = new Error(code + ': factory ' + "PropertyToken:ApiService.apiUrl" + ' ' + detail);
+      error.code = code;
+      throw error;
+    };
+    const __neoContext = {
+      resolve: (token) => {
+        if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+        const mode = __neoAllowed.get(token);
+        if (mode !== 'simple' && mode !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
+        return this.resolve(token);
+      },
+      resolveAll: (token) => {
+        if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+        if (__neoAllowed.get(token) !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
+        return this.resolveAll(token);
+      },
+    };
+    
+    
+    const __neoResult = userFactory(__neoContext);
+    if (__neoResult && typeof __neoResult.then === 'function') {
+      return Promise.resolve(__neoResult).then(
+        (value) => { __neoExpire();  return value; },
+        (err) => { __neoExpire();  throw err; },
+      );
+    }
+    __neoExpire();
+    
+    return __neoResult;
   }
   
   private create_ApiService_75972c9e(): any {

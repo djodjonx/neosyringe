@@ -1,7 +1,7 @@
 import type * as ts from 'typescript';
 import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
-import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError } from '../types';
+import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError, ValidationMode } from '../types';
 import { HashUtils, TokenResolverService, DEFAULT_EXPORT_CONTAINER_NAME } from '../shared';
 import { containerKeyFor, stampRegistration } from '../shared/registrationGraph';
 import { resolveNeoMarker } from '../shared/markerProvenance';
@@ -44,9 +44,10 @@ export class ConfigCollector implements IConfigCollector {
     private program: ts.Program,
     private checker: ts.TypeChecker,
     tokenResolverService?: TokenResolverService,
+    validation: ValidationMode = 'strict',
   ) {
     this.tokenResolverService = tokenResolverService ?? new TokenResolverService(checker);
-    this.injectionParser = new InjectionParser(checker, this.tokenResolverService);
+    this.injectionParser = new InjectionParser(checker, this.tokenResolverService, validation);
     this.dependencyAnalyzer = new DependencyAnalyzer(checker, this.tokenResolverService);
   }
 
@@ -266,6 +267,7 @@ export class ConfigCollector implements IConfigCollector {
           valueErrors.push(info as unknown as AnalysisError);
           continue;
         }
+        if (info.warnings) valueErrors.push(...info.warnings);
 
         // Check for mixed multi/non-multi
         if (info.isMulti && injections.has(info.definition.tokenId)) {
@@ -438,6 +440,8 @@ export class ConfigCollector implements IConfigCollector {
       isAsyncDisposable: parsed.isAsyncDisposable || undefined,
       implementationLocalName: parsed.implementationLocalName,
       tokenLocalName: parsed.tokenLocalName,
+      factoryDependencies: parsed.factoryDependencies,
+      opaque: parsed.opaque,
     };
     return {
       __kind: 'info',
@@ -446,6 +450,7 @@ export class ConfigCollector implements IConfigCollector {
       tokenText: parsed.tokenText,
       isScoped: parsed.isScoped,
       isMulti: parsed.isMulti,
+      warnings: parsed.dependenciesWarning ? [parsed.dependenciesWarning] : undefined,
     };
   }
 

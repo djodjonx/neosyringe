@@ -47,10 +47,14 @@ export class MissingDependencyValidator implements IValidator {
           const errorNode = tokenNode || info.node;
           errors.push({
             type: 'missing',
+            code: 'NEO_MISSING_PROVIDER',
             message: `Missing injection: '${getSimpleName(depTokenId)}' required by '${info.tokenText}' is not registered in this ${config.type === 'builder' ? 'builder nor its parents/extends' : 'partial config'}`,
             node: errorNode,
             sourceFile: config.sourceFile,
-            context: { tokenText: depTokenId },
+            context: {
+              tokenText: depTokenId,
+              chain: [getSimpleName(info.definition.tokenId), getSimpleName(depTokenId)],
+            },
           });
         }
       }

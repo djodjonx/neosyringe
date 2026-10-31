@@ -181,7 +181,8 @@ describe('LSP Diagnostics — multi-registration and async factories', () => {
         injections: [
           {
             token: useInterface<IDatabase>(),
-            provider: async () => ({ query: (sql: string) => [] }),
+            dependencies: [],
+            provider: async (): Promise<IDatabase> => ({ query: (sql: string) => [] }),
             useFactory: true
           }
         ]
@@ -211,6 +212,7 @@ describe('LSP Diagnostics — multi-registration and async factories', () => {
         injections: [
           {
             token: useInterface<IDatabase>(),
+            dependencies: [],
             provider: async () => ({ query: (sql: string) => [] }),
             useFactory: true,
             lifecycle: 'transient'

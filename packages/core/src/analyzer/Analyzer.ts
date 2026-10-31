@@ -4,7 +4,8 @@ import {
   DependencyGraph,
   AnalysisResult,
   ConfigGraph,
-  AnalysisError
+  AnalysisError,
+  ValidationMode,
 } from './types';
 import { ConfigCollector, type IConfigCollector } from './collectors';
 import { TokenResolver, type ITokenResolver } from './resolvers';
@@ -172,14 +173,16 @@ const UNSUPPORTED_SHAPE_MESSAGE =
 export class Analyzer {
   private program: ts.Program;
   private checker: ts.TypeChecker;
+  private validation: ValidationMode;
 
   // === SHARED SERVICES ===
   private tokenResolverService: TokenResolverService;
 
-  constructor(program: ts.Program) {
+  constructor(program: ts.Program, options?: { validation?: ValidationMode }) {
     this.program = program;
     this.checker = program.getTypeChecker();
     this.tokenResolverService = new TokenResolverService(this.checker);
+    this.validation = options?.validation ?? 'strict';
   }
 
   // === LEGACY PATH ===
@@ -197,7 +200,7 @@ export class Analyzer {
 
   private getLegacyServices() {
     if (!this._legacyServices) {
-      const configParser = new ConfigParser(this.checker, this.tokenResolverService);
+      const configParser = new ConfigParser(this.checker, this.tokenResolverService, this.validation);
       this._legacyServices = {
         dependencyResolver: new DependencyResolver(this.checker, this.tokenResolverService),
         configParser,
@@ -228,7 +231,7 @@ export class Analyzer {
       const errorFormatter: IErrorFormatter = new ErrorFormatter();
       const dependencyAnalyzer = new DependencyAnalyzer(this.checker, this.tokenResolverService);
       this._modularServices = {
-        configCollector: new ConfigCollector(this.program, this.checker, this.tokenResolverService),
+        configCollector: new ConfigCollector(this.program, this.checker, this.tokenResolverService, this.validation),
         tokenResolver: new TokenResolver(),
         validator: new CompositeValidator([
           new DuplicateValidator(errorFormatter),

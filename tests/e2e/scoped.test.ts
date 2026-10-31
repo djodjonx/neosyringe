@@ -172,7 +172,7 @@ describe('E2E - Scoped Injections', () => {
         const parent = defineBuilderConfig({
           injections: [{
             token: useInterface<IConfig>(),
-            provider: () => ({ apiUrl: 'https://prod.api.com' })
+            dependencies: [], provider: () => ({ apiUrl: 'https://prod.api.com' })
           }]
         });
 
@@ -182,7 +182,7 @@ describe('E2E - Scoped Injections', () => {
           injections: [
             {
               token: useInterface<IConfig>(),
-              provider: () => ({ apiUrl: 'http://localhost:3000' }),
+              dependencies: [], provider: () => ({ apiUrl: 'http://localhost:3000' }),
               scoped: true
             }
           ]

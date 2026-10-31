@@ -50,6 +50,16 @@ export function stampRegistration(
   }
 }
 
+/** Token ids a factory declared. Both the legacy resolver and the modular analyzer read this. */
+export function declaredFactoryEdges(definition: ServiceDefinition): TokenId[] {
+  if (definition.type !== 'factory') return [];
+  const ids: TokenId[] = [];
+  for (const dep of definition.factoryDependencies ?? []) {
+    if (!ids.includes(dep.tokenId)) ids.push(dep.tokenId);
+  }
+  return ids;
+}
+
 /**
  * Effective construct signature for `classDecl`.
  * A class with no constructor of its own inherits the base signature, with

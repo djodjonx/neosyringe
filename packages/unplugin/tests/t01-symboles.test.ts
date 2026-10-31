@@ -178,7 +178,7 @@ class Impl implements Api { id = 3; url = ''; }
 export const c = defineBuilderConfig({
   injections: [
     { token: PORT, provider: Impl },
-    { token: URL, provider: () => 'https://example.test' },
+    { token: URL, dependencies: [], provider: () => 'https://example.test' },
     { token: Api },
   ],
 });
@@ -414,7 +414,7 @@ export const url = neo.useProperty<string>(Api, 'url');
 export const c = neo.defineBuilderConfig({
   injections: [
     { token: port, provider: Impl },
-    { token: url, provider: () => 'https://barrel.test' },
+    { token: url, dependencies: [], provider: () => 'https://barrel.test' },
   ],
 });
 

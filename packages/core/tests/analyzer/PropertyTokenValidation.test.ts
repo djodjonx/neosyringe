@@ -32,7 +32,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<number>(Login, 'tokenExpired'), provider: () => 'env.TOKEN_EXPIRATION' }
+          { token: useProperty<number>(Login, 'tokenExpired'), dependencies: [], provider: () => 'env.TOKEN_EXPIRATION' }
         ]
       });
     `;
@@ -54,7 +54,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<string>(Service, 'url'), provider: () => 42 }
+          { token: useProperty<string>(Service, 'url'), dependencies: [], provider: () => 42 }
         ]
       });
     `;
@@ -76,7 +76,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<number>(Service, 'maxRetries'), provider: () => true }
+          { token: useProperty<number>(Service, 'maxRetries'), dependencies: [], provider: () => true }
         ]
       });
     `;
@@ -96,7 +96,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<string>(Service, 'name'), provider: () => ({ value: 'test' }) }
+          { token: useProperty<string>(Service, 'name'), dependencies: [], provider: () => ({ value: 'test' }) }
         ]
       });
     `;
@@ -118,7 +118,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<number>(Login, 'tokenExpired'), provider: () => 3600 }
+          { token: useProperty<number>(Login, 'tokenExpired'), dependencies: [], provider: () => 3600 }
         ]
       });
     `;
@@ -138,7 +138,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<string>(Service, 'url'), provider: () => 'http://localhost' }
+          { token: useProperty<string>(Service, 'url'), dependencies: [], provider: () => 'http://localhost' }
         ]
       });
     `;
@@ -158,7 +158,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<boolean>(Service, 'enabled'), provider: () => true }
+          { token: useProperty<boolean>(Service, 'enabled'), dependencies: [], provider: () => true }
         ]
       });
     `;
@@ -179,7 +179,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<number>(Service, 'port'), provider: portFactory }
+          { token: useProperty<number>(Service, 'port'), dependencies: [], provider: portFactory }
         ]
       });
     `;
@@ -200,7 +200,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<string>(Service, 'env'), provider: () => 'production' as const }
+          { token: useProperty<string>(Service, 'env'), dependencies: [], provider: () => 'production' as const }
         ]
       });
     `;
@@ -224,7 +224,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<number>(Login, 'tokenExpired'), provider: async () => 42 }
+          { token: useProperty<number>(Login, 'tokenExpired'), dependencies: [], provider: async () => 42 }
         ]
       });
     `;
@@ -268,7 +268,7 @@ describe('useProperty<T> provider type validation', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: useProperty<number>(Login, 'tokenExpired'), provider: () => 'env.TOKEN_EXPIRATION' }
+          { token: useProperty<number>(Login, 'tokenExpired'), dependencies: [], provider: () => 'env.TOKEN_EXPIRATION' }
         ]
       });
     `;

@@ -36,7 +36,7 @@ const URL = neo.useProperty<string>(Api, 'url');
 export const c = neo.defineBuilderConfig({
   injections: [
     { token: neo.useInterface<IPort>(), provider: Impl },
-    { token: URL, provider: () => 'https://example.test' },
+    { token: URL, dependencies: [], provider: () => 'https://example.test' },
     { token: Api },
   ],
 });
@@ -72,7 +72,7 @@ const URL = useProperty<string>(Api, 'url');
 
 export const c = defineBuilderConfig({
   injections: [
-    { token: URL, provider: () => 'https://example.test' },
+    { token: URL, dependencies: [], provider: () => 'https://example.test' },
     { token: Api },
   ],
 });
