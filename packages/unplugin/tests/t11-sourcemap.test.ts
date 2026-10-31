@@ -63,6 +63,36 @@ function positionOf(text: string, index: number): { line: number; column: number
   return { line, column };
 }
 
+function isWordChar(code: number): boolean {
+  return (code >= 48 && code <= 57)
+    || (code >= 65 && code <= 90)
+    || (code >= 97 && code <= 122)
+    || code === 36
+    || code === 95;
+}
+
+function wordRun(text: string, offset: number): string {
+  if (offset < 0 || offset >= text.length || !isWordChar(text.charCodeAt(offset))) return '';
+  let end = offset + 1;
+  while (end < text.length && isWordChar(text.charCodeAt(end))) end += 1;
+  return text.slice(offset, end);
+}
+
+function offsetOf(text: string, line: number, column: number): number {
+  let current = 1;
+  let columnAt = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (current === line && columnAt === column) return i;
+    if (text.charCodeAt(i) === 10) {
+      current += 1;
+      columnAt = 0;
+    } else {
+      columnAt += 1;
+    }
+  }
+  return current === line && columnAt === column ? text.length : -1;
+}
+
 type PluginMap = { version: 3; sources: string[]; names: string[]; mappings: string };
 
 function codeOf(result: unknown, fallback: string): { code: string; map: PluginMap | null } {
@@ -351,53 +381,29 @@ describe('T11 source maps', () => {
     const tracer = new TraceMap(output.map as never);
     const decoded = decodedMappings(tracer);
 
-    const numSpans: { start: number; end: number }[] = [];
-    let from = 0;
-    while (from < source.length) {
-      const at = source.indexOf('Num1', from);
-      if (at < 0) break;
-      const before = at > 0 ? source.charCodeAt(at - 1) : 0;
-      const after = at + 4 < source.length ? source.charCodeAt(at + 4) : 0;
-      const word = (code: number) => (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 36 || code === 95;
-      if (!word(before) && !word(after)) numSpans.push({ start: at, end: at + 4 });
-      from = at + 1;
-    }
-    expect(numSpans.length).toBeGreaterThan(0);
-    const offsetOf = (text: string, line: number, column: number): number => {
-      let current = 1;
-      let columnAt = 0;
-      for (let i = 0; i < text.length; i += 1) {
-        if (current === line && columnAt === column) return i;
-        if (text.charCodeAt(i) === 10) {
-          current += 1;
-          columnAt = 0;
-        } else {
-          columnAt += 1;
-        }
-      }
-      return current === line && columnAt === column ? text.length : -1;
-    };
-    const insideNum1 = (offset: number): boolean => numSpans.some((span) => offset >= span.start && offset < span.end);
-    const tokenRe = /Num1_[0-9a-f]{8}/g;
-    let tokenCount = 0;
-    for (const match of output.code.matchAll(tokenRe)) {
-      tokenCount += 1;
-      const start = match.index ?? 0;
-      const startPos = positionOf(output.code, start);
-      const row = decoded[startPos.line - 1] ?? [];
-      for (let index = 0; index < match[0].length; index += 1) {
-        const column = positionOf(output.code, start + index).column;
-        for (const segment of row) {
-          if (segment[0] !== column || segment.length < 4) continue;
-          const sourceLine = segment[2];
-          const sourceColumn = segment[3];
-          if (sourceLine === undefined || sourceColumn === undefined) continue;
-          const tracedOffset = offsetOf(source, sourceLine + 1, sourceColumn);
-          expect(insideNum1(tracedOffset)).toBe(false);
+    for (let lineIndex = 0; lineIndex < decoded.length; lineIndex += 1) {
+      const row = decoded[lineIndex] ?? [];
+      for (const segment of row) {
+        if (segment.length < 4) continue;
+        const sourceLine = segment[2];
+        const sourceColumn = segment[3];
+        if (sourceLine === undefined || sourceColumn === undefined) continue;
+        const generatedOffset = offsetOf(output.code, lineIndex + 1, segment[0]);
+        const originalOffset = offsetOf(source, sourceLine + 1, sourceColumn);
+        const generatedCode = generatedOffset >= 0 && generatedOffset < output.code.length
+          ? output.code.charCodeAt(generatedOffset)
+          : -1;
+        const originalCode = originalOffset >= 0 && originalOffset < source.length
+          ? source.charCodeAt(originalOffset)
+          : -1;
+        if (!isWordChar(generatedCode) && !isWordChar(originalCode)) continue;
+        expect(wordRun(output.code, generatedOffset)).toBe(wordRun(source, originalOffset));
+        if (isWordChar(generatedCode)) {
+          const previous = generatedOffset > 0 ? output.code.charCodeAt(generatedOffset - 1) : -1;
+          expect(isWordChar(previous)).toBe(false);
         }
       }
     }
-    expect(tokenCount).toBeGreaterThan(0);
 
     const uniqueAt = source.indexOf(unique);
     const uniquePos = positionOf(source, uniqueAt);

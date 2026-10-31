@@ -834,4 +834,76 @@ export const container = defineBuilderConfig({ injections: [] });
     expect(next.getCompilerOptions().declaration).toBe(host.getCompilerOptions().declaration);
     expect(host.getCompilerOptions().declaration).toBe(true);
   });
+
+  it('T11-P18-partial-other-file-use-site', () => {
+    const dir = tempDir('t11-p18-');
+    const part = [
+      "import { definePartialConfig, useInterface, useProperty } from '@djodjonx/neosyringe';",
+      'export interface A { n: number }',
+      'export interface B { n: number }',
+      'export interface Z { t: string; p: string }',
+      'export class Host { constructor(public secret: string) {} }',
+      'export const part = definePartialConfig({',
+      '  injections: [',
+      '    {',
+      '      token: useInterface<B>(),',
+      '      provider: (k: { resolve(token: unknown): A }) => k.resolve(useInterface<A>()),',
+      '    },',
+      '    {',
+      '      token: useInterface<Z>(),',
+      "      useValue: { t: useInterface<A>(), p: useProperty<string>(Host, 'secret') } as any,",
+      '    },',
+      '  ],',
+      '});',
+      '',
+    ].join('\n');
+    const app = [
+      "import { defineBuilderConfig, useInterface, useProperty } from '@djodjonx/neosyringe';",
+      "import { part, type A, type B, type Z, Host } from './part';",
+      'class AImpl implements A { n = 4; }',
+      'export const container = defineBuilderConfig({',
+      '  extends: [part],',
+      '  injections: [',
+      '    { token: useInterface<A>(), provider: AImpl },',
+      "    { token: useProperty<string>(Host, 'secret'), provider: () => 's3cret' },",
+      '  ],',
+      '});',
+      'export function read() {',
+      '  const a = container.resolve(useInterface<A>());',
+      '  const made = container.resolve(useInterface<B>());',
+      '  const held = container.resolve(useInterface<Z>());',
+      '  return {',
+      '    same: made === a,',
+      '    n: made.n,',
+      '    viaValue: container.resolve(held.t) === a,',
+      '    secret: container.resolve(held.p),',
+      '  };',
+      '}',
+      '',
+    ].join('\n');
+    const files = { 'part.ts': part, 'app.ts': app };
+    writeFiles(dir, files);
+    const project = writeTsconfig(dir);
+    const plugin = pluginBundle(dir, files, 'app.ts', project);
+    const pluginText = plugin.texts.get('app.ts') ?? '';
+    expect(pluginText).not.toMatch(/useInterface\s*[<(]/);
+    expect(pluginText).not.toMatch(/useProperty\s*[<(]/);
+    expect((plugin.mod.read as () => { same: boolean; n: number; viaValue: boolean; secret: string })()).toEqual({
+      same: true,
+      n: 4,
+      viaValue: true,
+      secret: 's3cret',
+    });
+
+    const transformer = transformerBundle(dir, 'app.ts', project, files, false);
+    expect(transformer.error).toBe('');
+    expect(transformer.text).not.toMatch(/useInterface\s*[<(]/);
+    expect(transformer.text).not.toMatch(/useProperty\s*[<(]/);
+    expect((transformer.mod.read as () => { same: boolean; n: number; viaValue: boolean; secret: string })()).toEqual({
+      same: true,
+      n: 4,
+      viaValue: true,
+      secret: 's3cret',
+    });
+  });
 });
