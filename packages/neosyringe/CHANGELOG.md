@@ -1,5 +1,12 @@
 # @djodjonx/neosyringe
 
+## [0.3.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.3.0...neosyringe-v0.3.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **neosyringe:** align public container types with generated capabilities (T03) ([#34](https://github.com/djodjonx/neosyringe/issues/34)) ([c2bb025](https://github.com/djodjonx/neosyringe/commit/c2bb025261e92d0d93285ce84fe707fae45edc03))
+
 ## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.2.2...neosyringe-v0.3.0) (2026-06-15)
 
 

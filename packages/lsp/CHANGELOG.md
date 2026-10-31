@@ -1,5 +1,20 @@
 # @djodjonx/neosyringe-lsp
 
+## [0.4.7](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.4.6...neosyringe-lsp-v0.4.7) (2026-10-31)
+
+
+### Bug Fixes
+
+* **core:** canonical token identity without silent collision (T02) ([#37](https://github.com/djodjonx/neosyringe/issues/37)) ([c8be9d5](https://github.com/djodjonx/neosyringe/commit/c8be9d5e65f8fd170ba7bfd65e8aff3b9047913b))
+* **core:** one constructor signature and registration graph for both analysis paths (T04) ([#38](https://github.com/djodjonx/neosyringe/issues/38)) ([a6f51ed](https://github.com/djodjonx/neosyringe/commit/a6f51edc48113263bd10c056008e8b29727834ec))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.2.1
+
 ## [0.4.6](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.4.5...neosyringe-lsp-v0.4.6) (2026-09-12)
 
 

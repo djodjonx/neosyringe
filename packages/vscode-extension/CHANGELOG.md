@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-vscode-v0.2.0...neosyringe-vscode-v0.3.0) (2026-10-31)
+
+
+### Features
+
+* **vscode:** codelens opens graph on correct container via postMessage ([91e267b](https://github.com/djodjonx/neosyringe/commit/91e267bc6f78cce3a75095c16741ee41300bc88a))
+
+
+### Bug Fixes
+
+* **vscode:** add onLanguage:typescript activationEvent for CodeLens ([65fb7c0](https://github.com/djodjonx/neosyringe/commit/65fb7c0bc98f969c78142d4619139fd834fe7425))
+* **vscode:** fix CSP blocking, event delegation, refresh, layout improvements ([97545a3](https://github.com/djodjonx/neosyringe/commit/97545a3f3dbf4c232eb58ddeb779312cd064e8a2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.2.1
+    * @djodjonx/neosyringe-ui bumped to 0.3.0
+
 ## [0.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-vscode-v0.1.1...neosyringe-vscode-v0.2.0) (2026-09-12)
 
 

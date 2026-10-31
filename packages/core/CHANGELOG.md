@@ -1,5 +1,16 @@
 # @djodjonx/neosyringe-core
 
+## [3.2.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.2.0...neosyringe-core-v3.2.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **core:** canonical token identity without silent collision (T02) ([#37](https://github.com/djodjonx/neosyringe/issues/37)) ([c8be9d5](https://github.com/djodjonx/neosyringe/commit/c8be9d5e65f8fd170ba7bfd65e8aff3b9047913b))
+* **core:** one constructor signature and registration graph for both analysis paths (T04) ([#38](https://github.com/djodjonx/neosyringe/issues/38)) ([a6f51ed](https://github.com/djodjonx/neosyringe/commit/a6f51edc48113263bd10c056008e8b29727834ec))
+* **neosyringe:** align public container types with generated capabilities (T03) ([#34](https://github.com/djodjonx/neosyringe/issues/34)) ([c2bb025](https://github.com/djodjonx/neosyringe/commit/c2bb025261e92d0d93285ce84fe707fae45edc03))
+* **unplugin:** annotate generated containers and definePartialConfig calls as PURE (T14) ([#36](https://github.com/djodjonx/neosyringe/issues/36)) ([33dc374](https://github.com/djodjonx/neosyringe/commit/33dc3741921fce3a464d6493b33f3d9072971286))
+* **unplugin:** recognise NeoSyringe markers by symbol provenance (T01) ([#35](https://github.com/djodjonx/neosyringe/issues/35)) ([f997f0f](https://github.com/djodjonx/neosyringe/commit/f997f0f253d7ba703ce8982fe57f48d5b3932282))
+
 ## [3.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.1.2...neosyringe-core-v3.2.0) (2026-09-12)
 
 

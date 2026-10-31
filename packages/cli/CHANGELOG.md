@@ -1,5 +1,20 @@
 # @djodjonx/neosyringe-cli
 
+## [0.4.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.4.1...neosyringe-cli-v0.4.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* **unplugin:** recognise NeoSyringe markers by symbol provenance (T01) ([#35](https://github.com/djodjonx/neosyringe/issues/35)) ([f997f0f](https://github.com/djodjonx/neosyringe/commit/f997f0f253d7ba703ce8982fe57f48d5b3932282))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.2.1
+    * @djodjonx/neosyringe-ui bumped to 0.3.0
+
 ## [0.4.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.4.0...neosyringe-cli-v0.4.1) (2026-09-12)
 
 
