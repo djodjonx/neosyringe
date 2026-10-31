@@ -328,21 +328,45 @@ function visitServices(graph: DependencyGraph, visit: (node: DependencyNode) => 
   }
 }
 
+/** Use-site edits of one foreign file, walked once per compileWith call. */
+function cachedForeignUseEdits(
+  sourceFile: ts.SourceFile,
+  checker: ts.TypeChecker,
+  usedTokens: Map<string, UsedTokenEntry>,
+  cache: Map<ts.SourceFile, readonly SourceEdit[]>,
+): readonly SourceEdit[] {
+  const cached = cache.get(sourceFile);
+  if (cached) return cached;
+  const collected = collectUseSiteEdits(sourceFile, checker, usedTokens);
+  cache.set(sourceFile, collected);
+  return collected;
+}
+
 /**
  * Rewrites use-site calls inside a provider or useValue before the generator
  * copies that text. The original offset is the initializer's start.
+ * A registration that lives in another file is rewritten from that file.
+ * Its offset belongs to that file, so it is not a source-map copy.
  */
 function collectEmbeddings(
   graph: DependencyGraph,
   sourceFile: ts.SourceFile,
   code: string,
   edits: readonly SourceEdit[],
+  checker: ts.TypeChecker,
+  usedTokens: Map<string, UsedTokenEntry>,
+  foreignEdits: Map<ts.SourceFile, readonly SourceEdit[]>,
 ): { orig: number; needle: string }[] {
   const found: { orig: number; needle: string }[] = [];
   visitServices(graph, (node) => {
     if (!node.service?.registrationNode) return;
     const registration = node.service.registrationNode;
-    if (registration.getSourceFile() !== sourceFile) return;
+    const registrationFile = registration.getSourceFile();
+    const foreign = registrationFile !== sourceFile;
+    const text = foreign ? registrationFile.text : code;
+    const fileEdits = foreign
+      ? cachedForeignUseEdits(registrationFile, checker, usedTokens, foreignEdits)
+      : edits;
     const factory = node.service.type === 'factory' ? node.service.factorySource : undefined;
     const value = node.service.type === 'value' ? node.service.valueSource : undefined;
     const initializer = factory !== undefined
@@ -351,13 +375,14 @@ function collectEmbeddings(
         ? propertyInitializer(registration, 'useValue')
         : undefined;
     if (!initializer) return;
-    const start = initializer.getStart(sourceFile);
+    const start = initializer.getStart(registrationFile);
     const end = initializer.getEnd();
-    const needle = code.slice(start, end);
+    const needle = text.slice(start, end);
     if (needle !== (factory !== undefined ? factory : value)) return;
-    const rewritten = rewriteEmbedded(code, start, end, edits);
+    const rewritten = rewriteEmbedded(text, start, end, fileEdits);
     if (factory !== undefined) node.service.factorySource = rewritten;
     else node.service.valueSource = rewritten;
+    if (foreign) return;
     found.push({ orig: start, needle });
   });
   return found;
@@ -504,9 +529,12 @@ function compileWith(input: SessionInput, resolved: { root: string; options: ts.
     useEdits.push(...collectUseSiteEdits(sourceFile, checker, input.state.usedTokens));
   }
 
+  const foreignEdits = new Map<ts.SourceFile, readonly SourceEdit[]>();
   const edits: MappedEdit[] = [];
   for (const graph of thisFileGraphs) {
-    const embeddings = sourceFile ? collectEmbeddings(graph, sourceFile, input.code, useEdits) : [];
+    const embeddings = sourceFile
+      ? collectEmbeddings(graph, sourceFile, input.code, useEdits, checker, input.state.usedTokens, foreignEdits)
+      : [];
     const generator = new Generator(graph, true, undefined, input.emitDebugHelpers);
     const containerClass = generator.generate();
     const instantiation = generator.generateInstantiation();
