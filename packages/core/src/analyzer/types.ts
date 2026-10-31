@@ -81,6 +81,47 @@ export interface ServiceDefinition {
    * Same rationale as implementationLocalName — needed for correct `this.resolve(token)` generation.
    */
   tokenLocalName?: string;
+
+  /** Stable id of this registration, distinct from the token id. */
+  registrationId?: string;
+
+  /** `owned` in the declaring container, `borrowed` when supplied by a parent. */
+  ownership?: 'owned' | 'borrowed';
+
+  /** Constructor edges for this registration, one per kept parameter position. */
+  dependencyEdges?: DependencyEdge[];
+
+  /** Container key that captured a `useValue`, when this registration is a value. */
+  capturedInContainerId?: string;
+}
+
+/** One constructor parameter demand. `paramIndex` is the source position. */
+export interface DependencyEdge {
+  tokenId: TokenId;
+  paramIndex: number;
+  optional: boolean;
+  multi: boolean;
+  origin: 'declared' | 'inherited';
+}
+
+/** Diagnostic for a constructor shape the analyzer will not treat as zero dependencies. */
+export interface ConstructorDiagnostic {
+  code: 'NEO_CONFIG_UNSUPPORTED';
+  message: string;
+  paramName?: string;
+}
+
+/** Effective construct signature shared by the legacy and modular paths. */
+export interface ConstructorSignature {
+  edges: DependencyEdge[];
+  diagnostics: ConstructorDiagnostic[];
+}
+
+/** A parent registration borrowed by a child container. `containerId` holds the parent containerKey. */
+export interface BorrowedRegistration {
+  registrationId: string;
+  tokenId: TokenId;
+  containerId: string;
 }
 
 // ============================================================================
@@ -98,6 +139,12 @@ export type ConfigType = 'builder' | 'partial';
 export interface ConfigGraph {
   /** Unique container ID (from 'name' field or generated hash) */
   containerId: string;
+
+  /**
+   * Identity of this config: hash of the project-relative POSIX path, the
+   * call position and the config text. Never the container name.
+   */
+  containerKey?: string;
 
   /** Variable name (appContainer, sharedPartial) */
   name: string;
@@ -227,6 +274,15 @@ export interface DependencyGraph {
   /** Unique container ID (from 'name' field or generated hash) */
   containerId: string;
 
+  /**
+   * Identity of this config: hash of the project-relative POSIX path, the
+   * call position and the config text. Never the container name.
+   */
+  containerKey?: string;
+
+  /** Parent registrations borrowed by this container. `containerId` is the parent containerKey. */
+  borrowedRegistrations?: BorrowedRegistration[];
+
   /** All service nodes indexed by their token ID. */
   nodes: Map<TokenId, DependencyNode>;
 
@@ -309,7 +365,7 @@ export interface DependencyGraph {
 /**
  * Type of analysis error.
  */
-export type AnalysisErrorType = 'duplicate' | 'type-mismatch' | 'cycle' | 'missing';
+export type AnalysisErrorType = 'duplicate' | 'type-mismatch' | 'cycle' | 'missing' | 'unsupported';
 
 /**
  * Context for error messages.
@@ -331,6 +387,9 @@ export interface ErrorContext {
 export interface AnalysisError {
   /** Type of error. */
   type: AnalysisErrorType;
+
+  /** Stable diagnostic code for constructor shapes the analyzer refuses. */
+  code?: 'NEO_CONFIG_UNSUPPORTED';
 
   /** Error message. */
   message: string;

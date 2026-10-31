@@ -1,6 +1,7 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { DependencyGraph, DependencyNode, TokenId } from '../types';
+import type { DependencyGraph, DependencyNode } from '../types';
+import { resolveConstructorSignature } from '../shared/registrationGraph';
 import { TokenResolverService } from '../shared/TokenResolverService';
 
 /**
@@ -101,98 +102,39 @@ export class DependencyResolver {
       | undefined;
     if (!classDecl) return;
 
-    const classType = classDecl.name ? this.checker.getTypeAtLocation(classDecl.name) : undefined;
-
-    // Find constructor
-    const constructor = classDecl.members.find((m) =>
-      TSContext.ts.isConstructorDeclaration(m)
-    ) as ts.ConstructorDeclaration | undefined;
-
-    if (!constructor) {
-      // No constructor or default constructor (no dependencies)
-      return;
+    const knownTokenIds = new Set(graph.nodes.keys());
+    if (graph.parentProvidedTokens) {
+      for (const tokenId of graph.parentProvidedTokens) knownTokenIds.add(tokenId);
     }
-
-    // Analyze each constructor parameter
-    for (const param of constructor.parameters) {
-      const dependency = this.resolveParameter(param, graph, classType);
-      if (dependency) {
-        node.dependencies.push(dependency);
-        if (this.isOptionalParameter(param)) {
-          node.optionalDependencies ??= new Set();
-          node.optionalDependencies.add(dependency);
-        }
+    const signature = resolveConstructorSignature(
+      this.checker,
+      this.tokenResolverService,
+      classDecl,
+      knownTokenIds,
+    );
+    const multiIds = new Set(graph.multiNodes?.keys() ?? []);
+    for (const edge of signature.edges) {
+      edge.multi = multiIds.has(edge.tokenId);
+    }
+    node.service.dependencyEdges = signature.edges;
+    for (const edge of signature.edges) {
+      node.dependencies.push(edge.tokenId);
+      if (edge.optional) {
+        node.optionalDependencies ??= new Set();
+        node.optionalDependencies.add(edge.tokenId);
       }
     }
-  }
-
-  /**
-   * True when a constructor parameter is optional: marked `?` (`logger?: ILogger`)
-   * or explicitly typed to include `undefined` (`logger: ILogger | undefined`).
-   * An optional dependency that isn't registered anywhere resolves to `undefined`
-   * instead of failing the build.
-   */
-  private isOptionalParameter(param: ts.ParameterDeclaration): boolean {
-    if (param.questionToken) return true;
-    if (!param.type) return false;
-    const type = this.checker.getTypeFromTypeNode(param.type);
-    if (!type.isUnion()) return false;
-    return type.types.some(t => (t.flags & TSContext.ts.TypeFlags.Undefined) !== 0);
-  }
-
-  /**
-   * Resolves a single constructor parameter to its token ID.
-   *
-   * Resolution strategy:
-   * 1. Check if a PropertyToken exists for this class.parameter
-   * 2. If not, resolve by parameter type (class or interface)
-   * 3. Skip parameters without type annotations
-   *
-   * @param param - Constructor parameter to resolve
-   * @param graph - Dependency graph to check for property tokens
-   * @param classType - Instance type of the class that declares the parameter
-   * @returns Token ID or undefined if not resolvable
-   *
-   * @example
-   * ```typescript
-   * // Parameter with property token:
-   * constructor(private apiUrl: string) {}
-   * // If property token exists: returns 'PropertyToken:MyClass.apiUrl'
-   *
-   * // Parameter with class type:
-   * constructor(private logger: ILogger) {}
-   * // Returns: 'ILogger_abc123'
-   *
-   * // Parameter without type annotation:
-   * constructor(private value) {}
-   * // Returns: undefined (cannot inject safely)
-   * ```
-   */
-  private resolveParameter(
-    param: ts.ParameterDeclaration,
-    graph: DependencyGraph,
-    classType: ts.Type | undefined,
-  ): TokenId | undefined {
-    const paramName = param.name.getText();
-    const typeNode = param.type;
-
-    if (!typeNode) {
-      // Without type annotation, we can't safely inject
-      // This could be implicit 'any' or inferred type
-      return undefined;
+    if (signature.diagnostics.length === 0) return;
+    if (!graph.errors) graph.errors = [];
+    const sourceFile = classDecl.getSourceFile();
+    for (const diagnostic of signature.diagnostics) {
+      graph.errors.push({
+        type: 'unsupported',
+        code: diagnostic.code,
+        message: diagnostic.message,
+        node: classDecl,
+        sourceFile,
+      });
     }
-
-    // 1. Check if there's a PropertyToken for this class.parameter
-    // Property tokens are used for primitives (string, number, etc.)
-    const propertyTokenId = classType
-      ? this.tokenResolverService.getPropertyTokenId(classType, paramName)
-      : undefined;
-    if (propertyTokenId && graph.nodes.has(propertyTokenId)) {
-      return propertyTokenId;
-    }
-
-    // 2. Fallback: resolve by type (class/interface)
-    const type = this.checker.getTypeFromTypeNode(typeNode);
-    return this.tokenResolverService.getTypeId(type);
   }
 }

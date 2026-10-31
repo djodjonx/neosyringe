@@ -3,6 +3,7 @@ import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
 import type { AnalysisError, DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../types';
 import { resolveNeoMarker } from '../shared/markerProvenance';
+import { containerKeyFor, stampRegistration } from '../shared/registrationGraph';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { HashUtils } from '../shared/HashUtils';
 import { InjectionParser, type ParsedInjection } from './InjectionParser';
@@ -54,7 +55,8 @@ export class ConfigParser {
   parseBuilderConfig(
     node: ts.CallExpression,
     graph: DependencyGraph,
-    parentContainerNames: Set<string>
+    parentContainerNames: Set<string>,
+    merge = false,
   ): void {
     const args = node.arguments;
     if (args.length < 1) return;
@@ -62,17 +64,30 @@ export class ConfigParser {
     const configObj = args[0];
     if (!TSContext.ts.isObjectLiteralExpression(configObj)) return;
 
-    // Parse 'name' property for containerName and containerId
-    const nameProp = configObj.properties.find(p =>
-      p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'name'
+    // A merged partial keeps the host container's name, id and key.
+    if (!merge) {
+      // Parse 'name' property for containerName and containerId
+      const nameProp = configObj.properties.find(p =>
+        p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'name'
+      );
+
+      if (nameProp && TSContext.ts.isPropertyAssignment(nameProp) && TSContext.ts.isStringLiteral(nameProp.initializer)) {
+        graph.containerName = nameProp.initializer.text;
+        graph.containerId = nameProp.initializer.text;
+      } else {
+        // Generate hash-based containerId if no name field
+        graph.containerId = this.generateHashBasedContainerId(node);
+      }
+      graph.containerKey = containerKeyFor(node);
+    }
+
+    // Parse 'extends' before local injections so partial multi order is stable.
+    const extendsProp = configObj.properties.find(p =>
+      p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'extends'
     );
 
-    if (nameProp && TSContext.ts.isPropertyAssignment(nameProp) && TSContext.ts.isStringLiteral(nameProp.initializer)) {
-      graph.containerName = nameProp.initializer.text;
-      graph.containerId = nameProp.initializer.text;
-    } else {
-      // Generate hash-based containerId if no name field
-      graph.containerId = this.generateHashBasedContainerId(node);
+    if (extendsProp && TSContext.ts.isPropertyAssignment(extendsProp) && TSContext.ts.isArrayLiteralExpression(extendsProp.initializer)) {
+      this.parseExtendsArray(extendsProp.initializer, graph, parentContainerNames);
     }
 
     // Parse 'injections' property
@@ -82,15 +97,6 @@ export class ConfigParser {
 
     if (injectionsProp && TSContext.ts.isPropertyAssignment(injectionsProp) && TSContext.ts.isArrayLiteralExpression(injectionsProp.initializer)) {
       this.parseInjectionsArray(injectionsProp.initializer, graph);
-    }
-
-    // Parse 'extends' property
-    const extendsProp = configObj.properties.find(p =>
-      p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'extends'
-    );
-
-    if (extendsProp && TSContext.ts.isPropertyAssignment(extendsProp) && TSContext.ts.isArrayLiteralExpression(extendsProp.initializer)) {
-      this.parseExtendsArray(extendsProp.initializer, graph, parentContainerNames);
     }
 
     // Parse 'useContainer' property
@@ -238,6 +244,7 @@ export class ConfigParser {
     node: DependencyNode,
     graph: DependencyGraph
   ): void {
+    stampRegistration(node.service, node.service.registrationNode, graph.containerKey);
     if (isMulti) {
       if (!graph.multiNodes) graph.multiNodes = new Map();
       const existing = graph.multiNodes.get(tokenId) ?? [];
@@ -392,7 +399,7 @@ export class ConfigParser {
 
       if (this.isDefinePartialConfigCall(callExpr)) {
         // Recursive reuse!
-        this.parseBuilderConfig(callExpr, graph, parentContainerNames);
+        this.parseBuilderConfig(callExpr, graph, parentContainerNames, true);
       }
     }
   }

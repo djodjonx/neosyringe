@@ -1,6 +1,13 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { TokenId, ServiceDefinition } from '../types';
+import type {
+  ConstructorDiagnostic,
+  ConstructorSignature,
+  DependencyEdge,
+  TokenId,
+  ServiceDefinition,
+} from '../types';
+import { resolveConstructorSignature } from '../shared/registrationGraph';
 import { TokenResolverService } from '../shared/TokenResolverService';
 
 /**
@@ -35,91 +42,44 @@ export class DependencyAnalyzer {
       return [];
     }
 
-    return this.getConstructorDependencies(definition.implementationSymbol, knownTokenIds);
+    return this.readSignature(definition, knownTokenIds).edges.map((edge) => edge.tokenId);
+  }
+
+  /** Constructor edges, including inherited parameters and kept positions. */
+  edgesFor(definition: ServiceDefinition, knownTokenIds?: Set<TokenId>): DependencyEdge[] {
+    return this.readSignature(definition, knownTokenIds).edges;
   }
 
   /**
    * Returns the subset of a service's required dependencies that are optional —
-   * the constructor parameter is marked `?` or typed `T | undefined`. These are
-   * exempt from "missing dependency" diagnostics when unregistered anywhere.
+   * the constructor parameter is marked `?`, typed `T | undefined`, or has an
+   * initializer. These are exempt from "missing dependency" diagnostics.
    */
-  getOptionalDependencyIds(definition: ServiceDefinition): Set<TokenId> {
-    if (definition.type === 'factory' || !definition.implementationSymbol) {
-      return new Set();
-    }
-
+  getOptionalDependencyIds(definition: ServiceDefinition, knownTokenIds?: Set<TokenId>): Set<TokenId> {
     const optional = new Set<TokenId>();
-    const declarations = definition.implementationSymbol.getDeclarations();
-    const classDecl = declarations?.find(d => TSContext.ts.isClassDeclaration(d)) as ts.ClassDeclaration | undefined;
-    const constructor = classDecl?.members.find(
-      m => TSContext.ts.isConstructorDeclaration(m)
-    ) as ts.ConstructorDeclaration | undefined;
-    if (!constructor) return optional;
-
-    for (const param of constructor.parameters) {
-      if (!param.type || !this.isOptionalParameter(param)) continue;
-      const type = this.checker.getTypeFromTypeNode(param.type);
-      optional.add(this.tokenResolverService.getHashedTokenIdFromType(type));
+    for (const edge of this.readSignature(definition, knownTokenIds).edges) {
+      if (edge.optional) optional.add(edge.tokenId);
     }
     return optional;
   }
 
-  private isOptionalParameter(param: ts.ParameterDeclaration): boolean {
-    if (param.questionToken) return true;
-    if (!param.type) return false;
-    const type = this.checker.getTypeFromTypeNode(param.type);
-    if (!type.isUnion()) return false;
-    return type.types.some(t => (t.flags & TSContext.ts.TypeFlags.Undefined) !== 0);
+  /** Constructor shapes this registration cannot treat as zero dependencies. */
+  constructorDiagnostics(definition: ServiceDefinition, knownTokenIds?: Set<TokenId>): ConstructorDiagnostic[] {
+    return this.readSignature(definition, knownTokenIds).diagnostics;
   }
 
-  /**
-   * Extracts dependencies from a class constructor.
-   * @param symbol - Class symbol to analyze
-   * @param knownTokenIds - Optional set of registered token IDs used to match property tokens
-   * @returns Array of token IDs required by the constructor
-   */
-  private getConstructorDependencies(
-    symbol: ts.Symbol,
-    knownTokenIds?: Set<TokenId>
-  ): TokenId[] {
-    const dependencies: TokenId[] = [];
-
-    const declarations = symbol.getDeclarations();
-    if (!declarations || declarations.length === 0) return dependencies;
-
-    const classDecl = declarations.find(d => TSContext.ts.isClassDeclaration(d)) as ts.ClassDeclaration | undefined;
-    if (!classDecl) return dependencies;
-
-    const classType = classDecl.name
-      ? this.checker.getTypeAtLocation(classDecl.name)
-      : undefined;
-
-    const constructor = classDecl.members.find(
-      m => TSContext.ts.isConstructorDeclaration(m)
-    ) as ts.ConstructorDeclaration | undefined;
-
-    if (!constructor) return dependencies;
-
-    for (const param of constructor.parameters) {
-      const typeNode = param.type;
-      if (!typeNode) continue; // No type annotation — cannot determine dependency
-
-      // Check for property token first (matches DependencyResolver behavior)
-      if (knownTokenIds && classType) {
-        const paramName = TSContext.ts.isIdentifier(param.name)
-          ? param.name.text
-          : param.name.getText();
-        const propertyTokenId = this.tokenResolverService.getPropertyTokenId(classType, paramName);
-        if (knownTokenIds.has(propertyTokenId)) {
-          dependencies.push(propertyTokenId);
-          continue;
-        }
-      }
-
-      const type = this.checker.getTypeFromTypeNode(typeNode);
-      dependencies.push(this.tokenResolverService.getHashedTokenIdFromType(type));
+  private readSignature(
+    definition: ServiceDefinition,
+    knownTokenIds?: Set<TokenId>,
+  ): ConstructorSignature {
+    if (definition.type === 'factory' || definition.type === 'value' || !definition.implementationSymbol) {
+      return { edges: [], diagnostics: [] };
     }
-
-    return dependencies;
+    const declarations = definition.implementationSymbol.getDeclarations();
+    const classDecl = declarations?.find((declaration) =>
+      TSContext.ts.isClassDeclaration(declaration),
+    ) as ts.ClassDeclaration | undefined;
+    if (!classDecl) return { edges: [], diagnostics: [] };
+    return resolveConstructorSignature(this.checker, this.tokenResolverService, classDecl, knownTokenIds);
   }
 }

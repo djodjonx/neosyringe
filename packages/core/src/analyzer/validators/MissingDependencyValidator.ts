@@ -24,11 +24,23 @@ export class MissingDependencyValidator implements IValidator {
     const availableTokens = this.collectAvailableTokens(config, context);
 
     const checkInfo = (info: import('../types').InjectionInfo) => {
+      for (const diagnostic of this.dependencyAnalyzer.constructorDiagnostics(info.definition, availableTokens)) {
+        errors.push({
+          type: 'unsupported',
+          code: diagnostic.code,
+          message: diagnostic.message,
+          node: info.node,
+          sourceFile: config.sourceFile,
+        });
+      }
       const requiredDeps = this.dependencyAnalyzer.getRequiredDependencies(
         info.definition,
         availableTokens  // pass so property tokens are matched correctly
       );
-      const optionalDeps = this.dependencyAnalyzer.getOptionalDependencyIds(info.definition);
+      const optionalDeps = this.dependencyAnalyzer.getOptionalDependencyIds(
+        info.definition,
+        availableTokens,
+      );
       for (const depTokenId of requiredDeps) {
         if (!availableTokens.has(depTokenId) && !optionalDeps.has(depTokenId)) {
           const tokenNode = findTokenAssignment(info.node);

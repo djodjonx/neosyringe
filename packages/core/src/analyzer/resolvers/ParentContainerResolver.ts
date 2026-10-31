@@ -1,6 +1,6 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { DependencyGraph } from '../types';
+import type { BorrowedRegistration, DependencyGraph, DependencyNode } from '../types';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { CallExpressionUtils } from '../utils/CallExpressionUtils';
 
@@ -162,6 +162,28 @@ export class ParentContainerResolver {
     if (this.hasAsyncFactories(parentGraph) || parentGraph.parentHasAsyncInitialize) {
       graph.parentHasAsyncInitialize = true;
     }
+
+    this.recordBorrowed(parentGraph, graph);
+  }
+
+  /** Records parent registrations borrowed by the child. The container id is the parent key. */
+  private recordBorrowed(parentGraph: DependencyGraph, graph: DependencyGraph): void {
+    const containerId = parentGraph.containerKey;
+    if (!containerId) return;
+    const borrowed: BorrowedRegistration[] = [];
+    const push = (node: DependencyNode) => {
+      const registrationId = node.service.registrationId;
+      if (!registrationId) return;
+      borrowed.push({ registrationId, tokenId: node.service.tokenId, containerId });
+    };
+    for (const node of parentGraph.nodes.values()) push(node);
+    if (parentGraph.multiNodes) {
+      for (const nodes of parentGraph.multiNodes.values()) {
+        for (const node of nodes) push(node);
+      }
+    }
+    if (borrowed.length === 0) return;
+    graph.borrowedRegistrations = [...(graph.borrowedRegistrations ?? []), ...borrowed];
   }
 
   /** Minimal local check — avoids a reverse dependency on the generator package. */

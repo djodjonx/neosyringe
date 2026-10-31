@@ -4,6 +4,7 @@ import { LSPLogger } from './logger';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 
 const enum NeoSyringeErrorCode {
+  Unsupported = 9994,
   Missing = 9995,
   Cycle = 9996,
   TypeMismatch = 9997,
@@ -16,6 +17,7 @@ const ERROR_CODE_MAP: Record<AnalysisErrorType, NeoSyringeErrorCode> = {
   cycle: NeoSyringeErrorCode.Cycle,
   'type-mismatch': NeoSyringeErrorCode.TypeMismatch,
   duplicate: NeoSyringeErrorCode.Duplicate,
+  unsupported: NeoSyringeErrorCode.Unsupported,
 };
 
 function getErrorCode(type: AnalysisErrorType | string): number {
