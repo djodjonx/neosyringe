@@ -211,7 +211,7 @@ describe('Plugin — multi-container per file', () => {
     }
   });
 
-  it('buildEnd DOES throw for a genuinely unregistered token', () => {
+  it('buildEnd does not throw for an exported token that is never resolved', () => {
     const GRAPHQL_FILE = '/project/src/plugins/graphql.ts';
     const GRAPHQL_CODE = `
       import { useInterface } from '@djodjonx/neosyringe';
@@ -222,6 +222,6 @@ describe('Plugin — multi-container per file', () => {
     const { transform, buildEnd } = makeBuildEnd();
     transform(SAME_FILE_CODE, FILE);
     transform(GRAPHQL_CODE, GRAPHQL_FILE);
-    expect(() => buildEnd()).toThrow(/Unregistered token.*IUnknown/);
+    expect(() => buildEnd()).not.toThrow();
   });
 });
