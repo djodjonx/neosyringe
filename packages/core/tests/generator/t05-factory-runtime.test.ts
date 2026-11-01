@@ -357,10 +357,11 @@ function execute(graph: DependencyGraph, bindings: Record<string, string> = {}):
   return container;
 }
 
-function readFailure(value: unknown): { code: string | undefined; message: string } {
-  if (!(value instanceof Error)) return { code: undefined, message: '' };
-  const code = 'code' in value && typeof value.code === 'string' ? value.code : undefined;
-  return { code, message: value.message };
+function readFailure(value: unknown): { code: string | undefined; message: string; cause: unknown } {
+  if (!(value instanceof Error)) return { code: undefined, message: '', cause: undefined };
+  const coded = value as Error & { code?: unknown; cause?: unknown };
+  const code = typeof coded.code === 'string' ? coded.code : undefined;
+  return { code, message: value.message, cause: coded.cause };
 }
 
 function callResolve(captured: unknown, token: string): unknown {
@@ -510,25 +511,33 @@ describe('T05 factory runtime', () => {
     expect(value).toEqual({ url: 'https://example.test' });
   });
 
-  it('sync throw during initialize keeps initialized false', async () => {
+  it('sync throw during initialize keeps the failure', async () => {
     const graph = graphs.get('BoomHold');
     if (!graph) throw new Error('missing BoomHold');
-    const container = execute(graph) as RuntimeContainer & { _initialized: boolean };
-    let first = '';
+    const container = execute(graph);
+    let first: unknown;
     try {
       await container.initialize();
     } catch (error) {
-      first = error instanceof Error ? error.message : '';
+      first = error;
     }
-    expect(first).toContain('boom');
-    expect(container._initialized).toBe(false);
-    let second = '';
+    expect(first instanceof Error ? first.message : '').toContain('boom');
+    let second: unknown;
     try {
       await container.initialize();
     } catch (error) {
-      second = error instanceof Error ? error.message : '';
+      second = error;
     }
-    expect(second).toContain('boom');
+    expect(second).toBe(first);
+    let resolved: unknown;
+    try {
+      container.resolve(tokenId(graph, 'BoomHost'));
+    } catch (error) {
+      resolved = error;
+    }
+    const failure = readFailure(resolved);
+    expect(failure.code).toBe('NEO_CONTAINER_FAILED');
+    expect(failure.cause).toBe(first);
   });
 
   it('compatible opaque factory resolves a dependency', () => {
@@ -549,15 +558,23 @@ describe('T05 factory runtime', () => {
   it('rejected async factory expires the context', async () => {
     const graph = graphs.get('RejectExpired');
     if (!graph) throw new Error('missing RejectExpired');
-    const container = execute(graph) as RuntimeContainer & { _initialized: boolean };
+    const container = execute(graph);
+    let firstError: unknown;
     let rejected = '';
     try {
       await container.initialize();
     } catch (error) {
+      firstError = error;
       rejected = error instanceof Error ? error.message : '';
     }
     expect(rejected).toContain('nope');
-    expect(container._initialized).toBe(false);
+    let secondError: unknown;
+    try {
+      await container.initialize();
+    } catch (error) {
+      secondError = error;
+    }
+    expect(secondError).toBe(firstError);
     let later: unknown;
     try {
       callResolve(Reflect.get(globalThis, '__t05Reject'), 'later');

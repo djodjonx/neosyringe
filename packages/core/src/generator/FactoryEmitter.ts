@@ -30,12 +30,20 @@ export function getFactoryName(tokenId: TokenId): string {
  *   `{ token: X }` there themselves), a class living in the parent's file is
  *   not guaranteed to be in scope in the child's file at all.
  */
+function resolutionCalls(hasAsync: boolean): { one: string; all: string } {
+  return hasAsync
+    ? { one: 'this._resolveInternal', all: 'this._resolveAllInternal' }
+    : { one: 'this.resolve', all: 'this.resolveAll' };
+}
+
 export function resolveConstructorArgs(
   dependencies: TokenId[],
   graph: DependencyGraph,
   getImport: GetImport,
-  getForeignImport: GetImport
+  getForeignImport: GetImport,
+  hasAsync = false,
 ): string {
+  const read = resolutionCalls(hasAsync).one;
   return dependencies.map(depId => {
     const depNode = graph.nodes.get(depId);
     if (!depNode) {
@@ -43,13 +51,13 @@ export function resolveConstructorArgs(
       // container (see DependencyGraph.parentResolvableTokens for why only this
       // subset of parent-provided tokens is safe to wire this way via a string key).
       if (graph.parentResolvableTokens?.has(depId)) {
-        return `this.resolve(${JSON.stringify(depId)})`;
+        return `${read}(${JSON.stringify(depId)})`;
       }
       // A bare class token from the parent: resolved by class identity, not by
       // string, so we need the actual class reference — see parentClassTokenSymbols.
       const classSymbol = graph.parentClassTokenSymbols?.get(depId);
       if (classSymbol) {
-        return `this.resolve(${getForeignImport(classSymbol)})`;
+        return `${read}(${getForeignImport(classSymbol)})`;
       }
       if (graph.parentProvidedTokens?.has(depId)) {
         // GraphValidator considers this dependency satisfied, but no symbol could
@@ -66,11 +74,11 @@ export function resolveConstructorArgs(
     }
 
     if (depNode.service.isInterfaceToken || depNode.service.isValueToken) {
-      return `this.resolve(${JSON.stringify(depNode.service.tokenId)})`;
+      return `${read}(${JSON.stringify(depNode.service.tokenId)})`;
     } else if (depNode.service.tokenSymbol) {
-      return `this.resolve(${getImport(depNode.service.tokenSymbol)})`;
+      return `${read}(${getImport(depNode.service.tokenSymbol)})`;
     } else if (depNode.service.implementationSymbol) {
-      return `this.resolve(${getImport(depNode.service.implementationSymbol)})`;
+      return `${read}(${getImport(depNode.service.implementationSymbol)})`;
     }
     return 'undefined';
   }).join(', ');
@@ -86,17 +94,6 @@ export function resolveTokenKey(service: DependencyNode['service'], getImport: G
   if (service.tokenSymbol) return getImport(service.tokenSymbol);
   if (service.implementationSymbol) return getImport(service.implementationSymbol);
   return JSON.stringify(service.tokenId);
-}
-
-function graphHasAsyncFactory(graph: DependencyGraph): boolean {
-  for (const node of graph.nodes.values()) {
-    if (node.service.isAsync) return true;
-  }
-  if (!graph.multiNodes) return false;
-  for (const nodes of graph.multiNodes.values()) {
-    if (nodes.some((node) => node.service.isAsync)) return true;
-  }
-  return false;
 }
 
 function dependencyKeyExpression(dep: FactoryDependency, graph: DependencyGraph, getImport: GetImport): string {
@@ -132,7 +129,8 @@ function factoryAllowList(
   return { entries: [...flags.entries()], skipWarm };
 }
 
-function emitInvocation(warmup: string, release: string, holdInitialized: boolean): string {
+/** A sync throw from warmup or from the factory must expire the context before it escapes. */
+function emitInvocation(warmup: string, release: string): string {
   const resultBlock = `const __neoResult = userFactory(__neoContext);
     if (__neoResult && typeof __neoResult.then === 'function') {
       return Promise.resolve(__neoResult).then(
@@ -143,19 +141,17 @@ function emitInvocation(warmup: string, release: string, holdInitialized: boolea
     __neoExpire();
     ${release}
     return __neoResult;`;
-  const open = `${warmup}
-    ${resultBlock}`;
-  if (!holdInitialized) return open;
   return `try {
-    ${open}
-    } catch (__neoThrown) { __neoExpire(); ${release} throw __neoThrown; }`;
+    ${warmup}
+    ${resultBlock}
+  } catch (__neoThrown) { __neoExpire(); ${release} throw __neoThrown; }`;
 }
 
 function emitFactoryBody(
   service: DependencyNode['service'],
   graph: DependencyGraph,
   getImport: GetImport,
-  holdInitialized: boolean,
+  hasAsync: boolean,
 ): string {
   const userFactory = service.factorySource ?? 'undefined';
   const label = JSON.stringify(getSimpleName(service.tokenId));
@@ -163,19 +159,18 @@ function emitFactoryBody(
   const listed = factoryAllowList(service, graph, getImport);
   const allowed = listed.entries;
   const entries = allowed.map(([key, all]) => `[${key}, ${all ? '"all"' : '"simple"'}]`).join(', ');
+  const calls = resolutionCalls(hasAsync);
   const warmupLines: string[] = [];
   if (!opaqueFactory) {
     for (const [key, all] of allowed) {
       const depIsTransient = listed.skipWarm.get(key) === true;
       if (depIsTransient) continue;
-      warmupLines.push(all ? `this.resolveAll(${key});` : `this.resolve(${key});`);
+      warmupLines.push(all ? `${calls.all}(${key});` : `${calls.one}(${key});`);
     }
   }
   const warmup = warmupLines.join('\n    ');
-  const holdStart = holdInitialized
-    ? 'const __neoHold = this._initialized === false;\n    if (__neoHold) this._initialized = true;'
-    : '';
-  const release = holdInitialized ? 'if (__neoHold) this._initialized = false;' : '';
+  const holdStart = '';
+  const release = '';
   const expireStmt = 'const __neoExpire = () => { __neoExpired = true; };';
   const failStmt = `const __neoFail = (code, detail) => {
       const error = new Error(code + ': factory ' + ${label} + ' ' + detail);
@@ -190,15 +185,15 @@ function emitFactoryBody(
     const __neoContext = {
       resolve: (token) => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-        return this.resolve(token);
+        return ${calls.one}(token);
       },
       resolveAll: (token) => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-        return this.resolveAll(token);
+        return ${calls.all}(token);
       },
     };
     ${holdStart}
-    ${emitInvocation('', release, holdInitialized)}`;
+    ${emitInvocation('', release)}`;
   }
   return `const userFactory = ${userFactory};
     const __neoAllowed = new Map([${entries}]);
@@ -210,16 +205,16 @@ function emitFactoryBody(
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         const mode = __neoAllowed.get(token);
         if (mode !== 'simple' && mode !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
-        return this.resolve(token);
+        return ${calls.one}(token);
       },
       resolveAll: (token) => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         if (__neoAllowed.get(token) !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
-        return this.resolveAll(token);
+        return ${calls.all}(token);
       },
     };
     ${holdStart}
-    ${emitInvocation(warmup, release, holdInitialized)}`;
+    ${emitInvocation(warmup, release)}`;
 }
 
 /** Generates a factory method for each service in topological order. */
@@ -227,10 +222,10 @@ export function generateFactories(
   graph: DependencyGraph,
   sorted: TokenId[],
   getImport: GetImport,
-  getForeignImport: GetImport
+  getForeignImport: GetImport,
+  hasAsync = false,
 ): string[] {
   const factories: string[] = [];
-  const holdInitialized = graphHasAsyncFactory(graph);
 
   for (const tokenId of sorted) {
     const node = graph.nodes.get(tokenId);
@@ -249,7 +244,7 @@ export function generateFactories(
     }
 
     if (node.service.type === 'factory' && node.service.factorySource) {
-      const body = emitFactoryBody(node.service, graph, getImport, holdInitialized);
+      const body = emitFactoryBody(node.service, graph, getImport, hasAsync);
       factories.push(`
   private ${factoryId}(): any {
     ${body}
@@ -262,7 +257,7 @@ export function generateFactories(
         );
       }
       const className = getImport(node.service.implementationSymbol);
-      const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport);
+      const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync);
 
       factories.push(`
   private ${factoryId}(): any {
@@ -278,18 +273,18 @@ export function generateFactories(
 export function generateMultiFactories(
   graph: DependencyGraph,
   getImport: GetImport,
-  getForeignImport: GetImport
+  getForeignImport: GetImport,
+  hasAsync = false,
 ): string[] {
   const factories: string[] = [];
   if (!graph.multiNodes) return factories;
-  const holdInitialized = graphHasAsyncFactory(graph);
 
   for (const [tokenId, nodes] of graph.multiNodes) {
     nodes.forEach((node, index) => {
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
 
       if (node.service.type === 'factory' && node.service.factorySource) {
-        const body = emitFactoryBody(node.service, graph, getImport, holdInitialized);
+        const body = emitFactoryBody(node.service, graph, getImport, hasAsync);
         factories.push(`
   private ${factoryId}(): any {
     ${body}
@@ -302,7 +297,7 @@ export function generateMultiFactories(
       } else {
         if (!node.service.implementationSymbol) return;
         const className = getImport(node.service.implementationSymbol);
-        const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport);
+        const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync);
         factories.push(`
   private ${factoryId}(): any {
     return new ${className}(${args});

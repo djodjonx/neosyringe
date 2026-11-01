@@ -136,7 +136,7 @@ describe('Generator - disposable', () => {
     expect(code).not.toContain('async destroy()');
   });
 
-  it('should emit _initialized = false in sync destroy() when async factories are present', () => {
+  it('should keep sync destroy from re-arming initialize when async factories are present', () => {
     const graph: DependencyGraph = {
       containerId: 'Test',
       nodes: new Map([
@@ -159,7 +159,8 @@ describe('Generator - disposable', () => {
     const code = new Generator(graph, true).generate();
 
     expect(code).not.toContain('async destroy()');
-    expect(code).toContain('this._initialized = false');
+    expect(code).not.toContain('_initialized');
+    expect(code).toContain("this._state = 'destroyed'");
     expect(code).toContain('.dispose()');
   });
 });

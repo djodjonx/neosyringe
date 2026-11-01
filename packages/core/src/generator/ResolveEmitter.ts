@@ -8,14 +8,16 @@ import { getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitte
  */
 export function buildAsyncResolveGuard(hasAsync: boolean): string {
   if (!hasAsync) return '';
-  return `if (!this._initialized) { throw new Error(\`[\${this.name}] This container has async services — call \\\`await container.initialize()\\\` before the first resolve().\`); }`;
+  return 'this._guardPublic();';
 }
 
 /** Generates resolve switch cases for each service in topological order. */
 export function generateResolveCases(
   graph: DependencyGraph,
   sorted: TokenId[],
-  getImport: GetImport
+  getImport: GetImport,
+  hasAsync = false,
+  formatToken = 'String',
 ): string[] {
   const resolveCases: string[] = [];
 
@@ -28,10 +30,28 @@ export function generateResolveCases(
     const isTransient = node.service.lifecycle === 'transient';
     const tokenKey = resolveTokenKey(node.service, getImport);
     const tokenCheck = `if (token === ${tokenKey})`;
+    const asyncSingleton = hasAsync && !!node.service.isAsync && !isTransient;
 
     const creationLogic = isTransient
       ? `return this.${factoryId}();`
-      : `
+      : asyncSingleton
+        ? `
+            if (!this.instances.has(${tokenKey})) {
+                throw new Error('async singleton is not prepared: ' + ${formatToken}(token));
+            }
+            return this.instances.get(${tokenKey});
+          `
+        : hasAsync
+          ? `
+            if (!this.instances.has(${tokenKey})) {
+                const instance = this.${factoryId}();
+                this.instances.set(${tokenKey}, instance);
+                if (this._initRunning) this._initJournal.push(${tokenKey});
+                return instance;
+            }
+            return this.instances.get(${tokenKey});
+          `
+          : `
             if (!this.instances.has(${tokenKey})) {
                 const instance = this.${factoryId}();
                 this.instances.set(${tokenKey}, instance);
@@ -53,7 +73,13 @@ export function generateResolveAllMethod(
   hasAsync: boolean
 ): string {
   if (!graph.multiNodes || graph.multiNodes.size === 0) {
-    return `public resolveAll<T>(token: any): T[] { return []; }`;
+    if (!hasAsync) return `public resolveAll<T>(token: any): T[] { return []; }`;
+    return `public resolveAll<T>(token: any): T[] {
+    this._guardPublic('resolveAll()');
+    return this._resolveAllInternal<T>(token);
+  }
+
+  private _resolveAllInternal<T>(token: any): T[] { return []; }`;
   }
 
   const resolveGuard = buildAsyncResolveGuard(hasAsync);
@@ -79,8 +105,20 @@ export function generateResolveAllMethod(
     cases.push(`${tokenCheck} return [${callExprs.join(', ')}] as T[];`);
   }
 
-  return `public resolveAll<T>(token: any): T[] {
+  if (!hasAsync) {
+    return `public resolveAll<T>(token: any): T[] {
     ${resolveGuard}
+    ${cases.join('\n    ')}
+    return [];
+  }`;
+  }
+
+  return `public resolveAll<T>(token: any): T[] {
+    this._guardPublic('resolveAll()');
+    return this._resolveAllInternal<T>(token);
+  }
+
+  private _resolveAllInternal<T>(token: any): T[] {
     ${cases.join('\n    ')}
     return [];
   }`;

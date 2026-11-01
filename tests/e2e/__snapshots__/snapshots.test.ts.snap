@@ -1001,6 +1001,7 @@ class NeoContainer {
       },
     };
     
+    try {
     
     const __neoResult = userFactory(__neoContext);
     if (__neoResult && typeof __neoResult.then === 'function') {
@@ -1012,6 +1013,7 @@ class NeoContainer {
     __neoExpire();
     
     return __neoResult;
+  } catch (__neoThrown) { __neoExpire();  throw __neoThrown; }
   }
   
   private create_ApiService_75972c9e(): any {
