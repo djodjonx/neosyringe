@@ -6,6 +6,8 @@ import { HashUtils } from './HashUtils';
 import { type ILogger, consoleLogger } from './Logger';
 import { resolveNeoMarker } from './markerProvenance';
 import { TOKEN_DESCRIPTOR_SCHEMA, canonicalDescriptor, canonicalParts } from './tokenDescriptor';
+import { boundaryUnsupported, publishedValueToken } from './tokensManifest';
+import type { ManifestCache, PublishedTokenRef } from './tokensManifest';
 
 /**
  * Service for resolving TypeScript nodes to token IDs.
@@ -33,6 +35,12 @@ export class TokenResolverService {
   private static readonly MAX_ALIAS_CHAIN_DEPTH = 20;
   private readonly hashFn: ((value: string) => string) | undefined;
   private readonly descriptors = new Map<string, string>();
+  /** packageName + descriptor → contractVersion. A second contract is refused. */
+  private readonly contracts = new Map<string, string>();
+  /** runtimeKey → package name, or `local` when this build computed the key. */
+  private readonly keyOwners = new Map<string, string>();
+  /** package.json path → manifest or the failure. This instance only. Stale until the next program. */
+  private readonly manifestCache: ManifestCache = new Map();
 
   constructor(
     private readonly checker: ts.TypeChecker,
@@ -55,6 +63,20 @@ export class TokenResolverService {
     }
     if (previous === next) return;
     throw new NeoTokenError('NEO_TOKEN_COLLISION', `NEO_TOKEN_COLLISION: ${previous} <> ${next}`);
+  }
+
+  /**
+   * The same runtime key cannot belong to two packages, or to a package and a local declaration.
+   * The same owner is a no-op. The producer's key text is unchanged.
+   */
+  private claimOwner(id: string, owner: string): void {
+    const previous = this.keyOwners.get(id);
+    if (previous === undefined) {
+      this.keyOwners.set(id, owner);
+      return;
+    }
+    if (previous === owner) return;
+    throw new NeoTokenError('NEO_TOKEN_COLLISION', `NEO_TOKEN_COLLISION: ${previous} <> ${owner}`);
   }
 
   /** Canonical descriptor. Same text as `canonicalDescriptor`, and nothing is claimed. */
@@ -310,8 +332,7 @@ export class TokenResolverService {
 
     const typeNode = node.typeArguments[0];
     const type = this.checker.getTypeFromTypeNode(typeNode);
-    const interfaceParts = canonicalParts(this.checker, type);
-    return this.emit(interfaceParts.name, interfaceParts.descriptor);
+    return this.getTypeId(type);
   }
 
   /**
@@ -390,8 +411,8 @@ export class TokenResolverService {
    * ```
    */
   getTypeId(type: ts.Type): TokenId {
-    const parts = canonicalParts(this.checker, type);
-    return this.emit(parts.name, parts.descriptor);
+    const parts = canonicalParts(this.checker, type, { manifestCache: this.manifestCache });
+    return this.emit(parts.name, parts.descriptor, parts.published);
   }
 
   /**
@@ -412,12 +433,34 @@ export class TokenResolverService {
    * ```
    */
   getTypeIdFromConstructor(type: ts.Type): TokenId {
-    const parts = canonicalParts(this.checker, type, { valueClass: true });
-    return this.emit(parts.name, parts.descriptor);
+    const parts = canonicalParts(this.checker, type, { valueClass: true, manifestCache: this.manifestCache });
+    return this.emit(parts.name, parts.descriptor, parts.published);
   }
 
-  private emit(name: string, descriptor: string): TokenId {
+  private emit(name: string, descriptor: string, published?: PublishedTokenRef): TokenId {
+    if (published) {
+      const seenKey = `${published.packageName}\0${descriptor}`;
+      const previous = this.contracts.get(seenKey);
+      if (previous !== undefined && previous !== published.contractVersion) {
+        boundaryUnsupported('contract-version', {
+          packageName: published.packageName,
+          subject: published.contractVersion,
+        });
+      }
+      const expected = `${name}_${HashUtils.hashDescriptor(descriptor, this.hashFn)}`;
+      if (published.runtimeKey !== expected) {
+        boundaryUnsupported('runtime-key', {
+          packageName: published.packageName,
+          subject: published.runtimeKey,
+        });
+      }
+      this.contracts.set(seenKey, published.contractVersion);
+      this.claimOwner(published.runtimeKey, published.packageName);
+      this.claim(published.runtimeKey, descriptor);
+      return published.runtimeKey;
+    }
     const id = `${name}_${HashUtils.hashDescriptor(descriptor, this.hashFn)}`;
+    this.claimOwner(id, 'local');
     this.claim(id, descriptor);
     return id;
   }
@@ -456,6 +499,9 @@ export class TokenResolverService {
     if (this.isUsePropertyCall(node)) {
       return this.extractPropertyTokenId(node);
     }
+
+    const published = publishedValueToken(this.checker, tokenNode, this.manifestCache);
+    if (published) return this.emit(published.name, published.descriptor, published.published);
 
     // Case: Class (direct reference)
     const type = this.checker.getTypeAtLocation(tokenNode);

@@ -2,7 +2,10 @@
  * Identity error raised while a token descriptor is built or claimed.
  * `code` is the stable machine contract. The message names the reason.
  */
-export type NeoTokenErrorCode = 'NEO_TOKEN_COLLISION' | 'NEO_TOKEN_UNSUPPORTED';
+export type NeoTokenErrorCode =
+  | 'NEO_TOKEN_COLLISION'
+  | 'NEO_TOKEN_UNSUPPORTED'
+  | 'NEO_TOKEN_BOUNDARY_UNSUPPORTED';
 
 export class NeoTokenError extends Error {
   readonly code: NeoTokenErrorCode;

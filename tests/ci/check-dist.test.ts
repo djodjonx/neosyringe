@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,10 @@ function run(target: string) {
 describe('check-dist', () => {
   it('passes on the built repo', () => {
     const result = run(root);
+    const output = `${result.stdout}\n${result.stderr}`;
     expect(result.status).toBe(0);
+    expect(output).not.toContain('check-dist warning');
+    expect(existsSync(path.join(root, 'scripts/ci/check-dist-allowlist.json'))).toBe(false);
   });
 
   it('fails when a declared bin entry is absent', () => {
@@ -45,46 +48,6 @@ describe('check-dist', () => {
       expect(output).not.toContain('TypeError');
     } finally {
       rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it('fails when an allowlisted package declares a path that is not allowlisted', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'neosyringe-dist-allow-extra-'));
-    try {
-      writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
-        name: '@djodjonx/neosyringe-core',
-        main: 'dist/index.cjs',
-        types: 'dist/other.d.mts',
-      }));
-      const result = run(dir);
-      const output = `${result.stdout}\n${result.stderr}`;
-      expect(result.status).toBe(1);
-      expect(output).toContain(
-        'check-dist warning: skip @djodjonx/neosyringe-core dist/index.cjs followUp=T15',
-      );
-      expect(output).toContain(`missing dist entry: ${path.join(dir, 'dist/other.d.mts')}`);
-      expect(output).not.toContain('TypeError');
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it('warns when skipping the named core root index', () => {
-    const result = run(root);
-    const output = `${result.stdout}\n${result.stderr}`;
-    const skipped = [
-      'dist/index.cjs',
-      'dist/index.mjs',
-      'dist/index.d.mts',
-      './dist/index.d.mts',
-      './dist/index.mjs',
-      './dist/index.cjs',
-    ];
-    expect(result.status).toBe(0);
-    for (const rel of skipped) {
-      expect(output).toContain(
-        `check-dist warning: skip @djodjonx/neosyringe-core ${rel} followUp=T15`,
-      );
     }
   });
 

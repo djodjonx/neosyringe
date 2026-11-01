@@ -143,6 +143,14 @@ describe('CI workflows', () => {
     expect(verifyCommands).toContain('node scripts/ci/check-dist.mjs');
   });
 
+  it('T15 distribution runs consumer-dist after check-dist', () => {
+    const commands = runs(loadJobs('.github/workflows/ci.yml').distribution!);
+    const checkAt = commands.indexOf('node scripts/ci/check-dist.mjs');
+    const consumerAt = commands.indexOf('node scripts/ci/consumer-dist.mjs');
+    expect(checkAt).toBeGreaterThanOrEqual(0);
+    expect(consumerAt).toBeGreaterThan(checkAt);
+  });
+
   it('T13-A06 required aggregator', () => {
     const jobs = loadJobs('.github/workflows/ci.yml');
     const required = jobs.required;

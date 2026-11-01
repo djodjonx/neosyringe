@@ -7,6 +7,10 @@ export interface CliArgs {
   /** Path to write HTML output, true for default filename, false if not requested. */
   graph: string | true | false;
   mermaid: boolean;
+  /** Output path for protocol v1. Requires `--contract-version`. */
+  tokensManifest: string | undefined;
+  /** Explicit token contract. Not the package version. */
+  contractVersion: string | undefined;
 }
 
 /** Parses CLI arguments. Pure and side-effect free — easy to unit test. */
@@ -15,6 +19,8 @@ export function parseArgs(argv: string[]): CliArgs {
   let json = false;
   let graph: string | true | false = false;
   let mermaid = false;
+  let tokensManifest: string | undefined;
+  let contractVersion: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     if ((argv[i] === '--project' || argv[i] === '-p') && argv[i + 1]) {
@@ -30,9 +36,17 @@ export function parseArgs(argv: string[]): CliArgs {
     if (argv[i] === '--mermaid') {
       mermaid = true;
     }
+    if (argv[i] === '--tokens-manifest' && argv[i + 1]) {
+      tokensManifest = argv[i + 1];
+    }
+    if (argv[i] === '--contract-version' && argv[i + 1]) {
+      contractVersion = argv[i + 1];
+    }
   }
 
-  return { project, json, graph, mermaid };
+  if (tokensManifest?.startsWith('--')) tokensManifest = '';
+  if (contractVersion?.startsWith('--')) contractVersion = undefined;
+  return { project, json, graph, mermaid, tokensManifest, contractVersion };
 }
 
 export interface JsonReportError {

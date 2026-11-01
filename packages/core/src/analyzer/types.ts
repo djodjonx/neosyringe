@@ -123,7 +123,7 @@ export interface DependencyEdge {
 
 /** Diagnostic for a constructor shape the analyzer will not treat as zero dependencies. */
 export interface ConstructorDiagnostic {
-  code: 'NEO_CONFIG_UNSUPPORTED';
+  code: 'NEO_CONFIG_UNSUPPORTED' | 'NEO_TOKEN_BOUNDARY_UNSUPPORTED';
   message: string;
   paramName?: string;
 }
@@ -411,7 +411,8 @@ export type DiagnosticCode =
   | 'NEO_CYCLE'
   | 'NEO_UNDECLARED_FACTORY_DEP'
   | 'NEO_FACTORY_CONTEXT_EXPIRED'
-  | 'NEO_ASYNC_TRANSIENT';
+  | 'NEO_ASYNC_TRANSIENT'
+  | 'NEO_TOKEN_BOUNDARY_UNSUPPORTED';
 
 /**
  * An error detected during dependency graph analysis.

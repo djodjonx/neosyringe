@@ -13,7 +13,6 @@
       "@djodjonx/neosyringe": ["./packages/neosyringe/src"],
       "@djodjonx/neosyringe-core/analyzer": ["./packages/core/src/analyzer/index.ts"],
       "@djodjonx/neosyringe-core/generator": ["./packages/core/src/generator/index.ts"],
-      "@djodjonx/neosyringe-core": ["./packages/core/src"],
       "@djodjonx/neosyringe-plugin": ["./packages/unplugin/src"],
       "@djodjonx/neosyringe-lsp": ["./packages/lsp/src"],
       "@djodjonx/neosyringe-cli": ["./packages/cli/src"]

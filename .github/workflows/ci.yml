@@ -107,6 +107,9 @@ jobs:
       - name: Check published entries
         run: node scripts/ci/check-dist.mjs
 
+      - name: Consumer distribution
+        run: node scripts/ci/consumer-dist.mjs
+
   required:
     name: Required checks
     runs-on: ubuntu-latest
