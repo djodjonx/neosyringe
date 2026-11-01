@@ -906,4 +906,134 @@ export const container = defineBuilderConfig({ injections: [] });
       secret: 's3cret',
     });
   });
+
+  it('T11-P19-namespace-extends', () => {
+    const dir = tempDir('t11-p19-');
+    const part = [
+      "import { definePartialConfig, useInterface, useProperty } from '@djodjonx/neosyringe';",
+      'export interface A { n: number }',
+      'export interface B { n: number }',
+      'export interface Z { t: string; p: string }',
+      'export class Host { constructor(public secret: string) {} }',
+      'export const part = definePartialConfig({',
+      '  injections: [',
+      '    {',
+      '      token: useInterface<B>(),',
+      '      provider: (k: { resolve(token: unknown): A }) => k.resolve(useInterface<A>()),',
+      '    },',
+      '    {',
+      '      token: useInterface<Z>(),',
+      "      useValue: { t: useInterface<A>(), p: useProperty<string>(Host, 'secret') } as any,",
+      '    },',
+      '  ],',
+      '});',
+      '',
+    ].join('\n');
+    const readBody = [
+      'class AImpl implements A { n = 4; }',
+      'export const container = defineBuilderConfig({',
+      '  injections: [',
+      '    { token: useInterface<A>(), provider: AImpl },',
+      "    { token: useProperty<string>(Host, 'secret'), provider: () => 's3cret' },",
+      '  ],',
+      '});',
+      'export function read() {',
+      '  const a = container.resolve(useInterface<A>());',
+      '  const made = container.resolve(useInterface<B>());',
+      '  const held = container.resolve(useInterface<Z>());',
+      '  return {',
+      '    same: made === a,',
+      '    n: made.n,',
+      '    viaValue: container.resolve(held.t) === a,',
+      '    secret: container.resolve(held.p),',
+      '  };',
+      '}',
+      '',
+    ];
+    const named = [
+      "import { defineBuilderConfig, useInterface, useProperty } from '@djodjonx/neosyringe';",
+      "import { part, type A, type B, type Z, Host } from './part';",
+      readBody[0],
+      'export const container = defineBuilderConfig({',
+      '  extends: [part],',
+      ...readBody.slice(2),
+    ].join('\n');
+    const namespace = [
+      "import { defineBuilderConfig, useInterface, useProperty } from '@djodjonx/neosyringe';",
+      "import * as P from './part';",
+      "import { type A, type B, type Z, Host } from './part';",
+      readBody[0],
+      'export const container = defineBuilderConfig({',
+      '  extends: [P.part],',
+      ...readBody.slice(2),
+    ].join('\n');
+    writeFiles(dir, { 'part.ts': part, 'named.ts': named, 'ns.ts': namespace });
+    const project = writeTsconfig(dir);
+
+    const namedPlugin = pluginBundle(dir, { 'part.ts': part, 'named.ts': named }, 'named.ts', project);
+    let namespaceError = '';
+    let namespaceValue: unknown;
+    try {
+      const namespacePlugin = pluginBundle(dir, { 'part.ts': part, 'ns.ts': namespace }, 'ns.ts', project);
+      namespaceValue = (namespacePlugin.mod.read as () => unknown)();
+    } catch (error) {
+      namespaceError = error instanceof Error ? error.message : String(error);
+    }
+    const namedValue = (namedPlugin.mod.read as () => unknown)();
+    expect(namespaceError).toBe('');
+    expect(namespaceValue).toEqual(namedValue);
+
+    const namedTransformer = transformerBundle(dir, 'named.ts', project, { 'part.ts': part, 'named.ts': named }, false);
+    const namespaceTransformer = transformerBundle(dir, 'ns.ts', project, { 'part.ts': part, 'ns.ts': namespace }, false);
+    expect(namedTransformer.error).toBe('');
+    expect(namespaceTransformer.error).toBe('');
+    expect((namespaceTransformer.mod.read as () => unknown)()).toEqual(
+      (namedTransformer.mod.read as () => unknown)(),
+    );
+  });
+
+  it('T11-P20-tsconfig-change', () => {
+    const dir = tempDir('t11-p20-');
+    chdir(dir);
+    writeFiles(dir, {
+      'one.ts': 'export class Widget { id = 1; }\n',
+      'second-widget.ts': 'export class Widget { id = 2; }\n',
+      'app.ts': [
+        "import { defineBuilderConfig } from '@djodjonx/neosyringe';",
+        "import { Widget } from 'widget';",
+        'export const container = defineBuilderConfig({',
+        '  injections: [{ token: Widget, provider: Widget }],',
+        '});',
+        '',
+      ].join('\n'),
+    });
+    const project = path.join(dir, 'tsconfig.json');
+    const writeConfig = (widgetFile: string): void => {
+      writeFileSync(project, JSON.stringify({
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'CommonJS',
+          moduleResolution: 'Bundler',
+          strict: true,
+          noLib: true,
+          types: [],
+          skipLibCheck: true,
+          esModuleInterop: true,
+          baseUrl: '.',
+          paths: { ...neoPaths(), widget: [`./${widgetFile}`] },
+        },
+        include: ['app.ts', 'one.ts', 'second-widget.ts'],
+      }));
+    };
+    writeConfig('one.ts');
+    const source = readFileSync(path.join(dir, 'app.ts'), 'utf8');
+    const plugin = hooks({ project });
+    const first = codeOf(plugin.transform(source, path.join(dir, 'app.ts')));
+    writeConfig('second-widget.ts');
+    const second = codeOf(plugin.transform(source, path.join(dir, 'app.ts')));
+    plugin.buildEnd();
+    expect(first).toContain('class NeoContainer');
+    expect(second).toContain('class NeoContainer');
+    expect(second).not.toBe(first);
+  });
 });

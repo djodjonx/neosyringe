@@ -70,6 +70,62 @@ function applyEdits(code: string, edits: readonly SourceEdit[]): string {
   return result;
 }
 
+// These fixtures only need the NeoSyringe markers. Default options parse lib.d.ts
+// on every createProgram. One host caches those source files, and each program
+// is built from the previous one.
+const memoryFiles = new Map<string, string>();
+const sourceCache = new Map<string, ts.SourceFile>();
+let sharedHost: ts.CompilerHost | undefined;
+let previousProgram: ts.Program | undefined;
+
+const NEO_STUB = [
+  'export function defineBuilderConfig(config: object): object { return config; }',
+  'export function useInterface<T>(): T { return null!; }',
+  'export function useProperty<T>(type: unknown, name: string): T { return null!; }',
+  '',
+].join('\n');
+
+function remember(fileName: string, text: string): void {
+  const key = path.normalize(fileName);
+  if (memoryFiles.get(key) !== text) sourceCache.delete(key);
+  memoryFiles.set(key, text);
+}
+
+function textOf(fileName: string): string | undefined {
+  return memoryFiles.get(path.normalize(fileName));
+}
+
+function hostFor(options: ts.CompilerOptions): ts.CompilerHost {
+  if (sharedHost) return sharedHost;
+  const host = ts.createCompilerHost(options);
+  const readSource = host.getSourceFile.bind(host);
+  const readFile = host.readFile.bind(host);
+  const fileExists = host.fileExists.bind(host);
+  host.fileExists = (fileName) => textOf(fileName) !== undefined || fileExists(fileName);
+  host.readFile = (fileName) => textOf(fileName) ?? readFile(fileName);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    const key = path.normalize(fileName);
+    const text = textOf(fileName);
+    if (!shouldCreateNewSourceFile) {
+      const hit = sourceCache.get(key);
+      if (hit && (text === undefined || hit.text === text)) return hit;
+    }
+    const created = text !== undefined
+      ? ts.createSourceFile(fileName, text, languageVersion, true)
+      : readSource(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+    if (created && !shouldCreateNewSourceFile) sourceCache.set(path.normalize(created.fileName), created);
+    return created;
+  };
+  sharedHost = host;
+  return host;
+}
+
+function programFor(rootNames: readonly string[], options: ts.CompilerOptions): ts.Program {
+  const program = ts.createProgram([...rootNames], options, hostFor(options), previousProgram);
+  previousProgram = program;
+  return program;
+}
+
 function editsOf(
   code: string,
   fileName: string,
@@ -77,46 +133,43 @@ function editsOf(
   usedTokens?: Map<string, UsedTokenEntry>,
   hash?: (value: string) => string,
 ): SourceEdit[] {
-  const sourceFile = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
-  const host = ts.createCompilerHost(options);
-  const original = host.getSourceFile.bind(host);
-  host.getSourceFile = (name, languageVersion, onError, shouldCreate) => {
-    if (name === fileName) return sourceFile;
-    return original(name, languageVersion, onError, shouldCreate);
-  };
-  const program = ts.createProgram([fileName], options, host);
+  remember(fileName, code);
+  const program = programFor([fileName], options);
+  const sourceFile = program.getSourceFile(fileName);
+  if (!sourceFile) throw new Error(`fichier absent du programme: ${fileName}`);
   return collectUseSiteEdits(sourceFile, program.getTypeChecker(), usedTokens, hash ? { hash } : undefined);
 }
 
 describe('T02 parité du transform', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 't02-parity-'));
+  const stubName = path.join(dir, 'neo-stub.ts');
+  const options: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    strict: true,
+    noLib: true,
+    types: [],
+    baseUrl: dir,
+    paths: {
+      '@djodjonx/neosyringe': ['./neo-stub.ts'],
+    },
+  };
   let transformed = '';
   let graphIds: string[] = [];
 
   beforeAll(() => {
     TSContext.projectRoot = dir;
-    const options: ts.CompilerOptions = {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      strict: true,
-    };
-    const sources = new Map<string, string>();
+    writeFileSync(stubName, NEO_STUB);
+    remember(stubName, NEO_STUB);
+    const roots: string[] = [];
     for (const [name, source] of Object.entries(FILES)) {
       const fileName = path.join(dir, name);
       writeFileSync(fileName, source);
-      sources.set(fileName, source);
+      remember(fileName, source);
+      roots.push(fileName);
     }
-    const host = ts.createCompilerHost(options);
-    const original = host.getSourceFile.bind(host);
-    host.fileExists = (fileName) => sources.has(fileName) || ts.sys.fileExists(fileName);
-    host.readFile = (fileName) => sources.get(fileName) ?? ts.sys.readFile(fileName);
-    host.getSourceFile = (fileName, languageVersion, onError, shouldCreate) => {
-      const text = sources.get(fileName);
-      if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
-      return original(fileName, languageVersion, onError, shouldCreate);
-    };
-    const program = ts.createProgram([...sources.keys()], options, host);
+    const program = programFor(roots, options);
     const analyzer = new Analyzer(program);
     graphIds = [...analyzer.extract().nodes.keys()];
     const appName = path.join(dir, 'app.ts');
@@ -129,6 +182,10 @@ describe('T02 parité du transform', () => {
   afterAll(() => {
     TSContext.reset();
     rmSync(dir, { recursive: true, force: true });
+    memoryFiles.clear();
+    sourceCache.clear();
+    sharedHost = undefined;
+    previousProgram = undefined;
   });
 
   it('T02-parity les ids du transform sont ceux de l’analyseur', () => {
@@ -144,12 +201,6 @@ describe('T02 parité du transform', () => {
   });
 
   it('T02-P23 une collision de hash entre fichiers lève NEO_TOKEN_COLLISION', () => {
-    const options: ts.CompilerOptions = {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      strict: true,
-    };
     const hash = { hash: () => 'aaaaaaaa' };
     const sourceOf = (field: string): string => `
       import { useInterface } from '@djodjonx/neosyringe';
