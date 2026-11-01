@@ -1,4 +1,4 @@
-export type { SerializableGraph, SerializableNode } from './types';
+export type { SerializableBorrowedRegistration, SerializableGraph, SerializableMultiRegistration, SerializableNode } from './types';
 export { serializeGraph } from './serialize';
 export { graphToMermaid } from './mermaid';
 export { buildStandaloneHtml, buildProjectHtml, buildWebviewScript } from './html';

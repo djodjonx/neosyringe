@@ -55,6 +55,15 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
     devtoolsGraphs: new Map(),
     cachedSources: new Map(),
   };
+  let serving = false;
+  const devtoolsActive = (): boolean =>
+    serving && options.devtools === true && process.env.NODE_ENV !== 'production';
+  const forgetDevtoolsFile = (id: string): void => {
+    const key = programFileName(id);
+    for (const [graphKey, graph] of state.devtoolsGraphs) {
+      if ((graph.sourceFileName ?? '').replace(/\\/g, '/') === key) state.devtoolsGraphs.delete(graphKey);
+    }
+  };
 
   return {
     name: 'neosyringe-plugin',
@@ -77,6 +86,7 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
         return undefined;
       }
       if (extension !== '.ts' && extension !== '.tsx') return undefined;
+      if (devtoolsActive()) forgetDevtoolsFile(id);
       if (!hasNeoSyringeMarkers(code)) return;
 
       // Missing tsconfig is an error only when a call can reach a marker.
@@ -95,7 +105,7 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
         project,
         cwd: process.cwd(),
         emitDebugHelpers,
-        devtools: options.devtools === true,
+        devtools: devtoolsActive(),
         state,
         errorPrefix: '[neosyringe-plugin]',
       });
@@ -139,9 +149,15 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       state.generatedContainerVars.clear();
     },
 
+    watchChange(id, change) {
+      if (change.event === 'delete') forgetDevtoolsFile(id);
+    },
+
     vite: {
       configureServer(server) {
-        if (!options?.devtools) return;
+        if (process.env.NODE_ENV === 'production') return;
+        if (options.devtools !== true) return;
+        serving = true;
         const middleware = createDevtoolsMiddleware(() => [...state.devtoolsGraphs.values()]);
         server.middlewares.use(middleware);
         // eslint-disable-next-line no-console
