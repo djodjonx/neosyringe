@@ -235,6 +235,14 @@ function pushSlot(
     const tokenId = tokens.getTypeId(tokenType);
     edges.push({ tokenId, paramIndex: index, optional, multi: false, origin });
   } catch (error) {
+    if (error instanceof NeoTokenError && error.code === 'NEO_TOKEN_BOUNDARY_UNSUPPORTED') {
+      diagnostics.push({
+        code: 'NEO_TOKEN_BOUNDARY_UNSUPPORTED',
+        message: error.message,
+        paramName: name,
+      });
+      return;
+    }
     if (!(error instanceof NeoTokenError) || error.code !== 'NEO_TOKEN_UNSUPPORTED' || !optional) throw error;
     pushAbsentOptional(edges, className, index, origin);
   }

@@ -9,6 +9,7 @@
     "build": "pnpm --filter './packages/**' run build",
     "test": "pnpm -r run test",
     "test:e2e": "vitest run tests/e2e",
+    "dist:consumer": "node scripts/ci/consumer-dist.mjs",
     "test:ci": "vitest run tests/ci",
     "lint": "oxlint .",
     "typecheck": "tsc --noEmit",

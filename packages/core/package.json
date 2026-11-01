@@ -4,15 +4,7 @@
   "description": "Core analysis and generation logic for NeoSyringe",
   "type": "module",
   "license": "MIT",
-  "main": "dist/index.cjs",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.mts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
-    },
     "./analyzer": {
       "types": "./dist/analyzer/index.d.mts",
       "import": "./dist/analyzer/index.mjs",

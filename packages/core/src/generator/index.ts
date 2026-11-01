@@ -1,4 +1,6 @@
 export * from './Generator';
+export { writeTokensManifest, declarationEmitPath } from './tokensManifest';
+export type { WriteTokensManifestInput } from './tokensManifest';
 export * from './GraphValidator';
 export { resolveDebugFlag } from './DebugConfig';
 export { topologicalSort } from './TopologicalSorter';

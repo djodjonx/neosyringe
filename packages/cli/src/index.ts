@@ -14,9 +14,13 @@
  * ```
  */
 import * as ts from 'typescript';
+import { realpathSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Analyzer, resolveProjectConfig } from '@djodjonx/neosyringe-core/analyzer';
 import { parseArgs, buildJsonReport } from './report';
 import { exportGraphHtml, exportMermaid } from './graphExport';
+import { emitTokensManifest } from './tokensManifest';
 
 /**
  * CLI entry point.
@@ -24,7 +28,8 @@ import { exportGraphHtml, exportMermaid } from './graphExport';
  * and reports any validation errors.
  */
 function main() {
-  const { project: projectArg, json, graph, mermaid } = parseArgs(process.argv.slice(2));
+  const args = parseArgs(process.argv.slice(2));
+  const { project: projectArg, json, graph, mermaid } = args;
   const cwd = process.cwd();
 
   let tsconfigPath: string;
@@ -67,6 +72,29 @@ function main() {
     if (!json) console.log('🔍 Validating all dependency containers...');
     const errors = analyzer.extractAllErrors();
 
+    const writeManifest = (): void => {
+      if (args.tokensManifest === undefined && args.contractVersion === undefined) return;
+      if (errors.length > 0) return;
+      try {
+        const written = emitTokensManifest({
+          tokensManifest: args.tokensManifest,
+          contractVersion: args.contractVersion,
+          project: projectArg,
+          cwd,
+          program,
+        });
+        if (!json) console.log(`tokens manifest written to: ${written}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (json) {
+          console.log(JSON.stringify({ ok: false, errorCount: 0, errors: [], fatal: message }));
+        } else {
+          console.error(`❌ ${message}`);
+        }
+        process.exit(1);
+      }
+    };
+
     // Graph export — runs independently of validation output
     if (graph !== false || mermaid) {
       const allGraphs = analyzer.extractAll();
@@ -75,12 +103,14 @@ function main() {
         if (!json) console.log(`📊 Graph written to: ${filePath}`);
       }
       if (mermaid) {
+        writeManifest();
         console.log(exportMermaid(allGraphs));
         process.exit(0);
       }
     }
 
     if (json) {
+      writeManifest();
       console.log(JSON.stringify(buildJsonReport(errors, cwd)));
       process.exit(errors.length > 0 ? 1 : 0);
     }
@@ -95,6 +125,7 @@ function main() {
       process.exit(1);
     }
 
+    writeManifest();
     console.log('✅ Validation passed! No errors found.');
     process.exit(0);
   } catch (e: unknown) {
@@ -108,4 +139,21 @@ function main() {
   }
 }
 
-main();
+/** True when `entry` is this module. A missing path is compared as text. */
+export function cliEntryMatches(entry: string, modulePath: string): boolean {
+  try {
+    return realpathSync(entry) === realpathSync(modulePath);
+  } catch {
+    return path.resolve(entry) === path.resolve(modulePath);
+  }
+}
+
+function isCliEntry(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return cliEntryMatches(entry, fileURLToPath(import.meta.url));
+}
+
+if (isCliEntry()) {
+  main();
+}

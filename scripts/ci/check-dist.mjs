@@ -5,7 +5,6 @@
 // A package with only a bin, and no main, is still checked.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(process.argv[2] ?? process.cwd());
 
@@ -53,23 +52,6 @@ function packageEntries(pkg) {
   return rels;
 }
 
-// Named skips: scripts/ci/check-dist-allowlist.json.
-// @djodjonx/neosyringe-core still declares a root index (packages/core/package.json:7-14).
-// Anything else missing fails the run. Follow-up for that skip is T15.
-function loadAllowlist() {
-  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), 'check-dist-allowlist.json');
-  const parsed = JSON.parse(readFileSync(file, 'utf8'));
-  const byPackage = new Map();
-  for (const record of parsed) {
-    byPackage.set(record.package, {
-      paths: new Set(record.paths),
-      followUp: record.followUp,
-    });
-  }
-  return byPackage;
-}
-
-const allowlist = loadAllowlist();
 const missing = [];
 
 function requireFile(dir, rel) {
@@ -81,14 +63,7 @@ for (const dir of packageDirs(root)) {
   const pkg = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
   if (pkg.private === true) continue;
   for (const rel of binEntries(pkg)) requireFile(dir, rel);
-  const allow = allowlist.get(pkg.name);
-  for (const rel of packageEntries(pkg)) {
-    if (allow !== undefined && allow.paths.has(rel)) {
-      console.warn(`check-dist warning: skip ${pkg.name} ${rel} followUp=${allow.followUp}`);
-      continue;
-    }
-    requireFile(dir, rel);
-  }
+  for (const rel of packageEntries(pkg)) requireFile(dir, rel);
 }
 
 if (missing.length > 0) {

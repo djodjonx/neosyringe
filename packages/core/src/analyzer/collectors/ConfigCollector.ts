@@ -7,6 +7,7 @@ import { containerKeyFor, stampRegistration } from '../shared/registrationGraph'
 import { buildContainerTokenView } from './resolutionUsages';
 import { extendsReferenceName } from '../shared/extendsReference';
 import { resolveNeoMarker } from '../shared/markerProvenance';
+import { NeoTokenError } from '../errors/NeoTokenError';
 import { InjectionParser } from '../parsers/InjectionParser';
 import { DependencyAnalyzer } from '../validators/DependencyAnalyzer';
 
@@ -372,7 +373,21 @@ export class ConfigCollector implements IConfigCollector {
     obj: ts.ObjectLiteralExpression,
     sourceFile: ts.SourceFile
   ): InjectionInfo | AnalysisError | null {
-    const result = this.injectionParser.parse(obj, sourceFile);
+    let result: ReturnType<InjectionParser['parse']>;
+    try {
+      result = this.injectionParser.parse(obj, sourceFile);
+    } catch (error) {
+      if (error instanceof NeoTokenError && error.code === 'NEO_TOKEN_BOUNDARY_UNSUPPORTED') {
+        return {
+          type: 'unsupported',
+          code: 'NEO_TOKEN_BOUNDARY_UNSUPPORTED',
+          message: error.message,
+          node: obj,
+          sourceFile,
+        };
+      }
+      throw error;
+    }
     if (result === null) return null;
 
     // AnalysisError has a `message` field; ParsedInjection has __kind: 'parsed'

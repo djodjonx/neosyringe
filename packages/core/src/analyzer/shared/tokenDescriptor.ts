@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
 import { NeoTokenError } from '../errors/NeoTokenError';
+import { publishedNamedParts, type ManifestCache, type PublishedTokenRef } from './tokensManifest';
 
 /**
  * Version of the canonical token descriptor.
@@ -30,11 +31,15 @@ const PRIMITIVE_FLAGS: ReadonlyArray<readonly [ts.TypeFlags, string]> = [
 export interface CanonicalParts {
   name: string;
   descriptor: string;
+  /** Present when the declaration is a published package type. */
+  published?: PublishedTokenRef;
 }
 
 export interface CanonicalOptions {
   /** Class value token: declaration only, type arguments dropped. */
   valueClass?: boolean;
+  /** Owned by one TokenResolverService. Absent means each lookup reads the disk. */
+  manifestCache?: ManifestCache;
 }
 
 /**
@@ -51,7 +56,7 @@ export function canonicalParts(
   type: ts.Type,
   options?: CanonicalOptions,
 ): CanonicalParts {
-  return describeType(checker, type, 0, options?.valueClass === true);
+  return describeType(checker, type, 0, options?.valueClass === true, options?.manifestCache);
 }
 
 function unsupported(reason: string): never {
@@ -184,14 +189,33 @@ function namedFromSymbol(
   checker: ts.TypeChecker,
   symbol: ts.Symbol,
   argumentDescriptors: readonly string[],
+  cache?: ManifestCache,
 ): CanonicalParts {
   const resolved = resolveAlias(checker, symbol);
   const declaration = canonicalDeclaration(resolved);
   if (isFunctionOrBlockLocal(declaration)) return unsupported('local-declaration');
   // packages/core/src/analyzer/shared/tokenDescriptor.ts:166 does not walk a ClassExpression.
   if (TSContext.ts.isClassExpression(declaration)) return unsupported('class-expression');
+  const fileName = declaration.getSourceFile().fileName;
+  if (!isDefaultLib(fileName.replace(/\\/g, '/'))) {
+    const published = publishedNamedParts(
+      checker,
+      declaration,
+      resolved,
+      argumentDescriptors.length,
+      fileName,
+      cache,
+    );
+    if (published) {
+      return {
+        name: resolved.getName(),
+        descriptor: published.descriptor,
+        published: published.published,
+      };
+    }
+  }
   const declName = qualifiedDeclarationName(declaration, resolved.getName());
-  const origin = declarationOrigin(declaration.getSourceFile().fileName);
+  const origin = declarationOrigin(fileName);
   const argBody = argumentDescriptors.length === 0 ? '' : pack(argumentDescriptors);
   const descriptor = `${TOKEN_DESCRIPTOR_SCHEMA}|named|${escapeToken(origin)}|${escapeToken(declName)}|${argBody}`;
   return { name: resolved.getName(), descriptor };
@@ -302,20 +326,21 @@ function describeType(
   type: ts.Type,
   depth: number,
   valueClass: boolean,
+  cache?: ManifestCache,
 ): CanonicalParts {
   if (depth > MAX_DEPTH) return unsupported('alias-cycle');
-  if (valueClass) return namedFromSymbol(checker, valueClassSymbol(checker, type), []);
+  if (valueClass) return namedFromSymbol(checker, valueClassSymbol(checker, type), [], cache);
   if ((type.flags & TSContext.ts.TypeFlags.Any) !== 0) return unsupported('any');
   if ((type.flags & TSContext.ts.TypeFlags.Unknown) !== 0) return unsupported('unknown');
   if ((type.flags & TSContext.ts.TypeFlags.TypeParameter) !== 0) return unsupported('unbound-type-parameter');
   if ((type.flags & TSContext.ts.TypeFlags.Conditional) !== 0) return unsupported('conditional');
   if ((type.flags & TSContext.ts.TypeFlags.Substitution) !== 0) {
-    return describeType(checker, (type as ts.SubstitutionType).baseType, depth + 1, false);
+    return describeType(checker, (type as ts.SubstitutionType).baseType, depth + 1, false, cache);
   }
 
   const enumSymbol = type.getSymbol();
   if (enumSymbol && (enumSymbol.flags & (TSContext.ts.SymbolFlags.Enum | TSContext.ts.SymbolFlags.EnumMember)) !== 0) {
-    return namedFromSymbol(checker, enumSymbol, []);
+    return namedFromSymbol(checker, enumSymbol, [], cache);
   }
 
   const literal = literalParts(type);
@@ -327,7 +352,7 @@ function describeType(
   }
 
   if (type.isUnion()) {
-    const unionMembers = type.types.map((part) => describeType(checker, part, depth + 1, false).descriptor);
+    const unionMembers = type.types.map((part) => describeType(checker, part, depth + 1, false, cache).descriptor);
     unionMembers.sort();
     return { name: 'Union', descriptor: composite('union', unionMembers) };
   }
@@ -341,14 +366,14 @@ function describeType(
 
   if (checker.isTupleType(type)) {
     const parts = checker.getTypeArguments(type as ts.TypeReference)
-      .map((part) => describeType(checker, part, depth + 1, false).descriptor);
+      .map((part) => describeType(checker, part, depth + 1, false, cache).descriptor);
     const shape = tupleMarks(type);
     return { name: 'Tuple', descriptor: sequenceDescriptor('tuple', parts, shape.marks, shape.readonlyForm) };
   }
   if (checker.isArrayType(type)) {
     const inner = checker.getTypeArguments(type as ts.TypeReference)[0];
     if (!inner) return anonymousObject();
-    const element = describeType(checker, inner, depth + 1, false);
+    const element = describeType(checker, inner, depth + 1, false, cache);
     const shape = arrayMarks(type);
     return { name: 'Array', descriptor: sequenceDescriptor('array', [element.descriptor], shape.marks, shape.readonlyForm) };
   }
@@ -357,8 +382,8 @@ function describeType(
   if (symbol && isStructuralAnonymousSymbol(symbol)) return unsupported('anonymous-object');
   if (symbol && !SKIPPED_SYMBOL_NAMES.has(symbol.getName())) {
     const argumentTypes = referenceArguments(checker, type);
-    const argumentDescriptors = argumentTypes.map((argument) => describeType(checker, argument, depth + 1, false).descriptor);
-    return namedFromSymbol(checker, symbol, argumentDescriptors);
+    const argumentDescriptors = argumentTypes.map((argument) => describeType(checker, argument, depth + 1, false, cache).descriptor);
+    return namedFromSymbol(checker, symbol, argumentDescriptors, cache);
   }
 
   if (type.aliasSymbol) {
@@ -367,8 +392,8 @@ function describeType(
       TSContext.ts.isTypeAliasDeclaration(node));
     if (declaration && TSContext.ts.isTypeLiteralNode(declaration.type)) {
       const aliasArgumentDescriptors = (type.aliasTypeArguments ?? [])
-        .map((argument) => describeType(checker, argument, depth + 1, false).descriptor);
-      return namedFromSymbol(checker, alias, aliasArgumentDescriptors);
+        .map((argument) => describeType(checker, argument, depth + 1, false, cache).descriptor);
+      return namedFromSymbol(checker, alias, aliasArgumentDescriptors, cache);
     }
   }
 

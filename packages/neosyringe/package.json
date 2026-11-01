@@ -3,6 +3,7 @@
   "version": "0.3.0",
   "description": "Runtime library for NeoSyringe DI",
   "type": "module",
+  "sideEffects": false,
   "license": "MIT",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",
