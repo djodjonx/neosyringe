@@ -1,9 +1,9 @@
 import type * as ts from 'typescript';
 import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
-import type { AnalysisError, DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../types';
+import type { AnalysisError, DependencyGraph, DependencyNode, ServiceDefinition, TokenId, ValidationMode } from '../types';
 import { resolveNeoMarker } from '../shared/markerProvenance';
-import { containerKeyFor, stampRegistration } from '../shared/registrationGraph';
+import { containerKeyFor, declaredFactoryEdges, stampRegistration } from '../shared/registrationGraph';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { HashUtils } from '../shared/HashUtils';
 import { InjectionParser, type ParsedInjection } from './InjectionParser';
@@ -32,9 +32,10 @@ export class ConfigParser {
 
   constructor(
     private checker: ts.TypeChecker,
-    private tokenResolverService: TokenResolverService
+    private tokenResolverService: TokenResolverService,
+    validation: ValidationMode = 'strict',
   ) {
-    this.injectionParser = new InjectionParser(checker, tokenResolverService);
+    this.injectionParser = new InjectionParser(checker, tokenResolverService, validation);
   }
 
   /**
@@ -197,8 +198,14 @@ export class ConfigParser {
         factorySource: factorySource!,
         isScoped,
         isAsync: isAsync || undefined,
+        factoryDependencies: parsed.factoryDependencies,
+        opaque: parsed.opaque,
       };
-      this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
+      if (parsed.dependenciesWarning) {
+        if (!graph.errors) graph.errors = [];
+        graph.errors.push(parsed.dependenciesWarning);
+      }
+      this.addToGraph(isMulti, tokenId, { service: definition, dependencies: declaredFactoryEdges(definition) }, graph);
       return;
     }
 

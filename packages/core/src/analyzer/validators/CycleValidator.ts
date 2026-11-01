@@ -1,4 +1,4 @@
-import type { AnalysisError, ConfigGraph, TokenId } from '../types';
+import type { AnalysisError, ConfigGraph, ServiceDefinition, TokenId } from '../types';
 import type { IValidator, ValidationContext } from './Validator';
 import type { DependencyAnalyzer } from './DependencyAnalyzer';
 import { getSimpleName } from '../utils/TokenUtils';
@@ -46,7 +46,7 @@ export class CycleValidator implements IValidator {
     ]);
 
     for (const [tokenId, info] of config.localInjections) {
-      const deps = this.dependencyAnalyzer.getRequiredDependencies(info.definition, allLocalTokens);
+      const deps = this.cycleDependencies(info.definition, allLocalTokens);
       // Include deps registered as either local or multi-injection (external deps can't form cycles)
       const localDeps = deps.filter(dep =>
         config.localInjections.has(dep) || config.multiInjections?.has(dep)
@@ -57,7 +57,7 @@ export class CycleValidator implements IValidator {
     if (config.multiInjections) {
       for (const [tokenId, infos] of config.multiInjections) {
         for (const info of infos) {
-          const deps = this.dependencyAnalyzer.getRequiredDependencies(info.definition, allLocalTokens);
+          const deps = this.cycleDependencies(info.definition, allLocalTokens);
           const localDeps = deps.filter(
             dep => config.localInjections.has(dep) || config.multiInjections!.has(dep)
           );
@@ -100,6 +100,7 @@ export class CycleValidator implements IValidator {
         if (localInfo) {
           errors.push({
             type: 'cycle',
+            code: 'NEO_CYCLE',
             message: `Circular dependency detected: ${readableCycle.join(' -> ')}`,
             node: localInfo.node,
             sourceFile: config.sourceFile,
@@ -111,6 +112,7 @@ export class CycleValidator implements IValidator {
             for (const info of multiInfos) {
               errors.push({
                 type: 'cycle',
+                code: 'NEO_CYCLE',
                 message: `Circular dependency detected: ${readableCycle.join(' -> ')}`,
                 node: info.node,
                 sourceFile: config.sourceFile,
@@ -122,5 +124,9 @@ export class CycleValidator implements IValidator {
     }
 
     stack.delete(tokenId);
+  }
+
+  private cycleDependencies(definition: ServiceDefinition, known: Set<TokenId>): TokenId[] {
+    return this.dependencyAnalyzer.getRequiredDependencies(definition, known);
   }
 }

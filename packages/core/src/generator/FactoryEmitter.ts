@@ -1,5 +1,5 @@
 import type * as ts from 'typescript';
-import type { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
+import type { DependencyGraph, DependencyNode, FactoryDependency, TokenId } from '../analyzer/types';
 import { FACTORY_NAME_SANITIZER } from '../analyzer/shared/constants';
 import { getSimpleName } from '../analyzer/utils/TokenUtils';
 
@@ -88,6 +88,140 @@ export function resolveTokenKey(service: DependencyNode['service'], getImport: G
   return JSON.stringify(service.tokenId);
 }
 
+function graphHasAsyncFactory(graph: DependencyGraph): boolean {
+  for (const node of graph.nodes.values()) {
+    if (node.service.isAsync) return true;
+  }
+  if (!graph.multiNodes) return false;
+  for (const nodes of graph.multiNodes.values()) {
+    if (nodes.some((node) => node.service.isAsync)) return true;
+  }
+  return false;
+}
+
+function dependencyKeyExpression(dep: FactoryDependency, graph: DependencyGraph, getImport: GetImport): string {
+  const service = graph.nodes.get(dep.tokenId)?.service ?? graph.multiNodes?.get(dep.tokenId)?.[0]?.service;
+  if (service) return resolveTokenKey(service, getImport);
+  return dep.source;
+}
+
+function isTransientDependency(dep: FactoryDependency, graph: DependencyGraph): boolean {
+  const node = graph.nodes.get(dep.tokenId);
+  if (node) return node.service.lifecycle === 'transient';
+  const multi = graph.multiNodes?.get(dep.tokenId);
+  if (!multi || multi.length === 0) return false;
+  return multi.every((item) => item.service.lifecycle === 'transient');
+}
+
+function factoryAllowList(
+  service: DependencyNode['service'],
+  graph: DependencyGraph,
+  getImport: GetImport,
+): { entries: Array<[string, boolean]>; skipWarm: Map<string, boolean> } {
+  const flags = new Map<string, boolean>();
+  const skipWarm = new Map<string, boolean>();
+  for (const dep of service.factoryDependencies ?? []) {
+    const key = dependencyKeyExpression(dep, graph, getImport);
+    const previous = flags.get(key);
+    const allFlag = previous || dep.all;
+    flags.set(key, allFlag);
+    const transientDep = isTransientDependency(dep, graph);
+    const already = skipWarm.get(key);
+    skipWarm.set(key, already === undefined ? transientDep : already && transientDep);
+  }
+  return { entries: [...flags.entries()], skipWarm };
+}
+
+function emitInvocation(warmup: string, release: string, holdInitialized: boolean): string {
+  const resultBlock = `const __neoResult = userFactory(__neoContext);
+    if (__neoResult && typeof __neoResult.then === 'function') {
+      return Promise.resolve(__neoResult).then(
+        (value) => { __neoExpire(); ${release} return value; },
+        (err) => { __neoExpire(); ${release} throw err; },
+      );
+    }
+    __neoExpire();
+    ${release}
+    return __neoResult;`;
+  const open = `${warmup}
+    ${resultBlock}`;
+  if (!holdInitialized) return open;
+  return `try {
+    ${open}
+    } catch (__neoThrown) { __neoExpire(); ${release} throw __neoThrown; }`;
+}
+
+function emitFactoryBody(
+  service: DependencyNode['service'],
+  graph: DependencyGraph,
+  getImport: GetImport,
+  holdInitialized: boolean,
+): string {
+  const userFactory = service.factorySource ?? 'undefined';
+  const label = JSON.stringify(getSimpleName(service.tokenId));
+  const opaqueFactory = service.opaque === true;
+  const listed = factoryAllowList(service, graph, getImport);
+  const allowed = listed.entries;
+  const entries = allowed.map(([key, all]) => `[${key}, ${all ? '"all"' : '"simple"'}]`).join(', ');
+  const warmupLines: string[] = [];
+  if (!opaqueFactory) {
+    for (const [key, all] of allowed) {
+      const depIsTransient = listed.skipWarm.get(key) === true;
+      if (depIsTransient) continue;
+      warmupLines.push(all ? `this.resolveAll(${key});` : `this.resolve(${key});`);
+    }
+  }
+  const warmup = warmupLines.join('\n    ');
+  const holdStart = holdInitialized
+    ? 'const __neoHold = this._initialized === false;\n    if (__neoHold) this._initialized = true;'
+    : '';
+  const release = holdInitialized ? 'if (__neoHold) this._initialized = false;' : '';
+  const expireStmt = 'const __neoExpire = () => { __neoExpired = true; };';
+  const failStmt = `const __neoFail = (code, detail) => {
+      const error = new Error(code + ': factory ' + ${label} + ' ' + detail);
+      error.code = code;
+      throw error;
+    };`;
+  if (opaqueFactory) {
+    return `const userFactory = ${userFactory};
+    let __neoExpired = false;
+    ${expireStmt}
+    ${failStmt}
+    const __neoContext = {
+      resolve: (token) => {
+        if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+        return this.resolve(token);
+      },
+      resolveAll: (token) => {
+        if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+        return this.resolveAll(token);
+      },
+    };
+    ${holdStart}
+    ${emitInvocation('', release, holdInitialized)}`;
+  }
+  return `const userFactory = ${userFactory};
+    const __neoAllowed = new Map([${entries}]);
+    let __neoExpired = false;
+    ${expireStmt}
+    ${failStmt}
+    const __neoContext = {
+      resolve: (token) => {
+        if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+        const mode = __neoAllowed.get(token);
+        if (mode !== 'simple' && mode !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
+        return this.resolve(token);
+      },
+      resolveAll: (token) => {
+        if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+        if (__neoAllowed.get(token) !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
+        return this.resolveAll(token);
+      },
+    };
+    ${holdStart}
+    ${emitInvocation(warmup, release, holdInitialized)}`;
+}
+
 /** Generates a factory method for each service in topological order. */
 export function generateFactories(
   graph: DependencyGraph,
@@ -96,6 +230,7 @@ export function generateFactories(
   getForeignImport: GetImport
 ): string[] {
   const factories: string[] = [];
+  const holdInitialized = graphHasAsyncFactory(graph);
 
   for (const tokenId of sorted) {
     const node = graph.nodes.get(tokenId);
@@ -114,11 +249,10 @@ export function generateFactories(
     }
 
     if (node.service.type === 'factory' && node.service.factorySource) {
-      const userFactory = node.service.factorySource;
+      const body = emitFactoryBody(node.service, graph, getImport, holdInitialized);
       factories.push(`
   private ${factoryId}(): any {
-    const userFactory = ${userFactory};
-    return userFactory(this);
+    ${body}
   }`);
     } else {
       if (!node.service.implementationSymbol) {
@@ -148,16 +282,17 @@ export function generateMultiFactories(
 ): string[] {
   const factories: string[] = [];
   if (!graph.multiNodes) return factories;
+  const holdInitialized = graphHasAsyncFactory(graph);
 
   for (const [tokenId, nodes] of graph.multiNodes) {
     nodes.forEach((node, index) => {
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
 
       if (node.service.type === 'factory' && node.service.factorySource) {
+        const body = emitFactoryBody(node.service, graph, getImport, holdInitialized);
         factories.push(`
   private ${factoryId}(): any {
-    const userFactory = ${node.service.factorySource};
-    return userFactory(this);
+    ${body}
   }`);
       } else if (node.service.type === 'value' && node.service.valueSource !== undefined) {
         factories.push(`

@@ -36,7 +36,8 @@ describe('Generator - Factory Support', () => {
     expect(code).toContain('private create_IConfig(): any');
     expect(code).toContain('const userFactory =');
     expect(code).toContain('apiUrl');
-    expect(code).toContain('return userFactory(this)');
+    expect(code).toContain('const __neoResult = userFactory(__neoContext)');
+    expect(code).not.toContain('userFactory(this)');
 
     // Should resolve with string token for interface
     expect(code).toContain('token === "IConfig"');

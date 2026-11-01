@@ -22,7 +22,7 @@ describe('Analyzer - async factories', () => {
         injections: [
           {
             token: useInterface<IDatabase>(),
-            provider: async () => ({ query: (sql: string) => [] }),
+            dependencies: [], provider: async () => ({ query: (sql: string) => [] }),
             useFactory: true
           }
         ]
@@ -49,7 +49,7 @@ describe('Analyzer - async factories', () => {
         injections: [
           {
             token: useInterface<ICache>(),
-            provider: async function() { return { get: (k: string) => null }; },
+            dependencies: [], provider: async function() { return { get: (k: string) => null }; },
             useFactory: true
           }
         ]
@@ -74,7 +74,7 @@ describe('Analyzer - async factories', () => {
         injections: [
           {
             token: useInterface<ILogger>(),
-            provider: () => ({ log: (msg: string) => console.log(msg) }),
+            dependencies: [], provider: () => ({ log: (msg: string) => console.log(msg) }),
             useFactory: true
           }
         ]
@@ -99,7 +99,7 @@ describe('Analyzer - async factories', () => {
         injections: [
           {
             token: useInterface<IDatabase>(),
-            provider: async () => ({ query: (sql: string) => [] }),
+            dependencies: [], provider: async () => ({ query: (sql: string) => [] }),
             useFactory: true,
             lifecycle: 'transient'
           }

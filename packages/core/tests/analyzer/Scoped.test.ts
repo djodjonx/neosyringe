@@ -411,7 +411,7 @@ describe('Scoped Injection', () => {
         const parent = defineBuilderConfig({
           injections: [{
             token: useInterface<IConfig>(),
-            provider: () => ({ env: 'production' })
+            dependencies: [], provider: () => ({ env: 'production' })
           }]
         });
 
@@ -420,7 +420,7 @@ describe('Scoped Injection', () => {
           injections: [
             {
               token: useInterface<IConfig>(),
-              provider: () => ({ env: 'test' }),
+              dependencies: [], provider: () => ({ env: 'test' }),
               scoped: true
             }
           ]

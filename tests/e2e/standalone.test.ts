@@ -113,7 +113,7 @@ describe('E2E - NeoSyringe Standalone', () => {
         injections: [
           {
             token: useInterface<IConfig>(),
-            provider: () => ({
+            dependencies: [], provider: () => ({
               apiUrl: process.env.API_URL || 'http://localhost',
               timeout: 5000
             })
@@ -165,8 +165,8 @@ describe('E2E - NeoSyringe Standalone', () => {
 
       export const container = defineBuilderConfig({
         injections: [
-          { token: apiUrl, provider: () => 'http://localhost:3000' },
-          { token: maxRetries, provider: () => 3 },
+          { token: apiUrl, dependencies: [], provider: () => 'http://localhost:3000' },
+          { token: maxRetries, dependencies: [], provider: () => 3 },
           { token: ApiService }
         ]
       });

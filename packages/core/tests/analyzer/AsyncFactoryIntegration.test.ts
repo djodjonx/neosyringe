@@ -24,7 +24,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
         injections: [
           {
             token: useInterface<IDatabase>(),
-            provider: async () => {
+            dependencies: [], provider: async () => {
               const pool = { query: (sql: string) => [] };
               return pool;
             },
@@ -68,7 +68,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
         injections: [
           {
             token: useInterface<IDatabase>(),
-            provider: async () => ({ query: (sql: string) => [] }),
+            dependencies: [], provider: async () => ({ query: (sql: string) => [] }),
             useFactory: true
           }
         ]
@@ -134,7 +134,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
         injections: [
           {
             token: useInterface<IDatabase>(),
-            provider: async () => ({ query: (sql: string) => [] }),
+            dependencies: [], provider: async () => ({ query: (sql: string) => [] }),
             useFactory: true,
             lifecycle: 'transient'
           }
@@ -160,7 +160,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
         injections: [
           {
             token: useInterface<IDatabase>(),
-            provider: async () => ({ query: (sql: string) => [] }),
+            dependencies: [], provider: async () => ({ query: (sql: string) => [] }),
             useFactory: true
           }
         ]

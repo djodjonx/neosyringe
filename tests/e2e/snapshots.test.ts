@@ -165,7 +165,7 @@ describe('Generated Code Snapshots', () => {
       export const c = defineBuilderConfig({
         name: 'PropertyApp',
         injections: [
-          { token: apiUrl, provider: () => 'http://localhost' },
+          { token: apiUrl, dependencies: [], provider: () => 'http://localhost' },
           { token: ApiService }
         ]
       });

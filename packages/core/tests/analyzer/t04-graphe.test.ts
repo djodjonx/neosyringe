@@ -167,7 +167,7 @@ const files = new Map<string, string>([
     }
     export const propertyContainer = defineBuilderConfig({
       injections: [
-        { token: useProperty<string>(PropertySvc, 'url'), provider: () => 'https://local' },
+        { token: useProperty<string>(PropertySvc, 'url'), dependencies: [], provider: () => 'https://local' },
         { token: PropertySvc },
       ],
     });
@@ -181,7 +181,7 @@ const files = new Map<string, string>([
     }
     const partialEdges = definePartialConfig({
       injections: [
-        { token: useProperty<string>(PartialSvc, 'url'), provider: () => 'https://partial' },
+        { token: useProperty<string>(PartialSvc, 'url'), dependencies: [], provider: () => 'https://partial' },
         { token: useInterface<PartialPort>(), provider: PartialPortImpl, multi: true },
       ],
     });

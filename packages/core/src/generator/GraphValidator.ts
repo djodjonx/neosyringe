@@ -8,6 +8,8 @@ import { getSimpleName } from '../analyzer/utils/TokenUtils';
 export interface GraphValidationError {
   /** Type of validation error */
   type: 'missing' | 'duplicate' | 'cycle';
+  /** Stable code for missing providers and cycles. */
+  code?: 'NEO_MISSING_PROVIDER' | 'NEO_CYCLE';
   /** Human-readable error message */
   message: string;
   /** The AST node where the error occurred (for positioning in IDE) */
@@ -78,6 +80,7 @@ export class GraphValidator {
         if (!isProvidedLocally && !isProvidedByParent && !isOptional) {
           errors.push({
             type: 'missing',
+            code: 'NEO_MISSING_PROVIDER',
             message: `Missing injection: '${getSimpleName(depId)}' required by '${getSimpleName(nodeId)}' is not registered.`,
             node: node.service.registrationNode,
             sourceFile: node.service.registrationNode.getSourceFile(),
@@ -99,6 +102,7 @@ export class GraphValidator {
             if (!isProvidedLocally && !isProvidedByParent && !isOptional) {
               errors.push({
                 type: 'missing',
+                code: 'NEO_MISSING_PROVIDER',
                 message: `Missing injection: '${getSimpleName(depId)}' required by multi-registration '${getSimpleName(tokenId)}' is not registered.`,
                 node: node.service.registrationNode,
                 sourceFile: node.service.registrationNode.getSourceFile(),
@@ -161,10 +165,12 @@ export class GraphValidator {
         if (!visited.has(depId)) {
           this.detectCycleCollect(depId, graph, visited, stack, parentTokens, errors);
         } else if (stack.has(depId)) {
-          const cycle = [...stack, depId];
+          const stackArr = [...stack];
+          const cycle = [...stackArr.slice(stackArr.indexOf(depId)), depId];
           const readableCycle = cycle.map(id => getSimpleName(id));
           errors.push({
             type: 'cycle',
+            code: 'NEO_CYCLE',
             message: `Circular dependency detected: ${readableCycle.join(' -> ')}`,
             node: node.service.registrationNode,
             sourceFile: node.service.registrationNode.getSourceFile(),

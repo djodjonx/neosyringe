@@ -65,8 +65,8 @@ describe('Analyzer - PropertyToken Support', () => {
 
       export const config = defineBuilderConfig({
         injections: [
-          { token: apiUrl, provider: () => 'http://localhost' },
-          { token: maxRetries, provider: () => 5 },
+          { token: apiUrl, dependencies: [], provider: () => 'http://localhost' },
+          { token: maxRetries, dependencies: [], provider: () => 5 },
           { token: ApiService }
         ]
       });
@@ -103,7 +103,7 @@ it('should auto-wire class with PropertyToken dependencies', () => {
 
       export const config = defineBuilderConfig({
         injections: [
-          { token: apiUrl, provider: () => 'http://localhost' },
+          { token: apiUrl, dependencies: [], provider: () => 'http://localhost' },
           { token: ApiService }
         ]
       });
@@ -140,8 +140,8 @@ it('should auto-wire class with PropertyToken dependencies', () => {
 
       export const config = defineBuilderConfig({
         injections: [
-          { token: apiUrl, provider: () => 'http://api.example.com' },
-          { token: authUrl, provider: () => 'http://auth.example.com' },
+          { token: apiUrl, dependencies: [], provider: () => 'http://api.example.com' },
+          { token: authUrl, dependencies: [], provider: () => 'http://auth.example.com' },
           { token: ApiService },
           { token: AuthService }
         ]
@@ -190,7 +190,7 @@ it('should auto-wire class with PropertyToken dependencies', () => {
 
       export const config = defineBuilderConfig({
         injections: [
-          { token: apiUrl, provider: () => 'http://localhost' },
+          { token: apiUrl, dependencies: [], provider: () => 'http://localhost' },
           { token: useInterface<ILogger>(), provider: ConsoleLogger },
           { token: ApiService }
         ]

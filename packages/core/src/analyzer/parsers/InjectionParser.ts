@@ -1,7 +1,9 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { TokenId, AnalysisError } from '../types';
+import type { TokenId, AnalysisError, FactoryDependency, ValidationMode } from '../types';
 import { TokenResolverService } from '../shared/TokenResolverService';
+import { containerKeyFor } from '../shared/registrationGraph';
+import { resolveNeoMarker } from '../shared/markerProvenance';
 
 export type ParsedRegistrationType = 'explicit' | 'autowire' | 'factory' | 'value';
 
@@ -28,6 +30,16 @@ export interface ParsedInjection {
   isAsyncDisposable: boolean;
   implementationLocalName?: string;
   tokenLocalName?: string;
+  factoryDependencies?: FactoryDependency[];
+  opaque?: boolean;
+  dependenciesWarning?: AnalysisError;
+}
+
+interface FactoryContract {
+  readonly __factory: true;
+  factoryDependencies: FactoryDependency[];
+  opaque?: boolean;
+  dependenciesWarning?: AnalysisError;
 }
 
 /**
@@ -38,7 +50,8 @@ export interface ParsedInjection {
 export class InjectionParser {
   constructor(
     private readonly checker: ts.TypeChecker,
-    private readonly tokenResolverService: TokenResolverService
+    private readonly tokenResolverService: TokenResolverService,
+    private readonly validation: ValidationMode = 'strict',
   ) {}
 
   parse(
@@ -172,10 +185,22 @@ export class InjectionParser {
     if (isAsync && lifecycle === 'transient') {
       return {
         type: 'type-mismatch',
+        code: 'NEO_ASYNC_TRANSIENT',
         message: `Async factory for '${tokenText}' cannot use lifecycle: 'transient'. Async factories are pre-initialized once in initialize() and must be singletons. Remove lifecycle: 'transient' or make the factory synchronous.`,
         node: obj,
         sourceFile,
       };
+    }
+
+    let factoryDependencies: FactoryDependency[] | undefined;
+    let opaque: boolean | undefined;
+    let dependenciesWarning: AnalysisError | undefined;
+    if (useFactory) {
+      const contract = this.readFactoryContract(obj, providerNode, tokenText, sourceFile);
+      if (!('__factory' in contract)) return contract;
+      factoryDependencies = contract.factoryDependencies;
+      opaque = contract.opaque;
+      dependenciesWarning = contract.dependenciesWarning;
     }
 
     // 6. Determine registration type
@@ -243,6 +268,9 @@ export class InjectionParser {
       isAsyncDisposable,
       implementationLocalName,
       tokenLocalName,
+      factoryDependencies,
+      opaque,
+      dependenciesWarning,
     };
   }
 
@@ -353,9 +381,219 @@ export class InjectionParser {
   }
 
   private isAsyncFunction(node: ts.Expression): boolean {
-    if (!TSContext.ts.isArrowFunction(node) && !TSContext.ts.isFunctionExpression(node)) return false;
-    const fn = node as ts.ArrowFunction | ts.FunctionExpression;
-    return fn.modifiers?.some(m => m.kind === TSContext.ts.SyntaxKind.AsyncKeyword) ?? false;
+    const fn = node;
+    if (
+      (TSContext.ts.isArrowFunction(fn) || TSContext.ts.isFunctionExpression(fn)) &&
+      fn.modifiers?.some(m => m.kind === TSContext.ts.SyntaxKind.AsyncKeyword)
+    ) return true;
+    return this.returnsPromiseLike(fn);
+  }
+
+  private returnsPromiseLike(fn: ts.Expression): boolean {
+    const signatures = this.checker.getTypeAtLocation(fn).getCallSignatures();
+    if (signatures.length === 0) return false;
+    return this.isPromiseLikeType(this.checker.getReturnTypeOfSignature(signatures[0]));
+  }
+
+  private isPromiseLikeType(type: ts.Type): boolean {
+    const names = [type.getSymbol()?.getName(), type.aliasSymbol?.getName()];
+    return names.includes('Promise') || names.includes('PromiseLike');
+  }
+
+  private readFactoryContract(
+    obj: ts.ObjectLiteralExpression,
+    providerNode: ts.Expression | undefined,
+    tokenText: string,
+    sourceFile: ts.SourceFile,
+  ): AnalysisError | FactoryContract {
+    let dependenciesNode: ts.Expression | undefined;
+    for (const prop of obj.properties) {
+      if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
+      if (prop.name.text === 'dependencies') dependenciesNode = prop.initializer;
+    }
+
+    const dependenciesMissing = !dependenciesNode;
+    if (this.validation === 'strict' && !dependenciesNode) {
+      return {
+        type: 'unsupported',
+        code: 'NEO_FACTORY_DEPENDENCIES_REQUIRED',
+        message: `NEO_FACTORY_DEPENDENCIES_REQUIRED: factory '${tokenText}' requires a dependencies list.`,
+        node: obj,
+        sourceFile,
+      };
+    }
+    if (dependenciesMissing) {
+      return {
+        __factory: true,
+        factoryDependencies: [],
+        opaque: true,
+        dependenciesWarning: {
+          type: 'unsupported',
+          code: 'NEO_FACTORY_DEPENDENCIES_REQUIRED',
+          severity: 'warning',
+          message: `NEO_FACTORY_DEPENDENCIES_REQUIRED: factory '${tokenText}' has no dependencies list and is opaque.`,
+          node: obj,
+          sourceFile,
+        },
+      };
+    }
+    if (!dependenciesNode || !TSContext.ts.isArrayLiteralExpression(dependenciesNode)) {
+      return {
+        type: 'unsupported',
+        code: 'NEO_CONFIG_UNSUPPORTED',
+        message: `NEO_CONFIG_UNSUPPORTED: factory '${tokenText}' dependencies must be an array.`,
+        node: obj,
+        sourceFile,
+      };
+    }
+
+    const parsed = this.parseFactoryDependencies(dependenciesNode, obj, tokenText, sourceFile);
+    if (!('__deps' in parsed)) return parsed;
+    if (this.validation === 'strict' && providerNode) {
+      const escape = this.findCapturedContainerResolve(providerNode, tokenText, obj, sourceFile);
+      if (escape) return escape;
+    }
+    return { __factory: true, factoryDependencies: parsed.deps };
+  }
+
+  private parseFactoryDependencies(
+    array: ts.ArrayLiteralExpression,
+    obj: ts.ObjectLiteralExpression,
+    tokenText: string,
+    sourceFile: ts.SourceFile,
+  ): AnalysisError | { __deps: true; deps: FactoryDependency[] } {
+    const containerId = this.enclosingContainerId(obj);
+    const deps: FactoryDependency[] = [];
+    for (const element of array.elements) {
+      if (TSContext.ts.isSpreadElement(element)) {
+        return this.unsupportedDependencies(tokenText, obj, sourceFile);
+      }
+      if (TSContext.ts.isObjectLiteralExpression(element)) {
+        const tokenExpr = this.allTokenExpression(element);
+        if (!tokenExpr) return this.unsupportedDependencies(tokenText, obj, sourceFile);
+        const tokenId = this.tokenResolverService.resolveTokenId(tokenExpr);
+        if (!tokenId) return this.unsupportedDependencies(tokenText, obj, sourceFile);
+        deps.push({ tokenId, all: true, source: tokenExpr.getText(sourceFile), containerId });
+        continue;
+      }
+      const tokenId = this.tokenResolverService.resolveTokenId(element);
+      if (!tokenId) return this.unsupportedDependencies(tokenText, obj, sourceFile);
+      deps.push({ tokenId, all: false, source: element.getText(sourceFile), containerId });
+    }
+    return { __deps: true, deps };
+  }
+
+  private allTokenExpression(element: ts.ObjectLiteralExpression): ts.Expression | undefined {
+    for (const prop of element.properties) {
+      if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
+      if (prop.name.text === 'all') return prop.initializer;
+    }
+    return undefined;
+  }
+
+  private unsupportedDependencies(
+    tokenText: string,
+    obj: ts.ObjectLiteralExpression,
+    sourceFile: ts.SourceFile,
+  ): AnalysisError {
+    return {
+      type: 'unsupported',
+      code: 'NEO_CONFIG_UNSUPPORTED',
+      message: `NEO_CONFIG_UNSUPPORTED: factory '${tokenText}' has a dependencies entry that is not a token or { all: token }.`,
+      node: obj,
+      sourceFile,
+    };
+  }
+
+  private enclosingContainerId(node: ts.Node): string {
+    let current: ts.Node | undefined = node;
+    while (current) {
+      if (TSContext.ts.isCallExpression(current) && this.isConfigCallee(current)) {
+        return containerKeyFor(current);
+      }
+      current = current.parent;
+    }
+    return containerKeyFor(node);
+  }
+
+  private isConfigCallee(call: ts.CallExpression): boolean {
+    const marker = resolveNeoMarker(this.checker, call);
+    if (marker === 'defineBuilderConfig' || marker === 'definePartialConfig') return true;
+    const expr = call.expression;
+    if (TSContext.ts.isIdentifier(expr)) {
+      if (expr.text === 'defineBuilderConfig' || expr.text === 'definePartialConfig') return true;
+      const name = this.checker.getSymbolAtLocation(expr)?.getName();
+      return name === 'defineBuilderConfig' || name === 'definePartialConfig';
+    }
+    if (TSContext.ts.isPropertyAccessExpression(expr)) {
+      return expr.name.text === 'defineBuilderConfig' || expr.name.text === 'definePartialConfig';
+    }
+    return false;
+  }
+
+  private findCapturedContainerResolve(
+    providerNode: ts.Expression,
+    tokenText: string,
+    obj: ts.ObjectLiteralExpression,
+    sourceFile: ts.SourceFile,
+  ): AnalysisError | undefined {
+    if (!TSContext.ts.isArrowFunction(providerNode) && !TSContext.ts.isFunctionExpression(providerNode)) {
+      return undefined;
+    }
+    const paramSymbol = this.factoryParameterSymbol(providerNode);
+    let found = false;
+    const visit = (node: ts.Node): void => {
+      if (found) return;
+      if (TSContext.ts.isCallExpression(node) && TSContext.ts.isPropertyAccessExpression(node.expression)) {
+        const name = node.expression.name.text;
+        if ((name === 'resolve' || name === 'resolveAll') && this.isOtherContainerReceiver(node.expression.expression, paramSymbol)) {
+          found = true;
+          return;
+        }
+      }
+      TSContext.ts.forEachChild(node, visit);
+    };
+    visit(providerNode.body);
+    if (!found) return undefined;
+    return {
+      type: 'unsupported',
+      code: 'NEO_UNDECLARED_FACTORY_DEP',
+      message: `NEO_UNDECLARED_FACTORY_DEP: factory '${tokenText}' resolves a captured container instead of its context.`,
+      node: obj,
+      sourceFile,
+    };
+  }
+
+  private factoryParameterSymbol(provider: ts.ArrowFunction | ts.FunctionExpression): ts.Symbol | undefined {
+    const param = provider.parameters[0];
+    if (!param || !TSContext.ts.isIdentifier(param.name)) return undefined;
+    return this.checker.getSymbolAtLocation(param.name);
+  }
+
+  private isOtherContainerReceiver(receiver: ts.Expression, paramSymbol: ts.Symbol | undefined): boolean {
+    if (!TSContext.ts.isIdentifier(receiver)) return false;
+    const symbol = this.checker.getSymbolAtLocation(receiver);
+    if (paramSymbol && symbol === paramSymbol) return false;
+    return this.initializerIsConfigCall(receiver, 0);
+  }
+
+  private initializerIsConfigCall(expr: ts.Expression, depth: number): boolean {
+    if (depth > 20) return false;
+    let current = expr;
+    while (
+      TSContext.ts.isParenthesizedExpression(current) ||
+      TSContext.ts.isAsExpression(current) ||
+      TSContext.ts.isTypeAssertionExpression(current) ||
+      (TSContext.ts.isSatisfiesExpression && TSContext.ts.isSatisfiesExpression(current))
+    ) {
+      current = current.expression;
+    }
+    if (TSContext.ts.isCallExpression(current)) return this.isConfigCallee(current);
+    if (!TSContext.ts.isIdentifier(current)) return false;
+    const symbol = this.checker.getSymbolAtLocation(current);
+    const decl = symbol?.getDeclarations()?.[0];
+    if (!decl || !TSContext.ts.isVariableDeclaration(decl) || !decl.initializer) return false;
+    return this.initializerIsConfigCall(decl.initializer, depth + 1);
   }
 
   /**
