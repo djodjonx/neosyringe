@@ -2,11 +2,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
-import * as ts from 'typescript';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { readTokensManifest } from '../../core/src/analyzer/shared/tokensManifest';
 import { resolveProjectConfig } from '../../core/src/resolveProjectConfig';
 import { emitUnderRoot } from '../../core/tests/emitUnderRoot';
+import { createFastProgram, warmLibCache } from '../../core/tests/fastProgram';
 import { parseArgs } from '../src/report';
 import { cliEntryMatches } from '../src/index';
 import { emitTokensManifest } from '../src/tokensManifest';
@@ -32,6 +32,8 @@ function producer(): string {
       outDir: 'dist',
       declaration: true,
       skipLibCheck: true,
+      lib: ['ES5'],
+      types: [],
       paths: { '@djodjonx/neosyringe': [neosyringeEntry] },
     },
     include: ['src'],
@@ -47,6 +49,10 @@ function producer(): string {
 }
 
 describe('CLI tokens manifest', () => {
+  beforeAll(() => {
+    warmLibCache();
+  });
+
   afterEach(() => {
     for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
@@ -70,7 +76,7 @@ describe('CLI tokens manifest', () => {
     const root = producer();
     const out = path.join(root, 'dist/tokens-manifest.json');
     const resolved = resolveProjectConfig(root);
-    emitUnderRoot(ts.createProgram(resolved.fileNames, resolved.options), root);
+    emitUnderRoot(createFastProgram(resolved.fileNames, resolved.options), root);
     emitTokensManifest({
       tokensManifest: out,
       contractVersion: 'tokens-v1',

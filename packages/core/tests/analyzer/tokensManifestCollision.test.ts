@@ -11,6 +11,7 @@ import type { TokensManifest } from '../../src/analyzer/shared/tokensManifest';
 import { readTokensManifest } from '../../src/analyzer/shared/tokensManifest';
 import { emitTokensManifest } from '../../../cli/src/tokensManifest';
 import { TSContext } from '../../src/TSContext';
+import { createFastProgram, warmLibCache } from '../fastProgram';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const neosyringeEntry = path.join(repoRoot, 'packages/neosyringe/dist/index.d.mts');
@@ -45,18 +46,15 @@ function variableType(program: ts.Program, fileName: string, name: string): ts.T
 function programOf(files: Record<string, string>): { program: ts.Program; file: string } {
   const file = Object.keys(files)[0];
   if (!file) throw new Error('missing file');
-  const host = ts.createCompilerHost({ strict: true, target: ts.ScriptTarget.ES2022 });
+  const options = { strict: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext };
+  const host = ts.createCompilerHost(options);
   const original = host.getSourceFile.bind(host);
   host.getSourceFile = (fileName, languageVersion, onError, create) => {
     const text = files[fileName];
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
     return original(fileName, languageVersion, onError, create);
   };
-  const program = ts.createProgram(Object.keys(files), {
-    strict: true,
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-  }, host);
+  const program = createFastProgram(Object.keys(files), options, host);
   return { program, file };
 }
 
@@ -84,6 +82,7 @@ function caught(run: () => void): NeoTokenError | undefined {
 
 describe('published runtime key owners', () => {
   beforeAll(() => {
+    warmLibCache();
     template = keep(mkdtempSync(path.join(tmpdir(), 'neosyringe-collision-template-')));
     mkdirSync(path.join(template, 'src'), { recursive: true });
     writeFileSync(path.join(template, 'package.json'), JSON.stringify({
@@ -103,6 +102,8 @@ describe('published runtime key owners', () => {
         rootDir: 'src',
         outDir: 'dist',
         skipLibCheck: true,
+        lib: ['ES5'],
+        types: [],
         paths: { '@djodjonx/neosyringe': [neosyringeEntry] },
       },
       include: ['src'],

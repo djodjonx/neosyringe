@@ -2,11 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readTokensManifest } from '../../src/analyzer/shared/tokensManifest';
 import { declarationEmitPath, writeTokensManifest } from '../../src/generator/tokensManifest';
 import { resolveProjectConfig } from '../../src/resolveProjectConfig';
 import { emitUnderRoot } from '../emitUnderRoot';
+import { createFastProgram, warmLibCache } from '../fastProgram';
 import * as ts from 'typescript';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -30,6 +31,8 @@ function writeProducer(name: string): string {
       outDir: 'dist',
       declaration: true,
       skipLibCheck: true,
+      lib: ['ES5'],
+      types: [],
       paths: { '@djodjonx/neosyringe': [neosyringeEntry] },
     },
     include: ['src'],
@@ -46,6 +49,10 @@ function writeProducer(name: string): string {
 }
 
 describe('tokens manifest read and write', () => {
+  beforeAll(() => {
+    warmLibCache();
+  });
+
   afterAll(() => {
     for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
   });
@@ -53,7 +60,7 @@ describe('tokens manifest read and write', () => {
   it('read write round trip', () => {
     const root = writeProducer('round');
     const resolved = resolveProjectConfig(root);
-    const program = ts.createProgram(resolved.fileNames, resolved.options);
+    const program = createFastProgram(resolved.fileNames, resolved.options);
     emitUnderRoot(program, root);
     const manifest = writeTokensManifest({
       program,
@@ -111,7 +118,7 @@ describe('tokens manifest read and write', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'neosyringe-manifest-empty-'));
     scratch.push(root);
     writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: '@acme/unit' }));
-    const program = ts.createProgram([], { strict: true });
+    const program = createFastProgram([], { strict: true });
     expect(thrownMessage(() => writeTokensManifest({
       program,
       packageRoot: root,
@@ -123,7 +130,7 @@ describe('tokens manifest read and write', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'neosyringe-manifest-name-'));
     scratch.push(root);
     writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '0.0.0' }));
-    const program = ts.createProgram([], { strict: true });
+    const program = createFastProgram([], { strict: true });
     expect(thrownMessage(() => writeTokensManifest({
       program,
       packageRoot: root,
@@ -136,7 +143,7 @@ describe('tokens manifest read and write', () => {
     scratch.push(root);
     const fileName = path.join(root, 'token.ts');
     writeFileSync(fileName, 'export const token = 1;\n');
-    const program = ts.createProgram([fileName], { strict: true, target: ts.ScriptTarget.ES2022 });
+    const program = createFastProgram([fileName], { strict: true, target: ts.ScriptTarget.ES2022 });
     const source = program.getSourceFiles().find((file) => file.fileName.endsWith('token.ts'));
     expect(source).toBeDefined();
     expect(thrownMessage(() => declarationEmitPath(program, source!, root))).toBe(
@@ -151,7 +158,7 @@ describe('tokens manifest read and write', () => {
     mkdirSync(src, { recursive: true });
     const fileName = path.join(src, 'token.ts');
     writeFileSync(fileName, 'export const token = 1;\n');
-    const program = ts.createProgram([fileName], {
+    const program = createFastProgram([fileName], {
       strict: true,
       target: ts.ScriptTarget.ES2022,
       rootDir: src,
@@ -174,7 +181,7 @@ describe('tokens manifest read and write', () => {
       export const AToken = useInterface<Hidden>();
     `);
     const resolved = resolveProjectConfig(root);
-    const program = ts.createProgram(resolved.fileNames, resolved.options);
+    const program = createFastProgram(resolved.fileNames, resolved.options);
     emitUnderRoot(program, root);
     const manifest = writeTokensManifest({
       program,
@@ -189,7 +196,7 @@ describe('tokens manifest read and write', () => {
   it('refuses a manifest when the declaration file is missing', () => {
     const root = writeProducer('missing-dts');
     const resolved = resolveProjectConfig(root);
-    const program = ts.createProgram(resolved.fileNames, resolved.options);
+    const program = createFastProgram(resolved.fileNames, resolved.options);
     expect(thrownMessage(() => writeTokensManifest({
       program,
       packageRoot: root,
@@ -206,7 +213,7 @@ describe('tokens manifest read and write', () => {
       export { UserToken };
     `);
     const resolved = resolveProjectConfig(root);
-    const program = ts.createProgram(resolved.fileNames, resolved.options);
+    const program = createFastProgram(resolved.fileNames, resolved.options);
     emitUnderRoot(program, root);
     const manifest = writeTokensManifest({
       program,
@@ -226,7 +233,7 @@ describe('tokens manifest read and write', () => {
       export { UserToken as Token };
     `);
     const resolved = resolveProjectConfig(root);
-    const program = ts.createProgram(resolved.fileNames, resolved.options);
+    const program = createFastProgram(resolved.fileNames, resolved.options);
     emitUnderRoot(program, root);
     const manifest = writeTokensManifest({
       program,
@@ -244,7 +251,7 @@ describe('tokens manifest read and write', () => {
       export default useInterface<User>();
     `);
     const resolved = resolveProjectConfig(root);
-    const program = ts.createProgram(resolved.fileNames, resolved.options);
+    const program = createFastProgram(resolved.fileNames, resolved.options);
     expect(thrownMessage(() => writeTokensManifest({
       program,
       packageRoot: root,
@@ -260,7 +267,7 @@ describe('tokens manifest read and write', () => {
       export const bag = { token: useInterface<User>() };
     `);
     const resolved = resolveProjectConfig(root);
-    const program = ts.createProgram(resolved.fileNames, resolved.options);
+    const program = createFastProgram(resolved.fileNames, resolved.options);
     expect(thrownMessage(() => writeTokensManifest({
       program,
       packageRoot: root,

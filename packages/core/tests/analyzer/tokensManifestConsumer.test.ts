@@ -1,7 +1,7 @@
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
 import { NeoTokenError } from '../../src/analyzer/errors/NeoTokenError';
 import { HashUtils } from '../../src/analyzer/shared/HashUtils';
@@ -11,6 +11,7 @@ import {
   declaredTokenName,
   locatePackage,
 } from '../../src/analyzer/shared/tokensManifest';
+import { createFastProgram, warmLibCache } from '../fastProgram';
 
 const DESCRIPTOR = 'v1|named|pkg/@acme/unit/dist/user.d.ts|User|';
 const USER_DTS = 'export interface User { id: string }\nexport interface Other { id: string }\n';
@@ -19,6 +20,9 @@ const TOKEN_DTS = 'export declare const UserToken: unique symbol;\n';
 const scratch: string[] = [];
 let templatePkg = '';
 let runtimeKey = '';
+let sharedPkg = '';
+let sharedProgram: ts.Program | undefined;
+let sharedFile = '';
 
 function keep(dir: string): string {
   scratch.push(dir);
@@ -69,7 +73,16 @@ function programFrom(files: Record<string, string>): ts.Program {
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
     return original(fileName, languageVersion, onError, create);
   };
-  return ts.createProgram(names, options, host);
+  return createFastProgram(names, options, host);
+}
+
+function sharedConsumer(): { program: ts.Program; file: string; pkg: string } {
+  if (!sharedProgram) throw new Error('missing shared program');
+  return { program: sharedProgram, file: sharedFile, pkg: sharedPkg };
+}
+
+function restoreShared(): void {
+  writeUnit(sharedPkg, manifestText('contract-a', runtimeKey));
 }
 
 function variableType(program: ts.Program, fileName: string, name: string): ts.Type {
@@ -137,10 +150,28 @@ function expectBoundary(error: unknown, reason: string, packageName: string): vo
 
 describe('tokens manifest consumer', () => {
   beforeAll(() => {
+    warmLibCache();
     runtimeKey = `User_${HashUtils.hashDescriptor(DESCRIPTOR)}`;
     const root = keep(mkdtempSync(path.join(tmpdir(), 'neosyringe-consumer-template-')));
     templatePkg = path.join(root, 'node_modules/@acme/unit');
     writeUnit(templatePkg, manifestText('contract-a', runtimeKey));
+    const installed = installFlat('shared');
+    sharedPkg = installed.pkg;
+    const built = consumer(installed.root, [
+      { binding: 'User', from: path.join(sharedPkg, 'dist/user.d.ts') },
+      { binding: 'Other', from: path.join(sharedPkg, 'dist/user.d.ts') },
+      { binding: 'UserToken', from: path.join(sharedPkg, 'dist/token.d.ts') },
+    ], `
+      export const userProbe: User = null!;
+      export const otherProbe: Other = null!;
+      export const tokenProbe = UserToken;
+    `);
+    sharedProgram = built.program;
+    sharedFile = built.file;
+  });
+
+  beforeEach(() => {
+    restoreShared();
   });
 
   afterAll(() => {
@@ -148,67 +179,39 @@ describe('tokens manifest consumer', () => {
   });
 
   it('reuses the published runtime key', () => {
-    const { root, pkg } = installFlat('key');
-    const { program, file } = consumer(root, [
-      { binding: 'User', from: path.join(pkg, 'dist/user.d.ts') },
-      { binding: 'UserToken', from: path.join(pkg, 'dist/token.d.ts') },
-    ], `
-      export const userProbe: User = null!;
-      export const tokenProbe = UserToken;
-    `);
+    const { program, file } = sharedConsumer();
     const service = new TokenResolverService(program.getTypeChecker());
     expect(service.getTypeId(variableType(program, file, 'userProbe'))).toBe(runtimeKey);
     expect(service.resolveTokenId(identifier(program, file, 'UserToken'))).toBe(runtimeKey);
   });
 
   it('refuses a missing manifest', () => {
-    const { root, pkg } = installFlat('absent');
+    const { program, file, pkg } = sharedConsumer();
     rmSync(path.join(pkg, 'dist/tokens-manifest.json'));
-    const { program, file } = consumer(root, [
-      { binding: 'User', from: path.join(pkg, 'dist/user.d.ts') },
-    ], 'export const userProbe: User = null!;\n');
     const error = capture(() => {
       new TokenResolverService(program.getTypeChecker()).getTypeId(variableType(program, file, 'userProbe'));
     });
     expectBoundary(error, 'manifest-absent', '@acme/unit');
 
-    const unnamed = keep(mkdtempSync(path.join(tmpdir(), 'neosyringe-consumer-unnamed-')));
-    const unnamedPkg = path.join(unnamed, 'node_modules/@acme/unit');
-    cpSync(templatePkg, unnamedPkg, { recursive: true });
-    writeFileSync(path.join(unnamedPkg, 'package.json'), JSON.stringify({
+    writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({
       version: '1.0.0',
       neosyringe: { tokensManifest: './dist/tokens-manifest.json' },
     }));
-    rmSync(path.join(unnamedPkg, 'dist/tokens-manifest.json'));
-    const unnamedProgram = consumer(unnamed, [
-      { binding: 'User', from: path.join(unnamedPkg, 'dist/user.d.ts') },
-    ], 'export const userProbe: User = null!;\n');
     const unnamedError = capture(() => {
-      new TokenResolverService(unnamedProgram.program.getTypeChecker())
-        .getTypeId(variableType(unnamedProgram.program, unnamedProgram.file, 'userProbe'));
+      new TokenResolverService(program.getTypeChecker()).getTypeId(variableType(program, file, 'userProbe'));
     });
     expectBoundary(unnamedError, 'manifest-absent', 'unit');
 
-    const broken = keep(mkdtempSync(path.join(tmpdir(), 'neosyringe-consumer-broken-json-')));
-    const brokenPkg = path.join(broken, 'node_modules/@acme/unit');
-    cpSync(templatePkg, brokenPkg, { recursive: true });
-    writeFileSync(path.join(brokenPkg, 'package.json'), '{');
-    const brokenProgram = consumer(broken, [
-      { binding: 'User', from: path.join(brokenPkg, 'dist/user.d.ts') },
-    ], 'export const userProbe: User = null!;\n');
+    writeFileSync(path.join(pkg, 'package.json'), '{');
     const brokenError = capture(() => {
-      new TokenResolverService(brokenProgram.program.getTypeChecker())
-        .getTypeId(variableType(brokenProgram.program, brokenProgram.file, 'userProbe'));
+      new TokenResolverService(program.getTypeChecker()).getTypeId(variableType(program, file, 'userProbe'));
     });
     expectBoundary(brokenError, 'manifest-absent', 'User');
   });
 
   it('refuses an unknown schema version', () => {
-    const { root, pkg } = installFlat('schema');
+    const { program, file, pkg } = sharedConsumer();
     writeFileSync(path.join(pkg, 'dist/tokens-manifest.json'), manifestText('contract-a', runtimeKey, 2));
-    const { program, file } = consumer(root, [
-      { binding: 'User', from: path.join(pkg, 'dist/user.d.ts') },
-    ], 'export const userProbe: User = null!;\n');
     const error = capture(() => {
       new TokenResolverService(program.getTypeChecker()).getTypeId(variableType(program, file, 'userProbe'));
     });
@@ -216,11 +219,8 @@ describe('tokens manifest consumer', () => {
   });
 
   it('refuses a runtime key that contradicts the descriptor', () => {
-    const { root, pkg } = installFlat('runtime');
+    const { program, file, pkg } = sharedConsumer();
     writeFileSync(path.join(pkg, 'dist/tokens-manifest.json'), manifestText('contract-a', 'User_deadbeef'));
-    const { program, file } = consumer(root, [
-      { binding: 'User', from: path.join(pkg, 'dist/user.d.ts') },
-    ], 'export const userProbe: User = null!;\n');
     const error = capture(() => {
       new TokenResolverService(program.getTypeChecker()).getTypeId(variableType(program, file, 'userProbe'));
     });
@@ -229,10 +229,7 @@ describe('tokens manifest consumer', () => {
   });
 
   it('refuses a token that is not listed', () => {
-    const { root, pkg } = installFlat('unlisted');
-    const { program, file } = consumer(root, [
-      { binding: 'Other', from: path.join(pkg, 'dist/user.d.ts') },
-    ], 'export const otherProbe: Other = null!;\n');
+    const { program, file } = sharedConsumer();
     const error = capture(() => {
       new TokenResolverService(program.getTypeChecker()).getTypeId(variableType(program, file, 'otherProbe'));
     });
@@ -331,10 +328,7 @@ describe('tokens manifest consumer', () => {
   });
 
   it('keeps the first manifest for one resolver instance', () => {
-    const { root, pkg } = installFlat('cache');
-    const { program, file } = consumer(root, [
-      { binding: 'User', from: path.join(pkg, 'dist/user.d.ts') },
-    ], 'export const userProbe: User = null!;\n');
+    const { program, file, pkg } = sharedConsumer();
     const type = variableType(program, file, 'userProbe');
     const checker = program.getTypeChecker();
     const first = new TokenResolverService(checker);
@@ -351,11 +345,8 @@ describe('tokens manifest consumer', () => {
   });
 
   it('caches a manifest failure until the next resolver', () => {
-    const { root, pkg } = installFlat('negative-cache');
+    const { program, file, pkg } = sharedConsumer();
     writeFileSync(path.join(pkg, 'dist/tokens-manifest.json'), manifestText('contract-a', runtimeKey, 2));
-    const { program, file } = consumer(root, [
-      { binding: 'User', from: path.join(pkg, 'dist/user.d.ts') },
-    ], 'export const userProbe: User = null!;\n');
     const type = variableType(program, file, 'userProbe');
     const checker = program.getTypeChecker();
     const first = new TokenResolverService(checker);

@@ -2,10 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
-import * as ts from 'typescript';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { resolveProjectConfig } from '../src/resolveProjectConfig';
 import { emitUnderRoot } from './emitUnderRoot';
+import { createFastProgram, warmLibCache } from './fastProgram';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const neosyringeSrc = path.resolve(here, '../../neosyringe/src');
@@ -30,6 +30,8 @@ function writeProducer(): string {
       outDir: 'dist',
       declaration: true,
       skipLibCheck: true,
+      lib: ['ES5'],
+      types: [],
       paths: { '@djodjonx/neosyringe': [neosyringeEntry] },
     },
     include: ['src'],
@@ -46,6 +48,10 @@ function writeProducer(): string {
 }
 
 describe('producer emit stays inside the temp project', () => {
+  beforeAll(() => {
+    warmLibCache();
+  });
+
   afterAll(() => {
     for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
     for (const name of readdirSync(neosyringeSrc)) {
@@ -58,7 +64,7 @@ describe('producer emit stays inside the temp project', () => {
     const before = readdirSync(neosyringeSrc).sort();
     const root = writeProducer();
     const resolved = resolveProjectConfig(root);
-    const program = ts.createProgram(resolved.fileNames, resolved.options);
+    const program = createFastProgram(resolved.fileNames, resolved.options);
     emitUnderRoot(program, root);
     const after = readdirSync(neosyringeSrc).sort();
     expect(after, 'no file appeared').toEqual(before);

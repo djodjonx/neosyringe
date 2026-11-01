@@ -2,13 +2,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import { NeoTokenError } from '../../src/analyzer/errors/NeoTokenError';
 import { HashUtils } from '../../src/analyzer/shared/HashUtils';
 import { TokenResolverService } from '../../src/analyzer/shared/TokenResolverService';
 import { TOKEN_MANIFEST_REMEDY } from '../../src/analyzer/shared/tokensManifest';
+import { createFastProgram, warmLibCache } from '../fastProgram';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const neosyringeEntry = path.join(repoRoot, 'packages/neosyringe/src/index.ts');
@@ -38,6 +39,8 @@ function programAt(root: string, source: string): { program: ts.Program; file: s
       strict: true,
       skipLibCheck: true,
       noEmit: true,
+      lib: ['ES5'],
+      types: [],
       paths: { '@djodjonx/neosyringe': [neosyringeEntry] },
     },
     files: ['app.ts'],
@@ -45,7 +48,7 @@ function programAt(root: string, source: string): { program: ts.Program; file: s
   const configPath = path.join(root, 'tsconfig.json');
   const read = ts.readConfigFile(configPath, ts.sys.readFile);
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, root, undefined, configPath);
-  return { program: ts.createProgram(parsed.fileNames, parsed.options), file };
+  return { program: createFastProgram(parsed.fileNames, parsed.options), file };
 }
 
 function variableType(program: ts.Program, fileName: string, name: string): ts.Type {
@@ -74,6 +77,10 @@ function textOf(run: () => string): string {
 }
 
 describe('third-party package without a tokens manifest', () => {
+  beforeAll(() => {
+    warmLibCache();
+  });
+
   afterAll(() => {
     for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
   });
