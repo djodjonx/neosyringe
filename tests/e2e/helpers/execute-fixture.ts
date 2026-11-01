@@ -29,8 +29,12 @@ interface SyringeBuildPlugin {
   buildEnd(): void;
 }
 
+interface FixturePluginOptions {
+  validation?: 'strict' | 'compatible';
+}
+
 interface PluginModule {
-  neoSyringePlugin: { vite: () => SyringeBuildPlugin };
+  neoSyringePlugin: { vite: (options?: FixturePluginOptions) => SyringeBuildPlugin };
 }
 
 interface CoreModule {
@@ -98,8 +102,12 @@ function generatedSource(output: TransformOutput, source: string): { code: strin
   return { code: source, transformed };
 }
 
-function compileProgram(pluginModule: PluginModule, source: string): { code: string; transformed: boolean } {
-  const plugin = pluginModule.neoSyringePlugin.vite();
+function compileProgram(
+  pluginModule: PluginModule,
+  source: string,
+  options?: FixturePluginOptions,
+): { code: string; transformed: boolean } {
+  const plugin = pluginModule.neoSyringePlugin.vite(options);
   const output = plugin.transform(source, VIRTUAL_FILE_ID);
   plugin.buildEnd();
   return generatedSource(output, source);
@@ -142,7 +150,10 @@ function runCompiled(javascript: string): Promise<unknown> {
   }
 }
 
-export async function executeFixture(source: string): Promise<HarnessOutcome> {
+export async function executeFixture(
+  source: string,
+  options?: FixturePluginOptions,
+): Promise<HarnessOutcome> {
   for (const [distRel, srcRel] of DIST_PAIRS) {
     assertDistFresh(path.join(process.cwd(), distRel), path.join(process.cwd(), srcRel));
   }
@@ -151,7 +162,7 @@ export async function executeFixture(source: string): Promise<HarnessOutcome> {
   try {
     let generated: { code: string; transformed: boolean };
     try {
-      generated = compileProgram(pluginModule, source);
+      generated = compileProgram(pluginModule, source, options);
     } catch (error) {
       return { phase: 'build', diagnostic: errorText(error) };
     }

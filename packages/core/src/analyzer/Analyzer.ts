@@ -222,6 +222,7 @@ export class Analyzer {
     configCollector: IConfigCollector;
     tokenResolver: ITokenResolver;
     validator: IValidator;
+    missingDeps: MissingDependencyValidator;
     collectedConfigs: Map<string, ConfigGraph> | undefined;
     collectionError: Error | undefined;
   } | undefined;
@@ -230,15 +231,22 @@ export class Analyzer {
     if (!this._modularServices) {
       const errorFormatter: IErrorFormatter = new ErrorFormatter();
       const dependencyAnalyzer = new DependencyAnalyzer(this.checker, this.tokenResolverService);
+      const missingDeps = new MissingDependencyValidator(
+        errorFormatter,
+        dependencyAnalyzer,
+        this.checker,
+        this.validation,
+      );
       this._modularServices = {
         configCollector: new ConfigCollector(this.program, this.checker, this.tokenResolverService, this.validation),
         tokenResolver: new TokenResolver(),
         validator: new CompositeValidator([
           new DuplicateValidator(errorFormatter),
           new TypeValidator(this.checker, errorFormatter),
-          new MissingDependencyValidator(errorFormatter, dependencyAnalyzer),
+          missingDeps,
           new CycleValidator(dependencyAnalyzer),
         ]),
+        missingDeps,
         collectedConfigs: undefined,
         collectionError: undefined,
       };
@@ -414,7 +422,7 @@ export class Analyzer {
    * @see {@link extract} for the legacy graph-building path
    */
   public extractForFile(fileName: string): AnalysisResult {
-    const { tokenResolver, validator } = this.getModularServices();
+    const { tokenResolver, validator, missingDeps } = this.getModularServices();
     const allConfigs = this.getCollectedConfigs();
     const errors: AnalysisError[] = [];
 
@@ -455,6 +463,11 @@ export class Analyzer {
       }
 
       errors.push(...validator.validate(config, context));
+    }
+
+    const sourceFile = this.program.getSourceFile(fileName);
+    if (sourceFile && !sourceFile.isDeclarationFile) {
+      errors.push(...missingDeps.validateResolutionUsages(sourceFile, allConfigs));
     }
 
     return { configs: allConfigs, errors };

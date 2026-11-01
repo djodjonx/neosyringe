@@ -1,6 +1,8 @@
 import { createUnplugin } from 'unplugin';
 import * as ts from 'typescript';
+import { textCallsResolve, type ValidationMode } from '@djodjonx/neosyringe-core/analyzer';
 import { resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
+import { usageErrorsAtBuildEnd } from './buildEndUsages';
 import { callsCanReachNeoSyringe, hasNeoSyringeMarkers } from './markerUtils';
 import { createDevtoolsMiddleware } from './devtools';
 import { moduleExtension, programFileName, runCompilationSession, shouldTransformId, type SessionState } from './session';
@@ -25,6 +27,14 @@ export interface NeoSyringePluginOptions {
    * When omitted, the nearest tsconfig.json is used.
    */
   project?: string;
+  /**
+   * Drives the buildEnd usage check only.
+   * `strict` reports an unknown NeoSyringe receiver as an error.
+   * `compatible` reports that same case as a warning and does not fail the build.
+   * Defaults to `strict`.
+   * The transform-time Analyzer in session.ts stays strict.
+   */
+  validation?: ValidationMode;
 }
 
 /**
@@ -64,6 +74,8 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       if ((graph.sourceFileName ?? '').replace(/\\/g, '/') === key) state.devtoolsGraphs.delete(graphKey);
     }
   };
+  // session.ts createProgram keeps only the last transformed root. buildEnd needs every file.
+  const sourceTexts = new Map<string, string>();
 
   return {
     name: 'neosyringe-plugin',
@@ -87,6 +99,9 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       }
       if (extension !== '.ts' && extension !== '.tsx') return undefined;
       if (devtoolsActive()) forgetDevtoolsFile(id);
+      if (hasNeoSyringeMarkers(code) || textCallsResolve(code)) {
+        sourceTexts.set(programFileName(id), code);
+      }
       if (!hasNeoSyringeMarkers(code)) return;
 
       // Missing tsconfig is an error only when a call can reach a marker.
@@ -114,27 +129,29 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
     },
 
     /**
-     * Validate that all used tokens are registered in containers.
-     * This runs at the end of the build to ensure all files have been processed.
+     * Re-check resolve / resolveAll against each call's container once every file is known.
      */
     buildEnd() {
-      const errors: string[] = [];
-
-      for (const [tokenId, usage] of state.usedTokens) {
-        if (!state.registeredTokens.has(tokenId)) {
-          errors.push(
-            `[NeoSyringe] Unregistered token: useInterface<${usage.interfaceName}>() at ${usage.file}:${usage.line}:${usage.column}\n` +
-            `  Token "${tokenId}" is not registered in any container.\n` +
-            `  Add it to your defineBuilderConfig injections.`
-          );
-        }
-      }
-
-      if (errors.length > 0) {
+      let errors: string[] = [];
+      let warnings: string[] = [];
+      try {
+        const report = usageErrorsAtBuildEnd(sourceTexts, state, options?.validation ?? 'strict');
+        errors = report.errors;
+        warnings = report.warnings;
+      } finally {
         state.registeredTokens.clear();
         state.usedTokens.clear();
         state.generatedContainerVars.clear();
+        sourceTexts.clear();
+      }
 
+      const host = this as { warn?: (message: string) => void } | undefined;
+      for (const warning of warnings) {
+        if (typeof host?.warn === 'function') host.warn(warning);
+        else console.warn(warning);
+      }
+
+      if (errors.length > 0) {
         throw new Error(
           `\n${'='.repeat(60)}\n` +
           `NEO-SYRINGE: ${errors.length} unregistered token(s) found!\n` +
@@ -143,10 +160,6 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
           `\n\n${'='.repeat(60)}\n`
         );
       }
-
-      state.registeredTokens.clear();
-      state.usedTokens.clear();
-      state.generatedContainerVars.clear();
     },
 
     watchChange(id, change) {

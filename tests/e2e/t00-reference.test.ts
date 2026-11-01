@@ -194,8 +194,10 @@ describe('T00 reference harness', () => {
     expect(programA.phase === 'ok' ? programA.value : undefined).toBe(1);
     expect(programB.phase).toBe('build');
     const diagnostic = programB.phase === 'build' ? programB.diagnostic : '';
-    expect(diagnostic).toContain('useInterface<IFromA>');
-    expect(diagnostic).toContain('is not registered in any container');
+    expect(diagnostic).toContain('NEO_MISSING_PROVIDER');
+    expect(diagnostic).toContain('IFromA');
+    expect(diagnostic).toContain("is not in container '");
+    expect(diagnostic).toContain('t00-program.ts');
   });
 
   it('T00-digests', () => {

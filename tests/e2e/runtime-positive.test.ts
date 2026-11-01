@@ -103,7 +103,8 @@ export const c = defineBuilderConfig({
   injections: [{ token: ${childToken} }],
 });
 export function run() {
-  return c.resolve(MissingToken);
+  const get = () => c;
+  return get().resolve(MissingToken);
 }
 `;
 }
@@ -160,7 +161,8 @@ export const c = defineBuilderConfig({
 });
 
 export function run() {
-  return c.resolve(MissingToken);
+  const get = () => c;
+  return get().resolve(MissingToken);
 }
 `;
 
@@ -211,7 +213,8 @@ export const c = defineBuilderConfig({
 });
 
 export function run() {
-  return c.resolve(MissingToken);
+  const get = () => c;
+  return get().resolve(MissingToken);
 }
 `;
 
@@ -247,32 +250,32 @@ describe('T13 runtime proof', () => {
   });
 
   it('T13-A02 name Application reaches the runtime', async () => {
-    const outcome = await executeFixture(namedSource('Application', false));
+    const outcome = await executeFixture(namedSource('Application', false), { validation: 'compatible' });
     expect(runtimeErrorOf(outcome)).toContain('[Application]');
   });
 
   it('T13-A02 name ReportingApp reaches the runtime', async () => {
-    const outcome = await executeFixture(namedSource('ReportingApp', false));
+    const outcome = await executeFixture(namedSource('ReportingApp', false), { validation: 'compatible' });
     expect(runtimeErrorOf(outcome)).toContain('[ReportingApp]');
   });
 
   it('T13-A02 name AppContainer standalone reaches the runtime', async () => {
-    const outcome = await executeFixture(namedSource('AppContainer', false));
+    const outcome = await executeFixture(namedSource('AppContainer', false), { validation: 'compatible' });
     expect(runtimeErrorOf(outcome)).toContain('[AppContainer]');
   });
 
   it('T13-A02 name AppContainer parent reaches the runtime', async () => {
-    const outcome = await executeFixture(namedSource('AppContainer', true));
+    const outcome = await executeFixture(namedSource('AppContainer', true), { validation: 'compatible' });
     expect(runtimeErrorOf(outcome)).toContain('[AppContainer]');
   });
 
   it('T13-A02 name AppWithTsyringe reaches the runtime', async () => {
-    const outcome = await executeFixture(namedSource('AppWithTsyringe', false));
+    const outcome = await executeFixture(namedSource('AppWithTsyringe', false), { validation: 'compatible' });
     expect(runtimeErrorOf(outcome)).toContain('[AppWithTsyringe]');
   });
 
   it('T13-A02 formatToken keeps the class name and drops its source', async () => {
-    const outcome = await executeFixture(namedSource('SimpleApp', false));
+    const outcome = await executeFixture(namedSource('SimpleApp', false), { validation: 'compatible' });
     const error = runtimeErrorOf(outcome);
     expect(error).toContain('Service not found or token not registered: MissingToken');
     expect(error).not.toContain('SHOULD_NOT_APPEAR_IN_ERROR');
@@ -291,7 +294,7 @@ describe('T13 runtime proof', () => {
   });
 
   it('T13-A02 legacy error that is not NeoServiceNotFoundError is rethrown', async () => {
-    const outcome = await executeFixture(LEGACY_RETHROW);
+    const outcome = await executeFixture(LEGACY_RETHROW, { validation: 'compatible' });
     expect(runtimeErrorOf(outcome)).toContain('legacy-boom');
   });
 
@@ -307,7 +310,7 @@ describe('T13 runtime proof', () => {
   });
 
   it('T13-A02 legacy NeoServiceNotFoundError is swallowed and the child reports its own name', async () => {
-    const error = runtimeErrorOf(await executeFixture(LEGACY_SWALLOW));
+    const error = runtimeErrorOf(await executeFixture(LEGACY_SWALLOW, { validation: 'compatible' }));
     expect(error).toContain('[ChildApp]');
     expect(error).not.toContain('from-legacy-not-found');
   });
