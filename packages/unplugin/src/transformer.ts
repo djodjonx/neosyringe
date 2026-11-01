@@ -3,7 +3,7 @@ import type { PluginConfig, ProgramTransformerExtras } from 'ts-patch';
 import { resolveProjectConfig } from '@djodjonx/neosyringe-core/analyzer';
 import { resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
 import { hasNeoSyringeMarkers } from './markerUtils';
-import { blockingConfigMessage, runCompilationSession, type SessionState } from './session';
+import { blockingConfigMessage, rewriteEmittedOutput, runCompilationSession, type SessionFileMap, type SessionState } from './session';
 
 /**
  * ts-patch–compatible TypeScript **Program** transformer for NeoSyringe.
@@ -79,6 +79,7 @@ export default function neoSyringeTransformer(
   }
 
   const transformedSources = new Map<string, string>();
+  const sessionMaps = new Map<string, SessionFileMap>();
   const state: SessionState = {
     registeredTokens: new Set(),
     usedTokens: new Map(),
@@ -102,6 +103,9 @@ export default function neoSyringeTransformer(
       hostProgram: analysisProgram,
       hostSource: sourceFile,
     });
+    if (output.map) {
+      sessionMaps.set(sourceFile.fileName, { map: output.map, originalText: sourceFile.text });
+    }
     if (output.code !== sourceFile.text) transformedSources.set(sourceFile.fileName, output.code);
   }
 
@@ -142,5 +146,38 @@ export default function neoSyringeTransformer(
   // Create a new program with the transformed sources; the type checker will
   // bind symbols against the transformed text.
   const rootFileNames = program.getRootFileNames();
-  return tsInstance.createProgram(rootFileNames, compilerOptions, customHost);
+  const created = tsInstance.createProgram(rootFileNames, compilerOptions, customHost);
+  return withComposedEmit(created, sessionMaps, customHost);
+}
+
+function withComposedEmit(
+  program: ts.Program,
+  sessions: ReadonlyMap<string, SessionFileMap>,
+  host: ts.CompilerHost,
+): ts.Program {
+  const emit = program.emit.bind(program);
+  const composed: ts.Program['emit'] = (targetSourceFile, writeFile, cancellationToken, emitOnlyDtsFiles, customTransformers) => {
+    const sink: ts.WriteFileCallback = writeFile ?? ((fileName, text, writeByteOrderMark) => {
+      host.writeFile(fileName, text, writeByteOrderMark);
+    });
+    return emit(
+      targetSourceFile,
+      (fileName, text, writeByteOrderMark, onError, sourceFiles, data) => {
+        sink(
+          fileName,
+          rewriteEmittedOutput(fileName, text, sourceFiles, sessions),
+          writeByteOrderMark,
+          onError,
+          sourceFiles,
+          data,
+        );
+      },
+      cancellationToken,
+      emitOnlyDtsFiles,
+      customTransformers,
+    );
+  };
+  // Same program object: callers compare it with ===. Only emit is replaced.
+  Object.assign(program, { emit: composed });
+  return program;
 }

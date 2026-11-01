@@ -372,25 +372,27 @@ export class ConfigParser {
     parentContainerNames: Set<string>
   ): void {
     for (const element of arrayLiteral.elements) {
-      if (TSContext.ts.isIdentifier(element)) {
+      if (TSContext.ts.isIdentifier(element) || TSContext.ts.isPropertyAccessExpression(element)) {
         this.parsePartialConfig(element, graph, parentContainerNames);
       }
     }
   }
 
   /**
-   * Parses a partial config referenced by identifier.
+   * Parses a partial config referenced by identifier or by a namespace property (`P.part`).
+   * The property name is resolved with the checker, the same way a plain identifier is.
    *
-   * @param identifier - The partial config identifier
+   * @param element - The extends element
    * @param graph - The dependency graph to populate
    * @param parentContainerNames - Set of parent container names
    */
   private parsePartialConfig(
-    identifier: ts.Identifier,
+    element: ts.Identifier | ts.PropertyAccessExpression,
     graph: DependencyGraph,
     parentContainerNames: Set<string>
   ): void {
-    const symbol = this.checker.getSymbolAtLocation(identifier);
+    const located = TSContext.ts.isPropertyAccessExpression(element) ? element.name : element;
+    const symbol = this.checker.getSymbolAtLocation(located);
     if (!symbol) return;
 
     const resolvedSymbol = this.resolveSymbol(symbol);

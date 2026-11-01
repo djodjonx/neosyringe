@@ -1,4 +1,6 @@
+import { statSync } from 'node:fs';
 import * as path from 'node:path';
+import { TraceMap, decodedMappings, encodedMappings, originalPositionFor, type SourceMapSegment } from '@jridgewell/trace-mapping';
 import * as ts from 'typescript';
 import { Analyzer, formatUnsupportedMarker, resolveNeoMarker, resolveProjectConfig, sourceFileUsesMarker } from '@djodjonx/neosyringe-core/analyzer';
 import type { DependencyGraph, DependencyNode } from '@djodjonx/neosyringe-core/analyzer';
@@ -18,6 +20,25 @@ export interface SessionSourceMap {
   mappings: string;
 }
 
+/** mtime and size of the one tsconfig file passed to resolveProjectConfig. */
+export interface TsconfigStamp {
+  mtimeMs: number;
+  size: number;
+}
+
+export interface ResolvedSessionConfig {
+  root: string;
+  options: ts.CompilerOptions;
+  configPath: string;
+  stamp?: TsconfigStamp;
+}
+
+/** Session map for one transformed file, plus the user's original text. */
+export interface SessionFileMap {
+  map: SessionSourceMap;
+  originalText: string;
+}
+
 export interface SessionState {
   previousProgram?: ts.Program;
   cachedSources: Map<string, { stamp: string; source: ts.SourceFile }>;
@@ -25,7 +46,7 @@ export interface SessionState {
   usedTokens: Map<string, UsedTokenEntry>;
   generatedContainerVars: Set<string>;
   devtoolsGraphs: Map<string, SerializableGraph>;
-  resolved?: { root: string; options: ts.CompilerOptions };
+  resolved?: ResolvedSessionConfig;
   graphs?: DependencyGraph[];
   graphProgram?: ts.Program;
 }
@@ -269,14 +290,44 @@ export function blockingConfigMessage(
     .join('\n  ');
 }
 
-function resolveCached(input: SessionInput): { root: string; options: ts.CompilerOptions } {
-  if (input.state.resolved) return input.state.resolved;
+/** mtime and size of the tsconfig file. Only that file is watched, not its `extends` chain. */
+function tsconfigFileStamp(configPath: string): TsconfigStamp | undefined {
+  try {
+    const stat = statSync(configPath);
+    return { mtimeMs: stat.mtimeMs, size: stat.size };
+  } catch {
+    return undefined;
+  }
+}
+
+function tsconfigFileUnchanged(configPath: string, stamp: TsconfigStamp | undefined): boolean {
+  if (!stamp) return false;
+  const next = tsconfigFileStamp(configPath);
+  if (!next) return false;
+  return next.mtimeMs === stamp.mtimeMs && next.size === stamp.size;
+}
+
+function resolveCached(input: SessionInput): ResolvedSessionConfig {
+  const previous = input.state.resolved;
+  if (previous && tsconfigFileUnchanged(previous.configPath, previous.stamp)) return previous;
   const resolved = resolveProjectConfig(input.cwd, input.project);
   const messages = blockingConfigMessage(resolved.parseErrors, ts);
   if (messages !== undefined) {
     throw new Error(`${input.errorPrefix}\n  ${messages}`);
   }
-  const stored = { root: resolved.root, options: resolved.options };
+  if (previous) {
+    // registeredTokens and usedTokens stay. They belong to the build, not to this tsconfig.
+    input.state.previousProgram = undefined;
+    input.state.cachedSources = new Map();
+    input.state.graphs = undefined;
+    input.state.graphProgram = undefined;
+  }
+  const stored: ResolvedSessionConfig = {
+    root: resolved.root,
+    options: resolved.options,
+    configPath: resolved.configPath,
+    stamp: tsconfigFileStamp(resolved.configPath),
+  };
   input.state.resolved = stored;
   return stored;
 }
@@ -587,4 +638,156 @@ export function runCompilationSession(input: SessionInput): SessionOutput {
   }
   const resolved = resolveCached(input);
   return TSContext.runWithProjectRoot(resolved.root, () => compileWith(input, resolved));
+}
+
+interface EmittedSourceMap {
+  version: 3;
+  file?: string;
+  sourceRoot?: string;
+  sources?: (string | null)[];
+  sourcesContent?: (string | null)[];
+  names?: string[];
+  mappings?: string;
+}
+
+/**
+ * Composes an emitted `.js` or `.js.map` with the session map
+ * (generated JS → transformed TS → original TS).
+ * `.d.ts` and `.d.ts.map` are left untouched, so `declarationMap` still points
+ * at the transformed text. `.tsbuildinfo` is not rewritten either: an
+ * incremental host keeps the transformed text.
+ */
+export function rewriteEmittedOutput(
+  fileName: string,
+  text: string,
+  sourceFiles: readonly { fileName: string }[] | undefined,
+  sessions: ReadonlyMap<string, SessionFileMap>,
+): string {
+  if (fileName.endsWith('.d.ts') || fileName.endsWith('.d.ts.map')) return text;
+  if (fileName.endsWith('.js.map')) return composeMapText(text, sourceFiles, sessions);
+  if (fileName.endsWith('.js')) return composeInlineMap(text, sourceFiles, sessions);
+  return text;
+}
+
+function composeInlineMap(
+  text: string,
+  sourceFiles: readonly { fileName: string }[] | undefined,
+  sessions: ReadonlyMap<string, SessionFileMap>,
+): string {
+  const match = text.match(/((?:\/\/[#@]|\/\*#)[ \t]*sourceMappingURL=data:application\/json(?:;charset=utf-8)?;base64,)([A-Za-z0-9+/=]+)/);
+  if (!match || match.index === undefined) return text;
+  let json: string;
+  try {
+    json = Buffer.from(match[2], 'base64').toString('utf8');
+  } catch {
+    return text;
+  }
+  const composed = composeMapText(json, sourceFiles, sessions);
+  if (composed === json) return text;
+  const encoded = Buffer.from(composed, 'utf8').toString('base64');
+  return text.slice(0, match.index) + match[1] + encoded + text.slice(match.index + match[0].length);
+}
+
+function composeMapText(
+  text: string,
+  sourceFiles: readonly { fileName: string }[] | undefined,
+  sessions: ReadonlyMap<string, SessionFileMap>,
+): string {
+  let emitted: EmittedSourceMap;
+  try {
+    emitted = JSON.parse(text) as EmittedSourceMap;
+  } catch {
+    return text;
+  }
+  if (emitted.version !== 3 || typeof emitted.mappings !== 'string') return text;
+  const sources = emitted.sources ?? [];
+  const bound = bindSessions(sources, sourceFiles, sessions);
+  if (!bound.some((record) => record)) return text;
+
+  const tracers = new Map<SessionFileMap, TraceMap>();
+  const tracerFor = (record: SessionFileMap): TraceMap => {
+    const cached = tracers.get(record);
+    if (cached) return cached;
+    const created = new TraceMap(record.map);
+    tracers.set(record, created);
+    return created;
+  };
+
+  const nextContent = emitted.sourcesContent ? emitted.sourcesContent.slice() : undefined;
+  if (nextContent) {
+    for (let index = 0; index < nextContent.length; index += 1) {
+      const record = bound[index];
+      if (record && nextContent[index] != null) nextContent[index] = record.originalText;
+    }
+  }
+
+  const decoded = decodedMappings(new TraceMap({
+    version: 3,
+    file: emitted.file,
+    names: emitted.names ?? [],
+    sources,
+    sourcesContent: emitted.sourcesContent,
+    mappings: emitted.mappings,
+  }));
+  const mappings: SourceMapSegment[][] = decoded.map((row) => {
+    const next: SourceMapSegment[] = [];
+    for (const segment of row) {
+      const generatedColumn = segment[0];
+      const sourceIndex = segment[1];
+      const sourceLine = segment[2];
+      const sourceColumn = segment[3];
+      const nameIndex = segment[4];
+      if (sourceIndex === undefined || sourceLine === undefined || sourceColumn === undefined) {
+        next.push([generatedColumn]);
+        continue;
+      }
+      const record = bound[sourceIndex];
+      if (!record) {
+        next.push(nameIndex === undefined
+          ? [generatedColumn, sourceIndex, sourceLine, sourceColumn]
+          : [generatedColumn, sourceIndex, sourceLine, sourceColumn, nameIndex]);
+        continue;
+      }
+      // Copied columns outside the container are word-start granular.
+      // The session map records word starts, and trace-mapping does not fill the gap.
+      const pos = originalPositionFor(tracerFor(record), { line: sourceLine + 1, column: sourceColumn });
+      if (pos.line == null || pos.column == null) continue;
+      const composedLine = pos.line - 1;
+      const composedColumn = pos.column;
+      next.push(nameIndex === undefined
+        ? [generatedColumn, sourceIndex, composedLine, composedColumn]
+        : [generatedColumn, sourceIndex, composedLine, composedColumn, nameIndex]);
+    }
+    return next;
+  });
+
+  const encoded = encodedMappings(new TraceMap({
+    version: 3,
+    file: emitted.file,
+    names: emitted.names ?? [],
+    sources,
+    sourcesContent: nextContent,
+    mappings,
+  }));
+  const output: EmittedSourceMap = {
+    version: 3,
+    file: emitted.file,
+    sources,
+    names: emitted.names ?? [],
+    mappings: encoded,
+  };
+  if (emitted.sourceRoot !== undefined) output.sourceRoot = emitted.sourceRoot;
+  if (nextContent) output.sourcesContent = nextContent;
+  return JSON.stringify(output);
+}
+
+function bindSessions(
+  sources: readonly (string | null)[],
+  sourceFiles: readonly { fileName: string }[] | undefined,
+  sessions: ReadonlyMap<string, SessionFileMap>,
+): (SessionFileMap | undefined)[] {
+  if (sourceFiles && sourceFiles.length === sources.length) {
+    return sourceFiles.map((file) => sessions.get(file.fileName));
+  }
+  return sources.map((): SessionFileMap | undefined => undefined);
 }

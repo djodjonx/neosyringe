@@ -32,6 +32,7 @@
   "dependencies": {
     "@djodjonx/neosyringe-core": "workspace:*",
     "@djodjonx/neosyringe-ui": "workspace:*",
+    "@jridgewell/trace-mapping": "0.3.31",
     "unplugin": "^2.0.0"
   },
   "peerDependencies": {
@@ -44,7 +45,6 @@
     }
   },
   "devDependencies": {
-    "@jridgewell/trace-mapping": "0.3.31",
     "esbuild": "0.27.2",
     "rollup": "4.55.2",
     "ts-patch": "^3.3.0",
