@@ -620,8 +620,15 @@ function compileWith(input: SessionInput, resolved: { root: string; options: ts.
   }
 
   if (input.devtools) {
+    const fileKey = programFileName(input.id);
+    for (const [graphKey, stored] of input.state.devtoolsGraphs) {
+      if ((stored.sourceFileName ?? '').replace(/\\/g, '/') === fileKey) {
+        input.state.devtoolsGraphs.delete(graphKey);
+      }
+    }
     for (const graph of thisFileGraphs) {
-      input.state.devtoolsGraphs.set(graph.sourceFileName ?? input.id, serializeGraph(graph));
+      const graphKey = graph.containerKey ?? `${fileKey}:${graph.defineBuilderConfigStart}`;
+      input.state.devtoolsGraphs.set(graphKey, serializeGraph(graph));
     }
   }
 
