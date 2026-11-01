@@ -69,6 +69,59 @@ function isResolutionUsageError(error: AnalysisError): boolean {
   return error.code === 'NEO_MISSING_PROVIDER' && error.containerId !== undefined;
 }
 
+/**
+ * Parsed lib and declaration files for every buildEnd host in this process.
+ * Stamp is the file text, same rule as `state.cachedSources` in session.ts.
+ * User files are never stored here.
+ */
+const declarationSources = new Map<string, { stamp: string; source: ts.SourceFile }>();
+
+function defaultLibDirectory(options: ts.CompilerOptions): string {
+  const libFile = ts.getDefaultLibFilePath(options).replace(/\\/g, '/');
+  return libFile.slice(0, libFile.lastIndexOf('/'));
+}
+
+function reusableDeclaration(fileName: string, options: ts.CompilerOptions): boolean {
+  const normalized = fileName.replace(/\\/g, '/');
+  if (normalized.endsWith('.d.ts') || normalized.endsWith('.d.mts') || normalized.endsWith('.d.cts')) {
+    return true;
+  }
+  const libDir = defaultLibDirectory(options);
+  return libDir.length > 0 && (normalized === libDir || normalized.startsWith(`${libDir}/`));
+}
+
+function readDeclarationText(fileName: string): string | undefined {
+  try {
+    return ts.sys.readFile(fileName);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Lib and other declaration files only.
+ * A path that is in sourceTexts must not reach this function: those SourceFiles
+ * are parsed from the text the plugin recorded, never from this cache.
+ */
+function cachedDeclaration(
+  fileName: string,
+  languageVersion: ts.ScriptTarget | ts.CreateSourceFileOptions,
+  state: SessionState,
+): ts.SourceFile | undefined {
+  const sourceText = readDeclarationText(fileName);
+  if (!sourceText) return undefined;
+  const cached = declarationSources.get(fileName);
+  if (cached !== undefined && cached.stamp === sourceText) return cached.source;
+  const fromSession = state.cachedSources.get(fileName);
+  if (fromSession !== undefined && fromSession.stamp === sourceText) {
+    declarationSources.set(fileName, fromSession);
+    return fromSession.source;
+  }
+  const created = ts.createSourceFile(fileName, sourceText, languageVersion, true);
+  declarationSources.set(fileName, { stamp: sourceText, source: created });
+  return created;
+}
+
 function programFromSources(sourceTexts: Map<string, string>, state: SessionState): ts.Program | undefined {
   if (sourceTexts.size === 0) return undefined;
   const options = {
@@ -85,8 +138,12 @@ function programFromSources(sourceTexts: Map<string, string>, state: SessionStat
   const textFor = (fileName: string) => sourceTexts.get(fileName) ?? sourceTexts.get(fileName.replace(/\\/g, '/'));
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
     const text = textFor(fileName);
+    // Never reuse a cached SourceFile for a path in sourceTexts.
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
-    return originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+    if (!reusableDeclaration(fileName, options)) {
+      return originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+    }
+    return cachedDeclaration(fileName, languageVersion, state);
   };
   host.fileExists = (fileName) => textFor(fileName) !== undefined || originalFileExists(fileName);
   host.readFile = (fileName) => textFor(fileName) ?? originalReadFile(fileName);
