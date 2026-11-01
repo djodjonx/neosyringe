@@ -191,6 +191,11 @@ export class ParentContainerResolver {
     for (const node of graph.nodes.values()) {
       if (node.service.isAsync) return true;
     }
+    if (graph.multiNodes) {
+      for (const nodes of graph.multiNodes.values()) {
+        if (nodes.some((node) => node.service.isAsync)) return true;
+      }
+    }
     return false;
   }
 

@@ -1,5 +1,5 @@
-import type { DependencyGraph, TokenId } from '../analyzer/types';
-import { getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
+import type { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
+import { getFactoryName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
 
 /**
  * Returns the guard statement injected at the top of resolve() and resolveAll()
@@ -9,6 +9,25 @@ import { getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitte
 export function buildAsyncResolveGuard(hasAsync: boolean): string {
   if (!hasAsync) return '';
   return 'this._guardPublic();';
+}
+
+/** resolve() on a multi token is refused. Sync containers have no _neoFail helper. */
+export function generateMultiResolveGuard(
+  graph: DependencyGraph,
+  getImport: GetImport,
+  hasAsync: boolean,
+): string {
+  if (!graph.multiNodes || graph.multiNodes.size === 0) return '';
+  const checks: string[] = [];
+  for (const nodes of graph.multiNodes.values()) {
+    const tokenKey = resolveTokenKey(nodes[0].service, getImport);
+    if (hasAsync) {
+      checks.push(`if (token === ${tokenKey}) { throw this._neoFail('NEO_MULTI_REQUIRES_RESOLVE_ALL', 'use resolveAll'); }`);
+    } else {
+      checks.push(`if (token === ${tokenKey}) { const __neoMulti = new Error('NEO_MULTI_REQUIRES_RESOLVE_ALL: [' + this.name + '] use resolveAll') as Error & { code: string }; __neoMulti.code = 'NEO_MULTI_REQUIRES_RESOLVE_ALL'; throw __neoMulti; }`);
+    }
+  }
+  return checks.join('\n    ');
 }
 
 /** Generates resolve switch cases for each service in topological order. */
@@ -66,50 +85,81 @@ export function generateResolveCases(
   return resolveCases;
 }
 
+function contributionCall(
+  node: DependencyNode,
+  tokenId: TokenId,
+  index: number,
+  factoryBase: string,
+  hasAsync: boolean,
+): string {
+  const factoryId = `${factoryBase}_${index}`;
+  if (node.service.lifecycle === 'transient') {
+    return `this.${factoryId}()`;
+  }
+  const key = multiRegistrationKey(node, tokenId, index);
+  if (hasAsync && node.service.isAsync) {
+    return `this.instances.get(${key})`;
+  }
+  if (hasAsync) {
+    return `(() => { const k = ${key}; if (!this.instances.has(k)) { const inst = this.${factoryId}(); this.instances.set(k, inst); if (this._initRunning) this._initJournal.push(k); } return this.instances.get(k); })()`;
+  }
+  return `(() => { const k = ${key}; if (!this.instances.has(k)) { const inst = this.${factoryId}(); this.instances.set(k, inst); } return this.instances.get(k); })()`;
+}
+
+function freshList(expr: string): string {
+  return `{ const __neoAll = [${expr}]; return __neoAll.slice(); }`;
+}
+
+function legacyResolveAll(): string {
+  return `if (this.legacy) {
+      for (const __neoLegacy of this.legacy) {
+        if (typeof __neoLegacy?.resolveAll === 'function') {
+          const __neoListed = __neoLegacy.resolveAll(token);
+          if (Array.isArray(__neoListed)) return __neoListed.slice();
+        }
+      }
+    }
+    return [];`;
+}
+
 /** Generates the resolveAll() method with one branch per multi-token. */
 export function generateResolveAllMethod(
   graph: DependencyGraph,
   getImport: GetImport,
   hasAsync: boolean
 ): string {
+  const tail = legacyResolveAll();
   if (!graph.multiNodes || graph.multiNodes.size === 0) {
-    if (!hasAsync) return `public resolveAll<T>(token: any): T[] { return []; }`;
+    if (!hasAsync) {
+      return `public resolveAll<T>(token: any): T[] {
+    ${tail}
+  }`;
+    }
     return `public resolveAll<T>(token: any): T[] {
     this._guardPublic('resolveAll()');
     return this._resolveAllInternal<T>(token);
   }
 
-  private _resolveAllInternal<T>(token: any): T[] { return []; }`;
+  private _resolveAllInternal<T>(token: any): T[] {
+    ${tail}
+  }`;
   }
-
-  const resolveGuard = buildAsyncResolveGuard(hasAsync);
 
   const cases: string[] = [];
 
   for (const [tokenId, nodes] of graph.multiNodes) {
-    const firstNode = nodes[0];
-    const tokenKey = resolveTokenKey(firstNode.service, getImport);
+    const contributions = nodes;
+    const tokenKey = resolveTokenKey(contributions[0].service, getImport);
     const tokenCheck = `if (token === ${tokenKey})`;
-
     const factoryBase = getFactoryName(tokenId);
-
-    const callExprs = nodes.map((node, i) => {
-      const nodeIsTransient = node.service.lifecycle === 'transient';
-      if (nodeIsTransient) {
-        return `this.${factoryBase}_${i}()`;
-      }
-      const cacheKey = JSON.stringify(`${tokenId}:${i}`);
-      return `(() => { const k = ${cacheKey}; if (!this.instances.has(k)) { const inst = this.${factoryBase}_${i}(); this.instances.set(k, inst); return inst; } return this.instances.get(k); })()`;
-    });
-
-    cases.push(`${tokenCheck} return [${callExprs.join(', ')}] as T[];`);
+    const callExprs = contributions.map((node, index) => contributionCall(node, tokenId, index, factoryBase, hasAsync));
+    cases.push(`${tokenCheck} ${freshList(callExprs.join(', '))}`);
   }
 
   if (!hasAsync) {
     return `public resolveAll<T>(token: any): T[] {
-    ${resolveGuard}
     ${cases.join('\n    ')}
-    return [];
+    ${tail}
   }`;
   }
 
@@ -120,6 +170,6 @@ export function generateResolveAllMethod(
 
   private _resolveAllInternal<T>(token: any): T[] {
     ${cases.join('\n    ')}
-    return [];
+    ${tail}
   }`;
 }

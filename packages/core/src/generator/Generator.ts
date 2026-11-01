@@ -4,7 +4,7 @@ import { DependencyGraph, DependencyNode } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, type GetImport } from './FactoryEmitter';
-import { generateResolveCases, generateResolveAllMethod, buildAsyncResolveGuard } from './ResolveEmitter';
+import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard } from './ResolveEmitter';
 import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateDestroyMethod, generateCreateScopeMethod } from './LifecycleEmitter';
 import { TSContext } from '../TSContext';
 import { HashUtils } from '../analyzer/shared/HashUtils';
@@ -303,8 +303,9 @@ export class Generator {
   private _initJournal: any[] = [];`
       : '';
 
+    const multiGuard = generateMultiResolveGuard(this.graph, getImport, hasAsync);
     const resolveInterior = `
-    // 0. An overridden token always wins, even over a cached real instance.
+    ${multiGuard}${multiGuard ? '\n    ' : ''}// 0. An overridden token always wins, even over a cached real instance.
     if (this.overrides.has(token)) {
       if (!this.instances.has(token)) {
         this.instances.set(token, this.overrides.get(token)!());
