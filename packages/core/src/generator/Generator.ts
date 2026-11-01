@@ -246,15 +246,21 @@ export class Generator {
     const hasAsync = hasAsyncFactories(this.graph) || !!this.graph.parentHasAsyncInitialize;
     const resolveGuard = buildAsyncResolveGuard(hasAsync);
 
-    const factories = generateFactories(this.graph, sorted, getImport, getForeignImport);
-    const resolveCases = generateResolveCases(this.graph, sorted, getImport);
-    const multiFactories = generateMultiFactories(this.graph, getImport, getForeignImport);
+    const factories = generateFactories(this.graph, sorted, getImport, getForeignImport, hasAsync);
+    const resolveCases = generateResolveCases(
+      this.graph,
+      sorted,
+      getImport,
+      hasAsync,
+      `${this.containerClassName}.formatToken`,
+    );
+    const multiFactories = generateMultiFactories(this.graph, getImport, getForeignImport, hasAsync);
     const resolveAllMethod = generateResolveAllMethod(this.graph, getImport, hasAsync);
     const initializeMethod = hasAsync
-      ? generateInitializeMethod(this.graph, sorted)
+      ? generateInitializeMethod(this.graph, sorted, getImport, hasAsync)
       : generateSyncInitializeMethod();
     const createScopeMethod = generateCreateScopeMethod();
-    const destroyMethod = generateDestroyMethod(this.graph, sorted, getImport);
+    const destroyMethod = generateDestroyMethod(this.graph, sorted, getImport, hasAsync);
 
     // Generate import lines for:
     // - All symbols when useDirectSymbolNames=false (CLI/generated file mode)
@@ -288,7 +294,63 @@ export class Generator {
       }
     }
 
-    const initializedField = hasAsync ? `private _initialized = false;` : '';
+    const stateFields = hasAsync
+      ? `private _state: 'created' | 'initializing' | 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
+  private _initWork?: Promise<void>;
+  private _destroyWork?: Promise<void>;
+  private _failure: unknown;
+  private _initRunning = false;
+  private _initJournal: any[] = [];`
+      : '';
+
+    const resolveInterior = `
+    // 0. An overridden token always wins, even over a cached real instance.
+    if (this.overrides.has(token)) {
+      if (!this.instances.has(token)) {
+        this.instances.set(token, this.overrides.get(token)!());
+      }
+      const overridden = this.instances.get(token);
+      this.notifyResolve(token, overridden);
+      return overridden;
+    }
+
+    // 1. Try to resolve locally (or create if singleton)
+    const result = this.resolveLocal(token);
+    if (result !== undefined) {
+      this.notifyResolve(token, result);
+      return result;
+    }
+
+    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
+    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
+    // ends up here)
+    if (this.legacy) {
+        for (const legacyContainer of this.legacy) {
+            try {
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    this.notifyResolve(token, legacyResult);
+                    return legacyResult;
+                }
+            } catch (e: any) {
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
+            }
+        }
+    }
+
+    throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${this.containerClassName}.formatToken(token)}\`);`;
+
+    const resolveMethod = hasAsync
+      ? `public resolve<T>(token: any): T {
+    this._guardPublic();
+    return this._resolveInternal<T>(token);
+  }
+
+  private _resolveInternal<T>(token: any): T {${resolveInterior}
+  }`
+      : `public resolve<T>(token: any): T {
+    ${resolveGuard}${resolveInterior}
+  }`;
 
     return `
 ${importLines.join('\n')}
@@ -302,7 +364,7 @@ class ${this.containerClassName} {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
   private resolveListeners = new Set<(token: any, instance: any) => void>();
-  ${initializedField}
+  ${stateFields}
 
   // -- Factories --
   ${[...factories, ...multiFactories].join('\n  ')}
@@ -367,44 +429,7 @@ class ${this.containerClassName} {
     }
   }
 
-  public resolve<T>(token: any): T {
-    ${resolveGuard}
-    // 0. An overridden token always wins, even over a cached real instance.
-    if (this.overrides.has(token)) {
-      if (!this.instances.has(token)) {
-        this.instances.set(token, this.overrides.get(token)!());
-      }
-      const overridden = this.instances.get(token);
-      this.notifyResolve(token, overridden);
-      return overridden;
-    }
-
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    if (result !== undefined) {
-      this.notifyResolve(token, result);
-      return result;
-    }
-
-    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
-    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
-    // ends up here)
-    if (this.legacy) {
-        for (const legacyContainer of this.legacy) {
-            try {
-                if (legacyContainer.resolve) {
-                    const legacyResult = legacyContainer.resolve(token);
-                    this.notifyResolve(token, legacyResult);
-                    return legacyResult;
-                }
-            } catch (e: any) {
-                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
-            }
-        }
-    }
-
-    throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${this.containerClassName}.formatToken(token)}\`);
-  }
+  ${resolveMethod}
 
   /**
    * Formats a token for error messages: a class token becomes its declared

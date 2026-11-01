@@ -280,7 +280,8 @@ describe('Generator', () => {
       expect(code).toContain(`if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`);
       // The resolve() guard must also activate, or resolve() could run before
       // this container's own (cascade-only) initialize() completes.
-      expect(code).toContain('if (!this._initialized)');
+      expect(code).toContain('this._guardPublic()');
+      expect(code).toContain('NEO_NOT_INITIALIZED');
     });
 
     it('does not generate initialize() when neither this container nor its parent has async factories', () => {
@@ -293,6 +294,7 @@ describe('Generator', () => {
 
       expect(code).not.toContain('public async initialize(');
       expect(code).not.toContain('if (!this._initialized)');
+      expect(code).not.toContain('_state');
     });
   });
 

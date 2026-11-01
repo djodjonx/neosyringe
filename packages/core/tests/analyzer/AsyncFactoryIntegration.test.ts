@@ -49,7 +49,8 @@ describe('Async factories — Analyzer to Generator integration', () => {
     expect(code).toContain('public async initialize(): Promise<void>');
     expect(code).toContain('await this.create_');
     expect(code).toContain('IDatabase');
-    expect(code).toContain('if (!this._initialized)');
+    expect(code).toContain('this._guardPublic()');
+    expect(code).toContain('NEO_NOT_INITIALIZED');
 
     // UserService is NOT pre-created in initialize()
     const initSection = code.split('async initialize()')[1]?.split('public resolve')[0] ?? '';
@@ -96,7 +97,8 @@ describe('Async factories — Analyzer to Generator integration', () => {
     // needs initialize() at all is to cascade into the async parent.
     expect(code).toContain('public async initialize(): Promise<void>');
     expect(code).toContain(`if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`);
-    expect(code).toContain('if (!this._initialized)');
+    expect(code).toContain('this._guardPublic()');
+    expect(code).toContain('NEO_NOT_INITIALIZED');
   });
 
   it('should NOT generate initialize() for all-sync container', () => {
@@ -120,6 +122,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
 
     expect(code).not.toContain('async initialize()');
     expect(code).not.toContain('_initialized');
+    expect(code).not.toContain('_state');
   });
 
   it('should emit error for async factory with transient lifecycle', () => {
@@ -148,7 +151,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
     expect(graph.errors![0].message).toContain('Async');
   });
 
-  it('should reset _initialized in destroy() to allow re-initialization in tests', () => {
+  it('should not re-arm initialize from destroy', () => {
     const program = createProgram('container.ts', `
       import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
       function defineBuilderConfig(c: any) { return c; }
@@ -171,7 +174,8 @@ describe('Async factories — Analyzer to Generator integration', () => {
     const code = new Generator(graph, true).generate();
 
     expect(code).toContain('destroy()');
-    const destroySection = code.split('public destroy()')[1]?.split('}')[0] ?? '';
-    expect(destroySection).toContain('_initialized = false');
+    expect(code).not.toContain('_initialized');
+    const destroySection = code.split('public destroy()')[1]?.split('private _close')[0] ?? '';
+    expect(destroySection).toContain("this._state = 'destroyed'");
   });
 });

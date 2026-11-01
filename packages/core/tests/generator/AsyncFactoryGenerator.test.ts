@@ -52,10 +52,10 @@ describe('Generator - async factories', () => {
     expect(code).toContain('public async initialize(): Promise<void>');
     expect(code).toContain('await this.create_IDatabase_abc()');
     expect(code).toContain('this.instances.set("IDatabase_abc"');
-    expect(code).toContain('this._initialized = true');
+    expect(code).toContain("this._state = 'ready'");
   });
 
-  it('should add _initialized guard to resolve()', () => {
+  it('should guard public resolve until initialize is ready', () => {
     const graph: DependencyGraph = {
       containerId: 'Test',
       nodes: new Map([
@@ -66,9 +66,10 @@ describe('Generator - async factories', () => {
 
     const code = new Generator(graph).generate();
 
-    expect(code).toContain('private _initialized = false');
-    expect(code).toContain('if (!this._initialized)');
-    expect(code).toContain('initialize()');
+    expect(code).toContain("private _state: 'created'");
+    expect(code).toContain('this._guardPublic()');
+    expect(code).toContain('NEO_NOT_INITIALIZED');
+    expect(code).not.toContain('_initialized');
   });
 
   it('should NOT generate initialize() when all factories are sync', () => {
@@ -84,6 +85,7 @@ describe('Generator - async factories', () => {
 
     expect(code).not.toContain('async initialize()');
     expect(code).not.toContain('_initialized');
+    expect(code).not.toContain('_state');
   });
 
   it('should pre-initialize async singletons in topological order in initialize()', () => {
