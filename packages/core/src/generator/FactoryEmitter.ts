@@ -21,6 +21,17 @@ export function getFactoryName(tokenId: TokenId): string {
 }
 
 /**
+ * Cache key shared by resolveAll, initialize and destroy.
+ * Hand-built graphs omit registrationId and keep the token:index fallback.
+ * The index keeps two contributions that share one registrationId apart.
+ */
+export function multiRegistrationKey(node: DependencyNode, tokenId: TokenId, index: number): string {
+  const registrationId = node.service.registrationId;
+  if (registrationId) return JSON.stringify(`${registrationId}#${index}`);
+  return JSON.stringify(`${tokenId}:${index}`);
+}
+
+/**
  * Resolves constructor argument expressions for a list of dependency token IDs.
  *
  * @param getForeignImport - Like `getImport`, but always emits an explicit

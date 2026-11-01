@@ -165,7 +165,17 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] { return []; }
+  public resolveAll<T>(token: any): T[] {
+    if (this.legacy) {
+      for (const __neoLegacy of this.legacy) {
+        if (typeof __neoLegacy?.resolveAll === 'function') {
+          const __neoListed = __neoLegacy.resolveAll(token);
+          if (Array.isArray(__neoListed)) return __neoListed.slice();
+        }
+      }
+    }
+    return [];
+  }
 
   private resolveLocal(token: any): any {
     if (token === "ILogger_40a89407") { 
@@ -384,7 +394,17 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] { return []; }
+  public resolveAll<T>(token: any): T[] {
+    if (this.legacy) {
+      for (const __neoLegacy of this.legacy) {
+        if (typeof __neoLegacy?.resolveAll === 'function') {
+          const __neoListed = __neoLegacy.resolveAll(token);
+          if (Array.isArray(__neoListed)) return __neoListed.slice();
+        }
+      }
+    }
+    return [];
+  }
 
   private resolveLocal(token: any): any {
     if (token === "ILogger_40a89407") { 
@@ -563,7 +583,17 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] { return []; }
+  public resolveAll<T>(token: any): T[] {
+    if (this.legacy) {
+      for (const __neoLegacy of this.legacy) {
+        if (typeof __neoLegacy?.resolveAll === 'function') {
+          const __neoListed = __neoLegacy.resolveAll(token);
+          if (Array.isArray(__neoListed)) return __neoListed.slice();
+        }
+      }
+    }
+    return [];
+  }
 
   private resolveLocal(token: any): any {
     if (token === Import_0.NewService) { 
@@ -746,7 +776,17 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] { return []; }
+  public resolveAll<T>(token: any): T[] {
+    if (this.legacy) {
+      for (const __neoLegacy of this.legacy) {
+        if (typeof __neoLegacy?.resolveAll === 'function') {
+          const __neoListed = __neoLegacy.resolveAll(token);
+          if (Array.isArray(__neoListed)) return __neoListed.slice();
+        }
+      }
+    }
+    return [];
+  }
 
   private resolveLocal(token: any): any {
     if (token === Import_0.SingletonService) { 
@@ -926,7 +966,17 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] { return []; }
+  public resolveAll<T>(token: any): T[] {
+    if (this.legacy) {
+      for (const __neoLegacy of this.legacy) {
+        if (typeof __neoLegacy?.resolveAll === 'function') {
+          const __neoListed = __neoLegacy.resolveAll(token);
+          if (Array.isArray(__neoListed)) return __neoListed.slice();
+        }
+      }
+    }
+    return [];
+  }
 
   private resolveLocal(token: any): any {
     if (token === Import_0.AppService) { 
@@ -1144,7 +1194,17 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] { return []; }
+  public resolveAll<T>(token: any): T[] {
+    if (this.legacy) {
+      for (const __neoLegacy of this.legacy) {
+        if (typeof __neoLegacy?.resolveAll === 'function') {
+          const __neoListed = __neoLegacy.resolveAll(token);
+          if (Array.isArray(__neoListed)) return __neoListed.slice();
+        }
+      }
+    }
+    return [];
+  }
 
   private resolveLocal(token: any): any {
     if (token === "PropertyToken:ApiService.apiUrl_8db03951") { 
@@ -1335,7 +1395,17 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] { return []; }
+  public resolveAll<T>(token: any): T[] {
+    if (this.legacy) {
+      for (const __neoLegacy of this.legacy) {
+        if (typeof __neoLegacy?.resolveAll === 'function') {
+          const __neoListed = __neoLegacy.resolveAll(token);
+          if (Array.isArray(__neoListed)) return __neoListed.slice();
+        }
+      }
+    }
+    return [];
+  }
 
   private resolveLocal(token: any): any {
     if (token === Import_0.Logger) { 
@@ -1522,7 +1592,17 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] { return []; }
+  public resolveAll<T>(token: any): T[] {
+    if (this.legacy) {
+      for (const __neoLegacy of this.legacy) {
+        if (typeof __neoLegacy?.resolveAll === 'function') {
+          const __neoListed = __neoLegacy.resolveAll(token);
+          if (Array.isArray(__neoListed)) return __neoListed.slice();
+        }
+      }
+    }
+    return [];
+  }
 
   private resolveLocal(token: any): any {
     if (token === Import_0.SimpleService) { 
