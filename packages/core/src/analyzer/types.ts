@@ -406,6 +406,8 @@ export type DiagnosticCode =
   | 'NEO_CONFIG_UNSUPPORTED'
   | 'NEO_FACTORY_DEPENDENCIES_REQUIRED'
   | 'NEO_MISSING_PROVIDER'
+  | 'NEO_UNKNOWN_CONTAINER'
+  | 'NEO_MULTI_REQUIRES_RESOLVE_ALL'
   | 'NEO_CYCLE'
   | 'NEO_UNDECLARED_FACTORY_DEP'
   | 'NEO_FACTORY_CONTEXT_EXPIRED'
@@ -435,6 +437,9 @@ export interface AnalysisError {
 
   /** Additional context for the message. */
   context?: ErrorContext;
+
+  /** `containerKey` of the container the resolve call was checked against. */
+  containerId?: string;
 }
 
 // ============================================================================

@@ -4,6 +4,7 @@ import { TSContext } from '../../TSContext';
 import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError, ValidationMode } from '../types';
 import { HashUtils, TokenResolverService, DEFAULT_EXPORT_CONTAINER_NAME } from '../shared';
 import { containerKeyFor, stampRegistration } from '../shared/registrationGraph';
+import { buildContainerTokenView } from './resolutionUsages';
 import { extendsReferenceName } from '../shared/extendsReference';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 import { InjectionParser } from '../parsers/InjectionParser';
@@ -325,73 +326,31 @@ export class ConfigCollector implements IConfigCollector {
     for (const info of duplicates) stamp(info);
   }
 
-  /** Same token set as the missing-dependency check: local, extends, and parent. */
+  /** Local, extends, parent, and legacy tokens. `expects` stay in the stamp set only. */
   private restampDependencyEdges(configs: Map<string, ConfigGraph>): void {
-    const byName = new Map<string, ConfigGraph>();
-    for (const config of configs.values()) {
-      if (!byName.has(config.name)) byName.set(config.name, config);
-    }
     for (const config of configs.values()) {
       const known = new Set<TokenId>();
       const multi = new Set<TokenId>();
-      this.collectStampTokens(config, byName, known, multi);
+      this.collectStampTokens(config, configs, known, multi);
       this.writeDependencyEdges(config, known, multi);
     }
   }
 
   private collectStampTokens(
     config: ConfigGraph,
-    byName: Map<string, ConfigGraph>,
+    allConfigs: Map<string, ConfigGraph>,
     known: Set<TokenId>,
     multi: Set<TokenId>,
   ): void {
-    for (const tokenId of config.localInjections.keys()) known.add(tokenId);
-    if (config.multiInjections) {
-      for (const tokenId of config.multiInjections.keys()) {
-        known.add(tokenId);
-        multi.add(tokenId);
-      }
+    const view = buildContainerTokenView(config, allConfigs, this.checker);
+    for (const tokenId of view.single) known.add(tokenId);
+    for (const tokenId of view.multi) {
+      known.add(tokenId);
+      multi.add(tokenId);
     }
     if (config.expectedExternalTokens) {
       for (const tokenId of config.expectedExternalTokens) known.add(tokenId);
     }
-    if (config.legacyParentTokens) {
-      for (const tokenId of config.legacyParentTokens) known.add(tokenId);
-    }
-    if (config.type !== 'builder') return;
-    this.addParentTokens(config, byName, known, new Set());
-    for (const ref of config.extendsRefs) this.addPartialTokens(byName.get(ref), known, multi);
-  }
-
-  private addParentTokens(
-    config: ConfigGraph,
-    byName: Map<string, ConfigGraph>,
-    known: Set<TokenId>,
-    seen: Set<string>,
-  ): void {
-    const ref = config.useContainerRef;
-    if (!ref || seen.has(ref)) return;
-    const parent = byName.get(ref);
-    if (!parent) return;
-    seen.add(ref);
-    for (const tokenId of parent.localInjections.keys()) known.add(tokenId);
-    for (const partialName of parent.extendsRefs) {
-      const partial = byName.get(partialName);
-      if (!partial) continue;
-      for (const tokenId of partial.localInjections.keys()) known.add(tokenId);
-    }
-    this.addParentTokens(parent, byName, known, seen);
-  }
-
-  private addPartialTokens(
-    partial: ConfigGraph | undefined,
-    known: Set<TokenId>,
-    multi: Set<TokenId>,
-  ): void {
-    if (!partial) return;
-    for (const tokenId of partial.localInjections.keys()) known.add(tokenId);
-    if (!partial.multiInjections) return;
-    for (const tokenId of partial.multiInjections.keys()) multi.add(tokenId);
   }
 
   private writeDependencyEdges(config: ConfigGraph, known: Set<TokenId>, multi: Set<TokenId>): void {

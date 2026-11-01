@@ -1,6 +1,8 @@
-import type { AnalysisError, ConfigGraph, TokenId } from '../types';
+import type * as ts from 'typescript';
+import type { AnalysisError, ConfigGraph, TokenId, ValidationMode } from '../types';
 import type { IValidator, ValidationContext } from './Validator';
 import type { IErrorFormatter } from '../errors/ErrorFormatter';
+import { buildContainerTokenView, collectResolutionUsages, type ContainerTokenView } from '../collectors/resolutionUsages';
 import { DependencyAnalyzer } from './DependencyAnalyzer';
 import { findTokenAssignment } from '../utils/PropertyFinder';
 import { getSimpleName } from '../utils/TokenUtils';
@@ -15,8 +17,86 @@ export class MissingDependencyValidator implements IValidator {
 
   constructor(
     private errorFormatter: IErrorFormatter,
-    private dependencyAnalyzer: DependencyAnalyzer
+    private dependencyAnalyzer: DependencyAnalyzer,
+    private checker: ts.TypeChecker,
+    private validation: ValidationMode,
   ) {}
+
+  /**
+   * Checks each resolve / resolveAll in this file against that call's container.
+   * Constructor checks stay on {@link validate} and still union single and multi.
+   */
+  validateResolutionUsages(sourceFile: ts.SourceFile, allConfigs: Map<string, ConfigGraph>): AnalysisError[] {
+    const errors: AnalysisError[] = [];
+    const usages = collectResolutionUsages(sourceFile, this.checker);
+    const views = new Map<string, ContainerTokenView>();
+    for (const usage of usages) {
+      if (!usage.containerKey) {
+        errors.push(this.unknownContainer(usage.node, sourceFile));
+        continue;
+      }
+      const view = this.viewFor(allConfigs, usage.containerKey, views);
+      if (!view) {
+        errors.push(this.unknownContainer(usage.node, sourceFile));
+        continue;
+      }
+      if (!usage.tokenId) continue;
+      const allowed = usage.kind === 'resolveAll' ? view.multi : view.single;
+      const other = usage.kind === 'resolveAll' ? view.single : view.multi;
+      if (allowed.has(usage.tokenId)) continue;
+      if (usage.kind === 'resolve' && other.has(usage.tokenId)) {
+        errors.push({
+          type: 'unsupported',
+          code: 'NEO_MULTI_REQUIRES_RESOLVE_ALL',
+          severity: 'error',
+          message: `NEO_MULTI_REQUIRES_RESOLVE_ALL: '${getSimpleName(usage.tokenId)}' is multi; use resolveAll`,
+          node: usage.node,
+          sourceFile,
+          containerId: usage.containerKey,
+          context: { tokenText: usage.tokenId },
+        });
+        continue;
+      }
+      // Open mode: resolveAll of a single or absent token returns [] and is not a miss.
+      if (usage.kind === 'resolveAll') continue;
+      errors.push({
+        type: 'missing',
+        code: 'NEO_MISSING_PROVIDER',
+        severity: 'error',
+        message: `NEO_MISSING_PROVIDER: '${getSimpleName(usage.tokenId)}' is not in container '${usage.containerKey}'`,
+        node: usage.node,
+        sourceFile,
+        containerId: usage.containerKey,
+        context: { tokenText: usage.tokenId },
+      });
+    }
+    return errors;
+  }
+
+  private viewFor(
+    allConfigs: Map<string, ConfigGraph>,
+    key: string,
+    cache: Map<string, ContainerTokenView>,
+  ): ContainerTokenView | undefined {
+    const cached = cache.get(key);
+    if (cached) return cached;
+    const config = allConfigs.get(key);
+    if (!config) return undefined;
+    const view = buildContainerTokenView(config, allConfigs, this.checker);
+    cache.set(key, view);
+    return view;
+  }
+
+  private unknownContainer(node: ts.Node, sourceFile: ts.SourceFile): AnalysisError {
+    return {
+      type: 'unsupported',
+      code: 'NEO_UNKNOWN_CONTAINER',
+      severity: this.validation === 'compatible' ? 'warning' : 'error',
+      message: 'NEO_UNKNOWN_CONTAINER: resolve receiver is not a known container',
+      node,
+      sourceFile,
+    };
+  }
 
   validate(config: ConfigGraph, context: ValidationContext): AnalysisError[] {
     const errors: AnalysisError[] = [];

@@ -1,5 +1,5 @@
 import type * as ts from 'typescript';
-import { Analyzer, type AnalysisErrorType } from '@djodjonx/neosyringe-core/analyzer';
+import { Analyzer, textCallsResolve, type AnalysisErrorType } from '@djodjonx/neosyringe-core/analyzer';
 import { LSPLogger } from './logger';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 
@@ -29,7 +29,8 @@ function makeDiagnostic(
   node: ts.Node,
   sourceFile: ts.SourceFile,
   message: string,
-  type: string
+  type: string,
+  severity?: string,
 ): ts.Diagnostic {
   const start = node.getStart(sourceFile);
   return {
@@ -37,7 +38,7 @@ function makeDiagnostic(
     start,
     length: node.getEnd() - start,
     messageText: `[NeoSyringe] ${message}`,
-    category: ts.DiagnosticCategory.Error,
+    category: severity === 'warning' ? ts.DiagnosticCategory.Warning : ts.DiagnosticCategory.Error,
     code: getErrorCode(type),
   };
 }
@@ -84,7 +85,11 @@ function init(modules: { typescript: typeof import('typescript') }) {
       if (!sourceFile) return prior;
 
       const text = sourceFile.getText();
-      if (!text.includes('defineBuilderConfig') && !text.includes('definePartialConfig')) return prior;
+      if (
+        !text.includes('defineBuilderConfig')
+        && !text.includes('definePartialConfig')
+        && !textCallsResolve(text)
+      ) return prior;
 
       try {
         const analyzer = getAnalyzer(program);
@@ -94,7 +99,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
         for (const error of result.errors) {
           const nodeFile = error.node.getSourceFile();
           const targetFile = nodeFile?.fileName === fileName ? nodeFile : sourceFile;
-          prior.push(makeDiagnostic(ts, error.node, targetFile, error.message, error.type));
+          prior.push(makeDiagnostic(ts, error.node, targetFile, error.message, error.type, error.severity));
         }
       } catch (e: unknown) {
         logger.error(`NeoSyringe analysis failed: ${e instanceof Error ? e.message : String(e)}`);
