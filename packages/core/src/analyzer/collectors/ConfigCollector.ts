@@ -4,6 +4,7 @@ import { TSContext } from '../../TSContext';
 import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError, ValidationMode } from '../types';
 import { HashUtils, TokenResolverService, DEFAULT_EXPORT_CONTAINER_NAME } from '../shared';
 import { containerKeyFor, stampRegistration } from '../shared/registrationGraph';
+import { extendsReferenceName } from '../shared/extendsReference';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 import { InjectionParser } from '../parsers/InjectionParser';
 import { DependencyAnalyzer } from '../validators/DependencyAnalyzer';
@@ -460,9 +461,8 @@ export class ConfigCollector implements IConfigCollector {
 
     if (extendsProp && TSContext.ts.isArrayLiteralExpression(extendsProp.initializer)) {
       for (const element of extendsProp.initializer.elements) {
-        if (TSContext.ts.isIdentifier(element)) {
-          refs.push(element.text);
-        }
+        const name = extendsReferenceName(this.checker, element);
+        if (name) refs.push(name);
       }
     }
 

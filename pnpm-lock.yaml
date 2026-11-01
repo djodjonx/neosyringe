@@ -140,6 +140,9 @@ importers:
       '@djodjonx/neosyringe-ui':
         specifier: workspace:*
         version: link:../ui
+      '@jridgewell/trace-mapping':
+        specifier: 0.3.31
+        version: 0.3.31
       unplugin:
         specifier: ^2.0.0
         version: 2.3.11

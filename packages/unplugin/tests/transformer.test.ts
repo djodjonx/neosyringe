@@ -64,7 +64,10 @@ describe('neoSyringeTransformer', () => {
 
     // Default: Analyzer returns empty graph (no container found)
     vi.mocked(Analyzer).mockImplementation(function () {
-      return { extract: vi.fn().mockReturnValue({ nodes: new Map(), errors: [] }) };
+      return {
+        extract: vi.fn().mockReturnValue({ nodes: new Map(), errors: [] }),
+        extractAll: vi.fn().mockReturnValue([]),
+      };
     } as any);
 
     vi.mocked(GraphValidator).mockImplementation(function () {
@@ -107,52 +110,42 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(Analyzer).mockImplementation(function () {
       return {
-        extract: vi.fn().mockReturnValue({
+        extractAll: vi.fn().mockReturnValue([{
           nodes: new Map([['MyService_abc', {}]]),
           errors: [],
           defineBuilderConfigStart: code.indexOf('defineBuilderConfig'),
           defineBuilderConfigEnd: code.length - 1,
           variableStatementStart: 0,
-        }),
+        }]),
       };
     } as any);
 
-    vi.mocked(ts.createProgram).mockReturnValue(makeProgram());
-
     const sf = makeSourceFile(code);
     const originalProgram = makeProgram([sf]);
-
-    // The final createProgram call (to create the new program with transformed sources)
-    // should return a distinct program object
     const newProgram = makeProgram([]);
-    let createProgramCallCount = 0;
-    vi.mocked(ts.createProgram).mockImplementation(() => {
-      createProgramCallCount++;
-      return createProgramCallCount === 1 ? makeProgram() : newProgram;
-    });
+    vi.mocked(ts.createProgram).mockReturnValue(newProgram);
 
     const result = await callTransformer(originalProgram);
 
     expect(result).toBe(newProgram);
   });
 
-  it('reuses the cached file program when the same fileName appears more than once', async () => {
+  it('rebuilds once when the same file is listed twice', async () => {
     const code = 'export const container = defineBuilderConfig({ name: "C", injections: [] });';
 
     vi.mocked(Analyzer).mockImplementation(function () {
       return {
-        extract: vi.fn().mockReturnValue({
+        extractAll: vi.fn().mockReturnValue([{
           nodes: new Map([['MyService_abc', {}]]),
           errors: [],
           defineBuilderConfigStart: code.indexOf('defineBuilderConfig'),
           defineBuilderConfigEnd: code.length - 1,
           variableStatementStart: 0,
-        }),
+        }]),
       };
     } as any);
 
     const sf = makeSourceFile(code);
-    // Returning the same source file twice exercises the cache-hit branch in getFileProgram()
     const program = {
       getCompilerOptions: () => ({ target: ts.ScriptTarget.ES2021 }),
       getSourceFiles: () => [sf, sf],
@@ -161,18 +154,12 @@ describe('neoSyringeTransformer', () => {
       emit: vi.fn(),
     } as unknown as ts.Program;
 
-    const fileSubProgram = makeProgram();
     const finalProgram = makeProgram();
-    let callCount = 0;
-    vi.mocked(ts.createProgram).mockImplementation(() => {
-      callCount++;
-      return callCount === 1 ? fileSubProgram : finalProgram;
-    });
+    vi.mocked(ts.createProgram).mockReturnValue(finalProgram);
 
     const result = await callTransformer(program);
 
-    // Cache hit on 2nd iteration: only 1 sub-program + 1 final rebuild = 2 total (not 3)
-    expect(vi.mocked(ts.createProgram)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(ts.createProgram)).toHaveBeenCalledTimes(1);
     expect(result).toBe(finalProgram);
   });
 
@@ -181,13 +168,13 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(Analyzer).mockImplementation(function () {
       return {
-        extract: vi.fn().mockReturnValue({
+        extractAll: vi.fn().mockReturnValue([{
           nodes: new Map([['MyService_abc', {}]]),
           errors: [],
           defineBuilderConfigStart: code.indexOf('defineBuilderConfig'),
           defineBuilderConfigEnd: code.length - 1,
           variableStatementStart: 0,
-        }),
+        }]),
       };
     } as any);
 

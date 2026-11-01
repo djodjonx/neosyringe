@@ -1,5 +1,6 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
+import { extendsReferenceName } from '../shared/extendsReference';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 
 /**
@@ -112,7 +113,7 @@ export class ASTVisitor {
    *
    * Detects:
    * - `useContainer: parentContainer` - Parent container references
-   * - `extends: [partial1, partial2]` - Partial config references
+   * - `extends: [partial1, P.part]` - Partial config references
    *
    * @param node - Property assignment to analyze
    */
@@ -126,12 +127,11 @@ export class ASTVisitor {
       this.parentContainers.add(node.initializer.text);
     }
 
-    // Detect: extends: [partial1, partial2, ...]
+    // Detect: extends: [partial1, P.part, N.nested.part, ...]
     if (propertyName === 'extends' && TSContext.ts.isArrayLiteralExpression(node.initializer)) {
       for (const element of node.initializer.elements) {
-        if (TSContext.ts.isIdentifier(element)) {
-          this.extendsReferences.add(element.text);
-        }
+        const name = extendsReferenceName(this.checker, element);
+        if (name) this.extendsReferences.add(name);
       }
     }
   }

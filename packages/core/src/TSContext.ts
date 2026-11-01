@@ -1,5 +1,8 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type * as ts from 'typescript';
 import * as defaultTs from 'typescript';
+
+const projectRootStore = new AsyncLocalStorage<string>();
 
 /**
  * Singleton that holds the active TypeScript instance.
@@ -30,11 +33,16 @@ export class TSContext {
   }
 
   static get projectRoot(): string {
-    return this._projectRoot ?? process.cwd();
+    return projectRootStore.getStore() ?? this._projectRoot ?? process.cwd();
   }
 
   static set projectRoot(root: string) {
     this._projectRoot = root;
+  }
+
+  /** Runs `fn` with `root` visible to `projectRoot`. The setter and `reset()` stay as they are. */
+  static runWithProjectRoot<T>(root: string, fn: () => T): T {
+    return projectRootStore.run(root, fn);
   }
 
   /**
