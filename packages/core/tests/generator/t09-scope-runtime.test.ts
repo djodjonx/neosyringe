@@ -587,7 +587,7 @@ function execute(
   graph: DependencyGraph,
   options: { prelude?: string; parent?: RuntimeContainer; bindings?: Record<string, string> } = {},
 ): RuntimeContainer {
-  const generator = new Generator(graph, true);
+  const generator = new Generator(graph, true, undefined, true, true);
   const name = graph.exportedVariableName ?? 'container';
   const bindingLines = Object.entries(options.bindings ?? {}).map(([key, value]) => `const ${key} = ${JSON.stringify(value)};`);
   const tsCode = `${bindingLines.join('\n')}\n${options.prelude ?? ''}\n${generator.generate()}\nexport const ${name} = ${generator.generateInstantiation()};`;
