@@ -1,0 +1,2 @@
+Type 'InterfaceToken<ClosedPort>[]' is not assignable to type 'undefined'.
+Property 'roots' is missing in type '{ mode: "closed"; }'
