@@ -1,6 +1,6 @@
 import type { DependencyGraph, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getFactoryName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
-import { afterStore, isBorrowedInstance } from './ResolveEmitter';
+import { afterStore, generateOverrideMultiGuard, isBorrowedInstance } from './ResolveEmitter';
 
 /** Returns true if any node in the graph has an async factory. */
 export function hasAsyncFactories(graph: DependencyGraph): boolean {
@@ -122,7 +122,7 @@ function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport:
     if (!node?.service.isAsync || node.service.lifecycle !== 'singleton') continue;
     const factoryId = getFactoryName(tokenId);
     const tokenKey = resolveTokenKey(node.service, getImport);
-    add(`node:${tokenId}`, `{ const __neoValue = await this.${factoryId}(); ${afterStore('__neoValue', tokenKey, true, isBorrowedInstance(node.service))} }`);
+    add(`node:${tokenId}`, `if (!this.overrides.has(${tokenKey})) { const __neoValue = await this.${factoryId}(); ${afterStore('__neoValue', tokenKey, true, isBorrowedInstance(node.service))} }`);
   }
 
   collectMultiAsyncLines(graph, getImport, add, multiIds);
@@ -185,6 +185,7 @@ export function generateInitializeMethod(
     if (this._state === 'destroying' || this._state === 'destroyed') {
       throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     }
+    if (this._state === 'reconfiguring') throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     this._state = 'initializing';
     this._initWork = this._runInitialize();
     return this._initWork;
@@ -233,6 +234,9 @@ export function generateInitializeMethod(
     if (this._state === 'created' || this._state === 'initializing') {
       throw this._neoFail('NEO_NOT_INITIALIZED', 'call await container.initialize() before ' + op);
     }
+    if (this._state === 'reconfiguring') {
+      throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    }
     if (this._state === 'failed') {
       throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     }
@@ -257,6 +261,8 @@ export function generateInitializeMethod(
 export function generateSyncInitializeMethod(): string {
   return `public initialize(): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
+    if (this._failure !== undefined) return Promise.reject(this._failure);
     return Promise.resolve();
   }`;
 }
@@ -270,10 +276,16 @@ export function generateCreateScopeMethod(className: string, hasAsync: boolean):
   if (this._state === 'failed') {
     throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed');
   }
-  if (this._state === 'initializing') {
+  if (this._state === 'initializing' || this._state === 'reconfiguring') {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }`
-    : `if (this._touchClosed(false)) {
+    : `if (this._reconfiguring) {
+    throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+  }
+  if (this._failure !== undefined) {
+    throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+  }
+  if (this._touchClosed(false)) {
     throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
   }`;
   return `public createScope(): this {
@@ -443,7 +455,7 @@ function disposeSlot(slot: DisposalSlot, immediateAwait: boolean): string {
   return `if (this.instances.has(${slot.tokenKey})) { const __neoInst = this.instances.get(${slot.tokenKey}); if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { ${call} } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }`;
 }
 
-function disposalLines(slots: DisposalSlot[], awaitClose: boolean): string[] {
+function sharedDisposalLines(slots: DisposalSlot[], awaitClose: boolean): string[] {
   const lines = ['const __neoSeen = new Set();', 'const __neoErrors = [];'];
   const early = slots.filter((slot) => !slot.late);
   const late = slots.filter((slot) => slot.late);
@@ -455,10 +467,97 @@ function disposalLines(slots: DisposalSlot[], awaitClose: boolean): string[] {
   }
   for (const slot of late) lines.push(disposeSlot(slot, true));
   lines.push('this.instances.clear();');
-  lines.push('this.overrides.clear();');
-  lines.push('this.resolveListeners.clear();');
-  lines.push('if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }');
   return lines;
+}
+
+function disposalLines(slots: DisposalSlot[], awaitClose: boolean): string[] {
+  return [
+    ...sharedDisposalLines(slots, awaitClose),
+    'this.overrides.clear();',
+    'this.resolveListeners.clear();',
+    'if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }',
+  ];
+}
+
+/**
+ * override() and clearOverrides(). The gate is synchronous.
+ * Cleanup finishes before the new override table is applied.
+ * A borrowed mock is removed from `_borrowed` and never disposed.
+ */
+export function generateOverrideMethods(
+  graph: DependencyGraph,
+  sorted: TokenId[],
+  getImport: GetImport,
+  hasAsync: boolean,
+  testOverrides: boolean,
+): string {
+  const collected = combinedDisposals(graph, sorted, getImport);
+  const disposalBody = sharedDisposalLines(collected.slots, collected.awaitClose).join('\n    ');
+  const enabled = testOverrides ? 'true' : 'false';
+  const testApiGate = `if (!${enabled}) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));`;
+  const busyCheck = hasAsync
+    ? `if (this._state === 'initializing' || this._state === 'reconfiguring' || this._state === 'destroying') return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`
+    : `if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`;
+  const destroyedCheck = hasAsync
+    ? `if (this._state === 'destroyed' || this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));`
+    : `if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));`;
+  const failedCheck = hasAsync
+    ? `if (this._state === 'failed' || this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));`
+    : `if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));`;
+  const arm = hasAsync ? `this._state = 'reconfiguring';` : `this._reconfiguring = true;`;
+  const onFailure = hasAsync
+    ? `if (this._state === 'reconfiguring') { this._failure = __neoDisposeFailure; this._state = 'failed'; }`
+    : `if (this._reconfiguring) { this._failure = __neoDisposeFailure; this._reconfiguring = false; }`;
+  const onSuccess = hasAsync
+    ? `this._initJournal = []; this._initWork = undefined; this._failure = undefined; this._initRunning = false; this._state = 'created';`
+    : `if (this._reconfiguring) { this._failure = undefined; this._reconfiguring = false; }`;
+  const stillOpen = hasAsync ? `this._state === 'reconfiguring'` : `this._reconfiguring`;
+  const park = hasAsync
+    ? `this._failure = __neoReconfigureError; this._state = 'failed';`
+    : `this._failure = __neoReconfigureError; this._reconfiguring = false;`;
+  const multiGuard = generateOverrideMultiGuard(graph, getImport);
+
+  return `public override(token: any, factory: () => any): Promise<void> {
+    ${testApiGate}
+    ${busyCheck}
+    ${destroyedCheck}
+    ${failedCheck}
+    ${multiGuard}
+    ${arm}
+    return this._reconfigure(() => { this.overrides.set(token, factory); });
+  }
+
+  public clearOverrides(): Promise<void> {
+    ${testApiGate}
+    ${busyCheck}
+    ${destroyedCheck}
+    ${failedCheck}
+    ${arm}
+    return this._reconfigure(() => { this.overrides.clear(); });
+  }
+
+  private async _reconfigure(apply: () => void): Promise<void> {
+    const __neoMocks = [];
+    for (const __neoToken of this.overrides.keys()) {
+      if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
+    }
+    try {
+      ${disposalBody}
+      for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
+      if (__neoErrors.length > 0) {
+        const __neoDisposeFailure = new AggregateError(__neoErrors);
+        ${onFailure}
+        throw __neoDisposeFailure;
+      }
+      apply();
+      ${onSuccess}
+    } catch (__neoReconfigureError) {
+      if (${stillOpen}) {
+        ${park}
+      }
+      throw __neoReconfigureError;
+    }
+  }`;
 }
 
 /**
@@ -476,11 +575,13 @@ export function generateDestroyMethod(
   const lines = disposalLines(collected.slots, collected.awaitClose);
   const body = lines.join('\n    ');
   const join = destroyJoinPrefix();
+  const reconfigBusy = `if (${hasAsync ? "this._state === 'reconfiguring'" : "this._reconfiguring"}) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`;
 
   if (!hasAsync) {
     if (collected.awaitClose) {
       return `public async destroy(): Promise<void> {
     ${join}
+    ${reconfigBusy}
     this._touchClosed(true);
     const __neoRun = this._runDestroy();
     this._destroyWork = __neoRun;
@@ -498,6 +599,7 @@ export function generateDestroyMethod(
 
     return `public destroy(): Promise<void> {
     ${join}
+    ${reconfigBusy}
     this._touchClosed(true);
     try {
       ${body}
@@ -515,6 +617,7 @@ export function generateDestroyMethod(
 
   return `public destroy(): Promise<void> {
     ${join}
+    ${reconfigBusy}
     this._touchClosed(true);
     if (this._state === 'destroyed') return Promise.resolve();
     if (this._state === 'created') {
@@ -529,7 +632,7 @@ export function generateDestroyMethod(
       try {
         ${finish}
       } finally {
-        this._state = 'destroyed';
+        if (this._state === 'destroying') this._state = 'destroyed';
       }
     })();
     this._destroyWork = __neoRun;

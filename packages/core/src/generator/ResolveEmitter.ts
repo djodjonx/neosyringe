@@ -14,11 +14,27 @@ export function afterStore(valueExpr: string, tokenKey: string, hasAsync: boolea
 }
 
 export function parentOpenCheck(hasAsync: boolean): string {
+  const syncGate = hasAsync
+    ? ''
+    : `if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+    `;
   const self = hasAsync
     ? `if (!this._initRunning && this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');`
     : `if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');`;
-  return `${self}
+  return `${syncGate}${self}
     this._assertParents();`;
+}
+
+/** Same token keys as {@link generateMultiResolveGuard}. Checked before any state change. */
+export function generateOverrideMultiGuard(graph: DependencyGraph, getImport: GetImport): string {
+  if (!graph.multiNodes || graph.multiNodes.size === 0) return '';
+  const checks: string[] = [];
+  for (const nodes of graph.multiNodes.values()) {
+    const tokenKey = resolveTokenKey(nodes[0].service, getImport);
+    checks.push(`if (token === ${tokenKey}) return Promise.reject(this._neoFail('NEO_OVERRIDE_MULTI_UNSUPPORTED', 'cannot override a multi token'));`);
+  }
+  return checks.join('\n    ');
 }
 
 /**
@@ -117,7 +133,7 @@ function contributionCall(
 }
 
 function freshList(expr: string): string {
-  return `{ const __neoAll = [${expr}]; return __neoAll.slice(); }`;
+  return `{ const __neoAll = [${expr}]; for (const __neoNoted of __neoAll) this.notifyResolve(token, __neoNoted); return __neoAll.slice(); }`;
 }
 
 function legacyResolveAll(): string {
@@ -125,7 +141,7 @@ function legacyResolveAll(): string {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } return __neoListed.slice(); }
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } for (const __neoItem of __neoListed) this.notifyResolve(token, __neoItem); return __neoListed.slice(); }
         }
       }
     }

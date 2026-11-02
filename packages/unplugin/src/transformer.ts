@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import type { PluginConfig, ProgramTransformerExtras } from 'ts-patch';
 import { resolveProjectConfig } from '@djodjonx/neosyringe-core/analyzer';
-import { resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
+import { resolveDebugFlag, resolveTestOverridesFlag } from '@djodjonx/neosyringe-core/generator';
 import { hasNeoSyringeMarkers } from './markerUtils';
 import { blockingConfigMessage, rewriteEmittedOutput, runCompilationSession, type SessionFileMap, type SessionState } from './session';
 
@@ -64,6 +64,7 @@ export default function neoSyringeTransformer(
   // "forced off in production, no escape hatch" behavior is identical
   // regardless of which one a project uses.
   const emitDebugHelpers = resolveDebugFlag(config.debug);
+  const testOverrides = resolveTestOverridesFlag(config.testOverrides);
   const project = typeof config.project === 'string' && config.project.length > 0 ? config.project : undefined;
 
   let analysisProgram = program;
@@ -97,6 +98,7 @@ export default function neoSyringeTransformer(
       project,
       cwd: process.cwd(),
       emitDebugHelpers,
+      testOverrides,
       devtools: false,
       state,
       errorPrefix: '[neosyringe-transformer]',
