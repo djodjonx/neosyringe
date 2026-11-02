@@ -16,6 +16,37 @@ export interface SerializableGraph {
   multiNodes?: SerializableMultiRegistration[];
   /** Parent registrations borrowed by this container. `containerId` is the parent containerKey. */
   borrowedRegistrations?: SerializableBorrowedRegistration[];
+  /** Why each registration is kept, read from the analyzer. Absent when the graph recorded none. Causes and paths only: no size. */
+  retention?: SerializableRetentionEntry[];
+  /** The stable diagnostics of this container. Same `code` and `severity` as the CLI JSON and the LSP. */
+  diagnostics?: SerializableDiagnostic[];
+}
+
+export interface SerializableRetentionEntry {
+  registrationId: string;
+  token: string;
+  /** `root`, `eager`, `dependency-of`, `multi-contribution-of`, `open-parent`, `opaque-boundary` or `unreachable`. */
+  cause: string;
+  /** Simple names, root first. Empty when unreachable. */
+  path: string[];
+}
+
+export interface SerializableDiagnostic {
+  /** Stable machine contract. Absent only for errors that have no code yet. */
+  code?: string;
+  severity: 'error' | 'warning';
+  message: string;
+  file: string;
+  line: number;
+  column: number;
+  type: string;
+  containerId?: string;
+  /** Name of the container `containerId` points to. */
+  containerName?: string;
+  /** Source file of that container. */
+  containerFile?: string;
+  token?: string;
+  chain?: string[];
 }
 
 export interface SerializableMultiRegistration {

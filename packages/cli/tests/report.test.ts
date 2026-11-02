@@ -12,24 +12,28 @@ describe('CLI report — parseArgs', () => {
       mermaid: false,
       tokensManifest: undefined,
       contractVersion: undefined,
+      explain: undefined,
+      container: undefined,
+      retentionReport: false,
+      help: false,
     });
   });
 
   it('parses -p as a shorthand for --project', () => {
-    expect(parseArgs(['-p', 'tsconfig.json'])).toEqual({ project: 'tsconfig.json', json: false, graph: false, mermaid: false, tokensManifest: undefined, contractVersion: undefined });
+    expect(parseArgs(['-p', 'tsconfig.json'])).toEqual({ project: 'tsconfig.json', json: false, graph: false, mermaid: false, tokensManifest: undefined, contractVersion: undefined, explain: undefined, container: undefined, retentionReport: false, help: false });
   });
 
   it('parses --json', () => {
-    expect(parseArgs(['--json'])).toEqual({ project: undefined, json: true, graph: false, mermaid: false, tokensManifest: undefined, contractVersion: undefined });
+    expect(parseArgs(['--json'])).toEqual({ project: undefined, json: true, graph: false, mermaid: false, tokensManifest: undefined, contractVersion: undefined, explain: undefined, container: undefined, retentionReport: false, help: false });
   });
 
   it('parses --project and --json together, in either order', () => {
-    expect(parseArgs(['--json', '--project', 'a.json'])).toEqual({ project: 'a.json', json: true, graph: false, mermaid: false, tokensManifest: undefined, contractVersion: undefined });
-    expect(parseArgs(['--project', 'a.json', '--json'])).toEqual({ project: 'a.json', json: true, graph: false, mermaid: false, tokensManifest: undefined, contractVersion: undefined });
+    expect(parseArgs(['--json', '--project', 'a.json'])).toEqual({ project: 'a.json', json: true, graph: false, mermaid: false, tokensManifest: undefined, contractVersion: undefined, explain: undefined, container: undefined, retentionReport: false, help: false });
+    expect(parseArgs(['--project', 'a.json', '--json'])).toEqual({ project: 'a.json', json: true, graph: false, mermaid: false, tokensManifest: undefined, contractVersion: undefined, explain: undefined, container: undefined, retentionReport: false, help: false });
   });
 
   it('defaults to no project override and non-json when nothing is passed', () => {
-    expect(parseArgs([])).toEqual({ project: undefined, json: false, graph: false, mermaid: false, tokensManifest: undefined, contractVersion: undefined });
+    expect(parseArgs([])).toEqual({ project: undefined, json: false, graph: false, mermaid: false, tokensManifest: undefined, contractVersion: undefined, explain: undefined, container: undefined, retentionReport: false, help: false });
   });
 });
 
@@ -46,7 +50,7 @@ describe('CLI report — buildJsonReport', () => {
 
   it('reports ok: true and an empty errors array when there are no errors', () => {
     const report = buildJsonReport([], '/project');
-    expect(report).toEqual({ ok: true, errorCount: 0, errors: [] });
+    expect(report).toEqual({ schemaVersion: 1, ok: true, errorCount: 0, errors: [] });
   });
 
   it('reports ok: false with structured file/line/column/type/message per error', () => {

@@ -1,47 +1,8 @@
 import type * as ts from 'typescript';
-import { Analyzer, textCallsResolve, type AnalysisErrorType } from '@djodjonx/neosyringe-core/analyzer';
+import { Analyzer, textCallsResolve } from '@djodjonx/neosyringe-core/analyzer';
+import { toTsDiagnostic } from './diagnostic';
 import { LSPLogger } from './logger';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
-
-const enum NeoSyringeErrorCode {
-  Unsupported = 9994,
-  Missing = 9995,
-  Cycle = 9996,
-  TypeMismatch = 9997,
-  Duplicate = 9998,
-  Unknown = 9999,
-}
-
-const ERROR_CODE_MAP: Record<AnalysisErrorType, NeoSyringeErrorCode> = {
-  missing: NeoSyringeErrorCode.Missing,
-  cycle: NeoSyringeErrorCode.Cycle,
-  'type-mismatch': NeoSyringeErrorCode.TypeMismatch,
-  duplicate: NeoSyringeErrorCode.Duplicate,
-  unsupported: NeoSyringeErrorCode.Unsupported,
-};
-
-function getErrorCode(type: AnalysisErrorType | string): number {
-  return ERROR_CODE_MAP[type as AnalysisErrorType] ?? NeoSyringeErrorCode.Unknown;
-}
-
-function makeDiagnostic(
-  ts: typeof import('typescript'),
-  node: ts.Node,
-  sourceFile: ts.SourceFile,
-  message: string,
-  type: string,
-  severity?: string,
-): ts.Diagnostic {
-  const start = node.getStart(sourceFile);
-  return {
-    file: sourceFile,
-    start,
-    length: node.getEnd() - start,
-    messageText: `[NeoSyringe] ${message}`,
-    category: severity === 'warning' ? ts.DiagnosticCategory.Warning : ts.DiagnosticCategory.Error,
-    code: getErrorCode(type),
-  };
-}
 
 function init(modules: { typescript: typeof import('typescript') }) {
   const ts = modules.typescript;
@@ -99,7 +60,7 @@ function init(modules: { typescript: typeof import('typescript') }) {
         for (const error of result.errors) {
           const nodeFile = error.node.getSourceFile();
           const targetFile = nodeFile?.fileName === fileName ? nodeFile : sourceFile;
-          prior.push(makeDiagnostic(ts, error.node, targetFile, error.message, error.type, error.severity));
+          prior.push(toTsDiagnostic(ts, error, targetFile));
         }
       } catch (e: unknown) {
         logger.error(`NeoSyringe analysis failed: ${e instanceof Error ? e.message : String(e)}`);
