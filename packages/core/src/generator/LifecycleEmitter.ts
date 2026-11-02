@@ -107,7 +107,7 @@ function linkNodeOrder(
   }
 }
 
-function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport: GetImport): string[] {
+function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport: GetImport, minimal = false): string[] {
   const steps: OrderedStep[] = [];
   const ids = new Set<string>();
   const multiIds = new Map<string, string[]>();
@@ -122,7 +122,9 @@ function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport:
     if (!node?.service.isAsync || node.service.lifecycle !== 'singleton') continue;
     const factoryId = getFactoryName(tokenId);
     const tokenKey = resolveTokenKey(node.service, getImport);
-    add(`node:${tokenId}`, `if (!this.overrides.has(${tokenKey})) { const __neoValue = await this.${factoryId}(); ${afterStore('__neoValue', tokenKey, true, isBorrowedInstance(node.service))} }`);
+    const create = `const __neoValue = await this.${factoryId}(); ${afterStore('__neoValue', tokenKey, true, isBorrowedInstance(node.service))}`;
+    // The minimal profile has no override table to consult.
+    add(`node:${tokenId}`, minimal ? `{ ${create} }` : `if (!this.overrides.has(${tokenKey})) { ${create} }`);
   }
 
   collectMultiAsyncLines(graph, getImport, add, multiIds);
@@ -164,8 +166,9 @@ export function generateInitializeMethod(
   getImport: GetImport,
   hasAsync: boolean,
   eagerLines: string[] = [],
+  minimal = false,
 ): string {
-  if (!hasAsync) return generateSyncInitializeMethod();
+  if (!hasAsync) return generateSyncInitializeMethod(minimal);
 
   const lines: string[] = [];
 
@@ -177,7 +180,7 @@ export function generateInitializeMethod(
   lines.push(
     `if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`
   );
-  lines.push(...orderedAsyncLines(graph, sorted, getImport));
+  lines.push(...orderedAsyncLines(graph, sorted, getImport, minimal));
   lines.push(...eagerLines);
 
   const initializeOutput = `public async initialize(): Promise<void> {
@@ -187,7 +190,7 @@ export function generateInitializeMethod(
     if (this._state === 'destroying' || this._state === 'destroyed') {
       throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     }
-    if (this._state === 'reconfiguring') throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    ${minimal ? '' : "if (this._state === 'reconfiguring') throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');"}
     this._state = 'initializing';
     this._initWork = this._runInitialize();
     return this._initWork;
@@ -236,10 +239,10 @@ export function generateInitializeMethod(
     if (this._state === 'created' || this._state === 'initializing') {
       throw this._neoFail('NEO_NOT_INITIALIZED', 'call await container.initialize() before ' + op);
     }
-    if (this._state === 'reconfiguring') {
+    ${minimal ? '' : `if (this._state === 'reconfiguring') {
       throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     }
-    if (this._state === 'failed') {
+    `}if (this._state === 'failed') {
       throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     }
     if (this._state === 'destroying' || this._state === 'destroyed') {
@@ -260,21 +263,21 @@ export function generateInitializeMethod(
  * Sync containers still expose initialize(). It is not `async` and it does not
  * touch `_initialized`: those shapes belong to containers that have async work.
  */
-export function generateSyncInitializeMethod(): string {
+export function generateSyncInitializeMethod(minimal = false): string {
   return `public initialize(): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
+    ${minimal ? '' : "if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));"}
     if (this._failure !== undefined) return Promise.reject(this._failure);
     return Promise.resolve();
   }`;
 }
 
 /** Sync eager roots run once. A second initialize() is a no-op. ADR006 line 12. */
-export function generateEagerSyncInitialize(lines: string[]): string {
+export function generateEagerSyncInitialize(lines: string[], minimal = false): string {
   return `public initialize(): Promise<void> {
     if (this._eagerOnce) return Promise.resolve();
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
+    ${minimal ? '' : "if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));"}
     if (this._failure !== undefined) return Promise.reject(this._failure);
     this._eagerOnce = true;
     ${lines.join('\n    ')}
@@ -283,7 +286,7 @@ export function generateEagerSyncInitialize(lines: string[]): string {
 }
 
 /** A scope shares the parent list and the name. It does not copy caches or call initialize(). */
-export function generateCreateScopeMethod(className: string, hasAsync: boolean): string {
+export function generateCreateScopeMethod(className: string, hasAsync: boolean, minimal = false): string {
   const guard = hasAsync
     ? `if (this._state === 'destroying' || this._state === 'destroyed' || this._touchClosed(false)) {
     throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
@@ -291,13 +294,13 @@ export function generateCreateScopeMethod(className: string, hasAsync: boolean):
   if (this._state === 'failed') {
     throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed');
   }
-  if (this._state === 'initializing' || this._state === 'reconfiguring') {
+  if (this._state === 'initializing'${minimal ? '' : " || this._state === 'reconfiguring'"}) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }`
-    : `if (this._reconfiguring) {
+    : `${minimal ? '' : `if (this._reconfiguring) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }
-  if (this._failure !== undefined) {
+  `}if (this._failure !== undefined) {
     throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
   }
   if (this._touchClosed(false)) {
@@ -485,11 +488,10 @@ function sharedDisposalLines(slots: DisposalSlot[], awaitClose: boolean): string
   return lines;
 }
 
-function disposalLines(slots: DisposalSlot[], awaitClose: boolean): string[] {
+function disposalLines(slots: DisposalSlot[], awaitClose: boolean, minimal = false): string[] {
   return [
     ...sharedDisposalLines(slots, awaitClose),
-    'this.overrides.clear();',
-    'this.resolveListeners.clear();',
+    ...(minimal ? [] : ['this.overrides.clear();', 'this.resolveListeners.clear();']),
     'if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }',
   ];
 }
@@ -585,12 +587,15 @@ export function generateDestroyMethod(
   sorted: TokenId[],
   getImport: GetImport,
   hasAsync = false,
+  minimal = false,
 ): string {
   const collected = combinedDisposals(graph, sorted, getImport);
-  const lines = disposalLines(collected.slots, collected.awaitClose);
+  const lines = disposalLines(collected.slots, collected.awaitClose, minimal);
   const body = lines.join('\n    ');
   const join = destroyJoinPrefix();
-  const reconfigBusy = `if (${hasAsync ? "this._state === 'reconfiguring'" : "this._reconfiguring"}) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`;
+  const reconfigBusy = minimal
+    ? ''
+    : `if (${hasAsync ? "this._state === 'reconfiguring'" : "this._reconfiguring"}) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`;
 
   if (!hasAsync) {
     if (collected.awaitClose) {
