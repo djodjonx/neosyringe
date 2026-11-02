@@ -33,8 +33,11 @@ describe('useValue — Analyzer to Generator integration', () => {
 
     const code = new Generator(graph, true).generate();
 
-    // Value factory
-    expect(code).toContain("return { apiUrl: 'http://api.example.com', timeout: 5000 };");
+    // The useValue object is evaluated once, before the class. The factory returns that capture.
+    expect(code).toContain("const __neoCapture_");
+    expect(code).toContain("{ apiUrl: 'http://api.example.com', timeout: 5000 }");
+    expect(code).not.toContain("return { apiUrl: 'http://api.example.com', timeout: 5000 };");
+    expect(code).toMatch(/return __neoCapture_\w+;/);
     // ApiService receives the config
     expect(code).toContain('new ApiService(');
     // No undefined references

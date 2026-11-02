@@ -96,11 +96,14 @@ describe('T03 runtime', () => {
     expect(first).toBe(second);
   });
 
-  it('T03 createScope throws not implemented', () => {
+  it('T03 createScope returns a distinct container', async () => {
     const container = load(singleValue('({ id: 1 })'));
-    expect(() => container.createScope()).toThrow(Error);
-    expect(() => container.createScope()).toThrow(/createScope/);
-    expect(() => container.createScope()).toThrow(/not implemented/);
+    const scope = container.createScope();
+    expect(scope).not.toBe(container);
+    expect(scope.resolve(TOKEN)).toEqual({ id: 1 });
+    expect(container.resolve(TOKEN)).toEqual({ id: 1 });
+    await scope.destroy();
+    await container.destroy();
   });
 
   it('T03 override clearOverrides destroy return thenables', async () => {
@@ -118,33 +121,36 @@ describe('T03 runtime', () => {
     const destroyed = container.destroy();
     expect(typeof thenOf(destroyed)).toBe('function');
     await destroyed;
-    expect(container.resolve(TOKEN)).toEqual({ id: 'real' });
+    expect(() => container.resolve(TOKEN)).toThrow(/NEO_CONTAINER_DESTROYED/);
 
     process.env.NODE_ENV = 'production';
     expect(() => container.override(TOKEN, () => ({ id: 'nope' }))).toThrow(/NODE_ENV=production/);
-    expect(container.resolve(TOKEN)).toEqual({ id: 'real' });
+    expect(() => container.resolve(TOKEN)).toThrow(/NEO_CONTAINER_DESTROYED/);
   });
 
   it('T03 sync destroy disposes in reverse order before await', async () => {
     const log: string[] = [];
     Object.assign(globalThis, { __t03DisposeLog: log });
+    // Owned factory singletons: a value registration is never disposed.
+    const ownedFactory = (tokenId: string, label: string): ServiceDefinition => ({
+      tokenId,
+      type: 'factory',
+      factorySource: `() => ({ dispose() { globalThis.__t03DisposeLog.push(${JSON.stringify(label)}); } })`,
+      lifecycle: 'singleton',
+      isInterfaceToken: true,
+      isDisposable: true,
+      ownership: 'owned',
+      registrationNode: registrationNode(),
+    });
     const graph: DependencyGraph = {
       containerId: 'Test',
       nodes: new Map([
         ['ServiceA', {
-          service: valueService(
-            'ServiceA',
-            '({ dispose() { globalThis.__t03DisposeLog.push("dependency"); } })',
-            true,
-          ),
+          service: ownedFactory('ServiceA', 'dependency'),
           dependencies: [],
         }],
         ['ServiceB', {
-          service: valueService(
-            'ServiceB',
-            '({ dispose() { globalThis.__t03DisposeLog.push("dependent"); } })',
-            true,
-          ),
+          service: ownedFactory('ServiceB', 'dependent'),
           dependencies: ['ServiceA'],
         }],
       ]),
