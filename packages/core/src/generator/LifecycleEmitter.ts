@@ -1,5 +1,6 @@
-import type { DependencyGraph, TokenId } from '../analyzer/types';
+import type { DependencyGraph, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getFactoryName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
+import { afterStore, isBorrowedInstance } from './ResolveEmitter';
 
 /** Returns true if any node in the graph has an async factory. */
 export function hasAsyncFactories(graph: DependencyGraph): boolean {
@@ -74,7 +75,7 @@ function collectMultiAsyncLines(
       const id = `multi:${tokenId}:${index}`;
       const key = multiRegistrationKey(node, tokenId, index);
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
-      add(id, `{ const __neoValue = await this.${factoryId}(); this.instances.set(${key}, __neoValue); if (this._initRunning) this._initJournal.push(${key}); }`);
+      add(id, `{ const __neoValue = await this.${factoryId}(); ${afterStore('__neoValue', key, true, isBorrowedInstance(node.service))} }`);
       ids.push(id);
     });
     multiIds.set(tokenId, ids);
@@ -121,7 +122,7 @@ function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport:
     if (!node?.service.isAsync || node.service.lifecycle !== 'singleton') continue;
     const factoryId = getFactoryName(tokenId);
     const tokenKey = resolveTokenKey(node.service, getImport);
-    add(`node:${tokenId}`, `{ const __neoValue = await this.${factoryId}(); this.instances.set(${tokenKey}, __neoValue); if (this._initRunning) this._initJournal.push(${tokenKey}); }`);
+    add(`node:${tokenId}`, `{ const __neoValue = await this.${factoryId}(); ${afterStore('__neoValue', tokenKey, true, isBorrowedInstance(node.service))} }`);
   }
 
   collectMultiAsyncLines(graph, getImport, add, multiIds);
@@ -196,8 +197,33 @@ export function generateInitializeMethod(
       if (this._state === 'initializing') this._state = 'ready';
     } catch (__neoInitError) {
       this._failure = __neoInitError;
+      if (this._state === 'destroying') throw __neoInitError;
+      const __neoCleanup = [];
+      const __neoSeen = new Set();
+      for (const __neoKey of [...this._initJournal].reverse()) {
+        const __neoInst = this.instances.get(__neoKey);
+        this.instances.delete(__neoKey);
+        if (__neoInst == null || this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)) continue;
+        __neoSeen.add(__neoInst);
+        try {
+          if (typeof __neoInst.dispose === 'function') {
+            const __neoResult = __neoInst.dispose();
+            if (__neoResult && typeof __neoResult.then === 'function') await __neoResult;
+          }
+        } catch (__neoDisposeError) {
+          __neoCleanup.push(__neoDisposeError);
+        }
+      }
+      if (__neoCleanup.length === 0) {
+        if (this._state !== 'destroying') this._state = 'failed';
+        throw __neoInitError;
+      }
+      const __neoWrapped = new Error(__neoInitError instanceof Error ? __neoInitError.message : String(__neoInitError)) as Error & { cause?: unknown; cleanupErrors?: unknown[] };
+      __neoWrapped.cause = __neoInitError;
+      __neoWrapped.cleanupErrors = __neoCleanup;
+      this._failure = __neoWrapped;
       if (this._state !== 'destroying') this._state = 'failed';
-      throw __neoInitError;
+      throw __neoWrapped;
     } finally {
       this._initRunning = false;
     }
@@ -229,14 +255,65 @@ export function generateInitializeMethod(
  * touch `_initialized`: those shapes belong to containers that have async work.
  */
 export function generateSyncInitializeMethod(): string {
-  return 'public initialize(): Promise<void> { return Promise.resolve(); }';
+  return `public initialize(): Promise<void> {
+    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    return Promise.resolve();
+  }`;
 }
 
-/** createScope is on the public type. This build has no scope behaviour yet. */
-export function generateCreateScopeMethod(): string {
-  return `public createScope(): this {
-    throw new Error('createScope() is not implemented yet in this build');
+/** A scope shares the parent list and the name. It does not copy caches or call initialize(). */
+export function generateCreateScopeMethod(className: string, hasAsync: boolean): string {
+  const guard = hasAsync
+    ? `if (this._state === 'destroying' || this._state === 'destroyed' || this._touchClosed(false)) {
+    throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+  }
+  if (this._state === 'failed') {
+    throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed');
+  }
+  if (this._state === 'initializing') {
+    throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+  }`
+    : `if (this._touchClosed(false)) {
+    throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
   }`;
+  return `public createScope(): this {
+    ${guard}
+    return new ${className}(this.legacy, this.name);
+  }`;
+}
+
+/** Destroy and resolve share this helper so one edit changes both sides. */
+export function touchClosedMethod(): string {
+  return `private _touchClosed(mark: boolean): boolean {
+    if (mark) this._closed = true;
+    return this._closed;
+  }`;
+}
+
+export function assertParentsMethod(): string {
+  return `private _assertParents(): void {
+    if (!this.legacy) return;
+    for (const legacyContainer of this.legacy) {
+      if (legacyContainer && legacyContainer._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      }
+    }
+  }`;
+}
+
+/** Sync output has no initialize() block, so it needs its own error helper. */
+export function syncNeoFailMethod(): string {
+  return `private _neoFail(code: string, detail: string, cause?: unknown): Error {
+    const error = new Error(code + ': [' + this.name + '] ' + detail) as Error & { code: string; cause?: unknown };
+    error.code = code;
+    if (arguments.length >= 3) error.cause = cause;
+    return error;
+  }`;
+}
+
+function destroyJoinPrefix(): string {
+  return `if (this._destroyWork) return this._destroyWork;
+    if (this._touchClosed(false)) return Promise.resolve();`;
 }
 
 interface DisposalSlot {
@@ -244,6 +321,7 @@ interface DisposalSlot {
   tokenKey: string;
   isAsync: boolean;
   guarded: boolean;
+  late: boolean;
 }
 
 function linkContributionDependencies(
@@ -271,46 +349,52 @@ function linkNodeDisposal(
   }
 }
 
+function slotKind(service: ServiceDefinition): 'skip' | 'unguarded' | 'guarded' {
+  if (service.lifecycle === 'transient' || service.type === 'parent') return 'skip';
+  if (isBorrowedInstance(service)) return 'skip';
+  if (service.isDisposable || service.isAsyncDisposable) return 'unguarded';
+  if (service.type === 'factory') return 'guarded';
+  return 'skip';
+}
+
 function combinedDisposals(
   graph: DependencyGraph,
   sorted: TokenId[],
   getImport: GetImport,
-): DisposalSlot[] {
+): { slots: DisposalSlot[]; awaitClose: boolean } {
   const slots: DisposalSlot[] = [];
   const seen = new Set<string>();
-  const add = (slot: DisposalSlot) => {
-    if (seen.has(slot.id)) return;
-    seen.add(slot.id);
-    slots.push(slot);
+  const add = (id: string, service: ServiceDefinition, tokenKey: string, kind: 'unguarded' | 'guarded') => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    slots.push({
+      id,
+      tokenKey,
+      isAsync: !!service.isAsyncDisposable,
+      guarded: kind === 'guarded',
+      late: false,
+    });
   };
 
   for (const tokenId of [...sorted].reverse()) {
     const node = graph.nodes.get(tokenId);
-    if (!node || node.service.lifecycle === 'transient') continue;
-    if (!node.service.isDisposable && !node.service.isAsyncDisposable) continue;
-    add({
-      id: `node:${tokenId}`,
-      tokenKey: resolveTokenKey(node.service, getImport),
-      isAsync: !!node.service.isAsyncDisposable,
-      guarded: false,
-    });
+    if (!node) continue;
+    const kind = slotKind(node.service);
+    if (kind === 'skip') continue;
+    add(`node:${tokenId}`, node.service, resolveTokenKey(node.service, getImport), kind);
   }
 
   if (graph.multiNodes) {
     for (const [tokenId, nodes] of graph.multiNodes) {
       nodes.forEach((node, index) => {
-        if (node.service.lifecycle === 'transient') return;
-        const flagged = !!node.service.isDisposable || !!node.service.isAsyncDisposable;
-        if (!flagged && node.service.type !== 'factory') return;
-        add({
-          id: `multi:${tokenId}:${index}`,
-          tokenKey: multiRegistrationKey(node, tokenId, index),
-          isAsync: !!node.service.isAsyncDisposable,
-          guarded: !flagged,
-        });
+        const kind = slotKind(node.service);
+        if (kind === 'skip') return;
+        add(`multi:${tokenId}:${index}`, node.service, multiRegistrationKey(node, tokenId, index), kind);
       });
     }
   }
+
+  slots.sort((left, right) => Number(left.isAsync) - Number(right.isAsync));
 
   const before = new Map<string, Set<string>>();
   const edge = (first: string, later: string) => {
@@ -321,41 +405,55 @@ function combinedDisposals(
   };
   linkContributionDependencies(graph, edge);
   linkNodeDisposal(graph, sorted, edge);
-  return stableOrder(slots, before);
-}
+  const ordered = stableOrder(slots, before);
 
-function plainDisposalLines(slots: Array<{ tokenKey: string; isAsync: boolean; guarded?: boolean }>): string[] {
-  const lines: string[] = [];
-  for (const slot of slots) {
-    if (slot.guarded) {
-      const call = slot.isAsync ? 'await __neoInst.dispose()' : '__neoInst.dispose()';
-      lines.push(`if (this.instances.has(${slot.tokenKey})) { const __neoInst = this.instances.get(${slot.tokenKey}); if (typeof __neoInst?.dispose === 'function') { ${call} } }`);
-      continue;
+  const blocking = new Set(ordered.filter((slot) => slot.isAsync).map((slot) => slot.id));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const slot of ordered) {
+      if (blocking.has(slot.id)) continue;
+      const preds = before.get(slot.id);
+      if (preds && [...preds].some((pred) => blocking.has(pred))) {
+        blocking.add(slot.id);
+        changed = true;
+      }
     }
-    const call = slot.isAsync
-      ? `await (this.instances.get(${slot.tokenKey}) as any).dispose();`
-      : `(this.instances.get(${slot.tokenKey}) as any).dispose();`;
-    lines.push(`if (this.instances.has(${slot.tokenKey})) { ${call} }`);
   }
-  lines.push('this.instances.clear();');
-  lines.push('this.overrides.clear();');
-  lines.push('this.resolveListeners.clear();');
-  return lines;
+  for (const slot of ordered) slot.late = blocking.has(slot.id);
+  const awaitClose = ordered.some((slot) => slot.guarded || slot.isAsync || slot.late);
+  return { slots: ordered, awaitClose };
 }
 
-function multiDisposalLines(slots: Array<{ tokenKey: string; isAsync: boolean; guarded?: boolean }>): string[] {
-  const lines: string[] = [];
-  lines.push('const __neoSeen = new Set();');
-  lines.push('const __neoErrors = [];');
-  for (const slot of slots) {
-    // A parent-resolved object returned by a multi factory is ownership borrowed (T09); this slot does not skip it.
-    const body = slot.guarded
-      ? "if (typeof __neoInst?.dispose === 'function') { await __neoInst.dispose(); }"
-      : slot.isAsync
-        ? 'await (__neoInst as any).dispose();'
-        : '(__neoInst as any).dispose();';
-    lines.push(`if (this.instances.has(${slot.tokenKey})) { const __neoInst = this.instances.get(${slot.tokenKey}); if (!(__neoInst != null && __neoSeen.has(__neoInst))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { ${body} } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }`);
+function disposeCall(slot: DisposalSlot, immediateAwait: boolean): string {
+  if (slot.guarded) {
+    const follow = immediateAwait
+      ? `if (__neoResult && typeof __neoResult.then === 'function') await __neoResult;`
+      : `if (__neoResult && typeof __neoResult.then === 'function') __neoPending.push(__neoResult);`;
+    return `if (typeof __neoInst?.dispose === 'function') { const __neoResult = __neoInst.dispose(); ${follow} }`;
   }
+  if (immediateAwait) {
+    return `const __neoResult = (__neoInst as any).dispose(); if (__neoResult && typeof __neoResult.then === 'function') await __neoResult;`;
+  }
+  return `(__neoInst as any).dispose();`;
+}
+
+function disposeSlot(slot: DisposalSlot, immediateAwait: boolean): string {
+  const call = disposeCall(slot, immediateAwait);
+  return `if (this.instances.has(${slot.tokenKey})) { const __neoInst = this.instances.get(${slot.tokenKey}); if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { ${call} } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }`;
+}
+
+function disposalLines(slots: DisposalSlot[], awaitClose: boolean): string[] {
+  const lines = ['const __neoSeen = new Set();', 'const __neoErrors = [];'];
+  const early = slots.filter((slot) => !slot.late);
+  const late = slots.filter((slot) => slot.late);
+  const defer = awaitClose && early.some((slot) => slot.guarded);
+  if (defer) lines.push('const __neoPending = [];');
+  for (const slot of early) lines.push(disposeSlot(slot, false));
+  if (defer) {
+    lines.push('for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }');
+  }
+  for (const slot of late) lines.push(disposeSlot(slot, true));
   lines.push('this.instances.clear();');
   lines.push('this.overrides.clear();');
   lines.push('this.resolveListeners.clear();');
@@ -365,8 +463,8 @@ function multiDisposalLines(slots: Array<{ tokenKey: string; isAsync: boolean; g
 
 /**
  * Generates the destroy() method.
- * Calls dispose() on cached singleton services in reverse dependency order.
- * Becomes async if a singleton dispose is async or a guarded factory dispose is emitted.
+ * Disposes cached singletons consumer-before-dependency.
+ * A sync class stays a non-async method. Async work waits inside _close or _runDestroy.
  */
 export function generateDestroyMethod(
   graph: DependencyGraph,
@@ -374,75 +472,73 @@ export function generateDestroyMethod(
   getImport: GetImport,
   hasAsync = false,
 ): string {
-  const hasAsyncDisposable = hasAsyncDisposables(graph, sorted);
-
-  // Collect disposable singletons in reverse dependency order.
-  // With no multi registrations the loop below stays the historical output.
-  const disposables: Array<{ tokenKey: string; isAsync: boolean; guarded?: boolean }> = [];
-  if (!graph.multiNodes || graph.multiNodes.size === 0) {
-    for (const tokenId of [...sorted].reverse()) {
-      const node = graph.nodes.get(tokenId);
-      if (!node) continue;
-      if (node.service.lifecycle === 'transient') continue;
-      if (!node.service.isDisposable && !node.service.isAsyncDisposable) continue;
-
-      disposables.push({
-        tokenKey: resolveTokenKey(node.service, getImport),
-        isAsync: !!node.service.isAsyncDisposable,
-      });
-    }
-  } else {
-    disposables.push(...combinedDisposals(graph, sorted, getImport));
-  }
-
-  const multi = !!graph.multiNodes && graph.multiNodes.size > 0;
-  const lines = multi ? multiDisposalLines(disposables) : plainDisposalLines(disposables);
-  const awaitClose = hasAsyncDisposable || disposables.some((slot) => slot.guarded === true);
+  const collected = combinedDisposals(graph, sorted, getImport);
+  const lines = disposalLines(collected.slots, collected.awaitClose);
+  const body = lines.join('\n    ');
+  const join = destroyJoinPrefix();
 
   if (!hasAsync) {
-    if (awaitClose) {
+    if (collected.awaitClose) {
       return `public async destroy(): Promise<void> {
-    ${lines.join('\n    ')}
+    ${join}
+    this._touchClosed(true);
+    const __neoRun = this._runDestroy();
+    this._destroyWork = __neoRun;
+    try {
+      await __neoRun;
+    } finally {
+      this._destroyWork = undefined;
+    }
+  }
+
+  private async _runDestroy(): Promise<void> {
+    ${body}
   }`;
     }
 
     return `public destroy(): Promise<void> {
-    ${lines.join('\n    ')}
+    ${join}
+    this._touchClosed(true);
+    try {
+      ${body}
+    } catch (__neoDestroyError) {
+      return Promise.reject(__neoDestroyError);
+    }
     return Promise.resolve();
   }`;
   }
 
-  const close = awaitClose
-    ? `private async _close(): Promise<void> {
-    ${lines.join('\n    ')}
-  }`
-    : `private _close(): void {
-    ${lines.join('\n    ')}
-  }`;
-  const finish = awaitClose ? 'await this._close();' : 'this._close();';
-  const head = awaitClose
-    ? 'public async destroy(): Promise<void> {'
-    : 'public destroy(): Promise<void> {';
+  const finish = collected.awaitClose ? 'await this._close();' : 'this._close();';
+  const closeHead = collected.awaitClose
+    ? 'private async _close(): Promise<void> {'
+    : 'private _close(): void {';
 
-  return `${head}
-    if (this._state === 'destroyed' || this._state === 'destroying') {
-      return this._destroyWork ?? Promise.resolve();
-    }
+  return `public destroy(): Promise<void> {
+    ${join}
+    this._touchClosed(true);
+    if (this._state === 'destroyed') return Promise.resolve();
     if (this._state === 'created') {
       this._state = 'destroyed';
       return Promise.resolve();
     }
-    const __neoDestroy = (async () => {
-      this._state = 'destroying';
+    this._state = 'destroying';
+    const __neoRun = (async () => {
       if (this._initWork) {
         try { await this._initWork; } catch { /* initialization failure stays on _failure */ }
       }
-      ${finish}
-      this._state = 'destroyed';
+      try {
+        ${finish}
+      } finally {
+        this._state = 'destroyed';
+      }
     })();
-    this._destroyWork = __neoDestroy;
-    return __neoDestroy;
+    this._destroyWork = __neoRun;
+    const __neoClear = () => { if (this._destroyWork === __neoRun) this._destroyWork = undefined; };
+    void __neoRun.then(__neoClear, __neoClear);
+    return __neoRun;
   }
 
-  ${close}`;
+  ${closeHead}
+    ${body}
+  }`;
 }

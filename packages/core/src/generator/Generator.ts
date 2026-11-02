@@ -4,8 +4,8 @@ import { DependencyGraph, DependencyNode } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, type GetImport } from './FactoryEmitter';
-import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard } from './ResolveEmitter';
-import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateDestroyMethod, generateCreateScopeMethod } from './LifecycleEmitter';
+import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, parentOpenCheck, isBorrowedInstance } from './ResolveEmitter';
+import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateDestroyMethod, generateCreateScopeMethod, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { TSContext } from '../TSContext';
 import { HashUtils } from '../analyzer/shared/HashUtils';
 
@@ -259,7 +259,7 @@ export class Generator {
     const initializeMethod = hasAsync
       ? generateInitializeMethod(this.graph, sorted, getImport, hasAsync)
       : generateSyncInitializeMethod();
-    const createScopeMethod = generateCreateScopeMethod();
+    const createScopeMethod = generateCreateScopeMethod(this.containerClassName, hasAsync);
     const destroyMethod = generateDestroyMethod(this.graph, sorted, getImport, hasAsync);
 
     // Generate import lines for:
@@ -294,21 +294,39 @@ export class Generator {
       }
     }
 
+    const borrowedList = borrowedSeeds(this.graph).join(', ');
+    // A successful legacy resolve borrows that instance. A throw must not mark the caller's own result.
+    const borrowField = '';
+    const borrowReset = '';
+    const borrowBefore = `const legacyResult = legacyContainer.resolve(token);
+                    if (legacyResult != null) this._borrowed.add(legacyResult);`;
+    const borrowNotify = '';
+    const scopeFields = `private _closed = false;
+  ${borrowField}private _borrowed = new Set<any>([${borrowedList}]);
+  private _destroyWork?: Promise<void>;`;
     const stateFields = hasAsync
       ? `private _state: 'created' | 'initializing' | 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
   private _initWork?: Promise<void>;
-  private _destroyWork?: Promise<void>;
   private _failure: unknown;
   private _initRunning = false;
-  private _initJournal: any[] = [];`
-      : '';
+  private _initJournal: any[] = [];
+  ${scopeFields}`
+      : scopeFields;
+    const runtimeHelpers = `${touchClosedMethod()}
+
+  ${assertParentsMethod()}
+  ${hasAsync ? '' : syncNeoFailMethod()}`;
+    const captureLines = captureHoists(this.graph);
 
     const multiGuard = generateMultiResolveGuard(this.graph, getImport, hasAsync);
     const resolveInterior = `
+    ${borrowReset}${parentOpenCheck(hasAsync)}
     ${multiGuard}${multiGuard ? '\n    ' : ''}// 0. An overridden token always wins, even over a cached real instance.
     if (this.overrides.has(token)) {
       if (!this.instances.has(token)) {
-        this.instances.set(token, this.overrides.get(token)!());
+        const __neoMock = this.overrides.get(token)!();
+        this.instances.set(token, __neoMock);
+        if (__neoMock != null) this._borrowed.add(__neoMock);
       }
       const overridden = this.instances.get(token);
       this.notifyResolve(token, overridden);
@@ -329,7 +347,7 @@ export class Generator {
         for (const legacyContainer of this.legacy) {
             try {
                 if (legacyContainer.resolve) {
-                    const legacyResult = legacyContainer.resolve(token);
+                    ${borrowBefore}
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
@@ -355,6 +373,7 @@ export class Generator {
 
     return `
 ${importLines.join('\n')}
+${captureLines.join('\n')}
 
 class ${this.notFoundErrorClassName} extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
@@ -374,6 +393,8 @@ class ${this.containerClassName} {
     private legacy?: any[],
     private name: string = 'NeoContainer'
   ) {}
+
+  ${runtimeHelpers}
 
   ${initializeMethod}
 
@@ -421,7 +442,7 @@ class ${this.containerClassName} {
   }
 
   private notifyResolve(token: any, instance: any): void {
-    for (const listener of this.resolveListeners) {
+    ${borrowNotify}for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
       } catch {
@@ -561,4 +582,31 @@ export const ${variableName || 'container'} = ${instantiation};
     return ${JSON.stringify(edges)};
   }`;
   }
+}
+
+function visitServices(graph: DependencyGraph, visit: (node: DependencyNode) => void): void {
+  for (const node of graph.nodes.values()) visit(node);
+  if (!graph.multiNodes) return;
+  for (const nodes of graph.multiNodes.values()) nodes.forEach(visit);
+}
+
+/** Direct useValue consts. Partial captures are property reads and stay at `new`. */
+function captureHoists(graph: DependencyGraph): string[] {
+  const lines: string[] = [];
+  visitServices(graph, (node) => {
+    const name = node.service.valueCapture;
+    const expr = node.service.valueSource;
+    if (!name || !expr || !name.startsWith('__neoCapture_')) return;
+    lines.push(`const ${name} = ${expr};`);
+  });
+  return lines;
+}
+
+function borrowedSeeds(graph: DependencyGraph): string[] {
+  const seeds: string[] = [];
+  visitServices(graph, (node) => {
+    if (node.service.type !== 'value' || !isBorrowedInstance(node.service)) return;
+    if (node.service.valueCapture) seeds.push(node.service.valueCapture);
+  });
+  return seeds;
 }

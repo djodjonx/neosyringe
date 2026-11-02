@@ -37,6 +37,42 @@ export function containerKeyFor(node: ts.Node): string {
   );
 }
 
+/**
+ * Expression that reads a useValue once.
+ * A direct value names a const. A partial reads the `extends` expression the consumer wrote.
+ */
+export function valueCaptureFor(
+  containerKey: string | undefined,
+  index: number,
+  partialBinding?: string,
+): string | undefined {
+  if (partialBinding) return `${partialBinding}.injections[${index}].useValue`;
+  const safe = (containerKey ?? 'value').replace(/[^A-Za-z0-9_]/g, '_');
+  return `__neoCapture_${safe}_${index}`;
+}
+
+/** A spread shifts runtime indexes, so a partial useValue capture would read the wrong element. */
+export function partialInjectionsSpreadError(
+  elements: readonly ts.Expression[],
+): { code: 'NEO_CONFIG_UNSUPPORTED'; message: string; node: ts.Node } | undefined {
+  let spread: ts.Node | undefined;
+  let useValue = false;
+  for (const element of elements) {
+    if (TSContext.ts.isSpreadElement(element)) spread = element;
+    if (!TSContext.ts.isObjectLiteralExpression(element)) continue;
+    for (const prop of element.properties) {
+      if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
+      if (prop.name.text === 'useValue') useValue = true;
+    }
+  }
+  if (!spread || !useValue) return undefined;
+  return {
+    code: 'NEO_CONFIG_UNSUPPORTED',
+    message: 'NEO_CONFIG_UNSUPPORTED: a partial injections array with useValue cannot contain a spread. The capture index would not match the array at runtime.',
+    node: spread,
+  };
+}
+
 /** Owns the registration in `containerKey`. A value records that key as its capture. */
 export function stampRegistration(
   definition: ServiceDefinition,
@@ -44,7 +80,7 @@ export function stampRegistration(
   containerKey: string | undefined,
 ): void {
   definition.registrationId = registrationIdFor(node.getSourceFile(), node);
-  definition.ownership = 'owned';
+  if (definition.ownership !== 'borrowed') definition.ownership = 'owned';
   if (definition.type === 'value') {
     definition.capturedInContainerId = containerKey;
   }

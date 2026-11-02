@@ -35,10 +35,15 @@ export interface CoreContainer {
   /** Brings async singletons to ready. Sync containers resolve this immediately. */
   initialize(): Promise<void>;
 
-  /** Disposes singleton services that implement IDisposable/IAsyncDisposable, then clears the instance cache. */
+  /**
+   * Ends this container. Terminal and idempotent: a later resolve() or initialize()
+   * throws NEO_CONTAINER_DESTROYED, and a second destroy() does nothing.
+   * Disposes owned singleton instances. Borrowed factory results, useValue values,
+   * override mocks and parent references are not disposed.
+   */
   destroy(): Promise<void>;
 
-  /** Returns a container with the same capability profile. Scope behaviour is not in this build. */
+  /** Returns a child with the same parents and name. It does not copy instances or call initialize(). */
   createScope(): this;
 }
 
@@ -219,6 +224,7 @@ export type Injection<T = any> =
       lifecycle?: Lifecycle;
       scoped?: boolean;
       multi?: boolean;
+      ownership?: 'owned' | 'borrowed';
       useValue?: never;
     }
   | {
@@ -226,6 +232,7 @@ export type Injection<T = any> =
       useValue: T;
       lifecycle?: Lifecycle;
       scoped?: boolean;
+      ownership?: 'borrowed';
       provider?: never;
       useFactory?: never;
     };

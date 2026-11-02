@@ -4,6 +4,7 @@ exports[`Generated Code Snapshots > should match snapshot for complex real-world
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
@@ -13,7 +14,9 @@ class NeoContainer {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
   private resolveListeners = new Set<(token: any, instance: any) => void>();
-  
+  private _closed = false;
+  private _borrowed = new Set<any>([]);
+  private _destroyWork?: Promise<void>;
 
   // -- Factories --
   
@@ -46,10 +49,36 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  public initialize(): Promise<void> { return Promise.resolve(); }
+  private _touchClosed(mark: boolean): boolean {
+    if (mark) this._closed = true;
+    return this._closed;
+  }
+
+  private _assertParents(): void {
+    if (!this.legacy) return;
+    for (const legacyContainer of this.legacy) {
+      if (legacyContainer && legacyContainer._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      }
+    }
+  }
+  private _neoFail(code: string, detail: string, cause?: unknown): Error {
+    const error = new Error(code + ': [' + this.name + '] ' + detail) as Error & { code: string; cause?: unknown };
+    error.code = code;
+    if (arguments.length >= 3) error.cause = cause;
+    return error;
+  }
+
+  public initialize(): Promise<void> {
+    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    return Promise.resolve();
+  }
 
   public createScope(): this {
-    throw new Error('createScope() is not implemented yet in this build');
+    if (this._touchClosed(false)) {
+    throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+  }
+    return new NeoContainer(this.legacy, this.name);
   }
 
   /**
@@ -105,10 +134,14 @@ class NeoContainer {
 
   public resolve<T>(token: any): T {
     
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     // 0. An overridden token always wins, even over a cached real instance.
     if (this.overrides.has(token)) {
       if (!this.instances.has(token)) {
-        this.instances.set(token, this.overrides.get(token)!());
+        const __neoMock = this.overrides.get(token)!();
+        this.instances.set(token, __neoMock);
+        if (__neoMock != null) this._borrowed.add(__neoMock);
       }
       const overridden = this.instances.get(token);
       this.notifyResolve(token, overridden);
@@ -130,6 +163,7 @@ class NeoContainer {
             try {
                 if (legacyContainer.resolve) {
                     const legacyResult = legacyContainer.resolve(token);
+                    if (legacyResult != null) this._borrowed.add(legacyResult);
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
@@ -159,18 +193,30 @@ class NeoContainer {
   }
 
   public destroy(): Promise<void> {
+    if (this._destroyWork) return this._destroyWork;
+    if (this._touchClosed(false)) return Promise.resolve();
+    this._touchClosed(true);
+    try {
+      const __neoSeen = new Set();
+    const __neoErrors = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
+    } catch (__neoDestroyError) {
+      return Promise.reject(__neoDestroyError);
+    }
     return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] {
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) return __neoListed.slice();
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } return __neoListed.slice(); }
         }
       }
     }
@@ -253,6 +299,7 @@ exports[`Generated Code Snapshots > should match snapshot for interface tokens 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
@@ -262,7 +309,9 @@ class NeoContainer {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
   private resolveListeners = new Set<(token: any, instance: any) => void>();
-  
+  private _closed = false;
+  private _borrowed = new Set<any>([]);
+  private _destroyWork?: Promise<void>;
 
   // -- Factories --
   
@@ -275,10 +324,36 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  public initialize(): Promise<void> { return Promise.resolve(); }
+  private _touchClosed(mark: boolean): boolean {
+    if (mark) this._closed = true;
+    return this._closed;
+  }
+
+  private _assertParents(): void {
+    if (!this.legacy) return;
+    for (const legacyContainer of this.legacy) {
+      if (legacyContainer && legacyContainer._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      }
+    }
+  }
+  private _neoFail(code: string, detail: string, cause?: unknown): Error {
+    const error = new Error(code + ': [' + this.name + '] ' + detail) as Error & { code: string; cause?: unknown };
+    error.code = code;
+    if (arguments.length >= 3) error.cause = cause;
+    return error;
+  }
+
+  public initialize(): Promise<void> {
+    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    return Promise.resolve();
+  }
 
   public createScope(): this {
-    throw new Error('createScope() is not implemented yet in this build');
+    if (this._touchClosed(false)) {
+    throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+  }
+    return new NeoContainer(this.legacy, this.name);
   }
 
   /**
@@ -334,10 +409,14 @@ class NeoContainer {
 
   public resolve<T>(token: any): T {
     
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     // 0. An overridden token always wins, even over a cached real instance.
     if (this.overrides.has(token)) {
       if (!this.instances.has(token)) {
-        this.instances.set(token, this.overrides.get(token)!());
+        const __neoMock = this.overrides.get(token)!();
+        this.instances.set(token, __neoMock);
+        if (__neoMock != null) this._borrowed.add(__neoMock);
       }
       const overridden = this.instances.get(token);
       this.notifyResolve(token, overridden);
@@ -359,6 +438,7 @@ class NeoContainer {
             try {
                 if (legacyContainer.resolve) {
                     const legacyResult = legacyContainer.resolve(token);
+                    if (legacyResult != null) this._borrowed.add(legacyResult);
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
@@ -388,18 +468,30 @@ class NeoContainer {
   }
 
   public destroy(): Promise<void> {
+    if (this._destroyWork) return this._destroyWork;
+    if (this._touchClosed(false)) return Promise.resolve();
+    this._touchClosed(true);
+    try {
+      const __neoSeen = new Set();
+    const __neoErrors = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
+    } catch (__neoDestroyError) {
+      return Promise.reject(__neoDestroyError);
+    }
     return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] {
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) return __neoListed.slice();
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } return __neoListed.slice(); }
         }
       }
     }
@@ -442,6 +534,7 @@ exports[`Generated Code Snapshots > should match snapshot for legacy container 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
@@ -451,7 +544,9 @@ class NeoContainer {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
   private resolveListeners = new Set<(token: any, instance: any) => void>();
-  
+  private _closed = false;
+  private _borrowed = new Set<any>([]);
+  private _destroyWork?: Promise<void>;
 
   // -- Factories --
   
@@ -464,10 +559,36 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  public initialize(): Promise<void> { return Promise.resolve(); }
+  private _touchClosed(mark: boolean): boolean {
+    if (mark) this._closed = true;
+    return this._closed;
+  }
+
+  private _assertParents(): void {
+    if (!this.legacy) return;
+    for (const legacyContainer of this.legacy) {
+      if (legacyContainer && legacyContainer._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      }
+    }
+  }
+  private _neoFail(code: string, detail: string, cause?: unknown): Error {
+    const error = new Error(code + ': [' + this.name + '] ' + detail) as Error & { code: string; cause?: unknown };
+    error.code = code;
+    if (arguments.length >= 3) error.cause = cause;
+    return error;
+  }
+
+  public initialize(): Promise<void> {
+    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    return Promise.resolve();
+  }
 
   public createScope(): this {
-    throw new Error('createScope() is not implemented yet in this build');
+    if (this._touchClosed(false)) {
+    throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+  }
+    return new NeoContainer(this.legacy, this.name);
   }
 
   /**
@@ -523,10 +644,14 @@ class NeoContainer {
 
   public resolve<T>(token: any): T {
     
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     // 0. An overridden token always wins, even over a cached real instance.
     if (this.overrides.has(token)) {
       if (!this.instances.has(token)) {
-        this.instances.set(token, this.overrides.get(token)!());
+        const __neoMock = this.overrides.get(token)!();
+        this.instances.set(token, __neoMock);
+        if (__neoMock != null) this._borrowed.add(__neoMock);
       }
       const overridden = this.instances.get(token);
       this.notifyResolve(token, overridden);
@@ -548,6 +673,7 @@ class NeoContainer {
             try {
                 if (legacyContainer.resolve) {
                     const legacyResult = legacyContainer.resolve(token);
+                    if (legacyResult != null) this._borrowed.add(legacyResult);
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
@@ -577,18 +703,30 @@ class NeoContainer {
   }
 
   public destroy(): Promise<void> {
+    if (this._destroyWork) return this._destroyWork;
+    if (this._touchClosed(false)) return Promise.resolve();
+    this._touchClosed(true);
+    try {
+      const __neoSeen = new Set();
+    const __neoErrors = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
+    } catch (__neoDestroyError) {
+      return Promise.reject(__neoDestroyError);
+    }
     return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] {
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) return __neoListed.slice();
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } return __neoListed.slice(); }
         }
       }
     }
@@ -631,6 +769,7 @@ exports[`Generated Code Snapshots > should match snapshot for mixed scopes 1`] =
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
@@ -640,7 +779,9 @@ class NeoContainer {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
   private resolveListeners = new Set<(token: any, instance: any) => void>();
-  
+  private _closed = false;
+  private _borrowed = new Set<any>([]);
+  private _destroyWork?: Promise<void>;
 
   // -- Factories --
   
@@ -657,10 +798,36 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  public initialize(): Promise<void> { return Promise.resolve(); }
+  private _touchClosed(mark: boolean): boolean {
+    if (mark) this._closed = true;
+    return this._closed;
+  }
+
+  private _assertParents(): void {
+    if (!this.legacy) return;
+    for (const legacyContainer of this.legacy) {
+      if (legacyContainer && legacyContainer._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      }
+    }
+  }
+  private _neoFail(code: string, detail: string, cause?: unknown): Error {
+    const error = new Error(code + ': [' + this.name + '] ' + detail) as Error & { code: string; cause?: unknown };
+    error.code = code;
+    if (arguments.length >= 3) error.cause = cause;
+    return error;
+  }
+
+  public initialize(): Promise<void> {
+    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    return Promise.resolve();
+  }
 
   public createScope(): this {
-    throw new Error('createScope() is not implemented yet in this build');
+    if (this._touchClosed(false)) {
+    throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+  }
+    return new NeoContainer(this.legacy, this.name);
   }
 
   /**
@@ -716,10 +883,14 @@ class NeoContainer {
 
   public resolve<T>(token: any): T {
     
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     // 0. An overridden token always wins, even over a cached real instance.
     if (this.overrides.has(token)) {
       if (!this.instances.has(token)) {
-        this.instances.set(token, this.overrides.get(token)!());
+        const __neoMock = this.overrides.get(token)!();
+        this.instances.set(token, __neoMock);
+        if (__neoMock != null) this._borrowed.add(__neoMock);
       }
       const overridden = this.instances.get(token);
       this.notifyResolve(token, overridden);
@@ -741,6 +912,7 @@ class NeoContainer {
             try {
                 if (legacyContainer.resolve) {
                     const legacyResult = legacyContainer.resolve(token);
+                    if (legacyResult != null) this._borrowed.add(legacyResult);
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
@@ -770,18 +942,30 @@ class NeoContainer {
   }
 
   public destroy(): Promise<void> {
+    if (this._destroyWork) return this._destroyWork;
+    if (this._touchClosed(false)) return Promise.resolve();
+    this._touchClosed(true);
+    try {
+      const __neoSeen = new Set();
+    const __neoErrors = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
+    } catch (__neoDestroyError) {
+      return Promise.reject(__neoDestroyError);
+    }
     return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] {
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) return __neoListed.slice();
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } return __neoListed.slice(); }
         }
       }
     }
@@ -825,6 +1009,7 @@ exports[`Generated Code Snapshots > should match snapshot for parent container 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
@@ -834,7 +1019,9 @@ class NeoContainer {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
   private resolveListeners = new Set<(token: any, instance: any) => void>();
-  
+  private _closed = false;
+  private _borrowed = new Set<any>([]);
+  private _destroyWork?: Promise<void>;
 
   // -- Factories --
   
@@ -847,10 +1034,36 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  public initialize(): Promise<void> { return Promise.resolve(); }
+  private _touchClosed(mark: boolean): boolean {
+    if (mark) this._closed = true;
+    return this._closed;
+  }
+
+  private _assertParents(): void {
+    if (!this.legacy) return;
+    for (const legacyContainer of this.legacy) {
+      if (legacyContainer && legacyContainer._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      }
+    }
+  }
+  private _neoFail(code: string, detail: string, cause?: unknown): Error {
+    const error = new Error(code + ': [' + this.name + '] ' + detail) as Error & { code: string; cause?: unknown };
+    error.code = code;
+    if (arguments.length >= 3) error.cause = cause;
+    return error;
+  }
+
+  public initialize(): Promise<void> {
+    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    return Promise.resolve();
+  }
 
   public createScope(): this {
-    throw new Error('createScope() is not implemented yet in this build');
+    if (this._touchClosed(false)) {
+    throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+  }
+    return new NeoContainer(this.legacy, this.name);
   }
 
   /**
@@ -906,10 +1119,14 @@ class NeoContainer {
 
   public resolve<T>(token: any): T {
     
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     // 0. An overridden token always wins, even over a cached real instance.
     if (this.overrides.has(token)) {
       if (!this.instances.has(token)) {
-        this.instances.set(token, this.overrides.get(token)!());
+        const __neoMock = this.overrides.get(token)!();
+        this.instances.set(token, __neoMock);
+        if (__neoMock != null) this._borrowed.add(__neoMock);
       }
       const overridden = this.instances.get(token);
       this.notifyResolve(token, overridden);
@@ -931,6 +1148,7 @@ class NeoContainer {
             try {
                 if (legacyContainer.resolve) {
                     const legacyResult = legacyContainer.resolve(token);
+                    if (legacyResult != null) this._borrowed.add(legacyResult);
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
@@ -960,18 +1178,30 @@ class NeoContainer {
   }
 
   public destroy(): Promise<void> {
+    if (this._destroyWork) return this._destroyWork;
+    if (this._touchClosed(false)) return Promise.resolve();
+    this._touchClosed(true);
+    try {
+      const __neoSeen = new Set();
+    const __neoErrors = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
+    } catch (__neoDestroyError) {
+      return Promise.reject(__neoDestroyError);
+    }
     return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] {
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) return __neoListed.slice();
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } return __neoListed.slice(); }
         }
       }
     }
@@ -1014,6 +1244,7 @@ exports[`Generated Code Snapshots > should match snapshot for property tokens 1`
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
@@ -1023,7 +1254,9 @@ class NeoContainer {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
   private resolveListeners = new Set<(token: any, instance: any) => void>();
-  
+  private _closed = false;
+  private _borrowed = new Set<any>([]);
+  private _destroyWork?: Promise<void>;
 
   // -- Factories --
   
@@ -1075,10 +1308,36 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  public initialize(): Promise<void> { return Promise.resolve(); }
+  private _touchClosed(mark: boolean): boolean {
+    if (mark) this._closed = true;
+    return this._closed;
+  }
+
+  private _assertParents(): void {
+    if (!this.legacy) return;
+    for (const legacyContainer of this.legacy) {
+      if (legacyContainer && legacyContainer._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      }
+    }
+  }
+  private _neoFail(code: string, detail: string, cause?: unknown): Error {
+    const error = new Error(code + ': [' + this.name + '] ' + detail) as Error & { code: string; cause?: unknown };
+    error.code = code;
+    if (arguments.length >= 3) error.cause = cause;
+    return error;
+  }
+
+  public initialize(): Promise<void> {
+    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    return Promise.resolve();
+  }
 
   public createScope(): this {
-    throw new Error('createScope() is not implemented yet in this build');
+    if (this._touchClosed(false)) {
+    throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+  }
+    return new NeoContainer(this.legacy, this.name);
   }
 
   /**
@@ -1134,10 +1393,14 @@ class NeoContainer {
 
   public resolve<T>(token: any): T {
     
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     // 0. An overridden token always wins, even over a cached real instance.
     if (this.overrides.has(token)) {
       if (!this.instances.has(token)) {
-        this.instances.set(token, this.overrides.get(token)!());
+        const __neoMock = this.overrides.get(token)!();
+        this.instances.set(token, __neoMock);
+        if (__neoMock != null) this._borrowed.add(__neoMock);
       }
       const overridden = this.instances.get(token);
       this.notifyResolve(token, overridden);
@@ -1159,6 +1422,7 @@ class NeoContainer {
             try {
                 if (legacyContainer.resolve) {
                     const legacyResult = legacyContainer.resolve(token);
+                    if (legacyResult != null) this._borrowed.add(legacyResult);
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
@@ -1187,19 +1451,39 @@ class NeoContainer {
     return token;
   }
 
-  public destroy(): Promise<void> {
+  public async destroy(): Promise<void> {
+    if (this._destroyWork) return this._destroyWork;
+    if (this._touchClosed(false)) return Promise.resolve();
+    this._touchClosed(true);
+    const __neoRun = this._runDestroy();
+    this._destroyWork = __neoRun;
+    try {
+      await __neoRun;
+    } finally {
+      this._destroyWork = undefined;
+    }
+  }
+
+  private async _runDestroy(): Promise<void> {
+    const __neoSeen = new Set();
+    const __neoErrors = [];
+    const __neoPending = [];
+    if (this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) { const __neoInst = this.instances.get("PropertyToken:ApiService.apiUrl_8db03951"); if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { if (typeof __neoInst?.dispose === 'function') { const __neoResult = __neoInst.dispose(); if (__neoResult && typeof __neoResult.then === 'function') __neoPending.push(__neoResult); } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }
+    for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    return Promise.resolve();
+    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
   }
 
   public resolveAll<T>(token: any): T[] {
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) return __neoListed.slice();
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } return __neoListed.slice(); }
         }
       }
     }
@@ -1250,6 +1534,7 @@ exports[`Generated Code Snapshots > should match snapshot for service with depen
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
@@ -1259,7 +1544,9 @@ class NeoContainer {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
   private resolveListeners = new Set<(token: any, instance: any) => void>();
-  
+  private _closed = false;
+  private _borrowed = new Set<any>([]);
+  private _destroyWork?: Promise<void>;
 
   // -- Factories --
   
@@ -1276,10 +1563,36 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  public initialize(): Promise<void> { return Promise.resolve(); }
+  private _touchClosed(mark: boolean): boolean {
+    if (mark) this._closed = true;
+    return this._closed;
+  }
+
+  private _assertParents(): void {
+    if (!this.legacy) return;
+    for (const legacyContainer of this.legacy) {
+      if (legacyContainer && legacyContainer._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      }
+    }
+  }
+  private _neoFail(code: string, detail: string, cause?: unknown): Error {
+    const error = new Error(code + ': [' + this.name + '] ' + detail) as Error & { code: string; cause?: unknown };
+    error.code = code;
+    if (arguments.length >= 3) error.cause = cause;
+    return error;
+  }
+
+  public initialize(): Promise<void> {
+    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    return Promise.resolve();
+  }
 
   public createScope(): this {
-    throw new Error('createScope() is not implemented yet in this build');
+    if (this._touchClosed(false)) {
+    throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+  }
+    return new NeoContainer(this.legacy, this.name);
   }
 
   /**
@@ -1335,10 +1648,14 @@ class NeoContainer {
 
   public resolve<T>(token: any): T {
     
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     // 0. An overridden token always wins, even over a cached real instance.
     if (this.overrides.has(token)) {
       if (!this.instances.has(token)) {
-        this.instances.set(token, this.overrides.get(token)!());
+        const __neoMock = this.overrides.get(token)!();
+        this.instances.set(token, __neoMock);
+        if (__neoMock != null) this._borrowed.add(__neoMock);
       }
       const overridden = this.instances.get(token);
       this.notifyResolve(token, overridden);
@@ -1360,6 +1677,7 @@ class NeoContainer {
             try {
                 if (legacyContainer.resolve) {
                     const legacyResult = legacyContainer.resolve(token);
+                    if (legacyResult != null) this._borrowed.add(legacyResult);
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
@@ -1389,18 +1707,30 @@ class NeoContainer {
   }
 
   public destroy(): Promise<void> {
+    if (this._destroyWork) return this._destroyWork;
+    if (this._touchClosed(false)) return Promise.resolve();
+    this._touchClosed(true);
+    try {
+      const __neoSeen = new Set();
+    const __neoErrors = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
+    } catch (__neoDestroyError) {
+      return Promise.reject(__neoDestroyError);
+    }
     return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] {
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) return __neoListed.slice();
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } return __neoListed.slice(); }
         }
       }
     }
@@ -1451,6 +1781,7 @@ exports[`Generated Code Snapshots > should match snapshot for simple service 1`]
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
@@ -1460,7 +1791,9 @@ class NeoContainer {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
   private resolveListeners = new Set<(token: any, instance: any) => void>();
-  
+  private _closed = false;
+  private _borrowed = new Set<any>([]);
+  private _destroyWork?: Promise<void>;
 
   // -- Factories --
   
@@ -1473,10 +1806,36 @@ class NeoContainer {
     private name: string = 'NeoContainer'
   ) {}
 
-  public initialize(): Promise<void> { return Promise.resolve(); }
+  private _touchClosed(mark: boolean): boolean {
+    if (mark) this._closed = true;
+    return this._closed;
+  }
+
+  private _assertParents(): void {
+    if (!this.legacy) return;
+    for (const legacyContainer of this.legacy) {
+      if (legacyContainer && legacyContainer._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      }
+    }
+  }
+  private _neoFail(code: string, detail: string, cause?: unknown): Error {
+    const error = new Error(code + ': [' + this.name + '] ' + detail) as Error & { code: string; cause?: unknown };
+    error.code = code;
+    if (arguments.length >= 3) error.cause = cause;
+    return error;
+  }
+
+  public initialize(): Promise<void> {
+    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    return Promise.resolve();
+  }
 
   public createScope(): this {
-    throw new Error('createScope() is not implemented yet in this build');
+    if (this._touchClosed(false)) {
+    throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+  }
+    return new NeoContainer(this.legacy, this.name);
   }
 
   /**
@@ -1532,10 +1891,14 @@ class NeoContainer {
 
   public resolve<T>(token: any): T {
     
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     // 0. An overridden token always wins, even over a cached real instance.
     if (this.overrides.has(token)) {
       if (!this.instances.has(token)) {
-        this.instances.set(token, this.overrides.get(token)!());
+        const __neoMock = this.overrides.get(token)!();
+        this.instances.set(token, __neoMock);
+        if (__neoMock != null) this._borrowed.add(__neoMock);
       }
       const overridden = this.instances.get(token);
       this.notifyResolve(token, overridden);
@@ -1557,6 +1920,7 @@ class NeoContainer {
             try {
                 if (legacyContainer.resolve) {
                     const legacyResult = legacyContainer.resolve(token);
+                    if (legacyResult != null) this._borrowed.add(legacyResult);
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
@@ -1586,18 +1950,30 @@ class NeoContainer {
   }
 
   public destroy(): Promise<void> {
+    if (this._destroyWork) return this._destroyWork;
+    if (this._touchClosed(false)) return Promise.resolve();
+    this._touchClosed(true);
+    try {
+      const __neoSeen = new Set();
+    const __neoErrors = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
+    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
+    } catch (__neoDestroyError) {
+      return Promise.reject(__neoDestroyError);
+    }
     return Promise.resolve();
   }
 
   public resolveAll<T>(token: any): T[] {
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) return __neoListed.slice();
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } return __neoListed.slice(); }
         }
       }
     }

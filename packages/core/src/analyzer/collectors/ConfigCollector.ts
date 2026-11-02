@@ -3,9 +3,9 @@ import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
 import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError, ValidationMode } from '../types';
 import { HashUtils, TokenResolverService, DEFAULT_EXPORT_CONTAINER_NAME } from '../shared';
-import { containerKeyFor, stampRegistration } from '../shared/registrationGraph';
+import { containerKeyFor, partialInjectionsSpreadError, stampRegistration, valueCaptureFor } from '../shared/registrationGraph';
 import { buildContainerTokenView } from './resolutionUsages';
-import { extendsReferenceName } from '../shared/extendsReference';
+import { extendsCaptureText, extendsReferenceName } from '../shared/extendsReference';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 import { NeoTokenError } from '../errors/NeoTokenError';
 import { InjectionParser } from '../parsers/InjectionParser';
@@ -73,6 +73,7 @@ export class ConfigCollector implements IConfigCollector {
     // to the offending config's valueErrors instead of thrown, so LSP keeps running.
     this.validateContainerIdCollisions(containerIdsByFile);
     this.restampDependencyEdges(configs);
+    this.bindExtendsCaptures(configs);
 
     return configs;
   }
@@ -189,7 +190,12 @@ export class ConfigCollector implements IConfigCollector {
     const containerKey = containerKeyFor(node);
 
     // Collect injections and detect internal duplicates
-    const { injections: localInjections, duplicates, valueErrors, multiInjections } = this.collectInjections(configArg, sourceFile);
+    const { injections: localInjections, duplicates, valueErrors, multiInjections } = this.collectInjections(
+      configArg,
+      sourceFile,
+      containerKey,
+      type === 'partial',
+    );
     this.stampCollected(localInjections, multiInjections, duplicates, containerKey);
 
     // Get extends and useContainer (for builders only)
@@ -246,7 +252,9 @@ export class ConfigCollector implements IConfigCollector {
 
   private collectInjections(
     configObj: ts.ObjectLiteralExpression,
-    sourceFile: ts.SourceFile
+    sourceFile: ts.SourceFile,
+    containerKey: string,
+    isPartial: boolean,
   ): { injections: Map<TokenId, InjectionInfo>; duplicates: InjectionInfo[]; valueErrors: AnalysisError[]; multiInjections?: Map<TokenId, InjectionInfo[]> } {
     const injections = new Map<TokenId, InjectionInfo>();
     const duplicates: InjectionInfo[] = [];
@@ -259,11 +267,26 @@ export class ConfigCollector implements IConfigCollector {
       return { injections, duplicates, valueErrors };
     }
 
-    // Parse each injection
-    for (const element of injectionsProperty.initializer.elements) {
-      if (!TSContext.ts.isObjectLiteralExpression(element)) continue;
+    if (isPartial) {
+      const spread = partialInjectionsSpreadError(injectionsProperty.initializer.elements);
+      if (spread) {
+        valueErrors.push({
+          type: 'unsupported',
+          code: spread.code,
+          message: spread.message,
+          node: spread.node,
+          sourceFile,
+        });
+        return { injections, duplicates, valueErrors };
+      }
+    }
 
-      const info = this.parseInjection(element, sourceFile);
+    // Parse each injection
+    for (let index = 0; index < injectionsProperty.initializer.elements.length; index++) {
+      const element = injectionsProperty.initializer.elements[index];
+      if (!element || !TSContext.ts.isObjectLiteralExpression(element)) continue;
+
+      const info = this.parseInjection(element, sourceFile, containerKey, index, isPartial);
       if (info) {
         // Check if it's an AnalysisError (InjectionInfo has __kind: 'info')
         if (!('__kind' in info)) {
@@ -371,7 +394,10 @@ export class ConfigCollector implements IConfigCollector {
 
   private parseInjection(
     obj: ts.ObjectLiteralExpression,
-    sourceFile: ts.SourceFile
+    sourceFile: ts.SourceFile,
+    containerKey: string,
+    index: number,
+    isPartial: boolean,
   ): InjectionInfo | AnalysisError | null {
     let result: ReturnType<InjectionParser['parse']>;
     try {
@@ -417,6 +443,12 @@ export class ConfigCollector implements IConfigCollector {
       tokenLocalName: parsed.tokenLocalName,
       factoryDependencies: parsed.factoryDependencies,
       opaque: parsed.opaque,
+      ownership: parsed.registrationType === 'value' || parsed.registrationType === 'factory'
+        ? parsed.ownership
+        : undefined,
+      valueCapture: parsed.registrationType === 'value' && !isPartial
+        ? valueCaptureFor(containerKey, index)
+        : undefined,
     };
     return {
       __kind: 'info',
@@ -427,6 +459,73 @@ export class ConfigCollector implements IConfigCollector {
       isMulti: parsed.isMulti,
       warnings: parsed.dependenciesWarning ? [parsed.dependenciesWarning] : undefined,
     };
+  }
+
+  /** A partial useValue reads the expression written in `extends`, once per host. The capture string is metadata on this shared partial, not a per-host copy. */
+  private bindExtendsCaptures(configs: Map<string, ConfigGraph>): void {
+    for (const config of configs.values()) {
+      if (config.type !== 'builder') continue;
+      this.bindExtendsOf(config, configs, new Set());
+    }
+  }
+
+  private bindExtendsOf(config: ConfigGraph, configs: Map<string, ConfigGraph>, seen: Set<string>): void {
+    const arg = config.node.arguments[0];
+    if (!arg || !TSContext.ts.isObjectLiteralExpression(arg)) return;
+    const extendsProp = this.findProperty(arg, 'extends');
+    if (!extendsProp || !TSContext.ts.isArrayLiteralExpression(extendsProp.initializer)) return;
+    for (const element of extendsProp.initializer.elements) {
+      if (!element) continue;
+      const binding = extendsCaptureText(element);
+      const call = binding ? this.partialCallFor(element) : undefined;
+      const partial = call ? configs.get(containerKeyFor(call)) : undefined;
+      if (!binding || !partial?.containerKey || seen.has(partial.containerKey)) continue;
+      seen.add(partial.containerKey);
+      this.writePartialCaptures(partial, binding);
+      this.bindExtendsOf(partial, configs, seen);
+    }
+  }
+
+  private writePartialCaptures(partial: ConfigGraph, binding: string): void {
+    const write = (info: InjectionInfo) => {
+      if (info.definition.type !== 'value') return;
+      const index = this.injectionIndex(partial, info.node);
+      if (index === undefined) return;
+      info.definition.valueCapture = valueCaptureFor(partial.containerKey, index, binding);
+    };
+    for (const info of partial.localInjections.values()) write(info);
+    if (partial.multiInjections) {
+      for (const infos of partial.multiInjections.values()) infos.forEach(write);
+    }
+    for (const info of partial.duplicates) write(info);
+  }
+
+  private injectionIndex(partial: ConfigGraph, node: ts.Node): number | undefined {
+    const arg = partial.node.arguments[0];
+    if (!arg || !TSContext.ts.isObjectLiteralExpression(arg)) return undefined;
+    const prop = this.findProperty(arg, 'injections');
+    if (!prop || !TSContext.ts.isArrayLiteralExpression(prop.initializer)) return undefined;
+    const index = prop.initializer.elements.findIndex((element) => element === node);
+    return index >= 0 ? index : undefined;
+  }
+
+  private partialCallFor(element: ts.Expression): ts.CallExpression | undefined {
+    if (!TSContext.ts.isIdentifier(element) && !TSContext.ts.isPropertyAccessExpression(element)) return undefined;
+    const located = TSContext.ts.isPropertyAccessExpression(element) ? element.name : element;
+    const symbol = this.checker.getSymbolAtLocation(located);
+    if (!symbol) return undefined;
+    const resolved = this.tokenResolverService.resolveSymbol(symbol);
+    const declaration = resolved.valueDeclaration ?? resolved.declarations?.[0];
+    if (
+      !declaration
+      || !TSContext.ts.isVariableDeclaration(declaration)
+      || !declaration.initializer
+      || !TSContext.ts.isCallExpression(declaration.initializer)
+    ) {
+      return undefined;
+    }
+    const call = declaration.initializer;
+    return resolveNeoMarker(this.checker, call) === 'definePartialConfig' ? call : undefined;
   }
 
   private getExtendsRefs(configObj: ts.ObjectLiteralExpression): string[] {

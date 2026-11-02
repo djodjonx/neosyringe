@@ -228,6 +228,11 @@ function emitFactoryBody(
     ${emitInvocation(warmup, release)}`;
 }
 
+/** A captured useValue is read once. Hand-built graphs keep the original expression. */
+function capturedValue(node: DependencyNode): string {
+  return node.service.valueCapture ?? node.service.valueSource ?? 'undefined';
+}
+
 /** Generates a factory method for each service in topological order. */
 export function generateFactories(
   graph: DependencyGraph,
@@ -246,10 +251,9 @@ export function generateFactories(
     const factoryId = getFactoryName(tokenId);
 
     if (node.service.type === 'value' && node.service.valueSource !== undefined) {
-      // Value provider: embed the source expression directly
       factories.push(`
   private ${factoryId}(): any {
-    return ${node.service.valueSource};
+    return ${capturedValue(node)};
   }`);
       continue;
     }
@@ -303,7 +307,7 @@ export function generateMultiFactories(
       } else if (node.service.type === 'value' && node.service.valueSource !== undefined) {
         factories.push(`
   private ${factoryId}(): any {
-    return ${node.service.valueSource};
+    return ${capturedValue(node)};
   }`);
       } else {
         if (!node.service.implementationSymbol) return;

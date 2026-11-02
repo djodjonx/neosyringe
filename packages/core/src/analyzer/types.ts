@@ -55,6 +55,13 @@ export interface ServiceDefinition {
   /** The raw source text of the value expression (for 'value' type). */
   valueSource?: string;
 
+  /**
+   * Expression that reads a useValue capture.
+   * A direct value names a const emitted once before the class.
+   * A partial value reads the `extends` expression the consumer wrote (`P.part`, `p`, `part`), then `.injections[i].useValue`.
+   */
+  valueCapture?: string;
+
   /** True if this injection is scoped to the local container. */
   isScoped?: boolean;
 

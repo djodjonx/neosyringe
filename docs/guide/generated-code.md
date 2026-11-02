@@ -98,7 +98,7 @@ container.override(useInterface<ILogger>(), () => mockLogger);
 container.clearOverrides(); // revert to the real registrations
 ```
 
-`destroy()` also clears overrides, so a container reused across tests doesn't leak one test's mocks into the next.
+`destroy()` clears overrides and is terminal: the container cannot be reused. Create a scope per test with `createScope()`, and destroy that scope. An override mock is not disposed.
 
 ::: warning Disabled when `NODE_ENV=production`
 `override()` throws if `process.env.NODE_ENV === 'production'`. A container is commonly a long-lived, shared singleton — an override left in by mistake, or reachable from somewhere it shouldn't be, would silently change what every caller gets for as long as the process runs. This is a deliberate guard, not an oversight — don't work around it by unsetting `NODE_ENV` in production.
