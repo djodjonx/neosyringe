@@ -62,7 +62,7 @@ describe('LSP Diagnostics Integration', () => {
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     expect(diagnostics.length).toBeGreaterThan(0);
-    expect(diagnostics[0].messageText).toContain('[NeoSyringe] Circular dependency detected');
+    expect(diagnostics[0].messageText).toContain('[NeoSyringe] NEO_CYCLE: Circular dependency detected');
   });
 
   it('should report missing binding diagnostics', () => {
@@ -104,7 +104,7 @@ describe('LSP Diagnostics Integration', () => {
     const diagnostics = proxy.getSemanticDiagnostics(fileName);
 
     expect(diagnostics.length).toBeGreaterThan(0);
-    expect(diagnostics[0].messageText).toContain('[NeoSyringe] Missing injection');
+    expect(diagnostics[0].messageText).toContain('[NeoSyringe] NEO_MISSING_PROVIDER: Missing injection');
   });
 
   it('should not report error when dependency is in legacy container', () => {

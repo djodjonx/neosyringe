@@ -58,6 +58,7 @@ describe('LSP unsupported constructor diagnostic', () => {
     );
 
     expect(diagnostic?.code).toBe(9994);
+    expect(diagnostic?.messageText).toContain('[NeoSyringe] NEO_CONFIG_UNSUPPORTED: ');
     expect(diagnostic?.messageText).toContain("Constructor 'UserService' parameter 'logger'");
   });
 });
