@@ -1,5 +1,5 @@
 import type { Node, SourceFile } from 'typescript';
-import { DependencyGraph, TokenId } from '../analyzer/types';
+import { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
 import { getSimpleName } from '../analyzer/utils/TokenUtils';
 
 /**
@@ -53,7 +53,7 @@ export class GraphValidator {
     const parentTokens = graph.parentProvidedTokens ?? new Set<TokenId>();
 
     // 1. Check for Duplicate Registrations (local token already in parent)
-    for (const [nodeId, node] of graph.nodes) {
+    for (const [nodeId, node] of this.registrationNodes(graph)) {
       if (parentTokens.has(nodeId)) {
         // Allow if scoped: true (intentional override)
         if (node.service.isScoped) {
@@ -70,7 +70,7 @@ export class GraphValidator {
     }
 
     // 2. Check for Missing Dependencies
-    for (const [nodeId, node] of graph.nodes) {
+    for (const [nodeId, node] of this.registrationNodes(graph)) {
       for (const depId of node.dependencies) {
         // Check if dependency is provided locally OR by parent
         const isProvidedLocally = graph.nodes.has(depId) || (graph.multiNodes?.has(depId) ?? false);
@@ -118,7 +118,7 @@ export class GraphValidator {
     // 3. Check for Cycles (only in local nodes, parent is assumed valid)
     // TODO: cycle detection does not yet walk multi-node deps; cycles involving
     // multi-registered tokens (A → multiToken → A) will not be detected.
-    for (const nodeId of graph.nodes.keys()) {
+    for (const nodeId of this.registrationNodes(graph).keys()) {
       if (!visited.has(nodeId)) {
         this.detectCycleCollect(nodeId, graph, visited, recursionStack, parentTokens, errors);
       }
@@ -128,6 +128,11 @@ export class GraphValidator {
       valid: errors.length === 0,
       errors,
     };
+  }
+
+  /** Every registration. Pruning must not hide a cycle or a missing provider. ADR006 line 21. */
+  private registrationNodes(graph: DependencyGraph): Map<TokenId, DependencyNode> {
+    return graph.nodes;
   }
 
   /**

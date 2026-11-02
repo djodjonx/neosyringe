@@ -8,6 +8,7 @@ import { buildContainerTokenView } from './resolutionUsages';
 import { extendsCaptureText, extendsReferenceName } from '../shared/extendsReference';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 import { NeoTokenError } from '../errors/NeoTokenError';
+import { closedModeDiagnostics, readOptimization, type OptimizationTarget } from '../parsers/ConfigParser';
 import { InjectionParser } from '../parsers/InjectionParser';
 import { DependencyAnalyzer } from '../validators/DependencyAnalyzer';
 
@@ -47,7 +48,7 @@ export class ConfigCollector implements IConfigCollector {
     private program: ts.Program,
     private checker: ts.TypeChecker,
     tokenResolverService?: TokenResolverService,
-    validation: ValidationMode = 'strict',
+    private validation: ValidationMode = 'strict',
   ) {
     this.tokenResolverService = tokenResolverService ?? new TokenResolverService(checker);
     this.injectionParser = new InjectionParser(checker, this.tokenResolverService, validation);
@@ -214,6 +215,26 @@ export class ConfigCollector implements IConfigCollector {
 
     // Get container name
     const containerName = this.getContainerName(configArg);
+    const known = new Set<TokenId>(localInjections.keys());
+    if (multiInjections) {
+      for (const id of multiInjections.keys()) known.add(id);
+    }
+    const optimization: OptimizationTarget = {};
+    if (type === 'builder') {
+      readOptimization(configArg, optimization, known, (expr) => this.tokenResolverService.resolveTokenId(expr));
+    }
+    const opaqueNames: string[] = [];
+    const collectOpaque = (info: InjectionInfo) => {
+      if (info.definition.opaque === true) opaqueNames.push(info.definition.tokenId);
+    };
+    for (const info of localInjections.values()) collectOpaque(info);
+    if (multiInjections) {
+      for (const infos of multiInjections.values()) infos.forEach(collectOpaque);
+    }
+    const closedErrors = type === 'builder'
+      ? closedModeDiagnostics(optimization.optimizationMode, this.validation, opaqueNames, configArg, sourceFile)
+      : [];
+    const mergedValueErrors = [...valueErrors, ...expectedErrors, ...(optimization.errors ?? []), ...closedErrors];
 
     return {
       containerId,
@@ -229,8 +250,12 @@ export class ConfigCollector implements IConfigCollector {
       legacyParentTokens,
       expectedExternalTokens,
       containerName,
-      valueErrors: [...valueErrors, ...expectedErrors].length > 0 ? [...valueErrors, ...expectedErrors] : undefined,
+      valueErrors: mergedValueErrors.length > 0 ? mergedValueErrors : undefined,
       multiInjections: multiInjections && multiInjections.size > 0 ? multiInjections : undefined,
+      optimizationMode: optimization.optimizationMode,
+      publicRoots: optimization.publicRoots,
+      publicMultiRoots: optimization.publicMultiRoots,
+      eagerRoots: optimization.eagerRoots,
     };
   }
 

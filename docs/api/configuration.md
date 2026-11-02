@@ -104,9 +104,25 @@ defineBuilderConfig({
   extends: [loggingPartial, databasePartial],
   
   // Parent container (NeoSyringe or legacy)
-  useContainer: parentContainer
+  useContainer: parentContainer,
+
+  // Open is the default and keeps every registration.
+  // Closed keeps roots, eager services, and what they need.
+  optimization: { mode: 'closed', roots: [UserService], eager: [Warmup] }
 });
 ```
+
+### optimization
+
+Type: `Optimization` on `BuilderCapabilities`.
+
+Absent and `{ mode: 'open' }` keep every registration. That is the default.
+
+`{ mode: 'closed', roots, eager? }` keeps each root, each eager service, and the dependencies those need. `roots` is a literal array of tokens or `{ all: token }`. An eager service starts once during `initialize()` and is not a public root. `resolve` of anything else fails with `NEO_ROOT_NOT_EXPORTED`.
+
+Moving an existing container from open to closed is an application choice. Name the public roots, and name any service that must start even though callers do not resolve it.
+
+A closed container requires `validation: 'strict'`.
 
 ### name
 

@@ -94,6 +94,9 @@ jobs:
       - name: Negative ownership consumer types
         run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative-ownership --expect-file expected-diagnostic.txt
 
+      - name: Negative closed consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative-closed --expect-file expected-diagnostic.txt
+
   distribution:
     name: Distribution
     runs-on: ubuntu-latest

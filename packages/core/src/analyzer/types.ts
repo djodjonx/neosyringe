@@ -212,6 +212,18 @@ export interface ConfigGraph {
 
   /** Multi-registrations (token -> ordered list of injection infos) */
   multiInjections?: Map<TokenId, InjectionInfo[]>;
+
+  /** Absent means open. ADR006 line 9. `roots` on DependencyGraph stays empty. */
+  optimizationMode?: 'open' | 'closed';
+
+  /** Simple exported roots of a closed container. */
+  publicRoots?: TokenId[];
+
+  /** `{ all: token }` roots. resolveAll is allowed for these tokens only. */
+  publicMultiRoots?: TokenId[];
+
+  /** Eager tokens. They start once and are not public roots. ADR006 line 12. */
+  eagerRoots?: TokenId[];
 }
 
 /**
@@ -316,6 +328,21 @@ export interface DependencyGraph {
   /** Root services that are explicitly requested or exported. */
   roots: TokenId[];
 
+  /** Absent means open. ADR006 line 9. Distinct from `roots`, which stays []. */
+  optimizationMode?: 'open' | 'closed';
+
+  /** Simple tokens a closed container exports through resolve. */
+  publicRoots?: TokenId[];
+
+  /** Multi tokens a closed container exports through resolveAll. */
+  publicMultiRoots?: TokenId[];
+
+  /** Tokens constructed once from initialize, without becoming public. */
+  eagerRoots?: TokenId[];
+
+  /** One reason per registration id. ADR006 line 24. */
+  retention?: Map<string, RetentionReason>;
+
   /** Optional container name for debugging. */
   containerName?: string;
 
@@ -419,7 +446,22 @@ export type DiagnosticCode =
   | 'NEO_UNDECLARED_FACTORY_DEP'
   | 'NEO_FACTORY_CONTEXT_EXPIRED'
   | 'NEO_ASYNC_TRANSIENT'
-  | 'NEO_TOKEN_BOUNDARY_UNSUPPORTED';
+  | 'NEO_TOKEN_BOUNDARY_UNSUPPORTED'
+  | 'NEO_ROOT_NOT_EXPORTED'
+  | 'NEO_CLOSED_REQUIRES_STRICT';
+
+/**
+ * Why one registration stays or goes.
+ * T19 reads `kind` and `token`. ADR006 lines 24 and 29-31.
+ * Rank when several apply: root, eager, multi-contribution-of, dependency-of, parent-boundary, unreachable.
+ */
+export type RetentionReason =
+  | { kind: 'root' }
+  | { kind: 'eager' }
+  | { kind: 'dependency-of'; token: TokenId }
+  | { kind: 'multi-contribution-of'; token: TokenId }
+  | { kind: 'parent-boundary' }
+  | { kind: 'unreachable' };
 
 /**
  * An error detected during dependency graph analysis.
