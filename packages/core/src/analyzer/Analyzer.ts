@@ -11,7 +11,7 @@ import { ConfigCollector, type IConfigCollector } from './collectors';
 import { TokenResolver, type ITokenResolver } from './resolvers';
 import { DependencyResolver } from './resolvers/DependencyResolver';
 import { ParentContainerResolver } from './resolvers/ParentContainerResolver';
-import { ConfigParser } from './parsers/ConfigParser';
+import { assignRetention, ConfigParser, sealOpenParent } from './parsers/ConfigParser';
 import {
   CompositeValidator,
   DuplicateValidator,
@@ -612,6 +612,7 @@ export class Analyzer {
   private resolveAllDependencies(graph: DependencyGraph): void {
     const { dependencyResolver } = this.getLegacyServices();
     dependencyResolver.resolveAll(graph);
+    // Factory and constructor edges exist. ADR006 lines 21-24. Do not drop nodes here.
 
     // Resolve dependencies for multi-nodes
     if (graph.multiNodes) {
@@ -621,5 +622,7 @@ export class Analyzer {
         }
       }
     }
+    assignRetention(graph);
+    sealOpenParent(graph);
   }
 }

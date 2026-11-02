@@ -1,11 +1,12 @@
 import type * as ts from 'typescript';
 import { relative, isAbsolute, dirname } from 'node:path';
-import { DependencyGraph, DependencyNode } from '../analyzer/types';
+import { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
-import { generateFactories, generateMultiFactories, type GetImport } from './FactoryEmitter';
-import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, parentOpenCheck, isBorrowedInstance } from './ResolveEmitter';
-import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
+import { generateFactories, generateMultiFactories, getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
+import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, parentOpenCheck, isBorrowedInstance, afterStore } from './ResolveEmitter';
+import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
+import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { TSContext } from '../TSContext';
 import { HashUtils } from '../analyzer/shared/HashUtils';
 
@@ -150,7 +151,9 @@ export class Generator {
    * @returns TypeScript source code for the generated container.
    */
   public generate(): string {
-    const sorted = topologicalSort(this.graph.nodes);
+    const sourceGraph = this.graph;
+    const emitted = dropUnreachable(sourceGraph);
+    const sorted = topologicalSort(emitted.nodes);
     const imports = new Map<string, string>(); // filePath -> importAliasPrefix
 
     // Build a map from resolved symbol → local identifier name for default exports.
@@ -162,9 +165,9 @@ export class Generator {
       if (implementationSymbol && implementationLocalName) localNameBySymbol.set(implementationSymbol, implementationLocalName);
       if (tokenSymbol && tokenLocalName) localNameBySymbol.set(tokenSymbol, tokenLocalName);
     };
-    for (const node of this.graph.nodes.values()) indexLocalNames(node);
-    if (this.graph.multiNodes) {
-      for (const nodes of this.graph.multiNodes.values()) nodes.forEach(indexLocalNames);
+    for (const node of emitted.nodes.values()) indexLocalNames(node);
+    if (emitted.multiNodes) {
+      for (const nodes of emitted.multiNodes.values()) nodes.forEach(indexLocalNames);
     }
 
     // For default exports in useDirectSymbolNames=true mode, pre-register their source file
@@ -249,59 +252,70 @@ export class Generator {
     // otherwise resolving from this container before the parent is ready would
     // silently succeed for local tokens and only fail deep inside the parent's
     // own resolve(), with no guidance that it's an initialization-order issue.
-    const hasAsync = hasAsyncFactories(this.graph) || !!this.graph.parentHasAsyncInitialize;
+    const hasAsync = hasAsyncFactories(emitted) || !!emitted.parentHasAsyncInitialize;
+    const closed = emitted.optimizationMode === 'closed';
     const resolveGuard = buildAsyncResolveGuard(hasAsync);
+    const eagerLines = eagerSyncLines(emitted, getImport, hasAsync);
 
-    const factories = generateFactories(this.graph, sorted, getImport, getForeignImport, hasAsync);
+    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed);
     const resolveCases = generateResolveCases(
-      this.graph,
+      emitted,
       sorted,
       getImport,
       hasAsync,
       `${this.containerClassName}.formatToken`,
     );
-    const multiFactories = generateMultiFactories(this.graph, getImport, getForeignImport, hasAsync);
-    const resolveAllMethod = generateResolveAllMethod(this.graph, getImport, hasAsync);
+    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed);
+    const resolveAllMethod = generateResolveAllMethod(emitted, getImport, hasAsync, closed);
     const initializeMethod = hasAsync
-      ? generateInitializeMethod(this.graph, sorted, getImport, hasAsync)
-      : generateSyncInitializeMethod();
+      ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines)
+      : eagerLines.length > 0
+        ? generateEagerSyncInitialize(eagerLines)
+        : generateSyncInitializeMethod();
     const createScopeMethod = generateCreateScopeMethod(this.containerClassName, hasAsync);
-    const destroyMethod = generateDestroyMethod(this.graph, sorted, getImport, hasAsync);
-    const overrideMethods = generateOverrideMethods(this.graph, sorted, getImport, hasAsync, this.testOverrides);
+    const destroyMethod = generateDestroyMethod(emitted, sorted, getImport, hasAsync);
+    const overrideMethods = generateOverrideMethods(emitted, sorted, getImport, hasAsync, this.testOverrides);
 
     // Generate import lines for:
     // - All symbols when useDirectSymbolNames=false (CLI/generated file mode)
     // - Only default export symbols when useDirectSymbolNames=true (inline transform mode)
     const importLines: string[] = [];
+    // Base directory for relative import paths:
+    // - useDirectSymbolNames=true: relative to the container source file (so the injected
+    //   import resolves correctly from the file's perspective)
+    // - useDirectSymbolNames=false: relative to the output directory (generated file)
+    const base = this.useDirectSymbolNames
+      ? (sourceGraph.sourceFileName ? dirname(sourceGraph.sourceFileName) : process.cwd())
+      : (this.outputDir ?? process.cwd());
+    const specifierFor = (filePath: string): string => {
+      let importPath: string;
+      if (isAbsolute(filePath)) {
+        const rel = relative(base, filePath).replace(/\\/g, '/');
+        importPath = rel.startsWith('.') ? rel : `./${rel}`;
+      } else {
+        importPath = filePath;
+      }
+      // Strip TS/TSX extensions in inline mode: the user's own import of the same file
+      // typically uses no extension (or .js). Using './login.ts' alongside './login'
+      // risks two distinct module specifiers which some toolchains won't deduplicate,
+      // breaking the identity comparison token === Import_N.default.
+      if (this.useDirectSymbolNames) {
+        importPath = importPath.replace(/\.(ts|tsx|mts|cts)$/, '');
+      }
+      return importPath;
+    };
     if (imports.size > 0) {
-      // Base directory for relative import paths:
-      // - useDirectSymbolNames=true: relative to the container source file (so the injected
-      //   import resolves correctly from the file's perspective)
-      // - useDirectSymbolNames=false: relative to the output directory (generated file)
-      const base = this.useDirectSymbolNames
-        ? (this.graph.sourceFileName ? dirname(this.graph.sourceFileName) : process.cwd())
-        : (this.outputDir ?? process.cwd());
-
       for (const [filePath, alias] of imports) {
-        let importPath: string;
-        if (isAbsolute(filePath)) {
-          const rel = relative(base, filePath).replace(/\\/g, '/');
-          importPath = rel.startsWith('.') ? rel : `./${rel}`;
-        } else {
-          importPath = filePath;
-        }
-        // Strip TS/TSX extensions in inline mode: the user's own import of the same file
-        // typically uses no extension (or .js). Using './login.ts' alongside './login'
-        // risks two distinct module specifiers which some toolchains won't deduplicate,
-        // breaking the identity comparison token === Import_N.default.
-        if (this.useDirectSymbolNames) {
-          importPath = importPath.replace(/\.(ts|tsx|mts|cts)$/, '');
-        }
-        importLines.push(`import * as ${alias} from '${importPath}';`);
+        importLines.push(`import * as ${alias} from '${specifierFor(filePath)}';`);
       }
     }
+    // A pruned provider's module still runs when it has a top-level effect. ADR006 lines 35-38.
+    for (const filePath of loadEffectFiles(sourceGraph)) {
+      if (imports.has(filePath)) continue;
+      importLines.push(`import '${specifierFor(filePath)}';`);
+    }
 
-    const borrowedList = borrowedSeeds(this.graph).join(', ');
+    const borrowedList = borrowedSeeds(emitted).join(', ');
     // A successful legacy resolve borrows that instance. A throw must not mark the caller's own result.
     const borrowField = '';
     const borrowReset = '';
@@ -311,6 +325,7 @@ export class Generator {
     const scopeFields = `private _closed = false;
   ${borrowField}private _borrowed = new Set<any>([${borrowedList}]);
   private _destroyWork?: Promise<void>;`;
+    const eagerField = !hasAsync && eagerLines.length > 0 ? '\n  private _eagerOnce = false;' : '';
     const stateFields = hasAsync
       ? `private _state: 'created' | 'initializing' | 'reconfiguring' | 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
   private _initWork?: Promise<void>;
@@ -325,9 +340,11 @@ export class Generator {
 
   ${assertParentsMethod()}
   ${hasAsync ? '' : syncNeoFailMethod()}`;
-    const captureLines = captureHoists(this.graph);
+    const captureLines = captureHoists(sourceGraph);
+    for (const line of residualValueReads(sourceGraph)) captureLines.push(line);
 
-    const multiGuard = generateMultiResolveGuard(this.graph, getImport, hasAsync);
+    const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
+    const assertOne = closed ? 'this._assertRoot(token, false);' : '';
     const resolveInterior = `
     ${borrowReset}${parentOpenCheck(hasAsync)}
     ${multiGuard}${multiGuard ? '\n    ' : ''}// 0. An overridden token always wins, even over a cached real instance.
@@ -371,16 +388,37 @@ export class Generator {
     const resolveMethod = hasAsync
       ? `public resolve<T>(token: any): T {
     this._guardPublic();
+    ${closed ? assertOne + '\n    ' : ''}return this._resolveInternal<T>(token);
+  }
+
+  private _resolveInternal<T>(token: any): T {${resolveInterior}
+  }`
+      : closed
+        ? `public resolve<T>(token: any): T {
+    ${assertOne}
     return this._resolveInternal<T>(token);
   }
 
   private _resolveInternal<T>(token: any): T {${resolveInterior}
   }`
-      : `public resolve<T>(token: any): T {
+        : `public resolve<T>(token: any): T {
     ${resolveGuard}${resolveInterior}
   }`;
 
-    return `
+    const exported = closed ? exportedRootIds(emitted) : undefined;
+    const rootFields = exported
+      ? `\n  private _singleRoots = new Set<any>([${rootKeyExprs(exported.single, emitted, getImport)}]);\n  private _multiRoots = new Set<any>([${rootKeyExprs(exported.multi, emitted, getImport)}]);`
+      : '';
+    const assertRootMethod = closed ? `
+
+  private _assertRoot(token: any, all: boolean): void {
+    if ((all ? this._multiRoots : this._singleRoots).has(token)) return;
+    const error = new Error('NEO_ROOT_NOT_EXPORTED: [' + this.name + '] token is not an exported root') as Error & { code: string };
+    error.code = 'NEO_ROOT_NOT_EXPORTED';
+    throw error;
+  }` : '';
+
+    return `${openModeMark(sourceGraph.optimizationMode)}
 ${importLines.join('\n')}
 ${captureLines.join('\n')}
 
@@ -393,7 +431,7 @@ class ${this.containerClassName} {
   private instances = new Map<any, any>();
   private overrides = new Map<any, () => any>();
   private resolveListeners = new Set<(token: any, instance: any) => void>();
-  ${stateFields}
+  ${stateFields}${eagerField}${rootFields}
 
   // -- Factories --
   ${[...factories, ...multiFactories].join('\n  ')}
@@ -403,7 +441,7 @@ class ${this.containerClassName} {
     private name: string = 'NeoContainer'
   ) {}
 
-  ${runtimeHelpers}
+  ${runtimeHelpers}${assertRootMethod}
 
   ${initializeMethod}
 
@@ -461,7 +499,7 @@ class ${this.containerClassName} {
     return undefined;
   }
 
-  ${this.emitDebugGetter()}
+  ${this.emitDebugGetter(emitted)}
 }
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   }
@@ -528,7 +566,7 @@ export const ${variableName || 'container'} = ${instantiation};
    * the bundle. Bundlers with static dead-code elimination (e.g., esbuild with
    * NODE_ENV inlined) will strip the literal entirely.
    */
-  private emitDebugGetter(): string {
+  private emitDebugGetter(graph: DependencyGraph): string {
     if (!this.emitDebugHelpers) {
       // Build-time strip: the data is never written into the output at all —
       // nothing for a bundler's DCE to depend on, and nothing shipped for the
@@ -540,11 +578,11 @@ export const ${variableName || 'container'} = ${instantiation};
     }
 
     const edges: Array<{ token: string; dependencies: string[]; multi?: true }> = [];
-    for (const [tokenId, node] of this.graph.nodes) {
+    for (const [tokenId, node] of graph.nodes) {
       edges.push({ token: tokenId, dependencies: node.dependencies });
     }
-    if (this.graph.multiNodes) {
-      for (const [tokenId, nodes] of this.graph.multiNodes) {
+    if (graph.multiNodes) {
+      for (const [tokenId, nodes] of graph.multiNodes) {
         for (const node of nodes) {
           edges.push({ token: tokenId, dependencies: node.dependencies, multi: true });
         }
@@ -554,7 +592,7 @@ export const ${variableName || 'container'} = ${instantiation};
     return `// For debugging/inspection — token IDs are stripped by DCE in production
   public get _graph() {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return [];
-    return ${JSON.stringify(Array.from(this.graph.nodes.keys()))};
+    return ${JSON.stringify(Array.from(graph.nodes.keys()))};
   }
 
   // Same token list as _graph, but with each token's own dependency edges —
@@ -592,4 +630,206 @@ function borrowedSeeds(graph: DependencyGraph): string[] {
     if (node.service.valueCapture) seeds.push(node.service.valueCapture);
   });
   return seeds;
+}
+
+/** Absent and explicit open emit the same text. ADR006 line 9. */
+function openModeMark(mode: 'open' | 'closed' | undefined): string {
+  return mode === 'closed' ? '' : '';
+}
+
+function dropUnreachable(graph: DependencyGraph): DependencyGraph {
+  const retention = graph.retention;
+  if (!retention) return graph;
+  for (const reason of retention.values()) {
+    if (reason.kind === 'unreachable') return pruneClosed(graph);
+  }
+  return graph;
+}
+
+function pruneClosed(graph: DependencyGraph): DependencyGraph {
+  const nodes = new Map<TokenId, DependencyNode>();
+  for (const [tokenId, node] of graph.nodes) {
+    if (!keepRegistration(graph, node.service.registrationId ?? tokenId)) continue;
+    nodes.set(tokenId, node);
+  }
+  let multiNodes = graph.multiNodes;
+  if (graph.multiNodes) {
+    multiNodes = new Map();
+    for (const [tokenId, list] of graph.multiNodes) {
+      const kept = list.filter((node) => keepRegistration(graph, node.service.registrationId ?? tokenId));
+      if (kept.length > 0) multiNodes.set(tokenId, kept);
+    }
+  }
+  return { ...graph, nodes, multiNodes };
+}
+
+function keepRegistration(graph: DependencyGraph, id: string): boolean {
+  return graph.retention?.get(id)?.kind !== 'unreachable';
+}
+
+function residualValueReads(graph: DependencyGraph): string[] {
+  const lines: string[] = [];
+  visitServices(graph, (node) => {
+    if (!isUnreachable(graph, node)) return;
+    const capture = node.service.valueCapture;
+    if (!capture || capture.startsWith('__neoCapture_')) return;
+    lines.push(`void ${capture};`);
+  });
+  return lines;
+}
+
+function isUnreachable(graph: DependencyGraph, node: DependencyNode): boolean {
+  const id = node.service.registrationId ?? node.service.tokenId;
+  return graph.retention?.get(id)?.kind === 'unreachable';
+}
+
+function eagerSyncLines(graph: DependencyGraph, getImport: GetImport, hasAsync: boolean): string[] {
+  if (graph.optimizationMode !== 'closed') return [];
+  const lines: string[] = [];
+  const pushNode = (node: DependencyNode, factoryId: string) => {
+    if (node.service.isAsync) return;
+    const tokenKey = resolveTokenKey(node.service, getImport);
+    if (node.service.lifecycle === 'transient') {
+      lines.push(`{ this.${factoryId}(); }`);
+      return;
+    }
+    const stored = afterStore('__neoEager', tokenKey, hasAsync, isBorrowedInstance(node.service));
+    lines.push(`{ if (!this.instances.has(${tokenKey})) { const __neoEager = this.${factoryId}(); ${stored} } }`);
+  };
+  for (const id of graph.eagerRoots ?? []) {
+    const node = graph.nodes.get(id);
+    if (node) pushNode(node, getFactoryName(id));
+    graph.multiNodes?.get(id)?.forEach((item, index) => {
+      pushNode(item, `${getFactoryName(id)}_${index}`);
+    });
+  }
+  return lines;
+}
+
+function rootKeyExprs(ids: readonly TokenId[], graph: DependencyGraph, getImport: GetImport): string {
+  return ids.map((id) => {
+    const node = graph.nodes.get(id) ?? graph.multiNodes?.get(id)?.[0];
+    return node ? resolveTokenKey(node.service, getImport) : JSON.stringify(id);
+  }).join(', ');
+}
+
+function loadEffectFiles(graph: DependencyGraph): string[] {
+  const files: string[] = [];
+  const seen = new Set<string>();
+  visitServices(graph, (node) => {
+    if (!isUnreachable(graph, node)) return;
+    const symbol = node.service.implementationSymbol ?? node.service.tokenSymbol;
+    const declaration = symbol?.declarations?.[0];
+    if (!declaration) return;
+    const file = declaration.getSourceFile();
+    // A .d.ts is not executed. Importing it (and stripping .ts) yields a specifier no bundler resolves.
+    if (file.isDeclarationFile) return;
+    const name = file.fileName.replace(/\\/g, '/');
+    if (seen.has(name)) return;
+    const host = graph.sourceFileName?.replace(/\\/g, '/');
+    if (host && name === host) return;
+    if (!hasTopLevelEffect(file)) return;
+    seen.add(name);
+    files.push(file.fileName);
+  });
+  return files;
+}
+
+function hasTopLevelEffect(file: ts.SourceFile): boolean {
+  for (const statement of file.statements) {
+    if (pureTopLevel(statement)) continue;
+    return true;
+  }
+  return false;
+}
+
+/** A load-time effect is anything that is not a pure declaration. ADR006 lines 35-38. */
+function pureTopLevel(statement: ts.Statement): boolean {
+  if (TSContext.ts.isInterfaceDeclaration(statement)) return true;
+  if (TSContext.ts.isTypeAliasDeclaration(statement)) return true;
+  if (TSContext.ts.isFunctionDeclaration(statement)) return true;
+  if (TSContext.ts.isImportDeclaration(statement)) return importIsTypeOnly(statement);
+  if (TSContext.ts.isExportDeclaration(statement)) return exportIsTypeOnly(statement);
+  if (TSContext.ts.isClassDeclaration(statement)) return !classRunsAtLoad(statement);
+  return false;
+}
+
+function importIsTypeOnly(statement: ts.ImportDeclaration): boolean {
+  const clause = statement.importClause;
+  if (!clause || clause.name) return false;
+  if (clause.isTypeOnly) return true;
+  const named = clause.namedBindings;
+  if (!named || !TSContext.ts.isNamedImports(named)) return false;
+  return named.elements.length > 0 && named.elements.every((element) => element.isTypeOnly);
+}
+
+function exportIsTypeOnly(statement: ts.ExportDeclaration): boolean {
+  if (statement.isTypeOnly) return true;
+  const clause = statement.exportClause;
+  if (!clause || !TSContext.ts.isNamedExports(clause)) return false;
+  return clause.elements.length > 0 && clause.elements.every((element) => element.isTypeOnly);
+}
+
+function classRunsAtLoad(statement: ts.ClassDeclaration): boolean {
+  if (decorated(statement)) return true;
+  if (definitionRunsAtLoad(statement)) return true;
+  for (const member of statement.members) {
+    if (decorated(member)) return true;
+    if (TSContext.ts.isClassStaticBlockDeclaration(member)) return true;
+    if (!TSContext.ts.isPropertyDeclaration(member) || !member.initializer) continue;
+    const flags = TSContext.ts.getCombinedModifierFlags(member);
+    if ((flags & TSContext.ts.ModifierFlags.Static) !== 0) return true;
+  }
+  return false;
+}
+
+/** A heritage call, a non-literal computed name, or a parameter decorator runs when the class is defined. */
+function definitionRunsAtLoad(statement: ts.ClassDeclaration): boolean {
+  for (const clause of statement.heritageClauses ?? []) {
+    if (clause.token !== TSContext.ts.SyntaxKind.ExtendsKeyword) continue;
+    for (const typeNode of clause.types) {
+      if (!heritageIsStable(typeNode.expression)) return true;
+    }
+  }
+  for (const member of statement.members) {
+    if (TSContext.ts.isConstructorDeclaration(member)) {
+      if (member.parameters.some((parameter) => decorated(parameter))) return true;
+      continue;
+    }
+    const name = namedMember(member);
+    if (name && computedNameRuns(name)) return true;
+  }
+  return false;
+}
+
+function heritageIsStable(expression: ts.Expression): boolean {
+  if (TSContext.ts.isIdentifier(expression)) return true;
+  if (!TSContext.ts.isPropertyAccessExpression(expression)) return false;
+  return heritageIsStable(expression.expression);
+}
+
+function namedMember(member: ts.ClassElement): ts.PropertyName | undefined {
+  if (
+    TSContext.ts.isPropertyDeclaration(member)
+    || TSContext.ts.isMethodDeclaration(member)
+    || TSContext.ts.isGetAccessorDeclaration(member)
+    || TSContext.ts.isSetAccessorDeclaration(member)
+  ) {
+    return member.name;
+  }
+  return undefined;
+}
+
+function computedNameRuns(name: ts.PropertyName): boolean {
+  if (!TSContext.ts.isComputedPropertyName(name)) return false;
+  const expression = name.expression;
+  if (TSContext.ts.isStringLiteral(expression)) return false;
+  if (TSContext.ts.isNumericLiteral(expression)) return false;
+  if (TSContext.ts.isNoSubstitutionTemplateLiteral(expression)) return false;
+  return true;
+}
+
+function decorated(node: ts.Node): boolean {
+  if (!TSContext.ts.canHaveDecorators(node)) return false;
+  return (TSContext.ts.getDecorators(node)?.length ?? 0) > 0;
 }

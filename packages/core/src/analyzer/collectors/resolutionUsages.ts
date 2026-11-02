@@ -21,6 +21,8 @@ export interface ResolutionUsage {
 export interface ContainerTokenView {
   single: Set<TokenId>;
   multi: Set<TokenId>;
+  /** Registered on a closed ancestor, outside its exported roots. */
+  closedPrivate: Set<TokenId>;
 }
 
 type ReceiverTarget =
@@ -78,8 +80,9 @@ export function buildContainerTokenView(
 ): ContainerTokenView {
   const single = new Set<TokenId>();
   const multi = new Set<TokenId>();
-  addView(config, allConfigs, single, multi, new Set(), checker);
-  return { single, multi };
+  const closedPrivate = new Set<TokenId>();
+  addView(config, allConfigs, single, multi, closedPrivate, new Set(), checker);
+  return { single, multi, closedPrivate };
 }
 
 function toUsage(
@@ -278,6 +281,7 @@ function addView(
   allConfigs: Map<string, ConfigGraph>,
   single: Set<TokenId>,
   multi: Set<TokenId>,
+  closedPrivate: Set<TokenId>,
   seen: Set<string>,
   checker: ts.TypeChecker | undefined,
 ): void {
@@ -293,13 +297,38 @@ function addView(
   }
   for (const ref of config.extendsRefs) {
     const partial = findNamedConfig(config, ref, allConfigs, 'partial', checker);
-    if (partial) addView(partial, allConfigs, single, multi, seen, checker);
+    if (partial) addView(partial, allConfigs, single, multi, closedPrivate, seen, checker);
   }
   if (config.type !== 'builder') return;
   const parent = config.useContainerRef
     ? findNamedConfig(config, config.useContainerRef, allConfigs, 'builder', checker)
     : undefined;
-  if (parent) addView(parent, allConfigs, single, multi, seen, checker);
+  if (!parent) return;
+  if (parent.optimizationMode === 'closed') {
+    addClosedParent(parent, single, multi, closedPrivate);
+    return;
+  }
+  addView(parent, allConfigs, single, multi, closedPrivate, seen, checker);
+}
+
+/** A closed parent contributes its exported roots only. ADR006 lines 45-46. */
+function addClosedParent(
+  parent: ConfigGraph,
+  single: Set<TokenId>,
+  multi: Set<TokenId>,
+  closedPrivate: Set<TokenId>,
+): void {
+  const roots = new Set(parent.publicRoots ?? []);
+  const multiRoots = new Set(parent.publicMultiRoots ?? []);
+  for (const tokenId of parent.localInjections.keys()) {
+    if (roots.has(tokenId)) single.add(tokenId);
+    else closedPrivate.add(tokenId);
+  }
+  if (!parent.multiInjections) return;
+  for (const tokenId of parent.multiInjections.keys()) {
+    if (multiRoots.has(tokenId)) multi.add(tokenId);
+    else closedPrivate.add(tokenId);
+  }
 }
 
 function findNamedConfig(

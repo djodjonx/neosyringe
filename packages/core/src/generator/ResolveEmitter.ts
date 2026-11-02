@@ -132,6 +132,10 @@ function contributionCall(
   return `(() => { const k = ${key}; if (!this.instances.has(k)) { const inst = this.${factoryId}(); ${stored} } return this.instances.get(k); })()`;
 }
 
+function orderedContributions(nodes: DependencyNode[]): DependencyNode[] {
+  return nodes.slice();
+}
+
 function freshList(expr: string): string {
   return `{ const __neoAll = [${expr}]; for (const __neoNoted of __neoAll) this.notifyResolve(token, __neoNoted); return __neoAll.slice(); }`;
 }
@@ -152,10 +156,12 @@ function legacyResolveAll(): string {
 export function generateResolveAllMethod(
   graph: DependencyGraph,
   getImport: GetImport,
-  hasAsync: boolean
+  hasAsync: boolean,
+  closed = false,
 ): string {
   const tail = legacyResolveAll();
   const open = parentOpenCheck(hasAsync);
+  if (closed) return closedResolveAll(graph, getImport, hasAsync, open, tail);
   if (!graph.multiNodes || graph.multiNodes.size === 0) {
     if (!hasAsync) {
       return `public resolveAll<T>(token: any): T[] {
@@ -177,7 +183,7 @@ export function generateResolveAllMethod(
   const cases: string[] = [];
 
   for (const [tokenId, nodes] of graph.multiNodes) {
-    const contributions = nodes;
+    const contributions = orderedContributions(nodes);
     const tokenKey = resolveTokenKey(contributions[0].service, getImport);
     const tokenCheck = `if (token === ${tokenKey})`;
     const factoryBase = getFactoryName(tokenId);
@@ -202,5 +208,35 @@ export function generateResolveAllMethod(
     ${open}
     ${cases.join('\n    ')}
     ${tail}
+  }`;
+}
+
+/** Public resolveAll checks the exported multi roots, then the internal list. ADR006 lines 29-33. */
+function closedResolveAll(
+  graph: DependencyGraph,
+  getImport: GetImport,
+  hasAsync: boolean,
+  open: string,
+  tail: string,
+): string {
+  const cases: string[] = [];
+  if (graph.multiNodes) {
+    for (const [tokenId, nodes] of graph.multiNodes) {
+      const contributions = orderedContributions(nodes);
+      const tokenKey = resolveTokenKey(contributions[0].service, getImport);
+      const factoryBase = getFactoryName(tokenId);
+      const callExprs = contributions.map((node, index) => contributionCall(node, tokenId, index, factoryBase, hasAsync));
+      cases.push(`if (token === ${tokenKey}) ${freshList(callExprs.join(', '))}`);
+    }
+  }
+  const body = cases.length === 0 ? `${open}\n    ${tail}` : `${open}\n    ${cases.join('\n    ')}\n    ${tail}`;
+  const guard = hasAsync ? `this._guardPublic('resolveAll()');\n    ` : '';
+  return `public resolveAll<T>(token: any): T[] {
+    ${guard}this._assertRoot(token, true);
+    return this._resolveAllInternal<T>(token);
+  }
+
+  private _resolveAllInternal<T>(token: any): T[] {
+    ${body}
   }`;
 }

@@ -62,6 +62,7 @@ function sortLocated(items: LocatedUsage[]): void {
 
 function isResolutionUsageError(error: AnalysisError): boolean {
   if (error.severity === 'warning') return false;
+  if (error.code === 'NEO_ROOT_NOT_EXPORTED') return true;
   if (error.code === 'NEO_UNKNOWN_CONTAINER' || error.code === 'NEO_MULTI_REQUIRES_RESOLVE_ALL') {
     return true;
   }

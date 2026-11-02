@@ -43,7 +43,25 @@ export class MissingDependencyValidator implements IValidator {
       if (!usage.tokenId) continue;
       const allowed = usage.kind === 'resolveAll' ? view.multi : view.single;
       const other = usage.kind === 'resolveAll' ? view.single : view.multi;
-      if (allowed.has(usage.tokenId)) continue;
+      if (view.closedPrivate.has(usage.tokenId) && !allowed.has(usage.tokenId)) {
+        errors.push({
+          type: 'unsupported',
+          code: 'NEO_ROOT_NOT_EXPORTED',
+          severity: 'error',
+          message: `NEO_ROOT_NOT_EXPORTED: '${getSimpleName(usage.tokenId)}' is not an exported root of this closed container.`,
+          node: usage.node,
+          sourceFile,
+          containerId: usage.containerKey,
+        });
+        continue;
+      }
+      if (allowed.has(usage.tokenId)) {
+        // The token exists. A closed container still refuses it outside its roots.
+        // ADR006 lines 29-31. Factory context is not this path.
+        const denied = this.privateRoot(allConfigs.get(usage.containerKey), usage.kind, usage.tokenId, usage.node, sourceFile, usage.containerKey);
+        if (denied) errors.push(denied);
+        continue;
+      }
       if (usage.kind === 'resolve' && other.has(usage.tokenId)) {
         errors.push({
           type: 'unsupported',
@@ -85,6 +103,29 @@ export class MissingDependencyValidator implements IValidator {
     const view = buildContainerTokenView(config, allConfigs, this.checker);
     cache.set(key, view);
     return view;
+  }
+
+  /** resolve of a retained private token. ADR006 lines 29-31. */
+  private privateRoot(
+    config: ConfigGraph | undefined,
+    kind: 'resolve' | 'resolveAll',
+    tokenId: TokenId,
+    node: ts.Node,
+    sourceFile: ts.SourceFile,
+    containerId: string | undefined,
+  ): AnalysisError | undefined {
+    if (!config || config.optimizationMode !== 'closed') return undefined;
+    const roots = kind === 'resolveAll' ? config.publicMultiRoots : config.publicRoots;
+    if (roots?.includes(tokenId)) return undefined;
+    return {
+      type: 'unsupported',
+      code: 'NEO_ROOT_NOT_EXPORTED',
+      severity: 'error',
+      message: `NEO_ROOT_NOT_EXPORTED: '${getSimpleName(tokenId)}' is not an exported root of this closed container.`,
+      node,
+      sourceFile,
+      containerId,
+    };
   }
 
   private unknownContainer(node: ts.Node, sourceFile: ts.SourceFile): AnalysisError {

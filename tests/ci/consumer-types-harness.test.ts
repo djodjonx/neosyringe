@@ -53,6 +53,34 @@ describe('consumer-types harness', () => {
     }
   });
 
+  it('each expected line is required', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'neosyringe-consumer-lines-'));
+    try {
+      writeProject(
+        dir,
+        'const value: number = "no";\nexport const checked = value;\n',
+        'TS2322\nnumber',
+      );
+      expect(run([dir, '--expect-file', 'expected-diagnostic.txt']).status).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('missing second expected line fails', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'neosyringe-consumer-second-'));
+    try {
+      writeProject(
+        dir,
+        'const value: number = "no";\nexport const checked = value;\n',
+        'TS2322\nTS9999',
+      );
+      expect(run([dir, '--expect-file', 'expected-diagnostic.txt']).status).not.toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('absent diagnostic fails', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'neosyringe-consumer-miss-'));
     try {

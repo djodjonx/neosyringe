@@ -2,8 +2,8 @@
 // scripts/ci/consumer-types.mjs
 // Typechecks one consumer fixture.
 // Without --expect-file, tsc must succeed.
-// With --expect-file, tsc must fail and its output must contain that text.
-// A missing diagnostic is a failure, not a pass.
+// With --expect-file, tsc must fail and its output must contain each
+// non-empty line of that file. A missing line is a failure, not a pass.
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -46,9 +46,13 @@ if (expectName === undefined) {
 const expectPath = path.isAbsolute(expectName) ? expectName : path.join(dir, expectName);
 if (!existsSync(expectPath)) fail(`missing expect file: ${expectPath}`);
 
-const expected = readFileSync(expectPath, 'utf8').trim();
-if (!failed || !output.includes(expected)) {
+const expectedLines = readFileSync(expectPath, 'utf8')
+  .split('\n')
+  .map((line) => line.trim())
+  .filter((line) => line.length > 0);
+const missing = expectedLines.filter((line) => !output.includes(line));
+if (!failed || missing.length > 0) {
   console.error(output);
-  fail(`expected diagnostic ${JSON.stringify(expected)} was not reported`);
+  fail(`expected diagnostic ${JSON.stringify(missing.length > 0 ? missing : expectedLines)} was not reported`);
 }
 process.exit(0);

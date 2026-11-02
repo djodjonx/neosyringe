@@ -153,6 +153,10 @@ describe('CI workflows', () => {
     );
     expect(negativeAt).toBeGreaterThanOrEqual(0);
     expect(ownershipAt).toBeGreaterThan(negativeAt);
+    const closedAt = commands.indexOf(
+      'node scripts/ci/consumer-types.mjs tests/consumer-types/negative-closed --expect-file expected-diagnostic.txt',
+    );
+    expect(closedAt).toBeGreaterThan(ownershipAt);
   });
 
   it('T15 distribution runs consumer-dist after check-dist', () => {

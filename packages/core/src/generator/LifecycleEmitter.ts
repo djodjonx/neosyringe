@@ -163,6 +163,7 @@ export function generateInitializeMethod(
   sorted: TokenId[],
   getImport: GetImport,
   hasAsync: boolean,
+  eagerLines: string[] = [],
 ): string {
   if (!hasAsync) return generateSyncInitializeMethod();
 
@@ -177,6 +178,7 @@ export function generateInitializeMethod(
     `if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`
   );
   lines.push(...orderedAsyncLines(graph, sorted, getImport));
+  lines.push(...eagerLines);
 
   const initializeOutput = `public async initialize(): Promise<void> {
     if (this._state === 'initializing') return this._initWork;
@@ -263,6 +265,19 @@ export function generateSyncInitializeMethod(): string {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    return Promise.resolve();
+  }`;
+}
+
+/** Sync eager roots run once. A second initialize() is a no-op. ADR006 line 12. */
+export function generateEagerSyncInitialize(lines: string[]): string {
+  return `public initialize(): Promise<void> {
+    if (this._eagerOnce) return Promise.resolve();
+    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
+    if (this._failure !== undefined) return Promise.reject(this._failure);
+    this._eagerOnce = true;
+    ${lines.join('\n    ')}
     return Promise.resolve();
   }`;
 }

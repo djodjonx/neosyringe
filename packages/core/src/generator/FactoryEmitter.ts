@@ -41,8 +41,9 @@ export function multiRegistrationKey(node: DependencyNode, tokenId: TokenId, ind
  *   `{ token: X }` there themselves), a class living in the parent's file is
  *   not guaranteed to be in scope in the child's file at all.
  */
-function resolutionCalls(hasAsync: boolean): { one: string; all: string } {
-  return hasAsync
+function resolutionCalls(hasAsync: boolean, closed = false): { one: string; all: string } {
+  // Closed sync factories must not call the public resolve. ADR006 lines 29-33.
+  return hasAsync || closed
     ? { one: 'this._resolveInternal', all: 'this._resolveAllInternal' }
     : { one: 'this.resolve', all: 'this.resolveAll' };
 }
@@ -53,8 +54,9 @@ export function resolveConstructorArgs(
   getImport: GetImport,
   getForeignImport: GetImport,
   hasAsync = false,
+  closed = false,
 ): string {
-  const read = resolutionCalls(hasAsync).one;
+  const read = resolutionCalls(hasAsync, closed).one;
   return dependencies.map(depId => {
     const depNode = graph.nodes.get(depId);
     if (!depNode) {
@@ -163,6 +165,7 @@ function emitFactoryBody(
   graph: DependencyGraph,
   getImport: GetImport,
   hasAsync: boolean,
+  closed = false,
 ): string {
   const userFactory = service.factorySource ?? 'undefined';
   const label = JSON.stringify(getSimpleName(service.tokenId));
@@ -170,7 +173,7 @@ function emitFactoryBody(
   const listed = factoryAllowList(service, graph, getImport);
   const allowed = listed.entries;
   const entries = allowed.map(([key, all]) => `[${key}, ${all ? '"all"' : '"simple"'}]`).join(', ');
-  const calls = resolutionCalls(hasAsync);
+  const calls = resolutionCalls(hasAsync, closed);
   const warmupLines: string[] = [];
   if (!opaqueFactory) {
     for (const [key, all] of allowed) {
@@ -240,6 +243,7 @@ export function generateFactories(
   getImport: GetImport,
   getForeignImport: GetImport,
   hasAsync = false,
+  closed = false,
 ): string[] {
   const factories: string[] = [];
 
@@ -259,7 +263,7 @@ export function generateFactories(
     }
 
     if (node.service.type === 'factory' && node.service.factorySource) {
-      const body = emitFactoryBody(node.service, graph, getImport, hasAsync);
+      const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed);
       factories.push(`
   private ${factoryId}(): any {
     ${body}
@@ -272,7 +276,7 @@ export function generateFactories(
         );
       }
       const className = getImport(node.service.implementationSymbol);
-      const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync);
+      const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed);
 
       factories.push(`
   private ${factoryId}(): any {
@@ -290,6 +294,7 @@ export function generateMultiFactories(
   getImport: GetImport,
   getForeignImport: GetImport,
   hasAsync = false,
+  closed = false,
 ): string[] {
   const factories: string[] = [];
   if (!graph.multiNodes) return factories;
@@ -299,7 +304,7 @@ export function generateMultiFactories(
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
 
       if (node.service.type === 'factory' && node.service.factorySource) {
-        const body = emitFactoryBody(node.service, graph, getImport, hasAsync);
+        const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed);
         factories.push(`
   private ${factoryId}(): any {
     ${body}
@@ -312,7 +317,7 @@ export function generateMultiFactories(
       } else {
         if (!node.service.implementationSymbol) return;
         const className = getImport(node.service.implementationSymbol);
-        const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync);
+        const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed);
         factories.push(`
   private ${factoryId}(): any {
     return new ${className}(${args});

@@ -22,3 +22,31 @@ export const container = defineBuilderConfig({
 });
 
 export const checked: Lifecycle = lifecycle;
+
+interface ClosedPort {
+  ok: number;
+}
+
+interface ClosedExtra {
+  n: number;
+}
+
+const closedPort = useInterface<ClosedPort>();
+const closedExtra = useInterface<ClosedExtra>();
+
+export const closedContainer = defineBuilderConfig({
+  name: 'ClosedConsumer',
+  optimization: {
+    mode: 'closed',
+    roots: [closedPort, { all: closedExtra }],
+    eager: [closedPort],
+  },
+  injections: [
+    {
+      token: closedPort,
+      useFactory: true,
+      dependencies: [],
+      provider: () => ({ ok: 1 }),
+    },
+  ],
+});

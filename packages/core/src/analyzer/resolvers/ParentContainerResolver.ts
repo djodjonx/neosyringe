@@ -1,6 +1,7 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { BorrowedRegistration, DependencyGraph, DependencyNode } from '../types';
+import type { BorrowedRegistration, DependencyGraph, DependencyNode, TokenId } from '../types';
+import { exportedRootIds } from '../parsers/ConfigParser';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { CallExpressionUtils } from '../utils/CallExpressionUtils';
 
@@ -119,6 +120,12 @@ export class ParentContainerResolver {
     graph.parentProvidedTokens ??= new Set();
     graph.parentResolvableTokens ??= new Set();
 
+    // A closed parent exposes its roots only. ADR006 lines 45-46.
+    if (parentGraph.optimizationMode === 'closed') {
+      this.copyClosedParent(parentGraph, graph);
+      return;
+    }
+
     // Add all parent tokens to parentProvidedTokens. Only interface tokens are
     // also added to parentResolvableTokens — the parent's generated resolveLocal()
     // matches those by string, so a child can safely delegate to them via
@@ -166,12 +173,52 @@ export class ParentContainerResolver {
     this.recordBorrowed(parentGraph, graph);
   }
 
+  /**
+   * Copies only the parent's exported roots. Private registrations stay on the parent.
+   * ADR006 lines 45-46.
+   */
+  private copyClosedParent(parentGraph: DependencyGraph, graph: DependencyGraph): void {
+    const exposed = exportedRootIds(parentGraph);
+    const allow = new Set<TokenId>([...exposed.single, ...exposed.multi]);
+    const take = (tokenId: TokenId, node: DependencyNode | undefined) => {
+      if (!allow.has(tokenId)) return;
+      graph.parentProvidedTokens?.add(tokenId);
+      if (node?.service.isInterfaceToken) {
+        graph.parentResolvableTokens?.add(tokenId);
+        return;
+      }
+      const symbol = node?.service.tokenSymbol ?? node?.service.implementationSymbol;
+      if (!symbol) return;
+      graph.parentClassTokenSymbols ??= new Map();
+      graph.parentClassTokenSymbols.set(tokenId, symbol);
+    };
+    for (const [tokenId, node] of parentGraph.nodes) take(tokenId, node);
+    if (parentGraph.multiNodes) {
+      for (const [tokenId, nodes] of parentGraph.multiNodes) take(tokenId, nodes[0]);
+    }
+    if (this.exposedAsync(parentGraph, allow)) graph.parentHasAsyncInitialize = true;
+    this.recordBorrowed(parentGraph, graph, allow);
+  }
+
+  /** Async work that a child must cascade into. Pruned providers do not count. */
+  private exposedAsync(parentGraph: DependencyGraph, allow: Set<TokenId>): boolean {
+    for (const [tokenId, node] of parentGraph.nodes) {
+      if (allow.has(tokenId) && node.service.isAsync) return true;
+    }
+    if (!parentGraph.multiNodes) return false;
+    for (const [tokenId, nodes] of parentGraph.multiNodes) {
+      if (allow.has(tokenId) && nodes.some((node) => node.service.isAsync)) return true;
+    }
+    return false;
+  }
+
   /** Records parent registrations borrowed by the child. The container id is the parent key. */
-  private recordBorrowed(parentGraph: DependencyGraph, graph: DependencyGraph): void {
+  private recordBorrowed(parentGraph: DependencyGraph, graph: DependencyGraph, allow?: Set<TokenId>): void {
     const containerId = parentGraph.containerKey;
     if (!containerId) return;
     const borrowed: BorrowedRegistration[] = [];
     const push = (node: DependencyNode) => {
+      if (allow && !allow.has(node.service.tokenId)) return;
       const registrationId = node.service.registrationId;
       if (!registrationId) return;
       borrowed.push({ registrationId, tokenId: node.service.tokenId, containerId });
