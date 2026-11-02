@@ -24,3 +24,15 @@ export function resolveDebugFlag(explicit: boolean | undefined): boolean {
   }
   return explicit === true;
 }
+
+/**
+ * Build-time switch for override() / clearOverrides().
+ * Default is off. Production cannot opt in: the check runs here, in Node,
+ * so the emitted container never reads `process`.
+ */
+export function resolveTestOverridesFlag(explicit: boolean | undefined): boolean {
+  if (explicit === true && typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+    throw new Error('NEO_TEST_API_DISABLED: testOverrides cannot be enabled when NODE_ENV is production');
+  }
+  return explicit === true;
+}

@@ -1155,8 +1155,8 @@ it('should generate PropertyToken resolution', () => {
         });
       `);
 
-      // Should have error throwing for unknown tokens
-      expect(code).toContain('throw new Error');
+      // Non-inline output names the class NeoServiceNotFoundError, with no call-site suffix.
+      expect(code).toContain('throw new NeoServiceNotFoundError');
       expect(code).toMatch(/not found|not registered/i);
     });
 

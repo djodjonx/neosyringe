@@ -1,7 +1,7 @@
 import { createUnplugin } from 'unplugin';
 import * as ts from 'typescript';
 import { textCallsResolve, type ValidationMode } from '@djodjonx/neosyringe-core/analyzer';
-import { resolveDebugFlag } from '@djodjonx/neosyringe-core/generator';
+import { resolveDebugFlag, resolveTestOverridesFlag } from '@djodjonx/neosyringe-core/generator';
 import { usageErrorsAtBuildEnd } from './buildEndUsages';
 import { callsCanReachNeoSyringe, hasNeoSyringeMarkers } from './markerUtils';
 import { createDevtoolsMiddleware } from './devtools';
@@ -35,6 +35,12 @@ export interface NeoSyringePluginOptions {
    * The transform-time Analyzer in session.ts stays strict.
    */
   validation?: ValidationMode;
+  /**
+   * Enables container.override() / clearOverrides() in the generated container.
+   * Defaults to false. Refused when NODE_ENV is production.
+   * The flag is fixed at build time; generated code does not read process.
+   */
+  testOverrides?: boolean;
 }
 
 /**
@@ -57,6 +63,7 @@ export interface NeoSyringePluginOptions {
 export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions | undefined = {}) => {
   // Per-build registries — scoped to the factory instance, safe for parallel builds
   const emitDebugHelpers = resolveDebugFlag(options.debug);
+  const testOverrides = resolveTestOverridesFlag(options.testOverrides);
   const project = options.project || undefined;
   const state: SessionState = {
     registeredTokens: new Set(),
@@ -120,6 +127,7 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
         project,
         cwd: process.cwd(),
         emitDebugHelpers,
+        testOverrides,
         devtools: devtoolsActive(),
         state,
         errorPrefix: '[neosyringe-plugin]',

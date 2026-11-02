@@ -38,8 +38,8 @@ function valueService(tokenId: string, valueSource: string, isDisposable = false
   };
 }
 
-function load(graph: DependencyGraph): SyncContainer {
-  const tsCode = new Generator(graph, false).generate();
+function load(graph: DependencyGraph, testOverrides = false): SyncContainer {
+  const tsCode = new Generator(graph, false, undefined, true, testOverrides).generate();
   const jsCode = ts.transpileModule(tsCode, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
@@ -107,7 +107,7 @@ describe('T03 runtime', () => {
   });
 
   it('T03 override clearOverrides destroy return thenables', async () => {
-    const container = load(singleValue('({ id: "real" })'));
+    const container = load(singleValue('({ id: "real" })'), true);
 
     const overridden = container.override(TOKEN, () => ({ id: 'mock' }));
     expect(typeof thenOf(overridden)).toBe('function');
@@ -123,8 +123,7 @@ describe('T03 runtime', () => {
     await destroyed;
     expect(() => container.resolve(TOKEN)).toThrow(/NEO_CONTAINER_DESTROYED/);
 
-    process.env.NODE_ENV = 'production';
-    expect(() => container.override(TOKEN, () => ({ id: 'nope' }))).toThrow(/NODE_ENV=production/);
+    await expect(container.override(TOKEN, () => ({ id: 'nope' }))).rejects.toThrow(/NEO_CONTAINER_DESTROYED/);
     expect(() => container.resolve(TOKEN)).toThrow(/NEO_CONTAINER_DESTROYED/);
   });
 

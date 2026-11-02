@@ -29,7 +29,7 @@ describe('Generator — container.on(\'resolve\', ...) (executed, not just strin
       variableExportModifier: 'export',
     };
 
-    const tsCode = new Generator(graph, false).generate();
+    const tsCode = new Generator(graph, false, undefined, true, true).generate();
     const jsCode = ts.transpileModule(tsCode, {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText;
@@ -62,12 +62,12 @@ describe('Generator — container.on(\'resolve\', ...) (executed, not just strin
     expect(calls).toHaveLength(2);
   });
 
-  it('fires for an overridden token too', () => {
+  it('fires for an overridden token too', async () => {
     const container = buildContainer();
     const calls: Array<[any, any]> = [];
     container.on('resolve', (token: any, instance: any) => calls.push([token, instance]));
 
-    container.override('ILogger_abc123', () => 'mock-logger');
+    await container.override('ILogger_abc123', () => 'mock-logger');
     container.resolve('ILogger_abc123');
 
     expect(calls).toEqual([['ILogger_abc123', 'mock-logger']]);
@@ -110,12 +110,12 @@ describe('Generator — container.on(\'resolve\', ...) (executed, not just strin
     expect(calls).toEqual(['ok']);
   });
 
-  it('destroy() clears listeners', () => {
+  it('destroy() clears listeners', async () => {
     const container = buildContainer();
     const calls: any[] = [];
     container.on('resolve', () => calls.push(1));
 
-    container.destroy();
+    await container.destroy();
     expect(() => container.resolve('ILogger_abc123')).toThrow(/NEO_CONTAINER_DESTROYED/);
 
     expect(calls).toHaveLength(0);

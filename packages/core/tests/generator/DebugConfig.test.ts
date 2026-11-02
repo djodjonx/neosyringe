@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { resolveDebugFlag } from '../../src/generator/DebugConfig';
+import { resolveDebugFlag, resolveTestOverridesFlag } from '../../src/generator/DebugConfig';
 
 describe('resolveDebugFlag', () => {
   const originalNodeEnv = process.env.NODE_ENV;
@@ -27,5 +27,31 @@ describe('resolveDebugFlag', () => {
   it('is true outside production only when explicitly set to true', () => {
     process.env.NODE_ENV = 'test';
     expect(resolveDebugFlag(true)).toBe(true);
+  });
+});
+
+describe('resolveTestOverridesFlag', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+  });
+
+  it('defaults to false', () => {
+    process.env.NODE_ENV = 'test';
+    expect(resolveTestOverridesFlag(undefined)).toBe(false);
+    expect(resolveTestOverridesFlag(false)).toBe(false);
+  });
+
+  it('is true outside production only when explicitly set to true', () => {
+    process.env.NODE_ENV = 'test';
+    expect(resolveTestOverridesFlag(true)).toBe(true);
+  });
+
+  it('throws in production when explicitly enabled', () => {
+    process.env.NODE_ENV = 'production';
+    expect(() => resolveTestOverridesFlag(true)).toThrow(
+      'NEO_TEST_API_DISABLED: testOverrides cannot be enabled when NODE_ENV is production',
+    );
+    expect(resolveTestOverridesFlag(false)).toBe(false);
   });
 });

@@ -21,6 +21,7 @@ vi.mock('@djodjonx/neosyringe-core/generator', () => ({
     validateAll: vi.fn().mockReturnValue({ valid: true, errors: [] }),
   })),
   resolveDebugFlag: vi.fn().mockReturnValue(true),
+  resolveTestOverridesFlag: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('typescript', async (importOriginal) => {

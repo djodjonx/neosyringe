@@ -57,6 +57,7 @@ export interface SessionInput {
   project?: string;
   cwd: string;
   emitDebugHelpers: boolean;
+  testOverrides: boolean;
   devtools: boolean;
   state: SessionState;
   errorPrefix: string;
@@ -586,7 +587,7 @@ function compileWith(input: SessionInput, resolved: { root: string; options: ts.
     const embeddings = sourceFile
       ? collectEmbeddings(graph, sourceFile, input.code, useEdits, checker, input.state.usedTokens, foreignEdits)
       : [];
-    const generator = new Generator(graph, true, undefined, input.emitDebugHelpers);
+    const generator = new Generator(graph, true, undefined, input.emitDebugHelpers, input.testOverrides);
     const containerClass = generator.generate();
     const instantiation = generator.generateInstantiation();
     const start = graph.variableStatementStart!;

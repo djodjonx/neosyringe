@@ -5,7 +5,7 @@ import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analy
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, type GetImport } from './FactoryEmitter';
 import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, parentOpenCheck, isBorrowedInstance } from './ResolveEmitter';
-import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateDestroyMethod, generateCreateScopeMethod, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
+import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { TSContext } from '../TSContext';
 import { HashUtils } from '../analyzer/shared/HashUtils';
 
@@ -98,7 +98,13 @@ export class Generator {
      * exist either way (returning `[]` when disabled), so `container._graph`
      * is never `undefined` — only its payload changes.
      */
-    private emitDebugHelpers: boolean = true
+    private emitDebugHelpers: boolean = true,
+    /**
+     * When true, the generated override() / clearOverrides() perform a real
+     * reconfigure. When false they reject NEO_TEST_API_DISABLED. The choice
+     * is fixed here so the emitted source never reads `process`.
+     */
+    private testOverrides: boolean = false
   ) {
     // Check for analysis errors and throw the first one for CLI compatibility
     if (graph.errors && graph.errors.length > 0) {
@@ -261,6 +267,7 @@ export class Generator {
       : generateSyncInitializeMethod();
     const createScopeMethod = generateCreateScopeMethod(this.containerClassName, hasAsync);
     const destroyMethod = generateDestroyMethod(this.graph, sorted, getImport, hasAsync);
+    const overrideMethods = generateOverrideMethods(this.graph, sorted, getImport, hasAsync, this.testOverrides);
 
     // Generate import lines for:
     // - All symbols when useDirectSymbolNames=false (CLI/generated file mode)
@@ -305,13 +312,15 @@ export class Generator {
   ${borrowField}private _borrowed = new Set<any>([${borrowedList}]);
   private _destroyWork?: Promise<void>;`;
     const stateFields = hasAsync
-      ? `private _state: 'created' | 'initializing' | 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
+      ? `private _state: 'created' | 'initializing' | 'reconfiguring' | 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
   private _initWork?: Promise<void>;
   private _failure: unknown;
   private _initRunning = false;
   private _initJournal: any[] = [];
   ${scopeFields}`
-      : scopeFields;
+      : `private _reconfiguring = false;
+  private _failure?: unknown;
+  ${scopeFields}`;
     const runtimeHelpers = `${touchClosedMethod()}
 
   ${assertParentsMethod()}
@@ -400,33 +409,7 @@ class ${this.containerClassName} {
 
   ${createScopeMethod}
 
-  /**
-   * Replaces a token's provider for the lifetime of this container instance —
-   * for tests, not production wiring. The factory runs once (its result is
-   * cached like a singleton); call override() again to change it, or
-   * clearOverrides() to remove all overrides and fall back to the real
-   * registrations.
-   *
-   * Disabled when NODE_ENV=production: a container is commonly a long-lived,
-   * shared singleton, so an override left in by mistake (or called from
-   * somewhere it shouldn't be) would silently change what every caller gets,
-   * for as long as the process runs. Throwing loudly here is cheaper than
-   * debugging that at 3am.
-   */
-  public override(token: any, factory: () => any): Promise<void> {
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
-      throw new Error('override() is a testing utility and is disabled when NODE_ENV=production.');
-    }
-    this.overrides.set(token, factory);
-    this.instances.delete(token);
-    return Promise.resolve();
-  }
-
-  /** Removes all overrides set via override(), reverting to real registrations. */
-  public clearOverrides(): Promise<void> {
-    this.overrides.clear();
-    return Promise.resolve();
-  }
+  ${overrideMethods}
 
   /**
    * Subscribes to container events — currently only 'resolve', fired with the
