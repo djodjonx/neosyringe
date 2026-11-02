@@ -159,11 +159,17 @@ The cascade check (`typeof c?.initialize === 'function'`) is a runtime check, no
 
 ## Testing
 
-`destroy()` resets the initialized state so you can call `initialize()` again between tests:
+`destroy()` is terminal. It does not reset the container for another `initialize()`. After `destroy()`, `initialize()` and `resolve()` throw `NEO_CONTAINER_DESTROYED`.
+
+Give each test its own scope:
 
 ```typescript
+let scope: Container;
 beforeEach(async () => {
-  container.destroy();
-  await container.initialize();
+  scope = container.createScope();
+  await scope.initialize();
+});
+afterEach(async () => {
+  await scope.destroy();
 });
 ```

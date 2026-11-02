@@ -82,7 +82,8 @@ describe('Generator — container.override() (executed, not just string-matched)
     const container = buildContainer();
     container.override('ILogger_abc123', () => 'mock-logger');
     container.destroy();
-    expect(container.resolve('ILogger_abc123')).toBe('real-logger');
+    expect(container.overrides.size).toBe(0);
+    expect(() => container.resolve('ILogger_abc123')).toThrow(/NEO_CONTAINER_DESTROYED/);
   });
 
   describe('disabled in production', () => {

@@ -116,8 +116,9 @@ describe('Generator — container.on(\'resolve\', ...) (executed, not just strin
     container.on('resolve', () => calls.push(1));
 
     container.destroy();
-    container.resolve('ILogger_abc123');
+    expect(() => container.resolve('ILogger_abc123')).toThrow(/NEO_CONTAINER_DESTROYED/);
 
     expect(calls).toHaveLength(0);
+    expect(container.resolveListeners.size).toBe(0);
   });
 });

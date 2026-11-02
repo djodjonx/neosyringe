@@ -65,8 +65,8 @@ If any service has `dispose(): Promise<void>`, the generated `destroy()` becomes
 Only singleton services (the default lifecycle) are disposed. Transient services are not cached, so `destroy()` cannot track them. Manage transient resource cleanup in your own code.
 :::
 
-::: tip Factories Excluded
-Factory providers (`useFactory: true`) are excluded from auto-detection — the return type of an arbitrary function cannot be inspected statically. If a factory returns a disposable, wrap it in a class that implements `IDisposable`.
+::: tip Factories, values, mocks, parents
+A singleton factory is disposed when its result has a callable `dispose`. Opt out with `ownership: 'borrowed'` when someone else owns that object. `useValue` is never disposed. An `override()` mock is never disposed. A child never disposes a parent reference.
 :::
 
 ## Dispose Order
@@ -75,9 +75,13 @@ Services are disposed in reverse dependency order: if `UserService` depends on `
 
 ## Testing
 
+`destroy()` is terminal. After it, `resolve()` and `initialize()` throw `NEO_CONTAINER_DESTROYED`. A second `destroy()` does nothing.
+
+Use `createScope()` when each test needs its own cache. Destroy the scope. Leave the shared parent open.
+
 ```typescript
-beforeEach(async () => {
-  await container.destroy(); // clears instances + calls dispose()
-  // Note: destroy() resets _initialized for async containers
-});
+const scope = container.createScope();
+await scope.initialize();
+// ...
+await scope.destroy();
 ```

@@ -3,7 +3,8 @@ import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
 import type { AnalysisError, DependencyGraph, DependencyNode, ServiceDefinition, TokenId, ValidationMode } from '../types';
 import { resolveNeoMarker } from '../shared/markerProvenance';
-import { containerKeyFor, declaredFactoryEdges, stampRegistration } from '../shared/registrationGraph';
+import { extendsCaptureText } from '../shared/extendsReference';
+import { containerKeyFor, declaredFactoryEdges, partialInjectionsSpreadError, stampRegistration, valueCaptureFor as captureExpression } from '../shared/registrationGraph';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { HashUtils } from '../shared/HashUtils';
 import { InjectionParser, type ParsedInjection } from './InjectionParser';
@@ -58,6 +59,7 @@ export class ConfigParser {
     graph: DependencyGraph,
     parentContainerNames: Set<string>,
     merge = false,
+    partialBinding?: string,
   ): void {
     const args = node.arguments;
     if (args.length < 1) return;
@@ -97,7 +99,7 @@ export class ConfigParser {
     );
 
     if (injectionsProp && TSContext.ts.isPropertyAssignment(injectionsProp) && TSContext.ts.isArrayLiteralExpression(injectionsProp.initializer)) {
-      this.parseInjectionsArray(injectionsProp.initializer, graph);
+      this.parseInjectionsArray(injectionsProp.initializer, graph, partialBinding, merge);
     }
 
     // Parse 'useContainer' property
@@ -125,10 +127,30 @@ export class ConfigParser {
    * @param arrayLiteral - The injections array literal
    * @param graph - The dependency graph to populate
    */
-  private parseInjectionsArray(arrayLiteral: ts.ArrayLiteralExpression, graph: DependencyGraph): void {
-    for (const element of arrayLiteral.elements) {
+  private parseInjectionsArray(
+    arrayLiteral: ts.ArrayLiteralExpression,
+    graph: DependencyGraph,
+    partialBinding?: string,
+    merge = false,
+  ): void {
+    if (partialBinding) {
+      const spread = partialInjectionsSpreadError(arrayLiteral.elements);
+      if (spread) {
+        if (!graph.errors) graph.errors = [];
+        graph.errors.push({
+          type: 'unsupported',
+          code: spread.code,
+          message: spread.message,
+          node: spread.node,
+          sourceFile: arrayLiteral.getSourceFile(),
+        });
+        return;
+      }
+    }
+    for (let index = 0; index < arrayLiteral.elements.length; index++) {
+      const element = arrayLiteral.elements[index];
       if (TSContext.ts.isObjectLiteralExpression(element)) {
-        this.parseInjectionObject(element, graph);
+        this.parseInjectionObject(element, graph, partialBinding, index, merge);
       }
     }
   }
@@ -142,7 +164,13 @@ export class ConfigParser {
    * @param obj - The injection object literal
    * @param graph - The dependency graph to populate
    */
-  parseInjectionObject(obj: ts.ObjectLiteralExpression, graph: DependencyGraph): void {
+  parseInjectionObject(
+    obj: ts.ObjectLiteralExpression,
+    graph: DependencyGraph,
+    partialBinding?: string,
+    index = 0,
+    merge = false,
+  ): void {
     const sourceFile = obj.getSourceFile();
     const result = this.injectionParser.parse(obj, sourceFile);
 
@@ -169,6 +197,8 @@ export class ConfigParser {
         lifecycle: 'singleton',
         isInterfaceToken,
         valueSource: valueSource!,
+        valueCapture: this.valueCaptureFor(graph, partialBinding, index, merge),
+        ownership: parsed.ownership,
         isScoped,
       };
       this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
@@ -200,6 +230,7 @@ export class ConfigParser {
         isAsync: isAsync || undefined,
         factoryDependencies: parsed.factoryDependencies,
         opaque: parsed.opaque,
+        ownership: parsed.ownership,
       };
       if (parsed.dependenciesWarning) {
         if (!graph.errors) graph.errors = [];
@@ -243,6 +274,17 @@ export class ConfigParser {
       tokenLocalName: parsed.tokenLocalName,
     };
     this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
+  }
+
+  /** Direct useValue is hoisted once. A partial reads the property; it does not re-run the expression. */
+  private valueCaptureFor(
+    graph: DependencyGraph,
+    partialBinding: string | undefined,
+    index: number,
+    merge: boolean,
+  ): string | undefined {
+    if (!partialBinding && merge) return undefined;
+    return captureExpression(graph.containerKey, index, partialBinding);
   }
 
   private addToGraph(
@@ -407,8 +449,9 @@ export class ConfigParser {
       const callExpr = declaration.initializer;
 
       if (this.isDefinePartialConfigCall(callExpr)) {
-        // Recursive reuse!
-        this.parseBuilderConfig(callExpr, graph, parentContainerNames, true);
+        // The binding is the expression written in `extends`, not the declaration name.
+        const partialBinding = extendsCaptureText(element);
+        this.parseBuilderConfig(callExpr, graph, parentContainerNames, true, partialBinding);
       }
     }
   }

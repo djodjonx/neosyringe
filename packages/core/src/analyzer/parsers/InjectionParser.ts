@@ -33,6 +33,7 @@ export interface ParsedInjection {
   factoryDependencies?: FactoryDependency[];
   opaque?: boolean;
   dependenciesWarning?: AnalysisError;
+  ownership?: 'owned' | 'borrowed';
 }
 
 interface FactoryContract {
@@ -66,6 +67,8 @@ export class InjectionParser {
     let isScoped = false;
     let valueNode: ts.Expression | undefined;
     let isMulti = false;
+    let ownershipSeen = false;
+    let ownershipText: string | undefined;
 
     for (const prop of obj.properties) {
       if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
@@ -89,10 +92,24 @@ export class InjectionParser {
         case 'multi':
           if (prop.initializer.kind === TSContext.ts.SyntaxKind.TrueKeyword) isMulti = true;
           break;
+        case 'ownership':
+          ownershipSeen = true;
+          ownershipText = this.staticOwnership(prop.initializer);
+          break;
       }
     }
 
     if (!tokenNode) return null;
+
+    if (ownershipSeen && ownershipText !== 'owned' && ownershipText !== 'borrowed') {
+      return {
+        type: 'unsupported',
+        code: 'NEO_CONFIG_UNSUPPORTED',
+        message: `NEO_CONFIG_UNSUPPORTED: ownership must be a static 'owned' or 'borrowed' literal.`,
+        node: obj,
+        sourceFile,
+      };
+    }
 
     // 2. Auto-detect factory if provider is a function literal
     if (
@@ -159,6 +176,17 @@ export class InjectionParser {
         };
       }
 
+      // useValue is never owned: the caller keeps the object and destroys it.
+      if (ownershipSeen && ownershipText !== 'borrowed') {
+        return {
+          type: 'unsupported',
+          code: 'NEO_CONFIG_UNSUPPORTED',
+          message: `NEO_CONFIG_UNSUPPORTED: useValue cannot be declared owned. Register a factory with ownership: 'owned', or omit ownership.`,
+          node: obj,
+          sourceFile,
+        };
+      }
+
       return {
         __kind: 'parsed',
         tokenNode,
@@ -177,6 +205,7 @@ export class InjectionParser {
         registrationType: 'value',
         isDisposable: false,
         isAsyncDisposable: false,
+        ownership: ownershipText === 'borrowed' ? 'borrowed' : undefined,
       };
     }
 
@@ -271,7 +300,28 @@ export class InjectionParser {
       factoryDependencies,
       opaque,
       dependenciesWarning,
+      ownership: ownershipText === 'owned' || ownershipText === 'borrowed' ? ownershipText : undefined,
     };
+  }
+
+  /** `'borrowed' as const` and a const binding of that literal are both static. */
+  private staticOwnership(expr: ts.Expression): 'owned' | 'borrowed' | undefined {
+    let current = expr;
+    while (
+      TSContext.ts.isParenthesizedExpression(current)
+      || TSContext.ts.isAsExpression(current)
+      || TSContext.ts.isSatisfiesExpression(current)
+    ) {
+      current = current.expression;
+    }
+    if (TSContext.ts.isStringLiteralLike(current)) {
+      return current.text === 'owned' || current.text === 'borrowed' ? current.text : undefined;
+    }
+    const type = this.checker.getTypeAtLocation(current);
+    if (type.isStringLiteral()) {
+      return type.value === 'owned' || type.value === 'borrowed' ? type.value : undefined;
+    }
+    return undefined;
   }
 
   private checkPrimitiveTokenForValue(

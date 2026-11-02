@@ -364,5 +364,7 @@ const child = defineBuilderConfig({
 });
 ```
 
+A scoped logger replaces that token only inside the child. A service the parent already constructed keeps the parent's logger. Register that service in the child too when it should see the child's logger.
+
 See [Scoped Injections](/guide/scoped-injections) for details.
 

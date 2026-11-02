@@ -1,5 +1,25 @@
-import type { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
+import type { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getFactoryName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
+
+/** useValue and an explicit borrowed factory stay out of the disposal journal. A value is never owned. */
+export function isBorrowedInstance(service: ServiceDefinition): boolean {
+  return service.ownership === 'borrowed' || service.type === 'value';
+}
+
+/** Cache a singleton. The journal keeps the token key, not the instance (T07-B07). */
+export function afterStore(valueExpr: string, tokenKey: string, hasAsync: boolean, borrowed: boolean): string {
+  const mark = borrowed ? ` this._borrowed.add(${valueExpr});` : '';
+  const journal = hasAsync ? ` if (this._initRunning) this._initJournal.push(${tokenKey});` : '';
+  return `this.instances.set(${tokenKey}, ${valueExpr});${mark}${journal}`;
+}
+
+export function parentOpenCheck(hasAsync: boolean): string {
+  const self = hasAsync
+    ? `if (!this._initRunning && this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');`
+    : `if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');`;
+  return `${self}
+    this._assertParents();`;
+}
 
 /**
  * Returns the guard statement injected at the top of resolve() and resolveAll()
@@ -50,6 +70,8 @@ export function generateResolveCases(
     const tokenKey = resolveTokenKey(node.service, getImport);
     const tokenCheck = `if (token === ${tokenKey})`;
     const asyncSingleton = hasAsync && !!node.service.isAsync && !isTransient;
+    const borrowed = isBorrowedInstance(node.service);
+    const stored = afterStore('instance', tokenKey, hasAsync, borrowed);
 
     const creationLogic = isTransient
       ? `return this.${factoryId}();`
@@ -60,20 +82,10 @@ export function generateResolveCases(
             }
             return this.instances.get(${tokenKey});
           `
-        : hasAsync
-          ? `
+        : `
             if (!this.instances.has(${tokenKey})) {
                 const instance = this.${factoryId}();
-                this.instances.set(${tokenKey}, instance);
-                if (this._initRunning) this._initJournal.push(${tokenKey});
-                return instance;
-            }
-            return this.instances.get(${tokenKey});
-          `
-          : `
-            if (!this.instances.has(${tokenKey})) {
-                const instance = this.${factoryId}();
-                this.instances.set(${tokenKey}, instance);
+                ${stored}
                 return instance;
             }
             return this.instances.get(${tokenKey});
@@ -100,10 +112,8 @@ function contributionCall(
   if (hasAsync && node.service.isAsync) {
     return `this.instances.get(${key})`;
   }
-  if (hasAsync) {
-    return `(() => { const k = ${key}; if (!this.instances.has(k)) { const inst = this.${factoryId}(); this.instances.set(k, inst); if (this._initRunning) this._initJournal.push(k); } return this.instances.get(k); })()`;
-  }
-  return `(() => { const k = ${key}; if (!this.instances.has(k)) { const inst = this.${factoryId}(); this.instances.set(k, inst); } return this.instances.get(k); })()`;
+  const stored = afterStore('inst', 'k', hasAsync, isBorrowedInstance(node.service));
+  return `(() => { const k = ${key}; if (!this.instances.has(k)) { const inst = this.${factoryId}(); ${stored} } return this.instances.get(k); })()`;
 }
 
 function freshList(expr: string): string {
@@ -115,7 +125,7 @@ function legacyResolveAll(): string {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) return __neoListed.slice();
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } return __neoListed.slice(); }
         }
       }
     }
@@ -129,9 +139,11 @@ export function generateResolveAllMethod(
   hasAsync: boolean
 ): string {
   const tail = legacyResolveAll();
+  const open = parentOpenCheck(hasAsync);
   if (!graph.multiNodes || graph.multiNodes.size === 0) {
     if (!hasAsync) {
       return `public resolveAll<T>(token: any): T[] {
+    ${open}
     ${tail}
   }`;
     }
@@ -141,6 +153,7 @@ export function generateResolveAllMethod(
   }
 
   private _resolveAllInternal<T>(token: any): T[] {
+    ${open}
     ${tail}
   }`;
   }
@@ -158,6 +171,7 @@ export function generateResolveAllMethod(
 
   if (!hasAsync) {
     return `public resolveAll<T>(token: any): T[] {
+    ${open}
     ${cases.join('\n    ')}
     ${tail}
   }`;
@@ -169,6 +183,7 @@ export function generateResolveAllMethod(
   }
 
   private _resolveAllInternal<T>(token: any): T[] {
+    ${open}
     ${cases.join('\n    ')}
     ${tail}
   }`;

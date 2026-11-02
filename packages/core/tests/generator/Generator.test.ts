@@ -234,7 +234,7 @@ describe('Generator', () => {
       const code = new Generator(graph).generate();
 
       expect(code).toContain('const legacyResult = legacyContainer.resolve(token);');
-      expect(code).toMatch(/const legacyResult = legacyContainer\.resolve\(token\);\s*this\.notifyResolve\(token, legacyResult\);\s*return legacyResult;/);
+      expect(code).toMatch(/const legacyResult = legacyContainer\.resolve\(token\);\s*if \(legacyResult != null\) this\._borrowed\.add\(legacyResult\);\s*this\.notifyResolve\(token, legacyResult\);\s*return legacyResult;/);
     });
   });
 

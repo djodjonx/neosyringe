@@ -143,6 +143,18 @@ describe('CI workflows', () => {
     expect(verifyCommands).toContain('node scripts/ci/check-dist.mjs');
   });
 
+  it('consumer-types job runs negative-ownership after negative', () => {
+    const commands = runs(loadJobs('.github/workflows/ci.yml')['consumer-types']!);
+    const negativeAt = commands.indexOf(
+      'node scripts/ci/consumer-types.mjs tests/consumer-types/negative --expect-file expected-diagnostic.txt',
+    );
+    const ownershipAt = commands.indexOf(
+      'node scripts/ci/consumer-types.mjs tests/consumer-types/negative-ownership --expect-file expected-diagnostic.txt',
+    );
+    expect(negativeAt).toBeGreaterThanOrEqual(0);
+    expect(ownershipAt).toBeGreaterThan(negativeAt);
+  });
+
   it('T15 distribution runs consumer-dist after check-dist', () => {
     const commands = runs(loadJobs('.github/workflows/ci.yml').distribution!);
     const checkAt = commands.indexOf('node scripts/ci/check-dist.mjs');
