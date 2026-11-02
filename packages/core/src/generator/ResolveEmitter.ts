@@ -1,5 +1,5 @@
 import type { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../analyzer/types';
-import { getFactoryName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
+import { getDirectName, getFactoryName, getReadName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
 
 /** useValue and an explicit borrowed factory stay out of the disposal journal. A value is never owned. */
 export function isBorrowedInstance(service: ServiceDefinition): boolean {
@@ -13,11 +13,10 @@ export function afterStore(valueExpr: string, tokenKey: string, hasAsync: boolea
   return `this.instances.set(${tokenKey}, ${valueExpr});${mark}${journal}`;
 }
 
-export function parentOpenCheck(hasAsync: boolean): string {
+export function parentOpenCheck(hasAsync: boolean, minimal = false): string {
   const syncGate = hasAsync
     ? ''
-    : `if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
-    if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+    : `${minimal ? '' : "if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');\n    "}if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     `;
   const self = hasAsync
     ? `if (!this._initRunning && this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');`
@@ -140,12 +139,13 @@ function freshList(expr: string): string {
   return `{ const __neoAll = [${expr}]; for (const __neoNoted of __neoAll) this.notifyResolve(token, __neoNoted); return __neoAll.slice(); }`;
 }
 
-function legacyResolveAll(): string {
+function legacyResolveAll(notify = true): string {
+  const noted = notify ? ' for (const __neoItem of __neoListed) this.notifyResolve(token, __neoItem);' : '';
   return `if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
           const __neoListed = __neoLegacy.resolveAll(token);
-          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); } for (const __neoItem of __neoListed) this.notifyResolve(token, __neoItem); return __neoListed.slice(); }
+          if (Array.isArray(__neoListed)) { for (const __neoItem of __neoListed) { if (__neoItem != null) this._borrowed.add(__neoItem); }${noted} return __neoListed.slice(); }
         }
       }
     }
@@ -239,4 +239,156 @@ function closedResolveAll(
   private _resolveAllInternal<T>(token: any): T[] {
     ${body}
   }`;
+}
+
+/** What the optimized accessors need to know about the profile. */
+export interface DirectProfile {
+  /** Minimal drops the resolve event and the overrides table. */
+  minimal: boolean;
+  /** Full profile with test overrides: an internal read must honour a mock too. */
+  honourOverrides: boolean;
+}
+
+/**
+ * One accessor per registration, reading its own container state.
+ * The cache flag is the presence of the key in `instances`, never the value, so a
+ * factory that returns undefined or null runs once. Full profile adds a `_get_` twin
+ * that fires the resolve event on every read, cache hit included.
+ */
+export function generateDirectAccessors(
+  graph: DependencyGraph,
+  sorted: TokenId[],
+  getImport: GetImport,
+  hasAsync: boolean,
+  profile: DirectProfile,
+  formatToken: string,
+): string[] {
+  const accessors: string[] = [];
+  for (const tokenId of sorted) {
+    const node = graph.nodes.get(tokenId);
+    if (!node || node.service.type === 'parent') continue;
+    const factoryId = getFactoryName(tokenId);
+    const tokenKey = resolveTokenKey(node.service, getImport);
+    const transient = node.service.lifecycle === 'transient';
+    const asyncSingleton = hasAsync && !!node.service.isAsync && !transient;
+    const stored = afterStore('instance', tokenKey, hasAsync, isBorrowedInstance(node.service));
+    const mock = profile.honourOverrides ? `if (this.overrides.has(${tokenKey})) return this._mock(${tokenKey});\n    ` : '';
+    const body = transient
+      ? `return this.${factoryId}();`
+      : asyncSingleton
+        ? `if (!this.instances.has(${tokenKey})) throw new Error('async singleton is not prepared: ' + ${formatToken}(${tokenKey}));
+    return this.instances.get(${tokenKey});`
+        : `if (this.instances.has(${tokenKey})) return this.instances.get(${tokenKey});
+    const instance = this.${factoryId}();
+    ${stored}
+    return instance;`;
+    accessors.push(`
+  private ${getDirectName(tokenId)}(): any {
+    ${mock}${body}
+  }`);
+    if (profile.minimal) continue;
+    accessors.push(`
+  private ${getReadName(tokenId)}(): any {
+    const __neoValue = this.${getDirectName(tokenId)}();
+    this.notifyResolve(${tokenKey}, __neoValue);
+    return __neoValue;
+  }`);
+  }
+  return accessors;
+}
+
+/** Indexed accessors for multi contributions. The cache key is the same as {@link contributionCall}. */
+export function generateDirectContributions(
+  graph: DependencyGraph,
+  hasAsync: boolean,
+): string[] {
+  const accessors: string[] = [];
+  if (!graph.multiNodes) return accessors;
+  for (const [tokenId, nodes] of graph.multiNodes) {
+    nodes.forEach((node, index) => {
+      const factoryId = `${getFactoryName(tokenId)}_${index}`;
+      const key = multiRegistrationKey(node, tokenId, index);
+      if (node.service.lifecycle === 'transient') {
+        accessors.push(`
+  private ${getDirectName(tokenId, index)}(): any {
+    return this.${factoryId}();
+  }`);
+        return;
+      }
+      if (hasAsync && node.service.isAsync) {
+        accessors.push(`
+  private ${getDirectName(tokenId, index)}(): any {
+    return this.instances.get(${key});
+  }`);
+        return;
+      }
+      const stored = afterStore('inst', 'k', hasAsync, isBorrowedInstance(node.service));
+      accessors.push(`
+  private ${getDirectName(tokenId, index)}(): any {
+    const k = ${key};
+    if (this.instances.has(k)) return this.instances.get(k);
+    const inst = this.${factoryId}();
+    ${stored}
+    return inst;
+  }`);
+    });
+  }
+  return accessors;
+}
+
+function directList(graph: DependencyGraph, tokenId: TokenId, minimal: boolean): string {
+  const nodes = graph.multiNodes?.get(tokenId) ?? [];
+  const calls = nodes.map((_, index) => `this.${getDirectName(tokenId, index)}()`).join(', ');
+  if (minimal) return `return [${calls}];`;
+  return `{ const __neoAll = [${calls}]; for (const __neoNoted of __neoAll) this.notifyResolve(token, __neoNoted); return __neoAll.slice(); }`;
+}
+
+/**
+ * resolveAll for the optimized emitter. Same shape in sync and async containers:
+ * `resolveAll` checks the entry, `_resolveAllInternal` lists every local multi token.
+ * Closed: the public method lists the exported multi roots only, and the internal
+ * one lists `internalIds` (the multi tokens a factory context still reads), not every token.
+ */
+export function generateDirectResolveAll(
+  graph: DependencyGraph,
+  getImport: GetImport,
+  hasAsync: boolean,
+  closed: boolean,
+  minimal: boolean,
+  internalIds: Iterable<TokenId> = graph.multiNodes?.keys() ?? [],
+): { publicMethod: string; internalMethod: string } {
+  const tail = legacyResolveAll(!minimal);
+  const open = parentOpenCheck(hasAsync, minimal);
+  const guard = hasAsync ? `this._guardPublic('resolveAll()');\n    ` : '';
+  const casesFor = (ids: Iterable<TokenId>): string => {
+    const cases: string[] = [];
+    for (const tokenId of ids) {
+      const nodes = graph.multiNodes?.get(tokenId);
+      if (!nodes || nodes.length === 0) continue;
+      cases.push(`if (token === ${resolveTokenKey(nodes[0].service, getImport)}) ${directList(graph, tokenId, minimal)}`);
+    }
+    return cases.join('\n    ');
+  };
+  const internalMethod = `private _resolveAllInternal<T>(token: any): T[] {
+    ${open}
+    ${casesFor(internalIds)}
+    ${tail}
+  }`;
+  if (!closed) {
+    return {
+      publicMethod: `public resolveAll<T>(token: any): T[] {
+    ${guard}return this._resolveAllInternal<T>(token);
+  }`,
+      internalMethod,
+    };
+  }
+  return {
+    publicMethod: `public resolveAll<T>(token: any): T[] {
+    ${guard}this._assertRoot(token, true);
+    ${open}
+    ${casesFor(graph.publicMultiRoots ?? [])}
+    ${tail}
+  }`,
+    internalMethod,
+  };
 }

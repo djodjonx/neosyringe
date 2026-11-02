@@ -31,6 +31,35 @@ export function multiRegistrationKey(node: DependencyNode, tokenId: TokenId, ind
   return JSON.stringify(`${tokenId}:${index}`);
 }
 
+/** Accessor names of the optimized emitter. `base` is a sanitized token id, plus `_<index>` for a contribution. */
+export function getDirectName(tokenId: TokenId, index?: number): string {
+  const base = tokenId.replace(FACTORY_NAME_SANITIZER, '_');
+  return index === undefined ? `_direct_${base}` : `_direct_${base}_${index}`;
+}
+
+/** Same as {@link getDirectName}, plus the resolve notification of the full profile. */
+export function getReadName(tokenId: TokenId): string {
+  return `_get_${tokenId.replace(FACTORY_NAME_SANITIZER, '_')}`;
+}
+
+/**
+ * Optimized emitter only. A dependency registered in this container is read through
+ * its own accessor instead of the generic resolver. `notify` keeps the full-profile
+ * resolve event on every internal read (ADR005, "Événement resolve").
+ */
+export interface DirectReads {
+  notify: boolean;
+}
+
+function directRead(tokenId: TokenId, direct: DirectReads): string {
+  return direct.notify ? `this.${getReadName(tokenId)}()` : `this.${getDirectName(tokenId)}()`;
+}
+
+function isLocalRegistration(graph: DependencyGraph, tokenId: TokenId): boolean {
+  const node = graph.nodes.get(tokenId);
+  return node !== undefined && node.service.type !== 'parent';
+}
+
 /**
  * Resolves constructor argument expressions for a list of dependency token IDs.
  *
@@ -55,10 +84,12 @@ export function resolveConstructorArgs(
   getForeignImport: GetImport,
   hasAsync = false,
   closed = false,
+  direct?: DirectReads,
 ): string {
-  const read = resolutionCalls(hasAsync, closed).one;
+  const read = resolutionCalls(hasAsync, closed || direct !== undefined).one;
   return dependencies.map(depId => {
     const depNode = graph.nodes.get(depId);
+    if (direct && isLocalRegistration(graph, depId)) return directRead(depId, direct);
     if (!depNode) {
       // Not registered locally — check whether it's satisfied by a parent/legacy
       // container (see DependencyGraph.parentResolvableTokens for why only this
@@ -127,11 +158,13 @@ function factoryAllowList(
   service: DependencyNode['service'],
   graph: DependencyGraph,
   getImport: GetImport,
-): { entries: Array<[string, boolean]>; skipWarm: Map<string, boolean> } {
+): { entries: Array<[string, boolean]>; skipWarm: Map<string, boolean>; locals: Map<string, TokenId> } {
   const flags = new Map<string, boolean>();
   const skipWarm = new Map<string, boolean>();
+  const locals = new Map<string, TokenId>();
   for (const dep of service.factoryDependencies ?? []) {
     const key = dependencyKeyExpression(dep, graph, getImport);
+    if (isLocalRegistration(graph, dep.tokenId)) locals.set(key, dep.tokenId);
     const previous = flags.get(key);
     const allFlag = previous || dep.all;
     flags.set(key, allFlag);
@@ -139,7 +172,47 @@ function factoryAllowList(
     const already = skipWarm.get(key);
     skipWarm.set(key, already === undefined ? transientDep : already && transientDep);
   }
-  return { entries: [...flags.entries()], skipWarm };
+  return { entries: [...flags.entries()], skipWarm, locals };
+}
+
+/**
+ * Optimized emitter only. `ctx.resolve` reaches a declared local provider through its own
+ * accessor. The generic resolver is called only for a declared token that is not a local
+ * single registration (a parent token, a multi token). A factory with no such token has none.
+ */
+function directContextResolve(
+  listed: ReturnType<typeof factoryAllowList>,
+  direct: DirectReads,
+  fallback: string,
+): string {
+  const locals = [...listed.locals.entries()];
+  const hasOther = listed.entries.some(([key]) => !listed.locals.has(key));
+  if (locals.length === 0 && !hasOther) return 'return undefined;';
+  const lines = locals.map(([key, tokenId], index) => {
+    const read = `return ${directRead(tokenId, direct)};`;
+    return !hasOther && index === locals.length - 1 ? read : `if (token === ${key}) ${read}`;
+  });
+  if (hasOther) lines.push(`return ${fallback}(token);`);
+  return lines.join('\n        ');
+}
+
+/**
+ * What the factory contexts of a graph still need from the generic resolvers.
+ * `opaque`: an opaque factory may ask for any token. `multiAll`: multi tokens a declared
+ * factory dependency reads with resolveAll.
+ */
+export function factoryContextNeeds(graph: DependencyGraph): { opaque: boolean; multiAll: Set<TokenId> } {
+  const needs = { opaque: false, multiAll: new Set<TokenId>() };
+  const visit = (service: DependencyNode['service']): void => {
+    if (service.type !== 'factory' || !service.factorySource) return;
+    if (service.opaque === true) needs.opaque = true;
+    for (const dep of service.factoryDependencies ?? []) {
+      if (dep.all && graph.multiNodes?.has(dep.tokenId)) needs.multiAll.add(dep.tokenId);
+    }
+  };
+  for (const node of graph.nodes.values()) visit(node.service);
+  for (const nodes of graph.multiNodes?.values() ?? []) nodes.forEach((node) => visit(node.service));
+  return needs;
 }
 
 /** A sync throw from warmup or from the factory must expire the context before it escapes. */
@@ -166,6 +239,7 @@ function emitFactoryBody(
   getImport: GetImport,
   hasAsync: boolean,
   closed = false,
+  direct?: DirectReads,
 ): string {
   const userFactory = service.factorySource ?? 'undefined';
   const label = JSON.stringify(getSimpleName(service.tokenId));
@@ -173,16 +247,23 @@ function emitFactoryBody(
   const listed = factoryAllowList(service, graph, getImport);
   const allowed = listed.entries;
   const entries = allowed.map(([key, all]) => `[${key}, ${all ? '"all"' : '"simple"'}]`).join(', ');
-  const calls = resolutionCalls(hasAsync, closed);
+  const calls = resolutionCalls(hasAsync, closed || direct !== undefined);
   const warmupLines: string[] = [];
   if (!opaqueFactory) {
     for (const [key, all] of allowed) {
       const depIsTransient = listed.skipWarm.get(key) === true;
       if (depIsTransient) continue;
+      const local = listed.locals.get(key);
+      if (direct && local !== undefined && !all) {
+        warmupLines.push(`${directRead(local, direct)};`);
+        continue;
+      }
       warmupLines.push(all ? `${calls.all}(${key});` : `${calls.one}(${key});`);
     }
   }
   const warmup = warmupLines.join('\n    ');
+  const resolveTail = direct ? directContextResolve(listed, direct, calls.one) : `return ${calls.one}(token);`;
+  const resolveAllTail = direct && !allowed.some(([, all]) => all) ? 'return undefined;' : `return ${calls.all}(token);`;
   const holdStart = '';
   const release = '';
   const expireStmt = 'const __neoExpire = () => { __neoExpired = true; };';
@@ -219,12 +300,12 @@ function emitFactoryBody(
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         const mode = __neoAllowed.get(token);
         if (mode !== 'simple' && mode !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
-        return ${calls.one}(token);
+        ${resolveTail}
       },
       resolveAll: (token) => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         if (__neoAllowed.get(token) !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
-        return ${calls.all}(token);
+        ${resolveAllTail}
       },
     };
     ${holdStart}
@@ -244,6 +325,7 @@ export function generateFactories(
   getForeignImport: GetImport,
   hasAsync = false,
   closed = false,
+  direct?: DirectReads,
 ): string[] {
   const factories: string[] = [];
 
@@ -263,7 +345,7 @@ export function generateFactories(
     }
 
     if (node.service.type === 'factory' && node.service.factorySource) {
-      const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed);
+      const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct);
       factories.push(`
   private ${factoryId}(): any {
     ${body}
@@ -276,7 +358,7 @@ export function generateFactories(
         );
       }
       const className = getImport(node.service.implementationSymbol);
-      const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed);
+      const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct);
 
       factories.push(`
   private ${factoryId}(): any {
@@ -295,6 +377,7 @@ export function generateMultiFactories(
   getForeignImport: GetImport,
   hasAsync = false,
   closed = false,
+  direct?: DirectReads,
 ): string[] {
   const factories: string[] = [];
   if (!graph.multiNodes) return factories;
@@ -304,7 +387,7 @@ export function generateMultiFactories(
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
 
       if (node.service.type === 'factory' && node.service.factorySource) {
-        const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed);
+        const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct);
         factories.push(`
   private ${factoryId}(): any {
     ${body}
@@ -317,7 +400,7 @@ export function generateMultiFactories(
       } else {
         if (!node.service.implementationSymbol) return;
         const className = getImport(node.service.implementationSymbol);
-        const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed);
+        const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct);
         factories.push(`
   private ${factoryId}(): any {
     return new ${className}(${args});

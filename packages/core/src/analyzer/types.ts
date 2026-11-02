@@ -224,6 +224,9 @@ export interface ConfigGraph {
 
   /** Eager tokens. They start once and are not public roots. ADR006 line 12. */
   eagerRoots?: TokenId[];
+
+  /** Literal `runtime.profile`. Absent means full. ADR007 "Profils de génération". */
+  runtimeProfile?: 'full' | 'minimal';
 }
 
 /**
@@ -339,6 +342,9 @@ export interface DependencyGraph {
 
   /** Tokens constructed once from initialize, without becoming public. */
   eagerRoots?: TokenId[];
+
+  /** Literal `runtime.profile`. Absent means full. ADR007 "Profils de génération". */
+  runtimeProfile?: 'full' | 'minimal';
 
   /** One reason per registration id. ADR006 line 24. */
   retention?: Map<string, RetentionReason>;

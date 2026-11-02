@@ -128,6 +128,7 @@ export class ConfigParser {
         for (const id of graph.multiNodes.keys()) known.add(id);
       }
       readOptimization(configObj, graph, known, (expr) => this.tokenResolverService.resolveTokenId(expr));
+      readRuntimeProfile(configObj, graph);
       const diagnostics = closedModeDiagnostics(
         graph.optimizationMode,
         this.validation,
@@ -518,6 +519,7 @@ export interface OptimizationTarget {
   publicRoots?: TokenId[];
   publicMultiRoots?: TokenId[];
   eagerRoots?: TokenId[];
+  runtimeProfile?: 'full' | 'minimal';
   errors?: AnalysisError[];
 }
 
@@ -618,6 +620,76 @@ export function readOptimization(
   target.publicRoots = roots.filter((item) => !item.all).map((item) => item.id);
   target.publicMultiRoots = roots.filter((item) => item.all).map((item) => item.id);
   target.eagerRoots = (eager ?? []).map((item) => item.id);
+}
+
+/** `name` and `'name'` are the same property. Anything else is not a literal name. */
+function literalPropertyName(name: ts.PropertyName): string | undefined {
+  if (TSContext.ts.isIdentifier(name) || TSContext.ts.isStringLiteral(name)) return name.text;
+  return undefined;
+}
+
+/**
+ * Initializer of `name` in an object literal. A spread or computed member could hide the
+ * property, so it is reported as `opaque` instead of being skipped.
+ */
+function literalMember(
+  obj: ts.ObjectLiteralExpression,
+  name: string,
+): { initializer?: ts.Expression; opaque?: ts.Node } {
+  let initializer: ts.Expression | undefined;
+  for (const prop of obj.properties) {
+    if (TSContext.ts.isSpreadAssignment(prop)) return { opaque: prop };
+    if (!prop.name) continue;
+    if (TSContext.ts.isComputedPropertyName(prop.name)) return { opaque: prop };
+    if (literalPropertyName(prop.name) !== name) continue;
+    if (TSContext.ts.isPropertyAssignment(prop)) initializer = prop.initializer;
+    else if (TSContext.ts.isShorthandPropertyAssignment(prop)) initializer = prop.name;
+    else return { opaque: prop };
+  }
+  return { initializer };
+}
+
+/**
+ * Literal `runtime.profile` only. Absent or `undefined` (for `runtime` or `profile`) is the
+ * full profile. 04-api-et-diagnostics.md "BuilderConfig et profils".
+ */
+export function readRuntimeProfile(
+  configObj: ts.ObjectLiteralExpression,
+  target: OptimizationTarget,
+): void {
+  const runtime = literalMember(configObj, 'runtime').initializer;
+  if (!runtime) return;
+  const sourceFile = configObj.getSourceFile();
+  const body = unwrapExpression(runtime);
+  const unsupported = (node: ts.Node, message: string): void => {
+    pushConfigError(target, {
+      type: 'unsupported',
+      code: 'NEO_CONFIG_UNSUPPORTED',
+      message,
+      node,
+      sourceFile,
+    });
+  };
+  const profileMessage = "NEO_CONFIG_UNSUPPORTED: runtime.profile must be the string literal 'full' or 'minimal'.";
+  if (TSContext.ts.isIdentifier(body) && body.text === 'undefined') return;
+  if (!TSContext.ts.isObjectLiteralExpression(body)) {
+    unsupported(runtime, profileMessage);
+    return;
+  }
+  const member = literalMember(body, 'profile');
+  if (member.opaque) {
+    unsupported(member.opaque, 'NEO_CONFIG_UNSUPPORTED: runtime must be an object literal without spread or computed members.');
+    return;
+  }
+  const profileNode = member.initializer;
+  if (!profileNode) return;
+  const profile = unwrapExpression(profileNode);
+  if (TSContext.ts.isIdentifier(profile) && profile.text === 'undefined') return;
+  if (!TSContext.ts.isStringLiteral(profile) || (profile.text !== 'full' && profile.text !== 'minimal')) {
+    unsupported(profileNode, profileMessage);
+    return;
+  }
+  target.runtimeProfile = profile.text;
 }
 
 function readRootList(

@@ -8,7 +8,7 @@ import { buildContainerTokenView } from './resolutionUsages';
 import { extendsCaptureText, extendsReferenceName } from '../shared/extendsReference';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 import { NeoTokenError } from '../errors/NeoTokenError';
-import { closedModeDiagnostics, readOptimization, type OptimizationTarget } from '../parsers/ConfigParser';
+import { closedModeDiagnostics, readOptimization, readRuntimeProfile, type OptimizationTarget } from '../parsers/ConfigParser';
 import { InjectionParser } from '../parsers/InjectionParser';
 import { DependencyAnalyzer } from '../validators/DependencyAnalyzer';
 
@@ -222,6 +222,7 @@ export class ConfigCollector implements IConfigCollector {
     const optimization: OptimizationTarget = {};
     if (type === 'builder') {
       readOptimization(configArg, optimization, known, (expr) => this.tokenResolverService.resolveTokenId(expr));
+      readRuntimeProfile(configArg, optimization);
     }
     const opaqueNames: string[] = [];
     const collectOpaque = (info: InjectionInfo) => {
@@ -256,6 +257,7 @@ export class ConfigCollector implements IConfigCollector {
       publicRoots: optimization.publicRoots,
       publicMultiRoots: optimization.publicMultiRoots,
       eagerRoots: optimization.eagerRoots,
+      runtimeProfile: optimization.runtimeProfile,
     };
   }
 

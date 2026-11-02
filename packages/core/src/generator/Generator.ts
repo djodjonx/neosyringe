@@ -7,6 +7,7 @@ import { generateFactories, generateMultiFactories, getFactoryName, resolveToken
 import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, parentOpenCheck, isBorrowedInstance, afterStore } from './ResolveEmitter';
 import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
+import { emitOptimizedContainer } from './DirectEmitter';
 import { TSContext } from '../TSContext';
 import { HashUtils } from '../analyzer/shared/HashUtils';
 
@@ -105,7 +106,14 @@ export class Generator {
      * reconfigure. When false they reject NEO_TEST_API_DISABLED. The choice
      * is fixed here so the emitted source never reads `process`.
      */
-    private testOverrides: boolean = false
+    private testOverrides: boolean = false,
+    /**
+     * Which container emitter to use. `reference` is the generic resolver, kept as the
+     * witness; `optimized` emits one direct accessor per registration (DirectEmitter).
+     * Undefined picks `optimized` for the minimal profile and for closed mode, and
+     * `reference` otherwise, so an open full container keeps today's text.
+     */
+    private emitter?: 'reference' | 'optimized'
   ) {
     // Check for analysis errors and throw the first one for CLI compatibility
     if (graph.errors && graph.errors.length > 0) {
@@ -144,6 +152,55 @@ export class Generator {
       ? `${this.graph.sourceFileName}:${this.graph.defineBuilderConfigStart}`
       : this.graph.containerId;
     return HashUtils.hashString(key);
+  }
+
+  /**
+   * Import lines for the symbols registered in `imports`. Must run after every emitter
+   * has called getImport: that call is what registers an import.
+   */
+  private renderImportLines(imports: Map<string, string>, sourceGraph: DependencyGraph): string[] {
+    const importLines: string[] = [];
+    // Base directory for relative import paths:
+    // - useDirectSymbolNames=true: relative to the container source file (so the injected
+    //   import resolves correctly from the file's perspective)
+    // - useDirectSymbolNames=false: relative to the output directory (generated file)
+    const base = this.useDirectSymbolNames
+      ? (sourceGraph.sourceFileName ? dirname(sourceGraph.sourceFileName) : process.cwd())
+      : (this.outputDir ?? process.cwd());
+    const specifierFor = (filePath: string): string => {
+      let importPath: string;
+      if (isAbsolute(filePath)) {
+        const rel = relative(base, filePath).replace(/\\/g, '/');
+        importPath = rel.startsWith('.') ? rel : `./${rel}`;
+      } else {
+        importPath = filePath;
+      }
+      // Strip TS/TSX extensions in inline mode: the user's own import of the same file
+      // typically uses no extension (or .js). Using './login.ts' alongside './login'
+      // risks two distinct module specifiers which some toolchains won't deduplicate,
+      // breaking the identity comparison token === Import_N.default.
+      if (this.useDirectSymbolNames) {
+        importPath = importPath.replace(/\.(ts|tsx|mts|cts)$/, '');
+      }
+      return importPath;
+    };
+    if (imports.size > 0) {
+      for (const [filePath, alias] of imports) {
+        importLines.push(`import * as ${alias} from '${specifierFor(filePath)}';`);
+      }
+    }
+    // A pruned provider's module still runs when it has a top-level effect. ADR006 lines 35-38.
+    for (const filePath of loadEffectFiles(sourceGraph)) {
+      if (imports.has(filePath)) continue;
+      importLines.push(`import '${specifierFor(filePath)}';`);
+    }
+
+    return importLines;
+  }
+
+  private useOptimizedEmitter(graph: DependencyGraph): boolean {
+    if (this.emitter) return this.emitter === 'optimized';
+    return graph.runtimeProfile === 'minimal' || graph.optimizationMode === 'closed';
   }
 
   /**
@@ -257,6 +314,34 @@ export class Generator {
     const resolveGuard = buildAsyncResolveGuard(hasAsync);
     const eagerLines = eagerSyncLines(emitted, getImport, hasAsync);
 
+    if (this.useOptimizedEmitter(emitted)) {
+      const state = containerState(emitted, hasAsync, eagerLines, emitted.runtimeProfile === 'minimal');
+      const containerClass = emitOptimizedContainer({
+        graph: emitted,
+        sorted,
+        getImport,
+        getForeignImport,
+        hasAsync,
+        closed,
+        minimal: emitted.runtimeProfile === 'minimal',
+        testOverrides: this.testOverrides,
+        className: this.containerClassName,
+        notFoundErrorClassName: this.notFoundErrorClassName,
+        eagerLines,
+        stateFields: `${state.stateFields}${state.eagerField}`,
+        ...rootMembers(emitted, closed, getImport),
+        runtimeHelpers: runtimeHelpers(hasAsync),
+        debugGetters: this.emitDebugGetter(emitted),
+      });
+      // Imports are read after the class: emitting it is what registers them.
+      return `${openModeMark(sourceGraph.optimizationMode)}
+${this.renderImportLines(imports, sourceGraph).join('\n')}
+${[...captureHoists(sourceGraph), ...residualValueReads(sourceGraph)].join('\n')}
+
+${containerClass}
+${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
+    }
+
     const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed);
     const resolveCases = generateResolveCases(
       emitted,
@@ -276,73 +361,17 @@ export class Generator {
     const destroyMethod = generateDestroyMethod(emitted, sorted, getImport, hasAsync);
     const overrideMethods = generateOverrideMethods(emitted, sorted, getImport, hasAsync, this.testOverrides);
 
-    // Generate import lines for:
-    // - All symbols when useDirectSymbolNames=false (CLI/generated file mode)
-    // - Only default export symbols when useDirectSymbolNames=true (inline transform mode)
-    const importLines: string[] = [];
-    // Base directory for relative import paths:
-    // - useDirectSymbolNames=true: relative to the container source file (so the injected
-    //   import resolves correctly from the file's perspective)
-    // - useDirectSymbolNames=false: relative to the output directory (generated file)
-    const base = this.useDirectSymbolNames
-      ? (sourceGraph.sourceFileName ? dirname(sourceGraph.sourceFileName) : process.cwd())
-      : (this.outputDir ?? process.cwd());
-    const specifierFor = (filePath: string): string => {
-      let importPath: string;
-      if (isAbsolute(filePath)) {
-        const rel = relative(base, filePath).replace(/\\/g, '/');
-        importPath = rel.startsWith('.') ? rel : `./${rel}`;
-      } else {
-        importPath = filePath;
-      }
-      // Strip TS/TSX extensions in inline mode: the user's own import of the same file
-      // typically uses no extension (or .js). Using './login.ts' alongside './login'
-      // risks two distinct module specifiers which some toolchains won't deduplicate,
-      // breaking the identity comparison token === Import_N.default.
-      if (this.useDirectSymbolNames) {
-        importPath = importPath.replace(/\.(ts|tsx|mts|cts)$/, '');
-      }
-      return importPath;
-    };
-    if (imports.size > 0) {
-      for (const [filePath, alias] of imports) {
-        importLines.push(`import * as ${alias} from '${specifierFor(filePath)}';`);
-      }
-    }
-    // A pruned provider's module still runs when it has a top-level effect. ADR006 lines 35-38.
-    for (const filePath of loadEffectFiles(sourceGraph)) {
-      if (imports.has(filePath)) continue;
-      importLines.push(`import '${specifierFor(filePath)}';`);
-    }
+    const importLines = this.renderImportLines(imports, sourceGraph);
 
-    const borrowedList = borrowedSeeds(emitted).join(', ');
     // A successful legacy resolve borrows that instance. A throw must not mark the caller's own result.
-    const borrowField = '';
     const borrowReset = '';
     const borrowBefore = `const legacyResult = legacyContainer.resolve(token);
                     if (legacyResult != null) this._borrowed.add(legacyResult);`;
     const borrowNotify = '';
-    const scopeFields = `private _closed = false;
-  ${borrowField}private _borrowed = new Set<any>([${borrowedList}]);
-  private _destroyWork?: Promise<void>;`;
-    const eagerField = !hasAsync && eagerLines.length > 0 ? '\n  private _eagerOnce = false;' : '';
-    const stateFields = hasAsync
-      ? `private _state: 'created' | 'initializing' | 'reconfiguring' | 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
-  private _initWork?: Promise<void>;
-  private _failure: unknown;
-  private _initRunning = false;
-  private _initJournal: any[] = [];
-  ${scopeFields}`
-      : `private _reconfiguring = false;
-  private _failure?: unknown;
-  ${scopeFields}`;
-    const runtimeHelpers = `${touchClosedMethod()}
-
-  ${assertParentsMethod()}
-  ${hasAsync ? '' : syncNeoFailMethod()}`;
+    const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines);
+    const runtimeHelpersText = runtimeHelpers(hasAsync);
     const captureLines = captureHoists(sourceGraph);
     for (const line of residualValueReads(sourceGraph)) captureLines.push(line);
-
     const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
     const assertOne = closed ? 'this._assertRoot(token, false);' : '';
     const resolveInterior = `
@@ -405,18 +434,7 @@ export class Generator {
     ${resolveGuard}${resolveInterior}
   }`;
 
-    const exported = closed ? exportedRootIds(emitted) : undefined;
-    const rootFields = exported
-      ? `\n  private _singleRoots = new Set<any>([${rootKeyExprs(exported.single, emitted, getImport)}]);\n  private _multiRoots = new Set<any>([${rootKeyExprs(exported.multi, emitted, getImport)}]);`
-      : '';
-    const assertRootMethod = closed ? `
-
-  private _assertRoot(token: any, all: boolean): void {
-    if ((all ? this._multiRoots : this._singleRoots).has(token)) return;
-    const error = new Error('NEO_ROOT_NOT_EXPORTED: [' + this.name + '] token is not an exported root') as Error & { code: string };
-    error.code = 'NEO_ROOT_NOT_EXPORTED';
-    throw error;
-  }` : '';
+    const { rootFields, assertRootMethod } = rootMembers(emitted, closed, getImport);
 
     return `${openModeMark(sourceGraph.optimizationMode)}
 ${importLines.join('\n')}
@@ -441,7 +459,7 @@ class ${this.containerClassName} {
     private name: string = 'NeoContainer'
   ) {}
 
-  ${runtimeHelpers}${assertRootMethod}
+  ${runtimeHelpersText}${assertRootMethod}
 
   ${initializeMethod}
 
@@ -603,6 +621,58 @@ export const ${variableName || 'container'} = ${instantiation};
     return ${JSON.stringify(edges)};
   }`;
   }
+}
+
+/** Scope and lifecycle fields shared by both emitters. */
+function containerState(
+  graph: DependencyGraph,
+  hasAsync: boolean,
+  eagerLines: string[],
+  minimal = false,
+): { stateFields: string; eagerField: string } {
+  const borrowedList = borrowedSeeds(graph).join(', ');
+  const scopeFields = `private _closed = false;
+  private _borrowed = new Set<any>([${borrowedList}]);
+  private _destroyWork?: Promise<void>;`;
+  const eagerField = !hasAsync && eagerLines.length > 0 ? '\n  private _eagerOnce = false;' : '';
+  const stateFields = hasAsync
+    ? `private _state: 'created' | 'initializing' ${minimal ? '' : "| 'reconfiguring' "}| 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
+  private _initWork?: Promise<void>;
+  private _failure: unknown;
+  private _initRunning = false;
+  private _initJournal: any[] = [];
+  ${scopeFields}`
+    : `${minimal ? '' : 'private _reconfiguring = false;\n  '}private _failure?: unknown;
+  ${scopeFields}`;
+  return { stateFields, eagerField };
+}
+
+function runtimeHelpers(hasAsync: boolean): string {
+  return `${touchClosedMethod()}
+
+  ${assertParentsMethod()}
+  ${hasAsync ? '' : syncNeoFailMethod()}`;
+}
+
+/** Exported root sets and their guard. Closed mode only. ADR006 lines 29-33. */
+function rootMembers(
+  graph: DependencyGraph,
+  closed: boolean,
+  getImport: GetImport,
+): { rootFields: string; assertRootMethod: string } {
+  const exported = closed ? exportedRootIds(graph) : undefined;
+  const rootFields = exported
+    ? `\n  private _singleRoots = new Set<any>([${rootKeyExprs(exported.single, graph, getImport)}]);\n  private _multiRoots = new Set<any>([${rootKeyExprs(exported.multi, graph, getImport)}]);`
+    : '';
+  const assertRootMethod = closed ? `
+
+  private _assertRoot(token: any, all: boolean): void {
+    if ((all ? this._multiRoots : this._singleRoots).has(token)) return;
+    const error = new Error('NEO_ROOT_NOT_EXPORTED: [' + this.name + '] token is not an exported root') as Error & { code: string };
+    error.code = 'NEO_ROOT_NOT_EXPORTED';
+    throw error;
+  }` : '';
+  return { rootFields, assertRootMethod };
 }
 
 function visitServices(graph: DependencyGraph, visit: (node: DependencyNode) => void): void {
