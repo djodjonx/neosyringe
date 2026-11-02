@@ -104,6 +104,7 @@ export class CycleValidator implements IValidator {
             message: `Circular dependency detected: ${readableCycle.join(' -> ')}`,
             node: localInfo.node,
             sourceFile: config.sourceFile,
+            context: { chain: readableCycle },
           });
         } else {
           // Multi-injection: emit one error per provider participating in the cycle
@@ -116,6 +117,7 @@ export class CycleValidator implements IValidator {
                 message: `Circular dependency detected: ${readableCycle.join(' -> ')}`,
                 node: info.node,
                 sourceFile: config.sourceFile,
+                context: { chain: readableCycle },
               });
             }
           }

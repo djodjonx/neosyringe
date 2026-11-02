@@ -1,4 +1,11 @@
-import type { DependencyGraph, DependencyNode } from '@djodjonx/neosyringe-core/analyzer';
+import {
+  containerLookupFor,
+  retentionEntries,
+  toStableDiagnostic,
+  type AnalysisError,
+  type DependencyGraph,
+  type DependencyNode,
+} from '@djodjonx/neosyringe-core/analyzer';
 import type { SerializableGraph, SerializableMultiRegistration, SerializableNode } from './types';
 
 function serializeMulti(multiNodes: Map<string, DependencyNode[]>): SerializableMultiRegistration[] {
@@ -18,7 +25,20 @@ function serializeMulti(multiNodes: Map<string, DependencyNode[]>): Serializable
   return serialized;
 }
 
+/**
+ * Serializes a graph. Its diagnostics are the config-level `graph.errors`.
+ * One parameter on purpose: it is safe to pass as an `Array.map` callback.
+ */
 export function serializeGraph(graph: DependencyGraph): SerializableGraph {
+  return serializeGraphWithErrors(graph, graph.errors);
+}
+
+/**
+ * Serializes a graph with the analyzer errors that belong to this container (for example
+ * the `extractAllErrors()` ones the caller attributed to it). They become its diagnostics,
+ * in place of the config-level `graph.errors`. `undefined` means the graph has no diagnostics field.
+ */
+export function serializeGraphWithErrors(graph: DependencyGraph, errors: readonly AnalysisError[] | undefined): SerializableGraph {
   const nodes: SerializableNode[] = [];
 
   for (const [tokenId, node] of graph.nodes) {
@@ -34,6 +54,9 @@ export function serializeGraph(graph: DependencyGraph): SerializableGraph {
         : [],
     });
   }
+
+  const diagnosticErrors = errors;
+  const lookup = containerLookupFor(graph);
 
   return {
     containerId: graph.containerId,
@@ -51,5 +74,8 @@ export function serializeGraph(graph: DependencyGraph): SerializableGraph {
         containerId: registration.containerId,
       })),
     } : {}),
+    // Causes come from the recorded retention. Nothing is recomputed and no node text is copied.
+    ...(graph.retention !== undefined ? { retention: retentionEntries(graph) } : {}),
+    ...(diagnosticErrors !== undefined ? { diagnostics: diagnosticErrors.map((error) => toStableDiagnostic(error, lookup)) } : {}),
   };
 }

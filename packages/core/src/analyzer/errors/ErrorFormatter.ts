@@ -48,6 +48,7 @@ export class ErrorFormatter implements IErrorFormatter {
 
     return {
       type: 'duplicate',
+      code: 'NEO_DUPLICATE_PROVIDER',
       message,
       node: errorNode,
       sourceFile: errorNode.getSourceFile(),
