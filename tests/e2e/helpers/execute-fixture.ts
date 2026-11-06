@@ -31,6 +31,7 @@ interface SyringeBuildPlugin {
 
 interface FixturePluginOptions {
   validation?: 'strict' | 'compatible';
+  testOverrides?: boolean;
 }
 
 interface PluginModule {

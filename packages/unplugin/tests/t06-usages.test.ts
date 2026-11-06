@@ -50,6 +50,10 @@ function writeProject(files: Record<string, string>, track = true): string {
       moduleResolution: 'bundler',
       strict: true,
       skipLibCheck: true,
+      // The fixtures use no DOM and no Node type. A program that loads only the ES library
+      // is parsed faster; every plugin instance of a test builds its own program.
+      lib: ['ES2020'],
+      types: [],
       baseUrl: REPO,
       paths: { '@djodjonx/neosyringe': ['packages/neosyringe/src/index.ts'] },
     },

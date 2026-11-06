@@ -4,6 +4,8 @@
 // Packs every non-private package under packages/, installs those tarballs plus
 // typescript, esbuild and rollup from the registry in a temporary directory
 // outside this repo, then typechecks, bundles and resolves a published token.
+// T21: each tarball is proven to carry the build on disk (scripts/ci/lib/tarball-proof.mjs), then the
+// integrated scenario and the closed bundle are compiled by the installed plugin and run.
 // The temporary directory is removed in finally.
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -23,6 +25,8 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
+import { assertDistNewerThanSrc, assertTarballFromBuild, declaredEntries } from './lib/tarball-proof.mjs';
 
 const root = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'));
 const started = Date.now();
@@ -82,31 +86,6 @@ function run(command, args, cwd) {
     stderr: result.stderr ?? '',
     output: `${result.stdout ?? ''}\n${result.stderr ?? ''}`,
   };
-}
-
-function collectPaths(node, out) {
-  if (typeof node === 'string') {
-    if (node.startsWith('.')) out.push(node);
-    return;
-  }
-  if (node && typeof node === 'object') {
-    for (const value of Object.values(node)) collectPaths(value, out);
-  }
-}
-
-function declaredEntries(pkg) {
-  const rels = [];
-  for (const field of ['main', 'module', 'types']) {
-    if (typeof pkg[field] === 'string') rels.push(pkg[field]);
-  }
-  collectPaths(pkg.exports, rels);
-  if (typeof pkg.bin === 'string') rels.push(pkg.bin);
-  else if (pkg.bin && typeof pkg.bin === 'object') {
-    for (const value of Object.values(pkg.bin)) {
-      if (typeof value === 'string') rels.push(value);
-    }
-  }
-  return rels;
 }
 
 function readJson(file) {
@@ -227,6 +206,11 @@ try {
     if (packedRun.status !== 0) fail(`pnpm pack failed for ${pkg.name}\n${packedRun.output}`);
     const tarball = parsePack(packedRun.stdout);
     if (!existsSync(tarball)) fail(`missing tarball for ${pkg.name}: ${tarball}`);
+    for (const rel of declaredEntries(pkg)) {
+      assertDistNewerThanSrc(path.join(dir, rel), path.join(dir, 'src'));
+    }
+    const proof = assertTarballFromBuild(tarball, dir);
+    step(`tarball ${path.basename(tarball)} carries the disk build (${proof.distFiles} dist files, version ${proof.version})`);
     packed.push({ name: pkg.name, tarball });
   }
   step(`packed ${packed.length} tarballs`);
@@ -527,6 +511,88 @@ insideConsumer(require.resolve('@djodjonx/neosyringe-lsp'));
   assertRuntime(usedEsbuild, 'esbuild runtime bundle');
   assertRuntime(usedRollup, 'rollup runtime bundle');
   step(`runtime bundle esbuild ${Buffer.byteLength(usedEsbuild)} bytes, rollup ${Buffer.byteLength(usedRollup)} bytes, bound ${RUNTIME_BUNDLE_MAX_BYTES}`);
+
+  // T21: the integrated scenario and the closed bundle, compiled by the installed plugin and run.
+  const t21Dir = path.join(consumerDir, 't21');
+  const t21Fixtures = path.join(root, 'tests/e2e/fixtures');
+  mkdirSync(path.join(t21Dir, 'out'), { recursive: true });
+  cpSync(path.join(t21Fixtures, 't21-scenario.ts'), path.join(t21Dir, 'scenario.ts'));
+  cpSync(path.join(t21Fixtures, 't21-closed'), path.join(t21Dir, 'closed'), { recursive: true });
+  const t21Config = path.join(consumerDir, 'tsconfig.t21.json');
+  writeFileSync(t21Config, `${JSON.stringify({
+    compilerOptions: {
+      target: 'ES2022',
+      module: 'ESNext',
+      moduleResolution: 'bundler',
+      strict: true,
+      skipLibCheck: true,
+      noEmit: true,
+      types: [],
+    },
+    include: ['t21/**/*.ts'],
+  }, null, 2)}\n`);
+  const t21Types = run(tsc, ['--noEmit', '-p', t21Config], consumerDir);
+  if (t21Types.status !== 0) fail(`t21 fixtures do not typecheck against the tarballs\n${t21Types.output}`);
+  const installedPlugin = requireConsumer('@djodjonx/neosyringe-plugin').neoSyringePlugin;
+  const t21Warnings = [];
+  async function bundleT21(entry, pluginOptions, nodeEnv) {
+    const previousEnv = process.env.NODE_ENV;
+    const previousWarn = console.warn;
+    process.env.NODE_ENV = nodeEnv;
+    console.warn = (...args) => { t21Warnings.push(String(args[0])); };
+    try {
+      const result = await esbuild.build({
+        absWorkingDir: consumerDir,
+        entryPoints: [entry],
+        bundle: true,
+        write: false,
+        metafile: true,
+        format: 'cjs',
+        platform: 'node',
+        logLevel: 'silent',
+        define: { 'process.env.NODE_ENV': JSON.stringify(nodeEnv) },
+        plugins: [installedPlugin.esbuild({ project: t21Config, ...pluginOptions })],
+      });
+      return { code: result.outputFiles[0].text, metafile: result.metafile };
+    } finally {
+      console.warn = previousWarn;
+      if (previousEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousEnv;
+    }
+  }
+  function runBundled(name, code) {
+    const file = path.join(t21Dir, 'out', name);
+    writeFileSync(file, code);
+    const executed = run(process.execPath, [
+      '-e',
+      "require(process.argv[1]).run().then((value) => console.log(JSON.stringify(value)))",
+      file,
+    ], consumerDir);
+    if (executed.status !== 0) fail(`t21 bundle ${name} failed to run\n${executed.output}`);
+    return JSON.parse(executed.stdout.trim().split('\n').pop());
+  }
+  const scenario = await bundleT21('t21/scenario.ts', { validation: 'compatible', testOverrides: true }, 'test');
+  const scenarioReport = runBundled('scenario.cjs', scenario.code);
+  const scenarioExpected = readJson(path.join(t21Fixtures, 't21-scenario.expected.json'));
+  if (!isDeepStrictEqual(scenarioReport, scenarioExpected)) {
+    fail(`t21 scenario from the tarballs differs from tests/e2e/fixtures/t21-scenario.expected.json\n${JSON.stringify(scenarioReport)}`);
+  }
+  const t21Unexpected = t21Warnings.filter((text) => !text.startsWith('NEO_UNKNOWN_CONTAINER:'));
+  if (t21Unexpected.length > 0) fail(`t21 scenario build warned about more than scope receivers\n${t21Unexpected.join('\n')}`);
+  step(`t21 integrated scenario run from the tarballs equals the pinned report (${Object.keys(scenarioExpected).length} slices, ${t21Warnings.length} scope-receiver warnings of compatible mode)`);
+
+  const closedBundle = await bundleT21('t21/closed/app.ts', {}, 'production');
+  if (closedBundle.code.includes('T21_SENTINEL_UNREACHABLE')) fail('t21 closed bundle from the tarballs kept the unreachable sentinel');
+  const closedCarried = Object.values(closedBundle.metafile.outputs).flatMap((output) => (
+    Object.entries(output.inputs).filter(([, input]) => input.bytesInOutput > 0).map(([file]) => file)
+  ));
+  if (closedCarried.some((file) => file.endsWith('heavy.ts'))) fail(`t21 closed bundle carries heavy.ts: ${closedCarried.join(', ')}`);
+  if (!closedBundle.code.includes('T21_EFFECT_REQUIRED')) fail('t21 closed bundle from the tarballs lost the required effect');
+  const closedReport = runBundled('closed.cjs', closedBundle.code);
+  if (!isDeepStrictEqual(closedReport, { names: ['auth', 'log'], workerStarts: 1, effects: ['T21_EFFECT_REQUIRED'] })) {
+    fail(`t21 closed bundle run differs\n${JSON.stringify(closedReport)}`);
+  }
+  step('t21 closed bundle from the tarballs: sentinel absent, effect run once, eager root started');
 
   const runtimeTarball = packed.find((item) => item.name === '@djodjonx/neosyringe')?.tarball;
   if (!runtimeTarball) fail('runtime tarball was not packed');
