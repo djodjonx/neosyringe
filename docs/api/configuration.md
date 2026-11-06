@@ -69,6 +69,18 @@ module.exports = {
 };
 ```
 
+### Plugin options
+
+Every entry point (`.vite()`, `.rollup()`, `.webpack()`, `.esbuild()`) takes `NeoSyringePluginOptions` (`packages/unplugin/src/index.ts:13`):
+
+| Option | Default | Effect |
+|--------|---------|--------|
+| `project` | nearest `tsconfig.json` | tsconfig to compile with. |
+| `debug` | `false` | Embeds `_graph` data. Forced off when `NODE_ENV=production`. |
+| `devtools` | `false` | Graph page on the Vite dev server only. |
+| `validation` | `'strict'` | **Drives only the usage check at the end of the build.** The analyzer that transforms each file stays strict, so `'compatible'` does not make a factory without `dependencies` legal (`packages/unplugin/src/index.ts:34` to `:37`). See the [migration guide](/guide/migration#validation-compatible-does-not-rescue-it-in-the-plugin). |
+| `testOverrides` | `false` | Turns on `override()` and `clearOverrides()`. Refused when `NODE_ENV=production`. |
+
 ## TypeScript LSP Plugin
 
 Add to `tsconfig.json` for IDE error detection:
@@ -123,6 +135,12 @@ Absent and `{ mode: 'open' }` keep every registration. That is the default.
 Moving an existing container from open to closed is an application choice. Name the public roots, and name any service that must start even though callers do not resolve it.
 
 A closed container requires `validation: 'strict'`.
+
+### runtime
+
+Type: `{ profile?: 'full' | 'minimal' }`
+
+`'full'` (default) gives a `Container`. `'minimal'` gives a `CoreContainer` without `override`, `clearOverrides` and `on`. The profile must be a literal the build can read; anything else is `NEO_CONFIG_UNSUPPORTED`. See [Profiles](/guide/profiles).
 
 ### name
 
@@ -188,6 +206,8 @@ Type: `Injection[]`
 
 Required. List of services to register.
 
+The list below is a deliberate excerpt that shows one row per shape. It is not one container: the last row needs a parent container, and the factory rows are the compiled regions of `examples/new-api/factories.ts` shown under `useFactory` and `dependencies` below.
+
 ```typescript
 defineBuilderConfig({
   injections: [
@@ -200,11 +220,7 @@ defineBuilderConfig({
     // Explicit provider
     { token: BaseService, provider: ConcreteService },
     
-    // Factory
-    { token: useInterface<IConfig>(), provider: () => loadConfig() },
-    
-    // Property token
-    { token: useProperty<string>(ApiService, 'apiUrl'), provider: () => 'http://...' },
+    // Factory and property token: see `useFactory` and `dependencies` below
     
     // Pre-built value
     { token: useInterface<AppConfig>(), useValue: { apiUrl: '...', timeout: 5000 } },
@@ -302,8 +318,12 @@ interface Injection<T> {
   lifecycle?: 'singleton' | 'transient';
   scoped?: boolean;
   multi?: boolean;
+  dependencies?: readonly DependencyRef[];
+  ownership?: 'owned' | 'borrowed';
 }
 ```
+
+The real type is a union of four disjoint shapes (`packages/neosyringe/src/types.ts:202`).
 
 ### token
 
@@ -322,7 +342,7 @@ Type: `Provider<T>`
 What provides the instance. Can be:
 
 - Class constructor: `ConsoleLogger`
-- Factory function: `(container) => new Service()`
+- Factory function: `(context) => new Service()` with `useFactory: true` and a `dependencies` list. `context` has `resolve` and `resolveAll` for the declared tokens only.
 
 If omitted, the token itself is used (autowiring).
 
@@ -358,17 +378,27 @@ const plugins = container.resolveAll(useInterface<IPlugin>());
 
 ### useFactory
 
-Type: `boolean`
+Type: `true`
 
-Force treating the provider as a factory function.
+Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:222`).
 
-```typescript
-// Auto-detected (arrow function)
-{ provider: () => createService() }
+<<< @/../examples/new-api/factories.ts#arrow
 
-// Explicit (regular function)
-{ provider: createService, useFactory: true }
-```
+### dependencies
+
+Type: `readonly DependencyRef[]`. A `DependencyRef` is a token, or `{ all: token }` for `resolveAll`.
+
+Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:223`), so the type does not catch the omission.
+
+<<< @/../examples/new-api/factories.ts#all-dependency
+
+The factory receives a `FactoryContext` (`resolve`, `resolveAll`). Asking for an undeclared token throws `NEO_UNDECLARED_FACTORY_DEP`. Using the context after the factory returned throws `NEO_FACTORY_CONTEXT_EXPIRED`.
+
+### ownership
+
+Type: `'owned' | 'borrowed'`. Factories only; `useValue` accepts `'borrowed'` and cannot be `'owned'` (`NEO_CONFIG_UNSUPPORTED`).
+
+`'borrowed'` means the container never calls `dispose` on the result. See [States, Scopes and Ownership](/guide/states-and-ownership).
 
 ### lifecycle
 

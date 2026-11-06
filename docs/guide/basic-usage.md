@@ -97,35 +97,19 @@ export const container = defineBuilderConfig({
 
 ### Factory Provider
 
-Use factory functions for dynamic instantiation:
+Use factory functions for dynamic instantiation. A factory declares `dependencies`, even when the list is empty. Each block below is a region of `examples/new-api/factories.ts`, typechecked and run by `tests/e2e/t20-docs-examples.test.ts`.
 
-```typescript
-// Arrow functions are auto-detected as factories
-{ 
-  token: useInterface<IConfig>(), 
-  provider: (container) => ({
-    apiUrl: process.env.API_URL ?? 'http://localhost',
-    timeout: 5000
-  })
-}
+<<< @/../examples/new-api/factories.ts#arrow
 
-// Factory with dependencies
-{ 
-  token: useInterface<IService>(), 
-  provider: (container) => {
-    const logger = container.resolve(useInterface<ILogger>());
-    const config = container.resolve(useInterface<IConfig>());
-    return new MyService(logger, config);
-  }
-}
+A factory with dependencies receives a `FactoryContext`:
 
-// Explicit factory flag (for non-arrow functions)
-{ 
-  token: useInterface<IDatabase>(), 
-  provider: createDatabaseConnection,
-  useFactory: true
-}
-```
+<<< @/../examples/new-api/factories.ts#with-dependencies
+
+A named function works the same way. `FactoryContext` is imported from `@djodjonx/neosyringe`:
+
+<<< @/../examples/new-api/factories.ts#imports
+
+<<< @/../examples/new-api/factories.ts#named-function
 
 ### Value Provider
 
@@ -160,32 +144,7 @@ Use `useValue` for config objects and pre-created instances. For primitive value
 
 Inject primitive values (string, number, boolean) while keeping classes pure:
 
-```typescript
-import { useProperty } from '@djodjonx/neosyringe';
-
-// Pure class - no DI imports!
-class ApiService {
-  constructor(
-    private apiUrl: string,
-    private timeout: number,
-    private debug: boolean
-  ) {}
-}
-
-// Define property tokens
-const apiUrl = useProperty<string>(ApiService, 'apiUrl');
-const timeout = useProperty<number>(ApiService, 'timeout');
-const debug = useProperty<boolean>(ApiService, 'debug');
-
-export const container = defineBuilderConfig({
-  injections: [
-    { token: apiUrl, provider: () => process.env.API_URL ?? 'http://localhost' },
-    { token: timeout, provider: () => 5000 },
-    { token: debug, provider: () => process.env.NODE_ENV === 'development' },
-    { token: ApiService }  // Primitives auto-wired!
-  ]
-});
-```
+<<< @/../examples/new-api/factories.ts#properties
 
 ::: info Type Safety
 `useProperty(ApiService, 'apiUrl')` creates a unique token scoped to that specific class parameter. This means `useProperty(ServiceA, 'url')` ≠ `useProperty(ServiceB, 'url')`.

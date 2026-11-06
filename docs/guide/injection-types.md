@@ -9,7 +9,7 @@ All the ways to define and inject dependencies in NeoSyringe.
 | **Class** | `{ token: MyClass }` | Simple autowiring |
 | **Interface** | `{ token: useInterface<IFoo>(), provider: Foo }` | Abstraction |
 | **Explicit** | `{ token: MyClass, provider: OtherClass }` | Override default |
-| **Factory** | `{ token: X, provider: (c) => ... }` | Dynamic creation |
+| **Factory** | `{ token: X, useFactory: true, dependencies: [...], provider: (context) => ... }` | Dynamic creation |
 | **Value** | `{ token: X, useValue: myValue }` | Pre-built objects |
 | **Property** | `{ token: useProperty(Class, 'param') }` | Primitives |
 | **Multi** | `{ token: X, provider: Y, multi: true }` | Plugin / strategy lists |
@@ -183,55 +183,28 @@ const service = testContainer.resolve(UserService);
 
 Use factory functions when you need:
 - Dynamic configuration
-- Container access for conditional resolution
+- Resolution of other tokens, declared in `dependencies`
 - External resource initialization
 
-### Arrow Function (Auto-detected)
+In strict validation every factory declares `dependencies`, even an empty list. Without it the build fails with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The TypeScript type still lets you omit the field, so the type does not warn you: the build does. See [States, Scopes and Ownership](./states-and-ownership.md#factories).
 
-```typescript
-{
-  token: useInterface<IConfig>(),
-  provider: () => ({
-    apiUrl: process.env.API_URL,
-    environment: process.env.NODE_ENV
-  })
-}
-```
+The factory examples below are regions of `examples/new-api/factories.ts`. `tests/e2e/t20-docs-examples.test.ts` typechecks that file against the built packages and runs it. The interfaces they use (`IConfig`, `ILogger`, ...) are declared at the top of the file.
 
-### Factory with Container Access
+### Arrow Function
 
-```typescript
-{
-  token: useInterface<IHttpClient>(),
-  provider: (container) => {
-    const config = container.resolve(useInterface<IConfig>());
-    const logger = container.resolve(useInterface<ILogger>());
-    
-    return new HttpClient({
-      baseUrl: config.apiUrl,
-      logger,
-      timeout: config.timeout
-    });
-  }
-}
-```
+<<< @/../examples/new-api/factories.ts#arrow
 
-### Explicit Factory Flag
+### Factory with Dependencies
 
-For regular functions that aren't arrow functions:
+The factory receives a `FactoryContext`: `resolve` and `resolveAll`, for the tokens listed in `dependencies` only.
 
-```typescript
-function createDatabaseConnection(container: Container) {
-  const config = container.resolve(useInterface<IDbConfig>());
-  return new DatabaseConnection(config.connectionString);
-}
+<<< @/../examples/new-api/factories.ts#with-dependencies
 
-{
-  token: useInterface<IDatabase>(),
-  provider: createDatabaseConnection,
-  useFactory: true  // Required for non-arrow functions
-}
-```
+### Regular Functions
+
+<<< @/../examples/new-api/factories.ts#imports
+
+<<< @/../examples/new-api/factories.ts#named-function
 
 ## Value Provider
 
@@ -276,10 +249,7 @@ Values are always singletons. Each `resolve()` call returns the same object.
 
 For a pre-built instance registered under a class token (e.g. a class constructed with arguments the container can't itself supply), use a factory instead:
 
-```typescript
-// ✅ Correct
-{ token: SomeConcreteClass, provider: () => someInstance, useFactory: true }
-```
+<<< @/../examples/new-api/factories.ts#existing-instance
 
 See [`TypeMismatchError` reference](/api/errors#usevalue-with-a-class-token) for the exact error text.
 :::
@@ -308,32 +278,7 @@ class ApiService {
 
 Use `useProperty<T>(Class, 'paramName')`:
 
-```typescript
-import { useProperty } from '@djodjonx/neosyringe';
-
-// ✅ Pure class
-class ApiService {
-  constructor(
-    private apiUrl: string,
-    private timeout: number,
-    private retryCount: number
-  ) {}
-}
-
-// Property tokens
-const apiUrl = useProperty<string>(ApiService, 'apiUrl');
-const timeout = useProperty<number>(ApiService, 'timeout');
-const retryCount = useProperty<number>(ApiService, 'retryCount');
-
-export const container = defineBuilderConfig({
-  injections: [
-    { token: apiUrl, provider: () => 'https://api.example.com' },
-    { token: timeout, provider: () => 5000 },
-    { token: retryCount, provider: () => 3 },
-    { token: ApiService }  // All primitives injected!
-  ]
-});
-```
+<<< @/../examples/new-api/factories.ts#properties
 
 ### Scoped to Class
 
@@ -403,54 +348,5 @@ A token registered with `multi: true` cannot also be registered without it (and 
 
 ## Combined Example
 
-```typescript
-import { defineBuilderConfig, useInterface, useProperty } from '@djodjonx/neosyringe';
-
-// Interfaces
-interface ILogger { log(msg: string): void; }
-interface IHttpClient { get(url: string): Promise<any>; }
-
-// Implementations
-class ConsoleLogger implements ILogger {
-  log(msg: string) { console.log(msg); }
-}
-
-// Pure service class
-class ApiService {
-  constructor(
-    private logger: ILogger,
-    private http: IHttpClient,
-    private baseUrl: string,
-    private timeout: number
-  ) {}
-}
-
-// Tokens
-const baseUrl = useProperty<string>(ApiService, 'baseUrl');
-const timeout = useProperty<number>(ApiService, 'timeout');
-
-export const container = defineBuilderConfig({
-  name: 'AppContainer',
-  injections: [
-    // Interface bindings
-    { token: useInterface<ILogger>(), provider: ConsoleLogger },
-    
-    // Factory for complex initialization
-    {
-      token: useInterface<IHttpClient>(),
-      provider: (container) => {
-        const logger = container.resolve(useInterface<ILogger>());
-        return new HttpClient(logger);
-      }
-    },
-    
-    // Primitive values
-    { token: baseUrl, provider: () => process.env.API_URL ?? 'http://localhost' },
-    { token: timeout, provider: () => 5000 },
-    
-    // Service with mixed dependencies
-    { token: ApiService }
-  ]
-});
-```
+<<< @/../examples/new-api/factories.ts#combined
 

@@ -85,16 +85,7 @@ app.use((req, res, next) => {
 
 ### Factory with Transient
 
-```typescript
-{
-  token: useInterface<IRequest>(),
-  provider: () => ({
-    id: crypto.randomUUID(),
-    timestamp: Date.now()
-  }),
-  lifecycle: 'transient'
-}
-```
+<<< @/../examples/new-api/factories.ts#transient
 
 ### Mixed Lifecycles
 

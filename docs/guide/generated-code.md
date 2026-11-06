@@ -38,15 +38,9 @@ All services are singletons by default. The generated container caches each inst
 
 Transient services skip the cache and return a fresh instance on every `resolve()`.
 
-## Zero Runtime Dependency
+## What ends up in your build
 
-The generated container has **no import from `@djodjonx/neosyringe`**. It is plain TypeScript — no reflection, no metadata, no DI library in your bundle.
-
-| | Traditional DI | NeoSyringe |
-|---|---|---|
-| Container library | 4–11 KB | 0 KB |
-| `reflect-metadata` | ~3 KB | 0 KB |
-| Generated container | N/A | ~50–200 lines |
+The plugin replaces the `defineBuilderConfig(...)` call with a generated container class, in the same file. The size of that class depends on your graph and on the [profile](./profiles.md). This page promises no size. A measured example, with its command, date and feature sets, is in the [profiles guide](./profiles.md#what-the-numbers-say-and-what-they-do-not).
 
 ## Debugging
 
@@ -89,24 +83,27 @@ console.log(container._dependencyGraph);
 
 ### Overriding a registration in tests
 
-Every generated container also has `override()` / `clearOverrides()`, meant for tests — not production wiring:
+The full profile has `override()` / `clearOverrides()`, meant for tests, not for production wiring. They work only in a build made with the plugin option `testOverrides: true`. Without it they reject with `NEO_TEST_API_DISABLED`. Both return promises: await them.
 
 ```typescript
-container.override(useInterface<ILogger>(), () => mockLogger);
-// every resolve() for that token now returns mockLogger (cached, like a singleton)
+await container.override(useInterface<ILogger>(), () => mockLogger);
+// every later resolve() of that token returns mockLogger, and the consumers are rebuilt around it
 
-container.clearOverrides(); // revert to the real registrations
+await container.clearOverrides(); // back to the real registrations
 ```
 
-`destroy()` clears overrides and is terminal: the container cannot be reused. Create a scope per test with `createScope()`, and destroy that scope. An override mock is not disposed.
+- Each call resets **all** caches of that container. Services you resolved earlier keep their old dependencies: resolve them again.
+- The mock is borrowed: the container does not dispose it.
+- `destroy()` is terminal: the container cannot be reused. Create a scope per test with `createScope()`, and destroy that scope.
+- The minimal profile has neither method. See [profiles](./profiles.md).
 
-::: warning Disabled when `NODE_ENV=production`
-`override()` throws if `process.env.NODE_ENV === 'production'`. A container is commonly a long-lived, shared singleton — an override left in by mistake, or reachable from somewhere it shouldn't be, would silently change what every caller gets for as long as the process runs. This is a deliberate guard, not an oversight — don't work around it by unsetting `NODE_ENV` in production.
+::: warning Refused when `NODE_ENV=production`
+A build with `testOverrides: true` and `NODE_ENV=production` fails (`packages/core/src/generator/DebugConfig.ts:35`). The choice is made at build time: the generated code does not read `process`. Do not work around it by unsetting `NODE_ENV`.
 :::
 
 ### Observing resolutions — `on('resolve', ...)`
 
-Every generated container has `on(event, listener)` for cross-cutting concerns — logging, tracing, timing how long a factory takes — without wrapping each factory by hand. Unlike `override()`, this is meant for production use too (e.g. wiring into your own tracing/APM), not just tests:
+The full profile has `on(event, listener)` for cross-cutting concerns — logging, tracing, timing how long a factory takes — without wrapping each factory by hand. Unlike `override()`, it needs no test flag and is meant for production use too (e.g. wiring into your own tracing/APM), not just tests:
 
 ```typescript
 const unsubscribe = container.on('resolve', (token, instance) => {
@@ -121,7 +118,6 @@ unsubscribe(); // stop listening
 - Fires on **every successful `resolve()`**, regardless of where the instance actually came from — a fresh factory call, a cached singleton, an `override()`, or delegation to a `useContainer` parent/legacy container.
 - Multiple listeners can be registered independently; each returns its own unsubscribe function.
 - A listener that throws is caught and ignored — a bug in an observability hook must never break the resolution it's observing, and it doesn't stop other listeners from running.
-- `destroy()` also clears all listeners, same as `override()`.
 
 `'resolve'` is currently the only event.
 

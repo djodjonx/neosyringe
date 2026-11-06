@@ -8,7 +8,7 @@ NeoSyringe supports parent containers for:
 
 - **SharedKernel pattern**: Core services shared across bounded contexts
 - **Modular architecture**: Each module has its own container
-- **Testing**: Override production services with mocks
+- **Testing**: Override production services with mocks. A service the parent already owns keeps the parent's dependencies: see [Scoped Injections](./scoped-injections.md#testing-with-mocks)
 
 ::: tip `useContainer` vs. `extends` — different tools for different jobs
 `useContainer` shares **instances**: the child resolves the *same singleton object* the parent already created (`sharedKernel`'s `ConsoleLogger` instance and `userModule`'s `ConsoleLogger` instance are identical). `extends` (with `definePartialConfig`) shares **recipes**: each container that `extends` a partial gets its *own, independent* instances from the same registrations — nothing is shared at runtime. If two modules must observe the same event bus instance, use `useContainer`. If they just want to avoid repeating the same boilerplate registrations but don't need shared state, use `extends`. See [Multiple Containers per File](./multi-containers.md#shared-kernel-pattern) for the `extends` version of this pattern.
@@ -319,7 +319,7 @@ Whatever the parent is — a NeoSyringe container from another file, one from th
 
 ## If the Parent Has Async Factories
 
-If `sharedKernel` (or any container in the chain) has async factories, the child needs `await child.initialize()` too — even if the child itself has no async work — since it cascades into the parent automatically. See [Async Parent Containers](./async-factories.md#async-parent-containers-usecontainer) for the full example.
+If `sharedKernel` (or any container in the chain) has async factories, the child needs `await child.initialize()` too — even if the child itself has no async work. Without it, `child.resolve(...)` throws `NEO_NOT_INITIALIZED`. `child.destroy()` never destroys the parent, and a child that needs a destroyed parent throws `NEO_SCOPE_PARENT_DESTROYED`: see [States, Scopes and Ownership](./states-and-ownership.md#who-owns-what). See [Async Parent Containers](./async-factories.md#async-parent-containers-usecontainer) for the full example.
 
 ## Best Practices
 
