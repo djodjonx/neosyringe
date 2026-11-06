@@ -130,6 +130,23 @@ function resolveConfigCall(
   if (depth > 20) return undefined;
   const current = unwrap(expr);
   if (TSContext.ts.isCallExpression(current)) {
+    // createScope() returns that defineBuilderConfig call, so the key stays the same
+    // (packages/core/src/analyzer/shared/registrationGraph.ts:31). The type takes no
+    // argument (packages/neosyringe/src/types.ts:47). createScope?.() is followed the
+    // same way when the receiver is a Neo container.
+    if (
+      TSContext.ts.isPropertyAccessExpression(current.expression)
+      && current.expression.name.text === 'createScope'
+    ) {
+      const receiver = current.expression.expression;
+      const receiverCall = resolveConfigCall(receiver, checker, depth + 1);
+      if (
+        receiverCall !== undefined
+        && isNeoContainerType(checker.getTypeAtLocation(receiver), checker)
+      ) {
+        return receiverCall;
+      }
+    }
     return resolveNeoMarker(checker, current) === 'defineBuilderConfig' ? current : undefined;
   }
   if (TSContext.ts.isConditionalExpression(current)) {

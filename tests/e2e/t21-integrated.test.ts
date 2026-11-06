@@ -46,11 +46,11 @@ describe('T21 integrated scenario', () => {
 
   beforeAll(async () => {
     const source = readFileSync(path.join(fixtureDir, 't21-scenario.ts'), 'utf8');
-    // compatible: strict does not follow the result of createScope(). testOverrides: the scenario calls override.
+    // testOverrides: the scenario calls override. Strict follows createScope() (packages/core/src/analyzer/collectors/resolutionUsages.ts:147).
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     let outcome: Awaited<ReturnType<typeof executeFixture>>;
     try {
-      outcome = await executeFixture(source, { validation: 'compatible', testOverrides: true });
+      outcome = await executeFixture(source, { validation: 'strict', testOverrides: true });
     } finally {
       warnings = warn.mock.calls.map((call) => String(call[0]));
       warn.mockRestore();
@@ -169,9 +169,8 @@ describe('T21 integrated scenario', () => {
     });
   });
 
-  it('T21-A01 the only build warnings are the scope receivers compatible mode allows', () => {
-    expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings.filter((text) => !text.startsWith('NEO_UNKNOWN_CONTAINER:'))).toEqual([]);
+  it('T21-A01 the integrated scenario builds strict', () => {
+    expect(warnings).toEqual([]);
   });
 
   it('T21-A01 the pinned expectation file equals the executed report', () => {

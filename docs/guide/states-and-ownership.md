@@ -71,9 +71,7 @@ await scope.destroy();         // closes this scope only
 - You cannot create a scope from a destroyed container: `createScope()` throws `NEO_CONTAINER_DESTROYED`.
 - There is no request context. A scope per request is something you create and close yourself.
 
-::: warning Build-time check on scope variables
-The build's usage check does not follow the result of `createScope()`. With the default `validation: 'strict'`, `scope.resolve(Repo)` fails the build with `NEO_UNKNOWN_CONTAINER`. The plugin option `validation: 'compatible'` turns that case into a warning. `tests/e2e/t20-docs-examples.test.ts` runs `scopes.ts` with `compatible` and shows the strict failure. That option only changes this usage check. It does not make legacy factories legal; see the [migration guide](./migration.md).
-:::
+`createScope()` is the same container for the usage check (`packages/core/src/analyzer/collectors/resolutionUsages.ts:147`). `scope.resolve(Repo)` is checked like a resolve on that container. A receiver the build cannot decide, such as `get().createScope()`, stays `NEO_UNKNOWN_CONTAINER` (`packages/core/src/analyzer/validators/MissingDependencyValidator.ts:136`). In the usage check, `validation: 'compatible'` turns only that undecidable case into a warning (`packages/core/src/analyzer/validators/MissingDependencyValidator.ts:135`). It does not make legacy factories legal; see the [migration guide](./migration.md).
 
 ## Who owns what
 

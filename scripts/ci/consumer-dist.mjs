@@ -571,15 +571,14 @@ insideConsumer(require.resolve('@djodjonx/neosyringe-lsp'));
     if (executed.status !== 0) fail(`t21 bundle ${name} failed to run\n${executed.output}`);
     return JSON.parse(executed.stdout.trim().split('\n').pop());
   }
-  const scenario = await bundleT21('t21/scenario.ts', { validation: 'compatible', testOverrides: true }, 'test');
+  const scenario = await bundleT21('t21/scenario.ts', { validation: 'strict', testOverrides: true }, 'test');
   const scenarioReport = runBundled('scenario.cjs', scenario.code);
   const scenarioExpected = readJson(path.join(t21Fixtures, 't21-scenario.expected.json'));
   if (!isDeepStrictEqual(scenarioReport, scenarioExpected)) {
     fail(`t21 scenario from the tarballs differs from tests/e2e/fixtures/t21-scenario.expected.json\n${JSON.stringify(scenarioReport)}`);
   }
-  const t21Unexpected = t21Warnings.filter((text) => !text.startsWith('NEO_UNKNOWN_CONTAINER:'));
-  if (t21Unexpected.length > 0) fail(`t21 scenario build warned about more than scope receivers\n${t21Unexpected.join('\n')}`);
-  step(`t21 integrated scenario run from the tarballs equals the pinned report (${Object.keys(scenarioExpected).length} slices, ${t21Warnings.length} scope-receiver warnings of compatible mode)`);
+  if (t21Warnings.length > 0) fail(`t21 scenario build warned\n${t21Warnings.join('\n')}`);
+  step(`t21 integrated scenario run from the tarballs equals the pinned report (${Object.keys(scenarioExpected).length} slices, no warnings)`);
 
   const closedBundle = await bundleT21('t21/closed/app.ts', {}, 'production');
   if (closedBundle.code.includes('T21_SENTINEL_UNREACHABLE')) fail('t21 closed bundle from the tarballs kept the unreachable sentinel');
