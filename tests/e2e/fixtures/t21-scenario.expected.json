@@ -1,0 +1,107 @@
+{
+  "early": "NEO_NOT_INITIALIZED",
+  "startsAfterInit": 1,
+  "identity": {
+    "dbThroughChild": true,
+    "dbThroughScopeA": true,
+    "dbThroughScopeB": true,
+    "clockThroughScopes": true,
+    "settingsThroughScopes": true,
+    "repoDbIsParentDb": true,
+    "repoClockIsParentClock": true,
+    "scopesOwnTheirRepo": true,
+    "repoStable": true
+  },
+  "multi": {
+    "parent": [
+      "auth",
+      "audit",
+      "log"
+    ],
+    "child": [
+      "auth",
+      "audit",
+      "log"
+    ],
+    "scope": [
+      "auth",
+      "audit",
+      "log"
+    ],
+    "freshArray": true,
+    "sameItems": true,
+    "childSameItems": true,
+    "scopeSameItems": true
+  },
+  "afterScopeA": {
+    "closeScopeA": "no error",
+    "closeScopeAAgain": "no error",
+    "reposDisposed": 1,
+    "dbClosed": false,
+    "clocksDisposed": 0,
+    "resolveRepo": "NEO_CONTAINER_DESTROYED",
+    "resolveRepoMessage": "NEO_CONTAINER_DESTROYED: [T21Child] container is destroyed",
+    "resolveParentValue": "NEO_CONTAINER_DESTROYED",
+    "initialize": "NEO_CONTAINER_DESTROYED",
+    "createScope": "NEO_CONTAINER_DESTROYED",
+    "scopeBStillWorks": true,
+    "parentStillWorks": true
+  },
+  "afterChildren": {
+    "reposDisposed": 3,
+    "dbClosed": false,
+    "clocksDisposed": 0,
+    "clocks": 1,
+    "parentStillWorks": true
+  },
+  "override": {
+    "seen": [
+      "real",
+      "fake",
+      "real"
+    ],
+    "consumerRebuilt": true,
+    "dbRebuilt": true,
+    "dbClosedByOverride": true,
+    "clocksClosedByOverride": 1,
+    "clockRebuilt": true,
+    "dbStarts": 3,
+    "fakeDisposed": 0
+  },
+  "afterParent": {
+    "dbDisposed": 3,
+    "dbClosed": true,
+    "clocksDisposed": 2,
+    "reposDisposed": 3,
+    "repoDisposals": [
+      "repo1",
+      "repo2",
+      "repo3"
+    ],
+    "resolve": "NEO_CONTAINER_DESTROYED",
+    "resolveMessage": "NEO_CONTAINER_DESTROYED: [T21Parent] container is destroyed",
+    "initialize": "NEO_CONTAINER_DESTROYED",
+    "createScope": "NEO_CONTAINER_DESTROYED",
+    "override": "NEO_CONTAINER_DESTROYED",
+    "destroyedChildResolve": "NEO_CONTAINER_DESTROYED"
+  },
+  "leaf": {
+    "stable": true,
+    "destroy": "no error",
+    "destroyAgain": "no error",
+    "disposed": 1,
+    "resolve": "NEO_CONTAINER_DESTROYED",
+    "resolveMessage": "NEO_CONTAINER_DESTROYED: [T21Leaf] container is destroyed",
+    "initialize": "NEO_CONTAINER_DESTROYED",
+    "createScope": "NEO_CONTAINER_DESTROYED"
+  },
+  "counts": {
+    "clocks": 2,
+    "clocksDisposed": 2,
+    "dbStarts": 3,
+    "dbDisposed": 3,
+    "repos": 3,
+    "reposDisposed": 3,
+    "fakeDisposed": 0
+  }
+}
