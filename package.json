@@ -24,6 +24,7 @@
     "verdaccio:publish": "bash scripts/verdaccio/publish.sh",
     "verdaccio:invalidate": "bash scripts/verdaccio/invalidate.sh",
     "examples:update": "node scripts/update-examples.mjs",
+    "bench:compile": "node tests/bench/compile-cost.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
