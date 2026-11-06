@@ -11,7 +11,7 @@ This is the delivery dossier. It prepares a release. It does not publish one.
 - Each command row has one status: `local`, `remote CI (run id N)`, or `not executed`.
 - The only remote CI run cited is `42218196764`. It ran on the base commit `bf23efa`. It is not a result of the candidate. Its conclusion is `failure`: the job "Test (Node 22)" failed on one test that timed out after 5000 ms (`packages/unplugin/tests/t06-usages.test.ts`, test "T06-A05 alias and unknown target"). The other jobs of that run succeeded, except the aggregator "Required checks", which fails when a needed job fails. This was read with `gh run view 42218196764` on 2026-11-06.
 - The CI run id of the pull request is cited by the pull request body. This page cannot cite its own CI run.
-- One docs edit is outside the dossier: `docs/guide/profiles.md:68` now points to `docs/benchmarks/T18-compilation-cost.md`, the placeholder that T20 left for T18.
+- One docs edit is outside the dossier: `docs/guide/profiles.md:87` now points to `docs/benchmarks/T18-compilation-cost.md`, the placeholder that T20 left for T18.
 
 ## Versions
 
@@ -121,7 +121,7 @@ Two parts of the migration protocol are not executed here.
 |------|----------|--------|
 | Node 20 | CI matrix (`.github/workflows/ci.yml:15`) | Not executed locally. Node 20 passed on the base run `42218196764`, not on the candidate. |
 | Node 22 | Local `v22.23.2`. CI matrix (`.github/workflows/ci.yml:15`) and the e2e job (`.github/workflows/ci.yml:67`) | Local. The base run `42218196764` failed on Node 22 with a test timeout, see above. |
-| Node 24 | The T18 benchmark page was measured on `v24.7.0` (`docs/benchmarks/T18-compilation-cost.md`) | Not executed for the candidate. |
+| Node 24 | Nothing | Not executed. |
 | TypeScript | `5.9.3` (`consumer-dist` output, lockfile). The peer range is `>=5.0.0` (`packages/unplugin/package.json:40`) | Only `5.9.3` is exercised. The lower bound of the range is not tested. |
 | esbuild | `0.27.2` (`packages/unplugin/package.json:48`), real bundles in `tests/e2e/t21-closed-bundle.test.ts` and `scripts/ci/consumer-dist.mjs` | Local. |
 | Rollup | `4.55.2` (`packages/unplugin/package.json:49`), `tests/e2e/t16-elagage.test.ts::T16-A01 rollup` and `scripts/ci/consumer-dist.mjs` | Local. |
@@ -140,15 +140,17 @@ Each number says its workload, features, versions and metric. A number from an o
 
 | Measurement | Workload and features | Result | Status |
 |-------------|-----------------------|--------|--------|
-| Size of one generated container | `node scripts/measure-t17-size.mjs`. 12 chained factories, 3 multi contributions, 1 async singleton, open mode, debug off, `testOverrides` off. Raw and minified (esbuild) bytes. Gzip and Brotli are not measured. | `reference-full` 79594 / 32747. `optimized-full` 80256 / 34050. `optimized-minimal` 58965 / 26635. | Local. Same numbers as `docs/guide/profiles.md`. |
-| Compile cost, size 10 | `NEOSYRINGE_BENCH_SIZES=10 NEOSYRINGE_BENCH_REPS=5 node tests/bench/compile-cost.mjs`. Node `v22.23.2`, TypeScript 5.9.3, 1 warm-up and 5 runs. | linear, plugin, open: full 12.5 ms and 109040 bytes, minimal 10.7 ms and 58120 bytes. closed: full 9.8 ms and 104420 bytes, minimal 7.4 ms and 60310 bytes. First pass, median. | Local. One machine, small range, no claim of a gain. |
-| Compile cost, sizes 100 and 1000 | `docs/benchmarks/T18-compilation-cost.md` | Copied from an earlier round, as that page says. | Not executed for the candidate. |
-| Compile cost, size 5000 | `docs/benchmarks/T18-compilation-cost.md` | The page says it was not run. | Not executed. |
+| Size of one generated container | `node scripts/measure-t17-size.mjs`, Node `v22.23.2`. 12 chained factories, 3 multi contributions, 1 async singleton, open mode, debug off, `testOverrides` off. Raw and minified (esbuild) bytes. Gzip level 9 and Brotli quality 11, both on the minified text. | Raw / minified / gzip / Brotli. `reference-full` 79594 / 32747 / 3669 / 2973. `optimized-full` 80256 / 34050 / 3951 / 3172. `optimized-minimal` 58965 / 26635 / 3271 / 2676. | Local. Same numbers as `docs/guide/profiles.md`. |
+| Open vs closed bundle | `node scripts/measure-t17-size.mjs`, same run. `tests/e2e/fixtures/t21-closed/app.ts` plus a generated heavy provider (500 methods, synthetic), real plugin, esbuild, production. Both bundles are executed and return the same result. Gzip level 9 and Brotli quality 11 on the minified text. | Raw / minified / gzip / Brotli. Open 59706 / 37646 / 12653 / 9908. Closed 30566 / 15706 / 3241 / 2842. Open minus closed 29140 / 21940 / 9412 / 7066. | Local. Open minus closed is the removed heavy provider plus the emitter change of the closed mode (`packages/core/src/generator/Generator.ts:201-203`), not the sentinel alone, and not what an application would gain. The bundle bytes depend on the absolute build path, so another checkout or CI can print other bytes (`docs/guide/profiles.md`). Initial and deferred chunks are not measured. |
+| Compile cost, size 10 | `NEOSYRINGE_BENCH_SIZES=10 NEOSYRINGE_BENCH_REPS=5 node tests/bench/compile-cost.mjs`. Node `v22.23.2`, TypeScript 5.9.3, Apple M4 Max, Darwin 27.2.0, 1 warm-up and 5 runs. | linear, plugin, `first_ms` median. open: full 13.7 ms and 109040 bytes, minimal 9.2 ms and 58120 bytes. closed: full 9.9 ms and 104420 bytes, minimal 8.6 ms and 60310 bytes. | Local. One machine, `load1` about 2 before the run, no claim of a gain. Min and max, all 16 cells and the other metrics are in `docs/benchmarks/T18-compilation-cost.md`. |
+| Compile cost, size 100 | Same command with `NEOSYRINGE_BENCH_SIZES=100`. Same session and machine. | linear, plugin, `first_ms` median. open: full 78.8 ms and 1091120 bytes, minimal 56.9 ms and 582100 bytes. closed: full 69.5 ms and 1045460 bytes, minimal 63.2 ms and 604090 bytes. | Local. Same reserves. |
+| Compile cost, size 1000 | Same command with `NEOSYRINGE_BENCH_SIZES=1000`. Same session and machine. | linear, plugin, `first_ms` median. open: full 572.8 ms and 10919120 bytes, minimal 544.5 ms and 5830900 bytes. closed: full 582.6 ms and 10468460 bytes, minimal 560.5 ms and 6051790 bytes. | Local. Same reserves. |
+| Compile cost, size 5000 | `NEOSYRINGE_BENCH_SIZES=5000 NEOSYRINGE_BENCH_REPS=5 NEOSYRINGE_BENCH_SHAPES=<shape> NEOSYRINGE_BENCH_PROFILES=<profile> NEOSYRINGE_BENCH_MODES=<mode> NODE_OPTIONS=--max-old-space-size=8192 node tests/bench/compile-cost.mjs`, one command per (shape, profile, mode), 8 commands, all 16 cells ran. Same session and machine. | linear, plugin, `first_ms` median. open: full 2949.4 ms and 54631120 bytes, minimal 2865.5 ms and 29198900 bytes. closed: full 3046.3 ms and 52404460 bytes, minimal 2941.7 ms and 30307790 bytes. | Local. The four `diamond` commands ran while another process loaded the machine (`load1` up to 33.52): read them as indicative. They were not rerun. |
 | Runtime bundle of the public package | `node scripts/ci/consumer-dist.mjs`. Bound `3072` bytes. | esbuild 232 bytes, rollup 1374 bytes. | Local. |
 
 - The T17 table compares variants with different feature sets. The minimal row has no overrides and no events. Do not read it as a free gain (`docs/guide/profiles.md`).
 - Compile cost has its own method and machine in `docs/benchmarks/T18-compilation-cost.md`. Do not add it to the size table.
-- The closed bundle test shows that the unreachable sentinel is absent from the code and from the modules that put bytes in the output. It does not measure a size gain.
+- The closed bundle test shows that the unreachable sentinel is absent from the code and from the modules that put bytes in the output. It does not measure a size gain: the size delta comes from `scripts/measure-t17-size.mjs` (row Open vs closed bundle), not from that test.
 
 ## NS001-NS017
 
@@ -183,8 +185,8 @@ A contractual refusal is not used as a proof for any NS row. The refusals of the
 - The plugin keeps a bare import of the module of a pruned provider (`packages/core/src/generator/Generator.ts:192-196`). esbuild still lists that module under `metafile.inputs`. It lists no bytes of it under `metafile.outputs`. The closed bundle test checks the outputs.
 - A disposable transient injected into a singleton is built and is not refused (`docs/guide/states-and-ownership.md:93`).
 - The bundlers and platforms marked "Not exercised" in the support matrix are not certified.
-- Gzip and Brotli costs are not measured. The tree-shaking item of the program definition of done (10-definition-termine.md, line 30 of the spec folder) asks for raw, minified, gzip and Brotli costs, so that item stays open.
-- The T18 compile-cost numbers for sizes 100 and 1000 come from an earlier round, and size 5000 was not run.
+- Initial and deferred chunks are not distinguished. The tree-shaking item of the program definition of done (10-definition-termine.md, line 30 of the spec folder) asks for raw, minified, gzip and Brotli costs, and for initial and deferred chunks to be told apart. Raw, minified, gzip and Brotli are recorded for one synthetic heavy provider. The measured bundles are single cjs outputs (`scripts/measure-t17-size.mjs:158`), so that item stays open.
+- Compile cost at size 5000, shape `diamond` (4 commands, 8 rows) is indicative: those commands ran while `load1` went up to 33.52 and were not rerun. The groups of size 10, 100 and 1000 and the four size 5000 `linear` groups started with `load1` between 1.94 and 2.73; the four size 5000 `diamond` groups started between 2.43 and 31.08. The machine was shared. A rerun on a quiet machine is needed before relying on these numbers.
 - The migration from historical npm archives was not run (see Migration).
 - Coverage thresholds are set per package in `packages/*/vitest.config.ts`. This work did not change a threshold.
 - The base CI run failed on Node 22 with one 5000 ms timeout, see Known issues. The candidate must be judged on its own CI run, which this page does not cite.
@@ -211,7 +213,7 @@ Rows 1 to 9 below are the T21 runs. They were run on the T21 tree, base `bf23efa
 | 8 | `pnpm test:ci` | local | 0 | 6 files, 34 tests passed. 1.05 s. It includes `tests/ci/t21-dossier.test.ts` (8 tests) and `tests/ci/tarball-proof.test.ts` (8 tests). |
 | 9 | `node scripts/ci/consumer-dist.mjs` | local | 0 | Six tarballs from `pnpm pack`, each proven equal to the disk build: `djodjonx-neosyringe-cli-0.4.1.tgz` (2 dist files), `djodjonx-neosyringe-core-3.2.0.tgz` (18), `djodjonx-neosyringe-lsp-0.4.6.tgz` (2), `djodjonx-neosyringe-0.3.0.tgz` (8), `djodjonx-neosyringe-ui-0.2.1.tgz` (4), `djodjonx-neosyringe-plugin-0.6.1.tgz` (10). Installed with typescript 5.9.3, esbuild 0.27.2, rollup 4.55.2. The script printed `npm network: no`: the install came from the local npm cache. The integrated scenario, built by the installed plugin, equals the pinned report (10 slices). The closed bundle has no sentinel and runs the effect once. `done in 5.7s`. |
 
-On that same T21 tree, two measurements were also run locally, with exit code 0: `node scripts/measure-t17-size.mjs` and `NEOSYRINGE_BENCH_SIZES=10 NEOSYRINGE_BENCH_REPS=5 node tests/bench/compile-cost.mjs`. Their results are in Measurements.
+The rows of Measurements do not come from that T21 tree. They come from the 2026-11-06 session, on base `65f3521` plus the changes of this branch, with the commands listed in the Measurements table. The size script and the compile-cost runs for sizes 10, 100, 1000 and 5000 each exited 0 (5000: all 8 commands). The size script ran again after the build directory became per checkout, and the bundle rows are from that last run.
 
 ## Runs after the open-parent fix
 
