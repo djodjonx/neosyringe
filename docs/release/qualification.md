@@ -1,0 +1,214 @@
+# Final qualification of the corrections program (T21)
+
+This is the delivery dossier. It prepares a release. It does not publish one.
+
+## Status in one view
+
+- Nothing is published, merged or deployed by this work. The version bumps are made by the release-please pull request (#32 when this was written, as given in the task brief). They are not edited here (`release-please-config.json`, `.release-please-manifest.json`).
+- Base commit: `bf23efa` (the head of `main` when the work started).
+- Candidate: the working tree of the pull request head, without the results of this page. A commit cannot cite its own sha, so the sha is not written here.
+- Node `v22.23.2` and pnpm `10.19.0` ran every local command (`package.json:48`). The platform is macOS (Darwin 27.2.0).
+- Each command row has one status: `local`, `remote CI (run id N)`, or `not executed`.
+- The only remote CI run cited is `42218196764`. It ran on the base commit `bf23efa`. It is not a result of the candidate. Its conclusion is `failure`: the job "Test (Node 22)" failed on one test that timed out after 5000 ms (`packages/unplugin/tests/t06-usages.test.ts`, test "T06-A05 alias and unknown target"). The other jobs of that run succeeded, except the aggregator "Required checks", which fails when a needed job fails. This was read with `gh run view 42218196764` on 2026-11-06.
+- The CI run id of the pull request is cited by the pull request body. This page cannot cite its own CI run.
+- One docs edit is outside the dossier: `docs/guide/profiles.md:68` now points to `docs/benchmarks/T18-compilation-cost.md`, the placeholder that T20 left for T18.
+
+## Versions
+
+The versions below are read from `packages/*/package.json`. A test compares this table with the files.
+
+| Package | Directory | Version |
+|---------|-----------|---------|
+| `@djodjonx/neosyringe` | `packages/neosyringe` | `0.3.0` |
+| `@djodjonx/neosyringe-core` | `packages/core` | `3.2.0` |
+| `@djodjonx/neosyringe-plugin` | `packages/unplugin` | `0.6.1` |
+| `@djodjonx/neosyringe-cli` | `packages/cli` | `0.4.1` |
+| `@djodjonx/neosyringe-lsp` | `packages/lsp` | `0.4.6` |
+| `@djodjonx/neosyringe-ui` | `packages/ui` | `0.2.1` |
+| `neosyringe-vscode` | `packages/vscode-extension` | `0.2.0` |
+
+- `neosyringe-vscode` is private. It is not an npm package (`packages/vscode-extension/package.json:8`).
+- These are the current versions. The six npm packages have the versions of the tarballs that `pnpm pack` made in the `node scripts/ci/consumer-dist.mjs` run below.
+- The next versions are not decided here. The release-please pull request decides them.
+- The next major is the target. `docs/guide/migration.md:5-6` says the destruction rule and the factory rule are not patch-level changes, and that no number is fixed.
+- Mixing package versions is not supported for tokens: rebuild the packages that share tokens together (`docs/guide/migration.md:22`).
+
+## Changelog proposal
+
+This is text only. It is not written into any `CHANGELOG.md`. Those files belong to release-please.
+
+The source is `git log bf23efa~21..bf23efa`, the 21 merged commits T00 to T20 (pull requests #31 and #33 to #52). A package is listed when the commit touched its directory (`git diff-tree`). "Breaking" marks a row of the migration table (`docs/guide/migration.md:11-22`).
+
+### `@djodjonx/neosyringe-core`
+
+- Breaking. `06cec7a` (T09, #46): resources are owned, disposed and scoped explicitly, with a terminal `destroy` and `createScope` (the words of its subject).
+- Breaking. `4ac260c` (T10, #47): `override` and `clearOverrides` reset the caches of the container and return a promise. `testOverrides` is a build option.
+- Breaking. `3ad0be1` (T05, #39): factory dependencies are validated in the graph. A factory receives a limited context.
+- `2ddfadb` (T17, #49): direct per-registration access and explicit full and minimal profiles. The minimal profile is opt-in (`docs/guide/migration.md:21`).
+- Breaking. `c8be9d5` (T02, #37): token identity is canonical. A collision is an error, not silent.
+- `a324a56` (T15, #45): token manifests are published between packages. The distribution is qualified.
+- `f20cab3` (T16, #48): the closed optimization mode with roots, eager roots and graph pruning.
+- `d4c149a` (T07, #43): one shared async initialization and an explicit container state machine.
+- `79e5409` (T08, #44): each multi contribution has its own state, cache key and disposal.
+- `cfc9347` (T06, #42): `resolve` and `resolveAll` are validated against the container each call targets.
+- `a6f51ed` (T04, #38): one constructor signature and one registration graph for both analysis paths.
+- `fc0bbb9` (T19, #50): stable diagnostic codes, a retention report and an explain command.
+- `33dc374` (T14, #36), `f997f0f` (T01, #35), `d02a5da` (T11, #40) and `c2bb025` (T03, #34) also touch this package.
+
+### `@djodjonx/neosyringe-plugin`
+
+- `f997f0f` (T01, #35): markers are recognised by symbol provenance, not by name.
+- `33dc374` (T14, #36): generated containers and `definePartialConfig` calls carry PURE annotations.
+- `d02a5da` (T11, #40): one compilation session for the plugin, the transformer and the CLI.
+- `86cba45` (T12, #41): the devtools registry is per container and file, and serve-only.
+- `bf23efa` (T18, #52): tsconfig invalidation by content, caches per plugin instance, a compile-cost benchmark.
+- `f20cab3` (T16, #48), `4ac260c` (T10, #47), `cfc9347` (T06, #42), `3ad0be1` (T05, #39) and `c8be9d5` (T02, #37) also touch this package.
+
+### `@djodjonx/neosyringe`
+
+- `c2bb025` (T03, #34): the public container types match the generated capabilities.
+- Breaking. `06cec7a` (T09, #46): see the core entry above.
+- `a324a56` (T15, #45): see the core entry above.
+
+### `@djodjonx/neosyringe-cli`
+
+- `fc0bbb9` (T19, #50): `--retention-report` and `--explain`.
+- `a324a56` (T15, #45): token manifest output.
+- `f997f0f` (T01, #35) and `d02a5da` (T11, #40) also touch this package.
+
+### `@djodjonx/neosyringe-lsp`
+
+- `fc0bbb9` (T19, #50): the stable code is carried in the message.
+- `a6f51ed` (T04, #38), `3ad0be1` (T05, #39), `cfc9347` (T06, #42) and `c8be9d5` (T02, #37) also touch this package.
+
+### `@djodjonx/neosyringe-ui`
+
+- `86cba45` (T12, #41): the graph serialization keeps container keys, multi nodes and borrowed registrations.
+- `fc0bbb9` (T19, #50): retention causes and paths are serialized.
+
+### `neosyringe-vscode`
+
+- No commit of the range touches this package.
+
+### No package
+
+- `790e1cf` (T00, #31): audit baseline, reproduction scripts and the e2e harness.
+- `1be8750` (T13, #33): e2e, consumer types and distribution checks run in CI. The release is gated.
+- `455011e` (T20, #51): guides, examples and the migration page match the implemented contracts.
+
+## Migration
+
+The full guide is `docs/guide/migration.md`. The table below only names what breaks.
+
+| Before | Now | Executed by |
+|--------|-----|-------------|
+| `destroy()` could serve as a reset | `destroy()` is final | `tests/e2e/t21-integrated.test.ts::T21-A01 destroy is terminal, owned disposed once, borrowed parent value untouched` |
+| `override` and `clearOverrides` without `await` | Both return a promise and reset all caches of that container | `tests/e2e/t21-integrated.test.ts::T21-A01 awaited override shows the mock, clearOverrides rebuilds the original` |
+| Opaque factories | `dependencies` is required | `tests/e2e/t20-migration.test.ts::T20-A06 the default strict plugin refuses the legacy factory with NEO_FACTORY_DEPENDENCIES_REQUIRED` |
+| Factories received the whole container | They receive `FactoryContext` | `tests/e2e/t20-docs-examples.test.ts::a factory may resolve only what it declares, and only while it runs` |
+| Open containers only | Closed mode is a second, separate change | `tests/e2e/t20-migration.test.ts::T20-A06 step 2 only: the same candidate turned closed keeps the values and the disposals` |
+
+Two parts of the migration protocol are not executed here.
+
+- Step 1 asks for a consumer on the archives of the historical version. No historical archive was installed. The before and after files of `tests/e2e/t20-migration.test.ts` run against the same candidate build. The old behaviour is not re-run.
+- The token descriptor row (`docs/guide/migration.md:22`) is not executed by the migration test. The token manifest round trip is covered by `tests/e2e/t15-token-manifest.test.ts::producer token keeps key in consumer` and by the `node scripts/ci/consumer-dist.mjs` run below.
+
+## Support matrix
+
+"Exercised" means a test or a command ran it. Nothing else is claimed.
+
+| Item | What ran | Status |
+|------|----------|--------|
+| Node 20 | CI matrix (`.github/workflows/ci.yml:15`) | Not executed locally. Node 20 passed on the base run `42218196764`, not on the candidate. |
+| Node 22 | Local `v22.23.2`. CI matrix (`.github/workflows/ci.yml:15`) and the e2e job (`.github/workflows/ci.yml:67`) | Local. The base run `42218196764` failed on Node 22 with a test timeout, see above. |
+| Node 24 | The T18 benchmark page was measured on `v24.7.0` (`docs/benchmarks/T18-compilation-cost.md`) | Not executed for the candidate. |
+| TypeScript | `5.9.3` (`consumer-dist` output, lockfile). The peer range is `>=5.0.0` (`packages/unplugin/package.json:40`) | Only `5.9.3` is exercised. The lower bound of the range is not tested. |
+| esbuild | `0.27.2` (`packages/unplugin/package.json:48`), real bundles in `tests/e2e/t21-closed-bundle.test.ts` and `scripts/ci/consumer-dist.mjs` | Local. |
+| Rollup | `4.55.2` (`packages/unplugin/package.json:49`), `tests/e2e/t16-elagage.test.ts::T16-A01 rollup` and `scripts/ci/consumer-dist.mjs` | Local. |
+| Vite | The `vite()` hooks are called directly by `tests/e2e/helpers/execute-fixture.ts`. No real Vite build runs. | Not exercised as a build. Not certified. |
+| webpack | The entry point exists (`packages/unplugin/src/index.ts:11`). No test loads it. | Not exercised. Not certified. |
+| Rspack | No test loads it. Using unplugin does not certify it. | Not exercised. Not certified. |
+| TypeScript transformer | `packages/unplugin/tests/t11-pipeline.test.ts::T11-P12-transformer-root-parity` and `packages/unplugin/tests/t14-pure.test.ts::T14-P7b-transformer` | Local, through the package suites. |
+| Linux | `ubuntu-latest` (`.github/workflows/ci.yml:12`) | Remote CI only, base run `42218196764`. |
+| macOS | The machine of the local runs | Local. |
+| Windows | No run. `packages/unplugin/tests/t11-pipeline.test.ts::T11-P5-id-query-windows` passes Windows-style ids to the plugin on a Unix machine. | Not exercised. Not certified. |
+| VS Code extension | Not built or run by T21 | Not executed. |
+
+## Measurements
+
+Each number says its workload, features, versions and metric. A number from an older page is not a result of the candidate.
+
+| Measurement | Workload and features | Result | Status |
+|-------------|-----------------------|--------|--------|
+| Size of one generated container | `node scripts/measure-t17-size.mjs`. 12 chained factories, 3 multi contributions, 1 async singleton, open mode, debug off, `testOverrides` off. Raw and minified (esbuild) bytes. Gzip and Brotli are not measured. | `reference-full` 79594 / 32747. `optimized-full` 80256 / 34050. `optimized-minimal` 58965 / 26635. | Local. Same numbers as `docs/guide/profiles.md`. |
+| Compile cost, size 10 | `NEOSYRINGE_BENCH_SIZES=10 NEOSYRINGE_BENCH_REPS=5 node tests/bench/compile-cost.mjs`. Node `v22.23.2`, TypeScript 5.9.3, 1 warm-up and 5 runs. | linear, plugin, open: full 12.5 ms and 109040 bytes, minimal 10.7 ms and 58120 bytes. closed: full 9.8 ms and 104420 bytes, minimal 7.4 ms and 60310 bytes. First pass, median. | Local. One machine, small range, no claim of a gain. |
+| Compile cost, sizes 100 and 1000 | `docs/benchmarks/T18-compilation-cost.md` | Copied from an earlier round, as that page says. | Not executed for the candidate. |
+| Compile cost, size 5000 | `docs/benchmarks/T18-compilation-cost.md` | The page says it was not run. | Not executed. |
+| Runtime bundle of the public package | `node scripts/ci/consumer-dist.mjs`. Bound `3072` bytes. | esbuild 232 bytes, rollup 1374 bytes. | Local. |
+
+- The T17 table compares variants with different feature sets. The minimal row has no overrides and no events. Do not read it as a free gain (`docs/guide/profiles.md`).
+- Compile cost has its own method and machine in `docs/benchmarks/T18-compilation-cost.md`. Do not add it to the size table.
+- The closed bundle test shows that the unreachable sentinel is absent from the code and from the modules that put bytes in the output. It does not measure a size gain.
+
+## NS001-NS017
+
+Each row names the tests that prove it. Each cell is `file::test name`. A test checks that every name exists in its file. The body of every listed test was read before it was listed.
+
+| NS | Finding | Tests | What the tests assert |
+|----|---------|-------|-----------------------|
+| NS001 | Generic tokens collided | `tests/e2e/t02-identite.test.ts::T02-A01 Repo<User> et Repo<Order> renvoient chacun leur valeur`<br>`tests/e2e/t15-token-manifest.test.ts::producer token keeps key in consumer` | Executed code returns `{ user: 'user', order: 'order' }`. A producer token keeps its runtime key in a consumer. |
+| NS002 | Inherited constructor | `tests/e2e/t04-graphe.test.ts::T04-A01 Derived sans constructeur reçoit le logger` | Executed code: a class without its own constructor receives the logger of its base. |
+| NS003 | Factories outside the graph | `packages/core/tests/analyzer/t05-factories.test.ts::missing factory dep is NEO_MISSING_PROVIDER`<br>`packages/core/tests/analyzer/t05-factories.test.ts::self capture is NEO_UNDECLARED_FACTORY_DEP` | A factory dependency that is not registered is a build error with its code. A factory that resolves a captured container is refused. |
+| NS004 | Validation against the wrong container | `packages/core/tests/analyzer/t06-usages.test.ts::T06-A01 token in A resolved in independent B`<br>`tests/e2e/t06-usages.test.ts::T06 strict build rejects resolve of a missing token on a known container` | The error names the container B, its file and its call. A resolve of a missing token on a known container fails the build with `NEO_MISSING_PROVIDER`. |
+| NS005 | Async factory could not resolve during initialize | `packages/core/tests/generator/t05-factory-runtime.test.ts::async factory reads sync config during initialize` | After `initialize()` the async host holds the value read from the sync config. |
+| NS006 | Concurrent initialize | `packages/core/tests/generator/t07-initialisation-runtime.test.ts::T07-A02 concurrent initialize calls the factory once`<br>`tests/e2e/t21-integrated.test.ts::T21-A01 concurrent initialize runs the async factory once` | Twelve concurrent calls run the factory once. A `resolve` during the work throws `NEO_NOT_INITIALIZED`. In the integrated scenario five containers start together and the async factory starts once. |
+| NS007 | Async multi and destruction | `packages/core/tests/generator/t08-multi-runtime.test.ts::T08-P1 [A01] async multi initialize returns ready objects`<br>`packages/core/tests/generator/t08-multi-runtime.test.ts::T08-P9 [A06] destroy disposes created multi singletons once` | Ready objects after `initialize()`. Each created multi singleton is disposed once, also on a second `destroy()`. |
+| NS008 | Override cache | `packages/core/tests/generator/t10-overrides-runtime.test.ts::T10-P1 clearOverrides drops the mock cache (class singleton and value)`<br>`packages/core/tests/generator/t10-overrides-runtime.test.ts::T10-P2 dependents rebuilt` | After `clearOverrides()` the real value comes back. A consumer is rebuilt around the mock and again around the original. |
+| NS009 | Parent semantics and mocks | `tests/e2e/t20-docs-examples.test.ts::T20-A02 mock example: the consumer sees the mock, the parent-owned consumer keeps the real dependency`<br>`packages/core/tests/generator/t09-scope-runtime.test.ts::T09-P8 parent semantics` | A parent-owned service keeps the parent's logger. A child that registers its own logger gets its own. |
+| NS010 | Public types incomplete | `tests/e2e/t03-public-types.test.ts::T03-A01 historical audit-types consumer has zero diagnostics`<br>`tests/e2e/t03-public-types.test.ts::T03-A05 async factory unwraps to Client` | The historical consumer compiles with zero diagnostics. An async factory resolves to its awaited type, and a wrong one is rejected. |
+| NS011 | `useProperty` marker left at run time | `tests/e2e/t01-symboles.test.ts::T01-P4-property-const`<br>`packages/unplugin/tests/t01-symboles.test.ts::T01-P4b-tokens-file`<br>`packages/unplugin/tests/t11-pipeline.test.ts::T11-P3-alias-namespace-property` | The original case runs and resolves the value. A dedicated tokens file and an aliased or namespace import leave no `useProperty(` or `useInterface(` call in the output, and the output runs. |
+| NS012 | Markers recognised by name | `tests/e2e/t01-symboles.test.ts::T01-P1-alias`<br>`tests/e2e/t01-symboles.test.ts::T01-P3-homonym` | An aliased `defineBuilderConfig` is transformed and runs. A local function with the same name is left alone. |
+| NS013 | Devtools without a graph | `packages/unplugin/tests/t12-devtools.test.ts::T12-A01 devtools lists the container` | The registry is empty before the transform, then holds the container with its tokens. |
+| NS014 | E2E and integration proof | `tests/ci/workflows.test.ts::T13-A01 e2e after build`<br>`tests/ci/workflows.test.ts::T15 distribution runs consumer-dist after check-dist`<br>`tests/ci/tarball-proof.test.ts::T21-A03 a tarball whose dist differs from the disk build is refused`<br>`tests/e2e/t21-integrated.test.ts::T21-A01 the pinned expectation file equals the executed report`<br>`tests/e2e/runtime-positive.test.ts::T13-A02 parent-only class resolves through the child` | The e2e job builds first, must not continue on error, and runs on Node 22. The distribution job runs `check-dist` then `consumer-dist`. The consumer-on-tarball proof refuses a tarball whose dist differs from the disk build. The report of the integrated scenario equals the pinned file that `scripts/ci/consumer-dist.mjs` compares with the report of the installed tarballs. The e2e suite runs the generated code. The `consumer-dist` command also ran locally, see the commands table. |
+| NS015 | Performance promises | `tests/e2e/t20-docs-examples.test.ts::T20-NS015 the profiles guide cites the measurement command, its date and its feature sets`<br>`packages/core/tests/generator/t17-direct-profiles.test.ts::T17-A05 minimal profile does not export on/override and carries neither maps nor branches` | The profiles page cites the command, the date and "different feature set". The minimal profile removes only `on`, `override` and `clearOverrides`, with their maps and branches. A guard in the same test file refuses pages that promise a free runtime. |
+| NS016 | Scopes and resources | `packages/core/tests/generator/t09-scope-runtime.test.ts::T09-P6 scopes`<br>`tests/e2e/t21-integrated.test.ts::T21-A01 parent value keeps identity, child scopes share the parent singleton` | Scopes have their own local singletons and share the parent's. Closing a scope does not close the parent. |
+| NS017 | Tree shaking | `tests/e2e/t16-elagage.test.ts::T16-A01 esbuild`<br>`tests/e2e/t21-closed-bundle.test.ts::T21-A04 closed bundle drops the unreachable sentinel and keeps the required effect`<br>`tests/e2e/t21-closed-bundle.test.ts::T21-A04 the executed bundle runs the effect once and starts the eager root` | A closed bundle has no sentinel of an unreachable provider. The module of that provider puts no bytes in the output. The required effect is present, runs once, and the eager root starts once. |
+
+A contractual refusal is not used as a proof for any NS row. The refusals of the program are listed in `docs/guide/states-and-ownership.md` and are checked by `tests/e2e/t20-docs-examples.test.ts`.
+
+## Remaining limits
+
+- Nothing is published, merged or deployed. This page prepares a release.
+- The strict build does not follow the result of `createScope()`. The integrated scenario therefore builds with `validation: 'compatible'` (`docs/guide/states-and-ownership.md:74`). Closed mode needs strict validation, so the closed container is a separate fixture, `tests/e2e/fixtures/t21-closed/app.ts`.
+- The plugin keeps a bare import of the module of a pruned provider (`packages/core/src/generator/Generator.ts:192-196`). esbuild still lists that module under `metafile.inputs`. It lists no bytes of it under `metafile.outputs`. The closed bundle test checks the outputs.
+- A disposable transient injected into a singleton is built and is not refused (`docs/guide/states-and-ownership.md:93`).
+- The bundlers and platforms marked "Not exercised" in the support matrix are not certified.
+- Gzip and Brotli costs are not measured. The tree-shaking item of the program definition of done (10-definition-termine.md, line 30 of the spec folder) asks for raw, minified, gzip and Brotli costs, so that item stays open.
+- The T18 compile-cost numbers for sizes 100 and 1000 come from an earlier round, and size 5000 was not run.
+- The migration from historical npm archives was not run (see Migration).
+- Coverage thresholds are set per package in `packages/*/vitest.config.ts`. This work did not change a threshold.
+- The base CI run failed on Node 22 with one 5000 ms timeout, see Known issues. The candidate must be judged on its own CI run, which this page does not cite.
+
+## Known issues
+
+- The base CI run `42218196764` (base commit `bf23efa`) failed in the job "Test (Node 22)", step "Test with coverage". The test "T06-A05 alias and unknown target" (`packages/unplugin/tests/t06-usages.test.ts:225`) took 5129 ms, over the 5000 ms limit. Source: `gh run view 42218196764 --log-failed`, read on 2026-11-06. This failure comes from an earlier task (T06), not from T21.
+- This pull request changes that test file so the test is cheaper: the temporary project sets `lib: ['ES2020']` and `types: []` (`packages/unplugin/tests/t06-usages.test.ts:53-56`), so each plugin instance parses fewer library files. No assertion changed. Local measure of that one test, with coverage on, two runs each: 1003 ms and 976 ms before, 255 ms and 248 ms after. Without coverage, one run: 166 ms before, 83 ms after. These are local numbers on one machine. The fix has not run on CI, so nothing here says the run will pass.
+- Defect from an earlier task (T05 and T08), not a limit of the contract. A factory of a child container that lists `{ all: token }` for a multi token of its open parent is refused by the build with the message "Missing injection ... is not registered" (code `NEO_MISSING_PROVIDER`, `packages/core/src/generator/GraphValidator.ts:83`). ADR002 (spec folder, line 7) allows `{ all: token }` as a dependency entry, and ADR002 (line 33) asks the validation to use the effective view: local, parent, and public roots when closed. The code is inconsistent with itself. The closed-parent path copies the exported multi roots (`packages/core/src/analyzer/resolvers/ParentContainerResolver.ts:182`). The open-parent path copies only `parentGraph.nodes` (`packages/core/src/analyzer/resolvers/ParentContainerResolver.ts:135`). An `{ all }` entry keeps the plain token id (`packages/core/src/analyzer/parsers/InjectionParser.ts:526`), and the validator checks it against that set (`packages/core/src/generator/GraphValidator.ts:77`, `packages/core/src/generator/GraphValidator.ts:100`). At run time `child.resolveAll` works (`packages/core/tests/generator/t08-multi-runtime.test.ts::T08-P12 [A07] child delegates or shadows the parent multi list`). It is not fixed here: T21 changes no product code. The proposed fix is in `packages/core/src/analyzer/resolvers/ParentContainerResolver.ts`: add the keys of `parentGraph.multiNodes` to `graph.parentProvidedTokens` in the open-parent path, as `copyClosedParent` does for the exported multi roots. The test `tests/e2e/t21-known-issues.test.ts::T21-KNOWN child factory { all } on an open parent multi token` pins the current refusal. It is green now and goes red when the defect is fixed, so the day it is fixed the test must be rewritten to expect a build that resolves `['auth', 'log']`.
+
+## Commands run
+
+Every row below was run in the foreground, one at a time, from the root of the working tree, after the last edit of code and tests. Node `v22.23.2`, pnpm `10.19.0`, macOS (Darwin 27.2.0). The base commit is `bf23efa`. The tree is the working tree of the pull request head minus the results in this section, so the commit sha is not written here. A row is written after its run. Only this section changed between the runs.
+
+| # | Command | Status | Exit | Result |
+|---|---------|--------|------|--------|
+| 1 | `pnpm build` | local | 0 | All seven `packages/* build` jobs report `Done` (neosyringe, core, lsp, ui, vscode-extension, cli, unplugin). |
+| 2 | `pnpm lint` | local | 0 | `Found 1763 warnings and 0 errors.` 357 files, 90 rules. No warning in a file of this work. |
+| 3 | `pnpm typecheck` | local | 0 | `tsc --noEmit` printed no diagnostic. The tests are inside this check (`tsconfig.json` includes `tests`). |
+| 4 | `pnpm test` | local | 0 | 848 tests passed in 6 packages: neosyringe 3, core 559, lsp 45, ui 44, cli 47, unplugin 150. |
+| 5 | `pnpm test:e2e` | local | 0 | 24 files, 264 tests passed. 5.89 s. It includes `tests/e2e/t21-integrated.test.ts` (7 tests), `tests/e2e/t21-closed-bundle.test.ts` (2 tests) and `tests/e2e/t21-known-issues.test.ts` (1 test). |
+| 6 | `pnpm test:coverage` | local | 0 | The same 848 tests passed. No per-package threshold failed. All files, statements: core 88.76 %, lsp 97.89 %, ui 100 %, cli 45.7 %, unplugin 92.06 %, neosyringe 40 %. |
+| 7 | `pnpm docs:build` | local | 0 | `build complete in 6.17s.` The build rendered the dossier page. |
+| 8 | `pnpm test:ci` | local | 0 | 6 files, 34 tests passed. 1.05 s. It includes `tests/ci/t21-dossier.test.ts` (8 tests) and `tests/ci/tarball-proof.test.ts` (8 tests). |
+| 9 | `node scripts/ci/consumer-dist.mjs` | local | 0 | Six tarballs from `pnpm pack`, each proven equal to the disk build: `djodjonx-neosyringe-cli-0.4.1.tgz` (2 dist files), `djodjonx-neosyringe-core-3.2.0.tgz` (18), `djodjonx-neosyringe-lsp-0.4.6.tgz` (2), `djodjonx-neosyringe-0.3.0.tgz` (8), `djodjonx-neosyringe-ui-0.2.1.tgz` (4), `djodjonx-neosyringe-plugin-0.6.1.tgz` (10). Installed with typescript 5.9.3, esbuild 0.27.2, rollup 4.55.2. The script printed `npm network: no`: the install came from the local npm cache. The integrated scenario, built by the installed plugin, equals the pinned report (10 slices). The closed bundle has no sentinel and runs the effect once. `done in 5.7s`. |
+
+Two measurements were also run locally, with exit code 0: `node scripts/measure-t17-size.mjs` and `NEOSYRINGE_BENCH_SIZES=10 NEOSYRINGE_BENCH_REPS=5 node tests/bench/compile-cost.mjs`. Their results are in Measurements.

@@ -65,6 +65,6 @@ Read it like this:
 - `optimized-full` is **larger** than `reference-full` for this graph. No gain is claimed for it.
 - `optimized-minimal` is smaller than `reference-full`, but it is a **different feature set** (no overrides, no events). The script says so itself. Do not read that row as a free speed-up.
 - One graph, one run, no dispersion. Another graph can give other numbers.
-- Build-time and runtime speed are not measured on this page.
+- Build-time and runtime speed are not measured on this page. The cost of compiling a project has its own method, machine and run, in `docs/benchmarks/T18-compilation-cost.md` (command `pnpm bench:compile`). Do not mix its numbers with the table above.
 
 The script reads `packages/core/dist`, so run it after a fresh `pnpm build`. Its header documents the same limit (`scripts/measure-t17-size.mjs:4`).
