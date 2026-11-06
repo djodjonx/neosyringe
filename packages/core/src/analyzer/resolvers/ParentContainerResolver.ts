@@ -145,6 +145,23 @@ export class ParentContainerResolver {
       }
     }
 
+    // Multi registrations are not in nodes. { all: token } keeps that token id.
+    if (parentGraph.multiNodes) {
+      for (const [tokenId, nodes] of parentGraph.multiNodes) {
+        const node = nodes[0];
+        graph.parentProvidedTokens.add(tokenId);
+        if (node?.service.isInterfaceToken) {
+          graph.parentResolvableTokens.add(tokenId);
+        } else {
+          const symbol = node?.service.tokenSymbol ?? node?.service.implementationSymbol;
+          if (symbol) {
+            graph.parentClassTokenSymbols ??= new Map();
+            graph.parentClassTokenSymbols.set(tokenId, symbol);
+          }
+        }
+      }
+    }
+
     // Also inherit parent's parent tokens (transitive inheritance)
     if (parentGraph.parentProvidedTokens) {
       for (const tokenId of parentGraph.parentProvidedTokens) {
