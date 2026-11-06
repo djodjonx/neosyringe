@@ -4,7 +4,7 @@ layout: home
 hero:
   name: NeoSyringe
   text: Compile-Time DI
-  tagline: Zero-overhead dependency injection that shifts resolution from Runtime to Build-Time. No reflection, no decorators, just pure TypeScript.
+  tagline: Dependency injection resolved at build time. No reflection, no decorators, just pure TypeScript.
   image:
     src: /logo.png
     alt: NeoSyringe
@@ -22,8 +22,8 @@ features:
     details: Native support for useInterface<ILogger>() without manual Symbols. TypeScript interfaces work seamlessly.
     
   - icon: 🚀
-    title: Zero Runtime Overhead
-    details: No reflection, no reflect-metadata. Just pure factory functions generated at build time.
+    title: Generated Containers
+    details: No reflection, no reflect-metadata. The container is generated at build time, in a full or a minimal profile.
     
   - icon: 🛡️
     title: Compile-Time Safety
@@ -51,14 +51,9 @@ features:
 
 ## Why Choose NeoSyringe?
 
-Traditional DI containers like InversifyJS and tsyringe rely on **runtime resolution**:
+When a DI container resolves bindings at runtime, a missing or wrong binding shows up when `resolve()` runs. How other libraries behave is on the [alternatives page](/guide/alternatives), from their own documentation and with the access date.
 
-- ❌ Ship DI container logic to the browser
-- ❌ Errors happen at runtime
-- ❌ Interfaces are erased, requiring manual Symbols
-- ❌ Need decorators and reflect-metadata
-
-**NeoSyringe is different.** It works as a **compiler plugin**:
+NeoSyringe works as a **compiler plugin**:
 
 - ✅ Generate optimized factories at build time
 - ✅ Errors detected in your IDE
@@ -97,7 +92,7 @@ const userService = container.resolve(UserService);
 // Type: UserService ✅ - Full auto-completion!
 ```
 
-**Zero DI library shipped to production!** The build plugin replaces your `defineBuilderConfig(...)` with an optimized container class — no runtime overhead, no reflection, no magic.
+The build plugin replaces your `defineBuilderConfig(...)` with a generated container class. No reflection, no decorators. Sizes are measured, never promised: see [Profiles](/guide/profiles).
 
 <div style="text-align: center; margin-top: 3rem;">
   <a href="./guide/getting-started" style="

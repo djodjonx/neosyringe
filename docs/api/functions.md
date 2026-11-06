@@ -180,29 +180,11 @@ Create a token for a primitive constructor parameter.
 
 ### Example
 
-```typescript
-import { useProperty } from '@djodjonx/neosyringe';
+Only `T` needs to be explicit: the class type is inferred from the first argument. This region of `examples/new-api/factories.ts` is typechecked and run by `tests/e2e/t20-docs-examples.test.ts`.
 
-class ApiService {
-  constructor(
-    private apiUrl: string,
-    private timeout: number
-  ) {}
-}
+<<< @/../examples/new-api/factories.ts#imports
 
-// Only T needs to be explicit — C is inferred from the class argument
-const apiUrl = useProperty<string>(ApiService, 'apiUrl');
-const timeout = useProperty<number>(ApiService, 'timeout');
-
-// In configuration
-{
-  injections: [
-    { token: apiUrl, provider: () => 'https://api.example.com' },
-    { token: timeout, provider: () => 5000 },
-    { token: ApiService }
-  ]
-}
-```
+<<< @/../examples/new-api/factories.ts#properties
 
 ---
 

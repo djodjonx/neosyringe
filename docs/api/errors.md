@@ -2,7 +2,51 @@
 
 All errors reported by NeoSyringe — in the IDE, the CLI, and at build time.
 
-## Error Codes
+## Stable codes (`NEO_*`)
+
+The `NEO_*` codes are the machine-readable contract. The message text may change; the code does not. The CLI prints the code in the `code` field of each error with `--json` (`packages/cli/src/report.ts:135`). The plugin puts the code at the start of most build messages, but not all of them (the `NEO_ASYNC_TRANSIENT` message starts with the sentence, `packages/core/src/analyzer/parsers/InjectionParser.ts:217`): read the code from the CLI report when you need it.
+
+Each code below exists in `packages/*/src`. `tests/e2e/t20-docs-examples.test.ts` checks that every code listed on this page does, and runs the ones marked "run" to see them raised.
+
+### Reported at build time
+
+| Code | Raised when | Run |
+|------|-------------|-----|
+| `NEO_CONFIG_UNSUPPORTED` | A configuration shape the build cannot read: a non-literal `runtime.profile`, `useValue` declared `owned`, `mode: 'open'` with `roots`. | yes |
+| `NEO_FACTORY_DEPENDENCIES_REQUIRED` | A factory has no `dependencies` list in strict validation. In `compatible` it is a warning (the factory is opaque). | yes |
+| `NEO_ASYNC_TRANSIENT` | An async factory with `lifecycle: 'transient'`. | yes |
+| `NEO_DUPLICATE_PROVIDER` | A simple token is registered twice, in the same container, a parent or a partial. | |
+| `NEO_MISSING_PROVIDER` | A dependency is not in the view of the container. | |
+| `NEO_CYCLE` | A dependency cycle. | |
+| `NEO_UNKNOWN_CONTAINER` | A `resolve` whose receiver the build cannot attribute, for example the result of `createScope()`. | yes |
+| `NEO_MULTI_REQUIRES_RESOLVE_ALL` | `resolve` of a `multi` token (build time when visible, run time otherwise). | yes |
+| `NEO_ROOT_NOT_EXPORTED` | `resolve` of a token outside the roots of a closed container (build time when visible, run time otherwise). | yes |
+| `NEO_CLOSED_REQUIRES_STRICT` | Closed mode with `validation: 'compatible'`. | yes |
+| `NEO_UNDECLARED_FACTORY_DEP` | At build time: a factory calls `resolve` or `resolveAll` directly on a captured container instead of its context (`packages/core/src/analyzer/parsers/InjectionParser.ts:584` to `:614`). The build does not see a helper or a dynamic receiver. The run time guard below catches a token outside `dependencies`. | yes |
+| `NEO_TOKEN_UNSUPPORTED`, `NEO_TOKEN_COLLISION`, `NEO_TOKEN_BOUNDARY_UNSUPPORTED` | A token the build cannot identify safely, two descriptors with one key, or an external token not described by the token manifest. | |
+
+### Thrown at run time by the generated container
+
+| Code | Thrown when | Run |
+|------|-------------|-----|
+| `NEO_NOT_INITIALIZED` | `resolve` before `initialize()` finished. | yes |
+| `NEO_CONTAINER_BUSY` | `resolve`, `initialize`, `destroy`, `createScope`, `override` and `clearOverrides` during a reconfiguration. `override`, `clearOverrides` and `createScope` also while `initialize()` is running. `override` and `clearOverrides` also while the container is destroying (source only: `packages/core/src/generator/LifecycleEmitter.ts:516` to `:517`). | yes |
+| `NEO_CONTAINER_FAILED` | `resolve` and `createScope()` after `initialize()` rejected. `override` and `clearOverrides` too (source only: `packages/core/src/generator/LifecycleEmitter.ts:522` to `:523`). | yes |
+| `NEO_CONTAINER_DESTROYED` | Use of a destroyed container (`resolve`, `initialize`, `createScope`). | yes |
+| `NEO_SCOPE_PARENT_DESTROYED` | A child needs a parent that was destroyed. | yes |
+| `NEO_TEST_API_DISABLED` | `override` or `clearOverrides` in a build without `testOverrides: true`. | yes |
+| `NEO_OVERRIDE_MULTI_UNSUPPORTED` | `override` of a `multi` token. | yes |
+| `NEO_FACTORY_CONTEXT_EXPIRED` | A factory context used after the factory returned. | yes |
+| `NEO_UNDECLARED_FACTORY_DEP` | See above. | yes |
+| `NEO_ROOT_NOT_EXPORTED` | See above (guard for dynamic access). | |
+| `NEO_MULTI_REQUIRES_RESOLVE_ALL` | See above (guard). | |
+
+A runtime error is an `Error` with a `code` property and a message that starts with the code.
+
+NEO_IMPORT_UNRESOLVED appears in the correction plan but is not emitted by any package at this revision. Do not wait for it.
+
+## Legacy numbered codes
+
 
 | Code | Type | Where reported |
 |------|------|----------------|
@@ -75,7 +119,7 @@ Use useProperty<string>(TargetClass, 'paramName') instead.
 
 // ✅
 const apiUrl = useProperty<string>(ApiService, 'apiUrl');
-{ token: apiUrl, provider: () => 'http://localhost' }
+{ token: apiUrl, useFactory: true, dependencies: [], provider: () => 'http://localhost' }
 ```
 
 ---
@@ -95,7 +139,7 @@ useValue cannot be used with a class token. Use provider: MyClass to register a 
 { token: SomeConcreteClass, useValue: someInstance }
 
 // ✅ Correct
-{ token: SomeConcreteClass, provider: () => someInstance, useFactory: true }
+{ token: SomeConcreteClass, provider: () => someInstance, useFactory: true, dependencies: [] }
 ```
 
 ---
@@ -111,10 +155,10 @@ Async factories are pre-initialized once in initialize() and must be singletons.
 
 ```typescript
 // ❌
-{ token: useInterface<IDatabase>(), provider: async () => createPool(), useFactory: true, lifecycle: 'transient' }
+{ token: useInterface<IDatabase>(), provider: async () => createPool(), useFactory: true, dependencies: [], lifecycle: 'transient' }
 
 // ✅
-{ token: useInterface<IDatabase>(), provider: async () => createPool(), useFactory: true }
+{ token: useInterface<IDatabase>(), provider: async () => createPool(), useFactory: true, dependencies: [] }
 ```
 
 ---

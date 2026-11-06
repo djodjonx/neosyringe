@@ -20,7 +20,7 @@ const child = defineBuilderConfig({
     { token: useInterface<ILogger>(), provider: FileLogger }  // Duplicate!
   ]
 });
-// Error: Duplicate registration: 'ILogger' is already registered in parent
+// Error: Duplicate registration: 'ILogger' is already registered in parent container 'parent'.
 ```
 
 ## The Solution: `scoped: true`
@@ -97,32 +97,17 @@ sequenceDiagram
 
 ## Use Cases
 
-### 🧪 Testing
+### 🧪 Testing with mocks
 
-Override production services with mocks:
+`scoped: true` replaces a token **for the services this container builds**. It does not rewire a service that the parent already owns. Test the consumer, not only the token:
 
-```typescript
-// Production container
-const production = defineBuilderConfig({
-  injections: [
-    { token: useInterface<IDatabase>(), provider: PostgresDatabase },
-    { token: useInterface<IEmailService>(), provider: SendGridService },
-    { token: UserService }
-  ]
-});
+<<< @/../examples/new-api/mock.ts#containers
 
-// Test container - override external services
-const testing = defineBuilderConfig({
-  useContainer: production,
-  injections: [
-    { token: useInterface<IDatabase>(), provider: InMemoryDatabase, scoped: true },
-    { token: useInterface<IEmailService>(), provider: MockEmailService, scoped: true }
-  ]
-});
+What the example proves, by running it (`tests/e2e/t20-docs-examples.test.ts`):
 
-// UserService uses mocked dependencies
-const userService = testing.resolve(UserService);
-```
+- `child.resolve(Service).logger.name()` is `'fake'`. `Service` is registered in the child with `scoped: true`, so it is built there around the child's `FakeLogger`.
+- `parent.resolve(Service).logger.name()` is `'real'`. This `Service` is **parent-owned**: replacing `Logger` in the child does not change it. If the child registered only the mock `Logger` and resolved `Service` through the parent, the test would see the real logger.
+- With `app.override(...)` (full profile, plugin option `testOverrides: true`), the consumer is rebuilt around the mock and again around the real logger after `clearOverrides()`. Both calls are awaited. See [profiles](./profiles.md).
 
 ### 🔧 Module Isolation
 
@@ -243,17 +228,17 @@ const test = defineBuilderConfig({
 
 test.resolve(useInterface<ILogger>());    // MockLogger (scoped)
 test.resolve(useInterface<IDatabase>());  // PostgresDatabase (from infrastructure)
-test.resolve(UserRepository);              // From domain
+test.resolve(UserRepository);              // From domain: parent-owned, so it keeps the Logger of its owner
 ```
+
+If `UserRepository` must use `MockLogger`, register `UserRepository` in `test` as well (with `scoped: true`).
 
 ## Error Messages
 
-When you forget `scoped: true`:
+When you forget `scoped: true`, the build reports `NEO_DUPLICATE_PROVIDER` with this message (`packages/core/src/analyzer/errors/ErrorFormatter.ts:41`):
 
 ```
-Error: Duplicate registration: 'ILogger' is already registered in the parent container.
-Use 'scoped: true' to override the parent's registration intentionally.
+Duplicate registration: 'ILogger' is already registered in parent container 'parent'.
 ```
 
-The error message tells you exactly what to do! ✅
-
+Add `scoped: true` if replacing the parent's registration is intended.

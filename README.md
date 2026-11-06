@@ -10,7 +10,7 @@
   <a href="https://djodjonx.github.io/neosyringe/"><img src="https://img.shields.io/badge/docs-VitePress-0d9488.svg?style=flat-square" alt="Documentation"></a>
 </p>
 
-<h1 align="center">Zero-Overhead, Compile-Time Dependency Injection</h1>
+<h1 align="center">Compile-Time Dependency Injection</h1>
 
 <p align="center">
   <strong>NeoSyringe</strong> shifts DI resolution from <strong>Runtime</strong> to <strong>Build-Time</strong>.<br>
@@ -33,7 +33,7 @@
 
 - **IDE Plugin** - Real-time validation with **all errors shown at once**, precise error positioning
 - **Use Interfaces as Tokens** - `useInterface<ILogger>()` without manual Symbols
-- **Zero Runtime Overhead** - Generated factory functions, no DI library shipped
+- **Generated Containers** - Resolution is decided at build time. Full or minimal profile; sizes are measured, never promised (see the Profiles guide)
 - **Compile-Time Safety** - Missing dependencies, cycles, and duplicates detected in your IDE
 - **Pure Classes** - No decorators, no DI imports in your business code
 - **Comprehensive Validation** - Validates across parent containers, extends, and partialConfigs
@@ -88,7 +88,7 @@ const userService = container.resolve(UserService); // Type: UserService ✅
 userService.greet('World');
 ```
 
-At build time, this generates optimized factory functions. **Zero DI library shipped to production!**
+At build time, the plugin replaces `defineBuilderConfig(...)` with a generated container. No decorators, no reflection.
 
 ## 🧪 Live Examples
 
@@ -113,6 +113,11 @@ No network access (offline, sandboxed CI, agent environments)? `@djodjonx/neosyr
 | [Scoped Injections](https://djodjonx.github.io/neosyringe/guide/scoped-injections) | Override parent container tokens |
 | [Parent Container](https://djodjonx.github.io/neosyringe/guide/parent-container) | SharedKernel architecture |
 | [Legacy Migration](https://djodjonx.github.io/neosyringe/guide/legacy-migration) | Bridge tsyringe, InversifyJS |
+| [Migrating to Strict Contracts](https://djodjonx.github.io/neosyringe/guide/migration) | Before/after for factories, overrides, destroy |
+| [States, Scopes and Ownership](https://djodjonx.github.io/neosyringe/guide/states-and-ownership) | Who closes what, factory limits |
+| [From Open to Closed](https://djodjonx.github.io/neosyringe/guide/closed-mode) | Roots, eager, multi, parent boundaries |
+| [Profiles and Capabilities](https://djodjonx.github.io/neosyringe/guide/profiles) | Full and minimal, measured sizes |
+| [Alternatives](https://djodjonx.github.io/neosyringe/guide/alternatives) | Documented capabilities, dated and sourced |
 | [Generated Code](https://djodjonx.github.io/neosyringe/guide/generated-code) | What the compiler produces |
 | [CLI Validator](https://djodjonx.github.io/neosyringe/guide/cli) | Validate in CI/CD |
 | [IDE Plugin](https://djodjonx.github.io/neosyringe/guide/ide-plugin) | Real-time error detection |

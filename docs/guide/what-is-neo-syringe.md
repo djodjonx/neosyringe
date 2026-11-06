@@ -2,12 +2,12 @@
 
 NeoSyringe is a **next-generation dependency injection system** for TypeScript that shifts resolution from **runtime** to **build-time**.
 
-## The Problem with Traditional DI
+## The Problem with Resolving at Runtime
 
-Traditional DI containers (InversifyJS, tsyringe, Awilix) all work the same way:
+When wiring is resolved while the program runs, a wrong or missing binding is found when `resolve()` is called. A runtime approach often looks like this (an illustration, not a description of one library):
 
 ```typescript
-// Traditional approach
+// Runtime approach, with decorators
 @injectable()
 class UserService {
   constructor(@inject(TYPES.ILogger) private logger: ILogger) {}
@@ -17,15 +17,14 @@ class UserService {
 container.resolve(UserService); // ← Resolution happens HERE
 ```
 
-This approach has several drawbacks:
+NeoSyringe moves that work to the build. This page makes no claim about how other libraries work. The [alternatives page](./alternatives.md) lists only what their own documentation says, with the access date.
 
-| Issue | Impact |
-|-------|--------|
-| **Runtime overhead** | DI container code shipped to production |
-| **Reflection required** | Need `reflect-metadata` and decorators |
-| **Interface erasure** | Must use Symbols or string tokens manually |
-| **Late errors** | Missing bindings only discovered at runtime |
-| **Framework coupling** | Classes polluted with DI decorators |
+| Concern | What NeoSyringe does |
+|---------|----------------------|
+| **Missing bindings** | Reported at build time, by the IDE plugin and the CLI (`NEO_MISSING_PROVIDER`) |
+| **Classes** | Stay plain: no decorators and no `reflect-metadata` |
+| **Interfaces** | `useInterface<T>()` gives a token; the build derives its id |
+| **Generated container** | Created at build time. Its size depends on the features you use: see [Profiles](./profiles.md) |
 
 ## The NeoSyringe Solution
 
@@ -50,13 +49,13 @@ export const container = defineBuilderConfig({
 });
 ```
 
-At build time, the build plugin replaces the `defineBuilderConfig(...)` call with a generated container — just plain TypeScript, no DI library included.
+At build time, the build plugin replaces the `defineBuilderConfig(...)` call with a generated container class, in the same file.
 
 ## Key Advantages
 
-### 🚀 Zero Runtime Overhead
+### 🚀 Generated Containers
 
-No DI library shipped to production. Just pure factory functions that create instances directly.
+The container is code your build emits for your graph. Its size depends on the graph and on the [profile](./profiles.md); no size or speed figure is promised. The one published measurement is in the [profiles guide](./profiles.md#what-the-numbers-say-and-what-they-do-not).
 
 ### ✨ Native Interface Support
 
@@ -73,7 +72,7 @@ Errors are detected in your IDE before you even save the file:
 
 ### 📦 Pure Classes
 
-Your business classes have **zero DI dependencies**:
+Your business classes have **no DI imports**:
 
 ```typescript
 // ✅ Pure TypeScript class
@@ -119,7 +118,7 @@ sequenceDiagram
     Note over App,Container: Runtime
     App->>Container: resolve(UserService)
     Container->>Container: Factory resolves dependencies recursively
-    Container-->>App: instance ✅ no reflection · no DI library · compile-time errors
+    Container-->>App: instance ✅ no reflection · compile-time errors
 ```
 
 ## Next Steps

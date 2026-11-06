@@ -1,170 +1,85 @@
 # Async Factories
 
-Initialize async services (databases, HTTP clients, external connections) once at startup. All subsequent `resolve()` calls stay synchronous.
+Start async services (databases, HTTP clients, remote config) once at startup. After that, every `resolve()` stays synchronous.
 
-## The Problem
+## The rule
 
-Some services require async initialization — opening a database pool, loading remote config, connecting to Redis. But your business code shouldn't have to `await` every `resolve()`.
+1. Declare the factory. It may be `async` and it declares its `dependencies`.
+2. Call `await container.initialize()` once, before the first `resolve()`.
+3. Resolve synchronously everywhere else.
+4. Call `await container.destroy()` at shutdown.
 
-## The Solution
+A `resolve()` before `initialize()` finishes throws `NEO_NOT_INITIALIZED`. `run()` in `examples/new-api/async.ts` makes that call on purpose, inside a `try`, and keeps the error. The container it uses is:
 
-Mark the factory `async`, call `await container.initialize()` once at app startup, then resolve everything synchronously as usual.
-
-```typescript
-import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
-
-interface IDatabase {
-  query(sql: string): Promise<any[]>;
-}
-
-export const container = defineBuilderConfig({
-  injections: [
-    {
-      token: useInterface<IDatabase>(),
-      provider: async () => {
-        const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-        await pool.connect();
-        return pool;
-      },
-      useFactory: true
-    },
-    { token: UserService }  // depends on IDatabase — no change needed
-  ]
-});
-```
+<<< @/../examples/new-api/async.ts#container
 
 ```typescript
 // main.ts — the only place with await
 await container.initialize();
 
-// Everywhere else — fully synchronous
-const userService = container.resolve(useInterface<IUserService>());
+// everywhere else — fully synchronous
+const client = container.resolve(clientToken);
+
+// at shutdown
+await container.destroy();
 ```
 
-## How It Works
+`tests/e2e/t20-docs-examples.test.ts` runs `examples/new-api/async.ts`. It checks the early error (`NEO_NOT_INITIALIZED`), the value after `initialize()`, one `dispose` call at `destroy()`, and `NEO_CONTAINER_DESTROYED` afterwards.
 
-When at least one factory is `async`, the generated container gets an `initialize()` method:
+## What initialize does
 
-```typescript
-// Generated (simplified)
-class NeoContainer {
-  private _initialized = false;
+- Every container has `initialize(): Promise<void>` (`packages/neosyringe/src/types.ts:36`). A container with no async work returns at once. You can call it everywhere without checking.
+- It builds the async singletons, in dependency order, and waits for each one before its consumers run. A factory that needs another async service lists it in `dependencies`.
+- Two `initialize()` calls at the same time share the work. A factory does not run twice.
+- A child of an async parent needs `await child.initialize()` too: it readies the parent as well. Without it, the child's `resolve()` throws `NEO_NOT_INITIALIZED`.
+- In an **open** container, `initialize()` starts every async singleton you registered. In a [closed](./closed-mode.md) container it starts the ones the roots need, and those listed in `eager`.
 
-  public async initialize(): Promise<void> {
-    if (this._initialized) return;
-    this.instances.set("IDatabase", await this.create_IDatabase());
-    this._initialized = true;
-  }
+## When initialization fails
 
-  public resolve<T>(token: any): T {
-    if (!this._initialized) {
-      throw new Error('Call await container.initialize() before the first resolve()');
-    }
-    // ... normal resolution
-  }
-}
-```
+`initialize()` first rolls back. The owned instances built during the failed attempt are disposed in reverse order of construction. Borrowed instances are left alone (`packages/core/src/generator/LifecycleEmitter.ts:209` to `:222`). Then it rejects, in one of two ways:
 
-All async singletons are pre-created in `initialize()`, in dependency order. After that, `resolve()` returns them from cache — no `await` needed anywhere in your application code.
+- With the factory's own error, when every `dispose` succeeded.
+- With a new `Error` when a `dispose` threw. It has the same message, a `cause` (the factory's error) and `cleanupErrors` (the errors thrown by `dispose`). The rollback does not stop at the first failing `dispose` (`packages/core/src/generator/LifecycleEmitter.ts:227` to `:232`).
 
-Containers with no async factories are completely unchanged — no `initialize()`, no guard.
+The container is then failed:
+
+- another `initialize()` rejects with that same error (or wrapper),
+- `resolve()` throws `NEO_CONTAINER_FAILED`,
+- `createScope()` throws `NEO_CONTAINER_FAILED` (`packages/core/src/generator/LifecycleEmitter.ts:294` to `:296` for a container with async work, `:303` to `:305` without),
+- nothing is retried by itself.
+
+A failed container cannot be repaired. To try again, build a new container. Or keep a root container that never ran `initialize()`, take your scopes from it, and drop a scope that failed: the root stays usable. See [States, Scopes and Ownership](./states-and-ownership.md).
+
+`tests/e2e/t20-docs-examples.test.ts` runs all of this: the rollback order, the wrapper with `cause` and `cleanupErrors`, `NEO_CONTAINER_FAILED` on `resolve()` and `createScope()`, and a second scope that succeeds after the first failed.
 
 ## Constraints
 
-::: warning Singleton Only
-Async factories must be `singleton` (the default). Using `lifecycle: 'transient'` with an async factory is a compile-time error — transient services are created on every `resolve()`, which would require making `resolve()` async and break all existing call sites.
+::: warning Singleton only
+An async factory cannot be `lifecycle: 'transient'`. The build fails with `NEO_ASYNC_TRANSIENT`: a transient is created on each `resolve()`, which would have to be async.
 :::
 
-## Multiple Async Services
+- `AsyncContainer` is a deprecated alias of `CoreContainer` and adds no method (`packages/neosyringe/src/types.ts:309`). Use `CoreContainer`, or let the type come from `defineBuilderConfig`.
 
-All async singletons are pre-created together in `initialize()`:
+## Overrides are awaited too
+
+In a test build (plugin option `testOverrides: true`), `override` and `clearOverrides` return promises. Await them before the next `resolve()`. After a reconfiguration of an async container, call `await container.initialize()` again before you resolve:
 
 ```typescript
-export const container = defineBuilderConfig({
-  injections: [
-    {
-      token: useInterface<IDatabase>(),
-      provider: async () => {
-        const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-        await pool.connect();
-        return pool;
-      },
-      useFactory: true
-    },
-    {
-      token: useInterface<ICache>(),
-      provider: async () => {
-        const client = createClient({ url: process.env.REDIS_URL });
-        await client.connect();
-        return client;
-      },
-      useFactory: true
-    },
-    { token: UserService }
-  ]
-});
-
-// One call initializes everything
+await container.override(clientToken, () => fakeClient);
+await container.initialize();
+const client = container.resolve(clientToken); // fakeClient
+await container.clearOverrides();
 await container.initialize();
 ```
 
-## Async Parent Containers (`useContainer`)
-
-If a container has **no async factories of its own**, but its `useContainer` parent does, it still gets an `initialize()` — purely to cascade into the parent:
-
-```typescript
-// shared-kernel.ts — has an async factory
-export const sharedKernel = defineBuilderConfig({
-  injections: [
-    {
-      token: useInterface<IDatabase>(),
-      provider: async () => { /* connect, etc. */ },
-      useFactory: true
-    }
-  ]
-});
-
-// app.ts — no async factories of its own, but depends on the async parent
-export const app = defineBuilderConfig({
-  useContainer: sharedKernel,
-  injections: [
-    { token: UserService }  // constructor(private db: IDatabase) — sync code, no await anywhere
-  ]
-});
-```
-
-```typescript
-// main.ts — one call is enough; you don't need to separately
-// initialize sharedKernel yourself
-await app.initialize();
-
-const userService = app.resolve(UserService);
-```
-
-`app`'s generated `initialize()` (real output, trimmed) does nothing but cascade:
-
-```typescript
-public async initialize(): Promise<void> {
-  if (this._initialized) return;
-  if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }
-  this._initialized = true;
-}
-```
-
-This also means `app.resolve(...)` throws the same "call `await container.initialize()` first" guard if you forget — even though `app` itself has no async work, resolving before the cascade runs would mean `sharedKernel`'s async singleton might not be ready yet.
-
-::: tip Works through any depth of `useContainer` chaining
-The cascade check (`typeof c?.initialize === 'function'`) is a runtime check, not a static one — so it also covers a `declareContainerTokens` legacy adapter that happens to expose its own `initialize()`, and a multi-level `useContainer` chain (domain → infrastructure) cascades all the way down automatically.
-:::
+The override factory is synchronous and its result is borrowed: the container does not close it. See [profiles](./profiles.md).
 
 ## Testing
 
-`destroy()` is terminal. It does not reset the container for another `initialize()`. After `destroy()`, `initialize()` and `resolve()` throw `NEO_CONTAINER_DESTROYED`.
-
-Give each test its own scope:
+`destroy()` is final. After it, `initialize()` and `resolve()` throw `NEO_CONTAINER_DESTROYED`. Give each test its own scope:
 
 ```typescript
-let scope: Container;
+let scope: CoreContainer;
 beforeEach(async () => {
   scope = container.createScope();
   await scope.initialize();
@@ -173,3 +88,7 @@ afterEach(async () => {
   await scope.destroy();
 });
 ```
+
+::: warning Build-time check on scope variables
+With the default `validation: 'strict'`, `scope.resolve(...)` on the result of `createScope()` fails the build with `NEO_UNKNOWN_CONTAINER`. See [States, Scopes and Ownership](./states-and-ownership.md#scopes).
+:::

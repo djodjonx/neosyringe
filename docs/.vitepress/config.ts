@@ -3,7 +3,7 @@ import { withMermaid } from 'vitepress-plugin-mermaid'
 
 export default withMermaid(defineConfig({
   title: 'NeoSyringe',
-  description: 'Zero-Overhead, Compile-Time Dependency Injection for TypeScript',
+  description: 'Compile-Time Dependency Injection for TypeScript',
 
   mermaid: {
     // No explicit `theme`: the plugin already swaps in mermaid's 'dark'
@@ -41,7 +41,7 @@ export default withMermaid(defineConfig({
     ['meta', { name: 'theme-color', content: '#0d9488' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'NeoSyringe' }],
-    ['meta', { property: 'og:description', content: 'Zero-Overhead, Compile-Time Dependency Injection for TypeScript' }],
+    ['meta', { property: 'og:description', content: 'Compile-Time Dependency Injection for TypeScript' }],
     ['meta', { property: 'og:image', content: '/logo.png' }],
   ],
 
@@ -59,6 +59,7 @@ export default withMermaid(defineConfig({
           { text: 'Basic Usage', link: '/guide/basic-usage' },
           { text: 'Parent Container', link: '/guide/parent-container' },
           { text: 'Legacy Migration', link: '/guide/legacy-migration' },
+          { text: 'Migrating to Strict Contracts', link: '/guide/migration' },
         ]
       },
       {
@@ -79,6 +80,7 @@ export default withMermaid(defineConfig({
             { text: 'What is NeoSyringe?', link: '/guide/what-is-neo-syringe' },
             { text: 'Getting Started', link: '/guide/getting-started' },
             { text: 'Why NeoSyringe?', link: '/guide/why-neo-syringe' },
+            { text: 'Alternatives', link: '/guide/alternatives' },
           ]
         },
         {
@@ -88,6 +90,7 @@ export default withMermaid(defineConfig({
             { text: 'Injection Types', link: '/guide/injection-types' },
             { text: 'Lifecycle', link: '/guide/lifecycle' },
             { text: 'Scoped Injections', link: '/guide/scoped-injections' },
+            { text: 'States, Scopes and Ownership', link: '/guide/states-and-ownership' },
           ]
         },
         {
@@ -96,7 +99,10 @@ export default withMermaid(defineConfig({
             { text: 'Parent Container', link: '/guide/parent-container' },
             { text: 'Multiple Containers', link: '/guide/multi-containers' },
             { text: 'Legacy Migration', link: '/guide/legacy-migration' },
+            { text: 'Migrating to Strict Contracts', link: '/guide/migration' },
             { text: 'Async Factories', link: '/guide/async-factories' },
+            { text: 'From Open to Closed', link: '/guide/closed-mode' },
+            { text: 'Profiles and Capabilities', link: '/guide/profiles' },
             { text: 'Disposable Services', link: '/guide/disposable' },
             { text: 'How It Works', link: '/guide/generated-code' },
           ]
