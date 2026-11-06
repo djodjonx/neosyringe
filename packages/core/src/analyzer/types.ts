@@ -455,7 +455,8 @@ export type DiagnosticCode =
   | 'NEO_ASYNC_TRANSIENT'
   | 'NEO_TOKEN_BOUNDARY_UNSUPPORTED'
   | 'NEO_ROOT_NOT_EXPORTED'
-  | 'NEO_CLOSED_REQUIRES_STRICT';
+  | 'NEO_CLOSED_REQUIRES_STRICT'
+  | 'NEO_DISPOSABLE_TRANSIENT_CAPTURED';
 
 /**
  * Why one registration stays or goes.
