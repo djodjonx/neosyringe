@@ -1,4 +1,3 @@
-import { statSync } from 'node:fs';
 import * as path from 'node:path';
 import { TraceMap, decodedMappings, encodedMappings, originalPositionFor, type SourceMapSegment } from '@jridgewell/trace-mapping';
 import * as ts from 'typescript';
@@ -8,6 +7,13 @@ import { Generator, GraphValidator } from '@djodjonx/neosyringe-core/generator';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { serializeGraph } from '@djodjonx/neosyringe-ui';
 import type { SerializableGraph } from '@djodjonx/neosyringe-ui';
+import {
+  canonicalPath,
+  cloneGraph,
+  configChainTexts,
+  graphsForProgram,
+  noteFileParsed,
+} from './analysisCache';
 import { collectDefinePartialConfigPureEdits, collectUseSiteEdits, type SourceEdit, type UsedTokenEntry } from './useInterfaceTransform';
 import { callsCanReachNeoSyringe } from './markerUtils';
 
@@ -20,17 +26,12 @@ export interface SessionSourceMap {
   mappings: string;
 }
 
-/** mtime and size of the one tsconfig file passed to resolveProjectConfig. */
-export interface TsconfigStamp {
-  mtimeMs: number;
-  size: number;
-}
-
 export interface ResolvedSessionConfig {
   root: string;
   options: ts.CompilerOptions;
   configPath: string;
-  stamp?: TsconfigStamp;
+  /** Text of the tsconfig and its extends chain. */
+  contentStamp?: string;
 }
 
 /** Session map for one transformed file, plus the user's original text. */
@@ -49,7 +50,16 @@ export interface SessionState {
   resolved?: ResolvedSessionConfig;
   graphs?: DependencyGraph[];
   graphProgram?: ts.Program;
+  /** Project sources parsed on a cache miss. Not a package export. */
+  filesParsed: number;
+  /** Graphs produced by extractAll. A cache hit adds nothing. */
+  graphsBuilt: number;
+  /** Lib and declaration SourceFiles for this plugin instance only. */
+  declarationSources: Map<string, { stamp: string; source: ts.SourceFile }>;
 }
+
+/** Test and bench handle for the SessionState closed over by one plugin instance. */
+export const sessionStateKey: unique symbol = Symbol('neoSyringe.sessionState');
 
 export interface SessionInput {
   code: string;
@@ -291,26 +301,17 @@ export function blockingConfigMessage(
     .join('\n  ');
 }
 
-/** mtime and size of the tsconfig file. Only that file is watched, not its `extends` chain. */
-function tsconfigFileStamp(configPath: string): TsconfigStamp | undefined {
-  try {
-    const stat = statSync(configPath);
-    return { mtimeMs: stat.mtimeMs, size: stat.size };
-  } catch {
-    return undefined;
-  }
-}
-
-function tsconfigFileUnchanged(configPath: string, stamp: TsconfigStamp | undefined): boolean {
-  if (!stamp) return false;
-  const next = tsconfigFileStamp(configPath);
-  if (!next) return false;
-  return next.mtimeMs === stamp.mtimeMs && next.size === stamp.size;
-}
-
 function resolveCached(input: SessionInput): ResolvedSessionConfig {
   const previous = input.state.resolved;
-  if (previous && tsconfigFileUnchanged(previous.configPath, previous.stamp)) return previous;
+  const abs = input.project
+    ? path.resolve(input.cwd, input.project)
+    : ts.findConfigFile(input.cwd, ts.sys.fileExists, 'tsconfig.json');
+  let knownChain: string | undefined;
+  if (abs && previous && previous.configPath === abs) {
+    const chain = configChainTexts(abs);
+    if (previous.contentStamp === chain) return previous;
+    knownChain = chain;
+  }
   const resolved = resolveProjectConfig(input.cwd, input.project);
   const messages = blockingConfigMessage(resolved.parseErrors, ts);
   if (messages !== undefined) {
@@ -323,11 +324,14 @@ function resolveCached(input: SessionInput): ResolvedSessionConfig {
     input.state.graphs = undefined;
     input.state.graphProgram = undefined;
   }
+  const chain = knownChain !== undefined && resolved.configPath === abs
+    ? knownChain
+    : configChainTexts(resolved.configPath);
   const stored: ResolvedSessionConfig = {
     root: resolved.root,
     options: resolved.options,
     configPath: resolved.configPath,
-    stamp: tsconfigFileStamp(resolved.configPath),
+    contentStamp: chain,
   };
   input.state.resolved = stored;
   return stored;
@@ -462,7 +466,34 @@ function soleWholeToken(haystack: string, needle: string): number | undefined {
   return count === 1 ? found : undefined;
 }
 
-function compileWith(input: SessionInput, resolved: { root: string; options: ts.CompilerOptions } | undefined): SessionOutput {
+function isProjectParse(fileName: string, root: string): boolean {
+  const canon = canonicalPath(fileName);
+  const base = canonicalPath(root).replace(/\/$/, '');
+  if (canon !== base && !canon.startsWith(`${base}/`)) return false;
+  return !canon.endsWith('.d.ts') && !canon.endsWith('.d.mts') && !canon.endsWith('.d.cts');
+}
+
+function rememberSource(
+  state: SessionState,
+  fileName: string,
+  sourceText: string,
+  projectRoot: string | undefined,
+): ts.SourceFile {
+  const canon = canonicalPath(fileName);
+  const cached = state.cachedSources.get(fileName) ?? state.cachedSources.get(canon);
+  if (cached && cached.stamp === sourceText) {
+    state.cachedSources.set(fileName, cached);
+    return cached.source;
+  }
+  const created = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true);
+  const stored = { stamp: sourceText, source: created };
+  state.cachedSources.set(fileName, stored);
+  state.cachedSources.set(canon, stored);
+  if (projectRoot && isProjectParse(fileName, projectRoot)) noteFileParsed(state);
+  return created;
+}
+
+function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | undefined): SessionOutput {
   const key = programFileName(input.id);
   if (!input.hostProgram && !callsCanReachNeoSyringe(input.code, key, resolved?.options ?? {})) {
     return { code: input.code, map: null };
@@ -470,20 +501,16 @@ function compileWith(input: SessionInput, resolved: { root: string; options: ts.
   let program = input.hostProgram;
   if (!program) {
     const options = resolved?.options ?? {};
+    const projectRoot = resolved?.root;
     const norm = (fileName: string) => fileName.replace(/\\/g, '/');
     const compilerHost: ts.CompilerHost = {
       getSourceFile: (fileName) => {
-        if (norm(fileName) === key) {
-          return ts.createSourceFile(fileName, input.code, ts.ScriptTarget.Latest, true);
-        }
+        const isEntry = norm(fileName) === key || canonicalPath(fileName) === canonicalPath(key);
+        if (isEntry) return rememberSource(input.state, fileName, input.code, projectRoot);
         try {
           const sourceText = ts.sys.readFile(fileName);
           if (!sourceText) return undefined;
-          const cached = input.state.cachedSources.get(fileName);
-          if (cached && cached.stamp === sourceText) return cached.source;
-          const created = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true);
-          input.state.cachedSources.set(fileName, { stamp: sourceText, source: created });
-          return created;
+          return rememberSource(input.state, fileName, sourceText, projectRoot);
         } catch {
           return undefined;
         }
@@ -522,14 +549,16 @@ function compileWith(input: SessionInput, resolved: { root: string; options: ts.
     rejectUnsupportedMarkers(sourceFile, checker);
   }
 
-  let allGraphs = input.hostProgram && input.state.graphProgram === program ? input.state.graphs : undefined;
-  if (!allGraphs) {
-    const analyzer = new Analyzer(program);
-    allGraphs = analyzer.extractAll();
-    if (input.hostProgram) {
-      input.state.graphs = allGraphs;
-      input.state.graphProgram = program;
-    }
+  // Same host program object: the files cannot have changed inside this call.
+  let allGraphs: DependencyGraph[];
+  if (input.hostProgram && input.state.graphProgram === program && input.state.graphs) {
+    allGraphs = input.state.graphs.map(cloneGraph);
+  } else {
+    allGraphs = graphsForProgram(
+      input.state,
+      () => new Analyzer(program).extractAll(),
+      input.hostProgram,
+    );
   }
 
   for (const graph of allGraphs) {

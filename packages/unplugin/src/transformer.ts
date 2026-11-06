@@ -87,6 +87,9 @@ export default function neoSyringeTransformer(
     generatedContainerVars: new Set(),
     devtoolsGraphs: new Map(),
     cachedSources: new Map(),
+    filesParsed: 0,
+    graphsBuilt: 0,
+    declarationSources: new Map(),
   };
 
   for (const sourceFile of analysisProgram.getSourceFiles()) {

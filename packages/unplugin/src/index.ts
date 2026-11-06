@@ -1,11 +1,12 @@
-import { createUnplugin } from 'unplugin';
+import { createUnplugin, type UnpluginOptions } from 'unplugin';
 import * as ts from 'typescript';
 import { textCallsResolve, type ValidationMode } from '@djodjonx/neosyringe-core/analyzer';
 import { resolveDebugFlag, resolveTestOverridesFlag } from '@djodjonx/neosyringe-core/generator';
+import { releaseGraphCache } from './analysisCache';
 import { usageErrorsAtBuildEnd } from './buildEndUsages';
 import { callsCanReachNeoSyringe, hasNeoSyringeMarkers } from './markerUtils';
 import { createDevtoolsMiddleware } from './devtools';
-import { moduleExtension, programFileName, runCompilationSession, shouldTransformId, type SessionState } from './session';
+import { moduleExtension, programFileName, runCompilationSession, sessionStateKey, shouldTransformId, type SessionState } from './session';
 
 /** Options accepted by every bundler entry point (`.vite()`, `.rollup()`, `.webpack()`, `.esbuild()`). */
 export interface NeoSyringePluginOptions {
@@ -71,6 +72,9 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
     generatedContainerVars: new Set(),
     devtoolsGraphs: new Map(),
     cachedSources: new Map(),
+    filesParsed: 0,
+    graphsBuilt: 0,
+    declarationSources: new Map(),
   };
   let serving = false;
   const devtoolsActive = (): boolean =>
@@ -84,7 +88,7 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
   // session.ts createProgram keeps only the last transformed root. buildEnd needs every file.
   const sourceTexts = new Map<string, string>();
 
-  return {
+  const plugin: UnpluginOptions = {
     name: 'neosyringe-plugin',
 
     /**
@@ -147,6 +151,7 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
         errors = report.errors;
         warnings = report.warnings;
       } finally {
+        releaseGraphCache(state);
         state.registeredTokens.clear();
         state.usedTokens.clear();
         state.generatedContainerVars.clear();
@@ -171,7 +176,10 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
     },
 
     watchChange(id, change) {
-      if (change.event === 'delete') forgetDevtoolsFile(id);
+      if (change.event === 'delete') {
+        forgetDevtoolsFile(id);
+        releaseGraphCache(state);
+      }
     },
 
     vite: {
@@ -186,4 +194,6 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       },
     },
   };
+  Object.defineProperty(plugin, sessionStateKey, { value: state });
+  return plugin;
 });
