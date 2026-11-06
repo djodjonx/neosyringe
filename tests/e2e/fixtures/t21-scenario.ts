@@ -3,8 +3,8 @@ import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
 // T21 integrated scenario. One file, read as text by tests/e2e/t21-integrated.test.ts and by
 // scripts/ci/consumer-dist.mjs, then compiled by the real plugin and executed.
 // The expected report is tests/e2e/fixtures/t21-scenario.expected.json.
-// Needs testOverrides: true (it calls override) and validation: 'compatible'
-// (strict does not follow the result of createScope(), docs/guide/states-and-ownership.md).
+// Needs testOverrides: true (it calls override). The build uses validation: 'strict'.
+// createScope() is the same container (packages/core/src/analyzer/collectors/resolutionUsages.ts:147).
 // The closed container is in tests/e2e/fixtures/t21-closed/app.ts: closed mode requires strict validation.
 
 interface Settings {

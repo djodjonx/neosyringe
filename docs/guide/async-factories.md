@@ -89,6 +89,4 @@ afterEach(async () => {
 });
 ```
 
-::: warning Build-time check on scope variables
-With the default `validation: 'strict'`, `scope.resolve(...)` on the result of `createScope()` fails the build with `NEO_UNKNOWN_CONTAINER`. See [States, Scopes and Ownership](./states-and-ownership.md#scopes).
-:::
+`scope.resolve(...)` is checked against the container that `createScope()` came from when the build can tell which container it is; otherwise `NEO_UNKNOWN_CONTAINER` (`packages/core/src/analyzer/collectors/resolutionUsages.ts:147`, `packages/core/src/analyzer/validators/MissingDependencyValidator.ts:136`). See [States, Scopes and Ownership](./states-and-ownership.md#scopes).

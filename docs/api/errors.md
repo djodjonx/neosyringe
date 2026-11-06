@@ -19,7 +19,7 @@ Each code below exists in `packages/*/src`. `tests/e2e/t20-docs-examples.test.ts
 | `NEO_DUPLICATE_PROVIDER` | A simple token is registered twice, in the same container, a parent or a partial. | |
 | `NEO_MISSING_PROVIDER` | A dependency is not in the view of the container. | |
 | `NEO_CYCLE` | A dependency cycle. | |
-| `NEO_UNKNOWN_CONTAINER` | A `resolve` whose receiver the build cannot attribute, for example the result of `createScope()`. | yes |
+| `NEO_UNKNOWN_CONTAINER` | A `resolve` whose receiver the build cannot attribute. An undecidable receiver, such as `get().createScope()`, stays this error (`packages/core/src/analyzer/collectors/resolutionUsages.ts:142`, `packages/core/src/analyzer/validators/MissingDependencyValidator.ts:136`). | yes |
 | `NEO_MULTI_REQUIRES_RESOLVE_ALL` | `resolve` of a `multi` token (build time when visible, run time otherwise). | yes |
 | `NEO_ROOT_NOT_EXPORTED` | `resolve` of a token outside the roots of a closed container (build time when visible, run time otherwise). | yes |
 | `NEO_CLOSED_REQUIRES_STRICT` | Closed mode with `validation: 'compatible'`. | yes |
