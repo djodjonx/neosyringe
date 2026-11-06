@@ -35,6 +35,7 @@ const F7_DEF = path.join(ROOT, 'f7-def.ts');
 const F7_USE = path.join(ROOT, 'f7-use.ts');
 const F7_ID = path.join(ROOT, 'f7-id.ts');
 const F7_ID_USE = path.join(ROOT, 'f7-id-use.ts');
+const P5_SCOPE = path.join(ROOT, 'p5-scope.ts');
 
 const IMPORTS = `import { defineBuilderConfig, definePartialConfig, declareContainerTokens, useInterface, type Container, type FactoryContext } from '@djodjonx/neosyringe';`;
 
@@ -311,6 +312,15 @@ const files = new Map<string, string>([
     d.resolve(useInterface<IFoo>());
     d.resolve(useInterface<IBar>());
   `],
+  [P5_SCOPE, `
+    ${IMPORTS}
+    class ForeignScope { createScope(): this { return this; } }
+    class Missing {}
+    export const container = defineBuilderConfig({ injections: [] });
+    const box: ForeignScope = container as unknown as ForeignScope;
+    box.createScope().resolve(Missing);
+    new ForeignScope().createScope().resolve(Missing);
+  `],
 ]);
 
 function createProgram(sources: Map<string, string>): ts.Program {
@@ -517,5 +527,13 @@ describe('T06 usages par conteneur', () => {
     expect(absent?.code).toBe('NEO_MISSING_PROVIDER');
     expect(presentId).toBeUndefined();
     expect(absentId?.code).toBe('NEO_MISSING_PROVIDER');
+  });
+
+  it('a user class with method createScope() is ignored', () => {
+    const errors = usageErrors(analyzer.extractForFile(P5_SCOPE).errors);
+    const box = errors.find((error) => error.node.getText().startsWith('box.createScope'));
+    const constructed = errors.find((error) => error.node.getText().includes('new ForeignScope()'));
+    expect(box).toBeUndefined();
+    expect(constructed).toBeUndefined();
   });
 });

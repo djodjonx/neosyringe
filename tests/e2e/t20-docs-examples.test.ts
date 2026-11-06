@@ -24,7 +24,6 @@ interface BuildOptions {
 
 const WITH_TEST_API: BuildOptions = { validation: 'strict', testOverrides: true };
 const STRICT: BuildOptions = { validation: 'strict' };
-const COMPATIBLE_USAGE: BuildOptions = { validation: 'compatible' };
 
 const scratch: string[] = [];
 
@@ -506,7 +505,7 @@ describe('T20 documentation examples', () => {
   });
 
   it('T20 scopes example: isolated caches, owned connection closed once per scope, terminal destroy', async () => {
-    const outcome = await executeFixture(example('scopes.ts'), COMPATIBLE_USAGE);
+    const outcome = await executeFixture(example('scopes.ts'), STRICT);
     expect(outcome).toMatchObject({ phase: 'ok' });
     if (outcome.phase !== 'ok') return;
     const value = outcome.value as { afterDestroy: string };
@@ -520,13 +519,21 @@ describe('T20 documentation examples', () => {
     expect(value.afterDestroy.startsWith('NEO_CONTAINER_DESTROYED')).toBe(true);
   });
 
-  it('T20 strict build reports resolve on a createScope() result as NEO_UNKNOWN_CONTAINER', async () => {
+  it('T20 scopes example builds in strict', async () => {
     const outcome = await executeFixture(example('scopes.ts'), STRICT);
-    expect(outcome.phase).toBe('build');
-    if (outcome.phase === 'build') expect(outcome.diagnostic).toContain('NEO_UNKNOWN_CONTAINER');
-    const guide = guideText('guide/states-and-ownership.md');
-    expect(guide).toContain('NEO_UNKNOWN_CONTAINER');
-    expect(guide).toContain('<<< @/../examples/new-api/scopes.ts');
+    expect(outcome.phase, JSON.stringify(outcome)).toBe('ok');
+    if (outcome.phase !== 'ok') return;
+    const value = outcome.value as { isolated: boolean };
+    expect(value.isolated).toBe(true);
+    const states = guideText('guide/states-and-ownership.md');
+    const asyncGuide = guideText('guide/async-factories.md');
+    expect(states).not.toMatch(/scope\.resolve\(Repo\)` fails the build with `NEO_UNKNOWN_CONTAINER/);
+    expect(asyncGuide).not.toMatch(/createScope\(\)` fails the build with `NEO_UNKNOWN_CONTAINER/);
+    const errors = guideText('api/errors.md');
+    const unknownRow = errors.split('\n').find((line) => line.includes('`NEO_UNKNOWN_CONTAINER`')) ?? '';
+    expect(unknownRow).toMatch(/undecidable/);
+    expect(unknownRow).toContain('get().createScope()');
+    expect(states).toContain('<<< @/../examples/new-api/scopes.ts');
   });
 
   it('T20 error reference lists only codes the packages emit, with the plugin option that does not reach the transform', () => {
@@ -710,7 +717,7 @@ describe('T20 states and ownership', () => {
         let afterDestroy = 'no error';
         try { c.createScope(); } catch (error) { afterDestroy = codeOf(error); }
         return { same, evaluations, afterDestroy };
-      }`, COMPATIBLE_USAGE);
+      }`, STRICT);
     expect(value).toEqual({ same: true, evaluations: 1, afterDestroy: 'NEO_CONTAINER_DESTROYED' });
   });
 
@@ -873,7 +880,7 @@ describe('T20 failed initialize, busy states, captured containers, closed overri
         await retry.destroy();
         await root.destroy();
         return out;
-      }`, COMPATIBLE_USAGE);
+      }`, STRICT);
     expect(value).toEqual({
       failed: 'Error: first attempt',
       failedScopeResolve: 'NEO_CONTAINER_FAILED',
