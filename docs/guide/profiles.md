@@ -78,10 +78,36 @@ The application is `tests/e2e/fixtures/t21-closed/app.ts`. The closed bundle use
 | closed | 30566 | 15706 | 3241 | 2842 | no |
 | open - closed | 29140 | 21940 | 9412 | 7066 | |
 
-The heavy provider is **synthetic**: the script generates a class with 500 methods that return seeded literals, and registers it so that no root reaches it. It is built to make the pruning visible. A real unused provider can be smaller or larger, and its content changes how well it compresses. The `open - closed` row is the open bundle minus the closed bundle. It mixes two changes: the heavy provider that the closed mode removes, and the emitter that the closed mode switches to (the optimized emitter is used when the mode is `closed`, `packages/core/src/generator/Generator.ts:201-203`; the open bundle uses the reference emitter). The container table above shows that the emitter alone moves the sizes (+662 raw, +1303 minified for the full profile). So the delta is not the size of the sentinel alone, and it is not what the closed mode removes from your application. Initial and deferred chunks are not measured.
+The heavy provider is **synthetic**: the script generates a class with 500 methods that return seeded literals, and registers it so that no root reaches it. It is built to make the pruning visible. A real unused provider can be smaller or larger, and its content changes how well it compresses. The `open - closed` row is the open bundle minus the closed bundle. It mixes two changes: the heavy provider that the closed mode removes, and the emitter that the closed mode switches to (the optimized emitter is used when the mode is `closed`, `packages/core/src/generator/Generator.ts:201-203`; the open bundle uses the reference emitter). The container table above shows that the emitter alone moves the sizes (+662 raw, +1303 minified for the full profile). So the delta is not the size of the sentinel alone, and it is not what the closed mode removes from your application. Initial and deferred chunks of this cjs bundle are not split. The esbuild ESM split is measured in [Initial and deferred chunks](#initial-and-deferred-chunks).
 
 The bundle byte counts depend on the absolute path of the build: the file name is hashed into the container id (`packages/core/src/analyzer/shared/HashUtils.ts:158-160`) and into the generated class suffix (`packages/core/src/generator/Generator.ts:150-154`). The script builds in a fixed directory per checkout, so one checkout prints the same bytes at every run. Another checkout or a CI machine can print other bytes: on 2026-11-06, changing the build directory name from `t17-size-bundle` to `t17-size-bundle-<10 hex>` moved the raw size of both bundles by +110 bytes (open 59596 to 59706, closed 30456 to 30566). The test of the script asserts no exact byte count.
 
 The script reads `packages/core/dist` and `packages/unplugin/dist`, so run it after a fresh `pnpm build`. Its header documents the same limit (`scripts/measure-t17-size.mjs:7`).
 
 Build-time and runtime speed are not measured on this page. The cost of compiling a project has its own method, machine and run, in `docs/benchmarks/T18-compilation-cost.md` (command `pnpm bench:compile`). Do not mix its numbers with the tables above.
+
+## Initial and deferred chunks
+
+The cjs rows above do not split a bundle into chunks. This command does, for one esbuild ESM bundle. It was run on 2026-11-06:
+
+```bash
+node scripts/measure-chunk-split.mjs
+```
+
+The script printed: Node `v22.23.2`, zlib `1.3.1-e00f703`, `Darwin 27.2.0 darwin`, `Apple M4 Max x16`, esbuild `0.27.2`, TypeScript `5.9.3`, `@djodjonx/neosyringe` `0.3.0`. Gzip is level 9 and Brotli is quality 11. Both compress the minified text. esbuild only. Rollup is not used. `scripts/ci/consumer-dist.mjs` is a CI check, not this measure.
+
+The container stays in the initial chunk. One synthetic heavy provider (500 generated methods) is reached only through a dynamic import, so its bytes are a deferred chunk. The static control uses a top-level import and has no deferred chunk. Open omits `optimization`. Closed sets `optimization: { mode: 'closed', roots: [port] }`. Full omits `runtime`. Minimal sets `runtime: { profile: 'minimal' }`. Each raw build and each minified build was executed. All five returned `{"tag":"CHUNK_SPLIT_HEAVY","marker":"CHUNK_SPLIT_CONTAINER"}`.
+
+| Scenario | Role | Raw bytes | Minified bytes | Gzip bytes | Brotli bytes |
+|----------|------|-----------|----------------|------------|--------------|
+| `open-full` | initial | 16814 | 8237 | 2404 | 2128 |
+| `open-full` | deferred | 29546 | 22481 | 8698 | 7072 |
+| `open-minimal` | initial | 11044 | 6162 | 2020 | 1769 |
+| `open-minimal` | deferred | 29546 | 22481 | 8698 | 7072 |
+| `closed-full` | initial | 16397 | 8260 | 2440 | 2144 |
+| `closed-full` | deferred | 29546 | 22481 | 8698 | 7072 |
+| `closed-minimal` | initial | 11338 | 6362 | 2098 | 1843 |
+| `closed-minimal` | deferred | 29546 | 22481 | 8698 | 7072 |
+| `control-static` | initial | 42658 | 28605 | 11115 | 8713 |
+
+The deferred row is the same in the four split cells: that provider does not change with the profile or the mode. `closed-full` is 16397 raw against `open-full` 16814 raw, and 8260 minified against 8237 minified. No gain is claimed. Minimal is a different feature set. The optimized emitter is used when the profile is minimal or the mode is closed (`packages/core/src/generator/Generator.ts:201-203`). The bytes depend on the absolute build path (`packages/core/src/analyzer/shared/HashUtils.ts:157-160`, `packages/core/src/generator/Generator.ts:150-154`) and on the Node zlib version (gzip). One synthetic provider, one machine, no threshold. The method is in [the chunk-split note](../benchmarks/chunk-split-size.md).
