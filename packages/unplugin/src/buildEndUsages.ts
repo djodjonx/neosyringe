@@ -71,11 +71,13 @@ function isResolutionUsageError(error: AnalysisError): boolean {
 }
 
 /**
- * Parsed lib and declaration files for every buildEnd host in this process.
+ * Lib and declaration files for this plugin instance.
  * Stamp is the file text, same rule as `state.cachedSources` in session.ts.
  * User files are never stored here.
  */
-const declarationSources = new Map<string, { stamp: string; source: ts.SourceFile }>();
+function declarationCache(state: SessionState): Map<string, { stamp: string; source: ts.SourceFile }> {
+  return state.declarationSources;
+}
 
 function defaultLibDirectory(options: ts.CompilerOptions): string {
   const libFile = ts.getDefaultLibFilePath(options).replace(/\\/g, '/');
@@ -111,15 +113,16 @@ function cachedDeclaration(
 ): ts.SourceFile | undefined {
   const sourceText = readDeclarationText(fileName);
   if (!sourceText) return undefined;
-  const cached = declarationSources.get(fileName);
+  const cache = declarationCache(state);
+  const cached = cache.get(fileName);
   if (cached !== undefined && cached.stamp === sourceText) return cached.source;
   const fromSession = state.cachedSources.get(fileName);
   if (fromSession !== undefined && fromSession.stamp === sourceText) {
-    declarationSources.set(fileName, fromSession);
+    cache.set(fileName, fromSession);
     return fromSession.source;
   }
   const created = ts.createSourceFile(fileName, sourceText, languageVersion, true);
-  declarationSources.set(fileName, { stamp: sourceText, source: created });
+  cache.set(fileName, { stamp: sourceText, source: created });
   return created;
 }
 
