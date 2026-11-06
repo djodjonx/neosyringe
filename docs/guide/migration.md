@@ -20,8 +20,11 @@ These changes are for the next major version. The destruction rule and the facto
 | An expression in `useValue` could be moved by generation | It is evaluated once where the configuration is evaluated, then shared by reference | Check expressions with effects. Use a factory for a value that is deferred or that differs per scope. |
 | The whole API was available implicitly | `runtime: { profile: 'minimal' }` is opt-in and narrows the type | Keep `full` if you use events or overrides. |
 | Tokens hashed with older rules | Versioned descriptors | Rebuild every package that shares tokens together. |
+| A singleton could capture a disposable transient | A strict build fails with `NEO_DISPOSABLE_TRANSIENT_CAPTURED`. A singleton with `scoped: true` is included. A transient consumer is not | Register that service as a singleton, or construct it inside the singleton and close it from that service's `dispose`. |
 
 The rows about `destroy`, `override`, factories, profiles and `useValue` are exercised by the executed example below and by [states and ownership](./states-and-ownership.md). The token-descriptor row is not executed here.
+
+A disposable transient captured by a singleton is a breaking change for strict builds (`packages/core/src/analyzer/validators/DisposableTransientCaptureValidator.ts:74`). A singleton with `scoped: true` is included. A transient consumer is not. The remediation is the row above. The plugin has no escape hatch: it builds with `new Analyzer(program).extractAll()` and no options (`packages/unplugin/src/session.ts:559`), and `validation` only reaches the usage check (`packages/unplugin/src/index.ts:32`). The target is the next major (`docs/guide/migration.md:6`), the ADR004 rule. `validation: 'compatible'` warns only if you call the core analyzer yourself (`packages/core/src/analyzer/validators/DisposableTransientCaptureValidator.ts:301`). The CLI stays strict (`packages/cli/src/index.ts:105`).
 
 ## Before and after, executed
 

@@ -15,6 +15,7 @@ Each code below exists in `packages/*/src`. `tests/e2e/t20-docs-examples.test.ts
 | `NEO_CONFIG_UNSUPPORTED` | A configuration shape the build cannot read: a non-literal `runtime.profile`, `useValue` declared `owned`, `mode: 'open'` with `roots`. | yes |
 | `NEO_FACTORY_DEPENDENCIES_REQUIRED` | A factory has no `dependencies` list in strict validation. In `compatible` it is a warning (the factory is opaque). | yes |
 | `NEO_ASYNC_TRANSIENT` | An async factory with `lifecycle: 'transient'`. | yes |
+| `NEO_DISPOSABLE_TRANSIENT_CAPTURED` | A singleton captures a disposable transient, including through a chain of non-disposable transients. A singleton with `scoped: true` is still refused. A transient consumer, including one with `scoped: true`, is not. Strict is an error. `validation: 'compatible'` is a warning only on the core analyzer (`packages/core/src/analyzer/validators/DisposableTransientCaptureValidator.ts:301`). The plugin and the CLI stay strict (`packages/unplugin/src/session.ts:559`, `packages/cli/src/index.ts:105`). | yes |
 | `NEO_DUPLICATE_PROVIDER` | A simple token is registered twice, in the same container, a parent or a partial. | |
 | `NEO_MISSING_PROVIDER` | A dependency is not in the view of the container. | |
 | `NEO_CYCLE` | A dependency cycle. | |

@@ -630,8 +630,8 @@ describe('T20 states and ownership', () => {
     if (outcome.phase === 'build') expect(outcome.diagnostic).toContain('NEO_CONFIG_UNSUPPORTED');
   });
 
-  it('a disposable transient injected into a singleton is built, not refused, and not closed', async () => {
-    const value = await runInline(`
+  it('a disposable transient injected into a singleton fails the strict build', async () => {
+    const outcome = await executeFixture(`${HEADER}
       class Conn { static closed = 0; dispose(): void { Conn.closed += 1; } }
       class Svc { constructor(readonly conn: Conn) {} }
       export const c = defineBuilderConfig({ name: 'Transient', injections: [{ token: Conn, lifecycle: 'transient' }, { token: Svc }] });
@@ -640,7 +640,40 @@ describe('T20 states and ownership', () => {
         await c.destroy();
         return { built: svc.conn instanceof Conn, closed: Conn.closed };
       }`, STRICT);
-    expect(value).toEqual({ built: true, closed: 0 });
+    expect(outcome.phase).toBe('build');
+    if (outcome.phase === 'build') expect(outcome.diagnostic).toContain('NEO_DISPOSABLE_TRANSIENT_CAPTURED');
+  });
+
+  it('allowed ownership graphs still run', async () => {
+    const value = await runInline(`
+      class Plain {}
+      class Host { constructor(readonly plain: Plain) {} }
+      class Leak { static closed = 0; dispose(): void { Leak.closed += 1; } }
+      class TransientHost { constructor(readonly leak: Leak) {} }
+      class Owned { static closed = 0; dispose(): void { Owned.closed += 1; } }
+      export const c = defineBuilderConfig({ name: 'Allowed', injections: [
+        { token: Plain, lifecycle: 'transient' },
+        { token: Host },
+        { token: Leak, lifecycle: 'transient' },
+        { token: TransientHost, lifecycle: 'transient' },
+        { token: Owned },
+      ] });
+      export async function run() {
+        const host = c.resolve(Host);
+        const first = c.resolve(Leak);
+        const second = c.resolve(Leak);
+        const viaTransient = c.resolve(TransientHost);
+        c.resolve(Owned);
+        await c.destroy();
+        return {
+          plain: host.plain instanceof Plain,
+          distinct: first !== second,
+          leakClosed: Leak.closed,
+          via: viaTransient.leak instanceof Leak,
+          owned: Owned.closed,
+        };
+      }`, STRICT);
+    expect(value).toEqual({ plain: true, distinct: true, leakClosed: 0, via: true, owned: 1 });
   });
 
   it('a child that needs a destroyed parent throws NEO_SCOPE_PARENT_DESTROYED, cached services included', async () => {

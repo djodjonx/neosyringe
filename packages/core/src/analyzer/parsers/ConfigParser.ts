@@ -250,6 +250,8 @@ export class ConfigParser {
         factorySource: factorySource!,
         isScoped,
         isAsync: isAsync || undefined,
+        isDisposable: parsed.isDisposable || undefined,
+        isAsyncDisposable: parsed.isAsyncDisposable || undefined,
         factoryDependencies: parsed.factoryDependencies,
         opaque: parsed.opaque,
         ownership: parsed.ownership,

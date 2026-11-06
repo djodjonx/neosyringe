@@ -5,6 +5,7 @@ import { exportedRootIds } from '../parsers/ConfigParser';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { CallExpressionUtils } from '../utils/CallExpressionUtils';
 
+
 /**
  * Resolves parent container tokens and manages container hierarchy.
  *
@@ -29,8 +30,39 @@ export class ParentContainerResolver {
   constructor(
     private checker: ts.TypeChecker,
     private tokenResolverService: TokenResolverService,
-    private parseBuilderConfigCallback: (node: ts.CallExpression, graph: DependencyGraph) => void
+    private parseBuilderConfigCallback: (node: ts.CallExpression, graph: DependencyGraph) => void,
+    private resolveParentGraph?: (graph: DependencyGraph) => void,
   ) {}
+
+  /** Unresolved parent graph. Constructor edges are filled the first time a capture walk needs them. */
+  private readonly parentGraphs = new WeakMap<DependencyGraph, DependencyGraph>();
+  private readonly resolvedParents = new WeakSet<DependencyGraph>();
+
+  /** Parent registrations, with constructor edges resolved on this call only. */
+  ancestorNodes(child: DependencyGraph): DependencyNode[] {
+    const nodes: DependencyNode[] = [];
+    const seen = new Set<DependencyGraph>();
+    let host: DependencyGraph | undefined = child;
+    while (host && !seen.has(host)) {
+      seen.add(host);
+      const parent = this.parentGraphs.get(host);
+      if (!parent) break;
+      if (!this.resolvedParents.has(parent)) {
+        this.resolvedParents.add(parent);
+        this.resolveParentGraph?.(parent);
+      }
+      for (const node of parent.nodes.values()) nodes.push(node);
+      if (parent.multiNodes) {
+        for (const list of parent.multiNodes.values()) nodes.push(...list);
+      }
+      host = parent;
+    }
+    return nodes;
+  }
+
+  private linkParent(child: DependencyGraph, parent: DependencyGraph): void {
+    this.parentGraphs.set(child, parent);
+  }
 
   /**
    * Extracts tokens provided by a parent container.
@@ -114,7 +146,8 @@ export class ParentContainerResolver {
       roots: []
     };
 
-    // Use callback to parse (avoids circular dependency)
+    // Use callback to parse (avoids circular dependency).
+    // Constructor edges stay unresolved until a capture walk needs them.
     this.parseBuilderConfigCallback(init, parentGraph);
 
     graph.parentProvidedTokens ??= new Set();
@@ -188,6 +221,7 @@ export class ParentContainerResolver {
     }
 
     this.recordBorrowed(parentGraph, graph);
+    this.linkParent(graph, parentGraph);
   }
 
   /**
@@ -215,6 +249,7 @@ export class ParentContainerResolver {
     }
     if (this.exposedAsync(parentGraph, allow)) graph.parentHasAsyncInitialize = true;
     this.recordBorrowed(parentGraph, graph, allow);
+    this.linkParent(graph, parentGraph);
   }
 
   /** Async work that a child must cascade into. Pruned providers do not count. */
