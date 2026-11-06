@@ -4,3 +4,4 @@ export { TypeValidator } from './TypeValidator';
 export { MissingDependencyValidator } from './MissingDependencyValidator';
 export { DependencyAnalyzer } from './DependencyAnalyzer';
 export { CycleValidator } from './CycleValidator';
+export { DisposableTransientCaptureValidator, rememberCaptureSites } from './DisposableTransientCaptureValidator';

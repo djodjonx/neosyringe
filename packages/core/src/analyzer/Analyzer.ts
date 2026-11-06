@@ -19,6 +19,8 @@ import {
   MissingDependencyValidator,
   DependencyAnalyzer,
   CycleValidator,
+  DisposableTransientCaptureValidator,
+  rememberCaptureSites,
   type IValidator,
   type ValidationContext
 } from './validators';
@@ -207,7 +209,8 @@ export class Analyzer {
         parentContainerResolver: new ParentContainerResolver(
           this.checker,
           this.tokenResolverService,
-          (node, graph) => this.parseBuilderConfig(node, graph)
+          (node, graph) => this.parseBuilderConfig(node, graph),
+          (graph) => this.resolveAllDependencies(graph, false),
         ),
         parentContainerNames: new Set<string>(),
       };
@@ -245,6 +248,7 @@ export class Analyzer {
           new TypeValidator(this.checker, errorFormatter),
           missingDeps,
           new CycleValidator(dependencyAnalyzer),
+          new DisposableTransientCaptureValidator(this.validation),
         ]),
         missingDeps,
         collectedConfigs: undefined,
@@ -404,7 +408,7 @@ export class Analyzer {
       }
     }
 
-    return errors;
+    return listedCaptures(errors);
   }
 
   /**
@@ -470,7 +474,7 @@ export class Analyzer {
       errors.push(...missingDeps.validateResolutionUsages(sourceFile, allConfigs));
     }
 
-    return { configs: allConfigs, errors };
+    return { configs: allConfigs, errors: listedCaptures(errors) };
   }
 
   /**
@@ -599,6 +603,7 @@ export class Analyzer {
         );
       }
     }
+    rememberCaptureSites(graph);
   }
 
   /**
@@ -609,7 +614,7 @@ export class Analyzer {
    *
    * @param graph - The dependency graph to process
    */
-  private resolveAllDependencies(graph: DependencyGraph): void {
+  private resolveAllDependencies(graph: DependencyGraph, capture = true): void {
     const { dependencyResolver } = this.getLegacyServices();
     dependencyResolver.resolveAll(graph);
     // Factory and constructor edges exist. ADR006 lines 21-24. Do not drop nodes here.
@@ -624,5 +629,33 @@ export class Analyzer {
     }
     assignRetention(graph);
     sealOpenParent(graph);
+    if (capture) this.pushCapture(graph);
   }
+
+  private pushCapture(graph: DependencyGraph): void {
+    const validator = new DisposableTransientCaptureValidator(this.validation);
+    const captured = validator.validateGraph(graph, () =>
+      this.getLegacyServices().parentContainerResolver.ancestorNodes(graph),
+    );
+    if (captured.length === 0) return;
+    if (!graph.errors) graph.errors = [];
+    graph.errors.push(...captured);
+  }
+}
+
+/** One diagnostic per file, registration and captured token, when errors are listed together. */
+function listedCaptures(errors: readonly AnalysisError[]): AnalysisError[] {
+  const seen = new Set<string>();
+  const kept: AnalysisError[] = [];
+  for (const error of errors) {
+    if (error.code !== 'NEO_DISPOSABLE_TRANSIENT_CAPTURED') {
+      kept.push(error);
+      continue;
+    }
+    const key = `${error.sourceFile.fileName}:${error.node.getStart()}\0${error.context?.tokenText ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(error);
+  }
+  return kept;
 }

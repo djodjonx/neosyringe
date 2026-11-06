@@ -252,10 +252,14 @@ export class InjectionParser {
       }
     }
 
-    // 8. Detect disposable interface
-    const { isDisposable, isAsyncDisposable } = implementationSymbol
-      ? this.detectDisposable(implementationSymbol)
-      : { isDisposable: false, isAsyncDisposable: false };
+    // 8. Detect disposable interface. Singleton factories stay unset.
+    const { isDisposable, isAsyncDisposable } = this.disposableFlagsFor(
+      registrationType,
+      lifecycle,
+      implementationSymbol,
+      providerNode,
+      tokenNode,
+    );
 
     const factorySource =
       registrationType === 'factory' && providerNode ? providerNode.getText(sourceFile) : undefined;
@@ -350,20 +354,99 @@ export class InjectionParser {
     };
   }
 
+  /**
+   * Class symbols use the declared type. A transient factory uses the call return
+   * type, then the token type. A singleton factory is left unset.
+   */
+  private disposableFlagsFor(
+    registrationType: ParsedRegistrationType,
+    lifecycle: 'singleton' | 'transient',
+    implementationSymbol: ts.Symbol | undefined,
+    providerNode: ts.Expression | undefined,
+    tokenNode: ts.Expression,
+  ): { isDisposable: boolean; isAsyncDisposable: boolean } {
+    if (registrationType === 'factory') {
+      if (lifecycle !== 'transient') return { isDisposable: false, isAsyncDisposable: false };
+      return this.detectTransientFactoryDisposable(providerNode, tokenNode);
+    }
+    if (!implementationSymbol) return { isDisposable: false, isAsyncDisposable: false };
+    return this.detectDisposable(implementationSymbol);
+  }
+
+  /** `dispose` on the factory's return type, otherwise on the token's service type. */
+  private detectTransientFactoryDisposable(
+    providerNode: ts.Expression | undefined,
+    tokenNode: ts.Expression,
+  ): { isDisposable: boolean; isAsyncDisposable: boolean } {
+    if (providerNode) {
+      const providerType = this.checker.getTypeAtLocation(providerNode);
+      const signature = providerType.getCallSignatures()[0];
+      if (signature) {
+        const flags = this.disposableFlags(this.checker.getReturnTypeOfSignature(signature));
+        if (flags.isDisposable || flags.isAsyncDisposable) return flags;
+      }
+    }
+    return this.disposableFlags(this.tokenServiceType(tokenNode));
+  }
+
+  /**
+   * Class tokens use the instance type. Interface and property tokens use T
+   * from `InterfaceToken<T>` / `PropertyToken<T>`.
+   */
+  private tokenServiceType(tokenNode: ts.Expression): ts.Type {
+    const type = this.checker.getTypeAtLocation(tokenNode);
+    const branded = this.brandedArgument(type);
+    if (branded) return branded;
+    const classSymbol = this.classSymbolOf(tokenNode);
+    if (classSymbol) return this.declaredInstance(classSymbol);
+    return type;
+  }
+
+  private declaredInstance(classSymbol: ts.Symbol): ts.Type {
+    return this.checker.getDeclaredTypeOfSymbol(classSymbol);
+  }
+
+  private brandedArgument(type: ts.Type): ts.Type | undefined {
+    if (type.flags & TSContext.ts.TypeFlags.Any || type.flags & TSContext.ts.TypeFlags.Unknown) return undefined;
+    const brand = type.getProperty('__brand');
+    const argument = type.getProperty('__type');
+    if (!brand || !argument) return undefined;
+    const brandType = this.checker.getTypeOfSymbol(brand);
+    if (!brandType.isStringLiteral()) return undefined;
+    if (brandType.value !== 'InterfaceToken' && brandType.value !== 'PropertyToken') return undefined;
+    return this.checker.getTypeOfSymbol(argument);
+  }
+
+  private classSymbolOf(tokenNode: ts.Expression): ts.Symbol | undefined {
+    const atNode = this.checker.getSymbolAtLocation(tokenNode);
+    const symbol = atNode && (atNode.flags & TSContext.ts.SymbolFlags.Alias)
+      ? this.checker.getAliasedSymbol(atNode)
+      : atNode;
+    if (symbol && (symbol.flags & TSContext.ts.SymbolFlags.Class)) return symbol;
+    return undefined;
+  }
+
   /** Detects whether a class symbol implements dispose(): void or dispose(): Promise<void>. */
   private detectDisposable(symbol: ts.Symbol): { isDisposable: boolean; isAsyncDisposable: boolean } {
     if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
       symbol = this.checker.getAliasedSymbol(symbol);
     }
-    const type = this.checker.getDeclaredTypeOfSymbol(symbol);
+    return this.disposableFlags(this.checker.getDeclaredTypeOfSymbol(symbol));
+  }
+
+  private disposableFlags(type: ts.Type): { isDisposable: boolean; isAsyncDisposable: boolean } {
+    if (type.flags & TSContext.ts.TypeFlags.Any || type.flags & TSContext.ts.TypeFlags.Unknown) {
+      return { isDisposable: false, isAsyncDisposable: false };
+    }
     const disposeMember = type.getProperty('dispose');
     if (!disposeMember) return { isDisposable: false, isAsyncDisposable: false };
 
     const disposeType = this.checker.getTypeOfSymbol(disposeMember);
     const signatures = disposeType.getCallSignatures();
-    if (signatures.length === 0) return { isDisposable: false, isAsyncDisposable: false };
+    const signature = signatures[0];
+    if (!signature) return { isDisposable: false, isAsyncDisposable: false };
 
-    const returnType = this.checker.getReturnTypeOfSignature(signatures[0]);
+    const returnType = this.checker.getReturnTypeOfSignature(signature);
     const isAsync = this.checker.typeToString(returnType).startsWith('Promise');
 
     return { isDisposable: !isAsync, isAsyncDisposable: isAsync };
