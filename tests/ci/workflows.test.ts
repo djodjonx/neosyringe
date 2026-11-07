@@ -11,6 +11,7 @@ interface Step {
   name?: string;
   uses?: string;
   run?: string;
+  if?: string;
   continueOnError: boolean;
   with: Record<string, string | number>;
 }
@@ -57,6 +58,7 @@ function asStep(value: unknown): Step {
     name: typeof value.name === 'string' ? value.name : undefined,
     uses: typeof value.uses === 'string' ? value.uses : undefined,
     run: typeof value.run === 'string' ? value.run : undefined,
+    if: typeof value.if === 'string' ? value.if : undefined,
     continueOnError: value['continue-on-error'] === true,
     with: withValues,
   };
@@ -238,9 +240,25 @@ describe('CI workflows', () => {
     const firstRunAt = windows!.steps.findIndex((step) => step.run !== undefined);
     expect(checkoutAt).toBeGreaterThanOrEqual(0);
     expect(firstRunAt).toBeGreaterThan(checkoutAt);
-    expect(windows?.continueOnError).toBe(false);
-    expect(windows!.steps.every((step) => step.continueOnError === false)).toBe(true);
     expect(windows?.timeoutMinutes).toBe(30);
+  });
+
+  it('windows job full step sequence', () => {
+    const windows = loadJobs('.github/workflows/ci.yml').windows;
+    expect(windows?.steps.map((step) => step.uses ?? step.run)).toEqual([
+      'actions/checkout@v4',
+      './.github/actions/setup-node-pnpm',
+      'pnpm build',
+      'pnpm test',
+      'pnpm test:e2e',
+    ]);
+  });
+
+  it('windows e2e step runs even when unit tests fail', () => {
+    const windows = loadJobs('.github/workflows/ci.yml').windows;
+    const e2e = windows?.steps.find((step) => step.run === 'pnpm test:e2e');
+    expect(e2e?.run).toBe('pnpm test:e2e');
+    expect(e2e?.if).toBe('${{ !cancelled() }}');
   });
 
   it('windows job is not part of required.needs', () => {
