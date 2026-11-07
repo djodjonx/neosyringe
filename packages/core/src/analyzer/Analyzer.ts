@@ -430,9 +430,10 @@ export class Analyzer {
     const allConfigs = this.getCollectedConfigs();
     const errors: AnalysisError[] = [];
 
-    // Find configs defined in this file
+    // TypeScript stores forward slashes. Callers on Windows pass backslashes.
+    const wanted = fileName.replace(/\\/g, '/');
     const configsInFile = [...allConfigs.values()]
-      .filter(c => c.sourceFile.fileName === fileName);
+      .filter(c => c.sourceFile.fileName.replace(/\\/g, '/') === wanted);
 
     // Validate each config
     for (const config of configsInFile) {
