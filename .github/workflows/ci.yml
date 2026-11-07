@@ -116,6 +116,24 @@ jobs:
       - name: Consumer distribution
         run: node scripts/ci/consumer-dist.mjs
 
+  historical-migration:
+    name: Historical migration
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 22
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Historical migration
+        run: pnpm migration:historical
+
   required:
     name: Required checks
     runs-on: ubuntu-latest
