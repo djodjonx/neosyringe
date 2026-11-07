@@ -39,7 +39,7 @@ Les tableaux « Taille 10 » à « Taille 5000 », la charge de la machine et la
 
 - Node v22.23.2 (`node --version`)
 - pnpm 10.19.0 (`pnpm --version`)
-- TypeScript 5.9.3, exigé `^5.9.3` dans `packages/unplugin/package.json:52`
+- TypeScript 5.9.3, exigé `^5.9.3` dans `packages/unplugin/package.json:53`
 - `@djodjonx/neosyringe` 0.3.0 (`packages/neosyringe/package.json:3`)
 - `@djodjonx/neosyringe-plugin` 0.6.1 (`packages/unplugin/package.json:3`)
 - `@djodjonx/neosyringe-core` 3.2.0 (`packages/core/package.json:3`)
@@ -75,7 +75,7 @@ Avant les groupes de taille 10, 100 et 1000 et avant les quatre groupes 5000 `li
 
 `bench:compile` (`package.json:27`) lance `node tests/bench/compile-cost.mjs`.
 
-Le banc empaquette `packages/unplugin/src` avec esbuild 0.27.2 (`packages/unplugin/package.json:48`) sous `os.tmpdir()` (`tests/bench/compile-cost.mjs:210-212`). Le répertoire est effacé à la fin et sur SIGINT ou SIGTERM (`tests/bench/compile-cost.mjs:436-440`, `tests/bench/compile-cost.mjs:463-465`).
+Le banc empaquette `packages/unplugin/src` avec esbuild 0.27.2 (`packages/unplugin/package.json:49`) sous `os.tmpdir()` (`tests/bench/compile-cost.mjs:210-212`). Le répertoire est effacé à la fin et sur SIGINT ou SIGTERM (`tests/bench/compile-cost.mjs:436-440`, `tests/bench/compile-cost.mjs:463-465`).
 
 Profil et mode sont des littéraux dans le `defineBuilderConfig` généré (`tests/bench/compile-cost.mjs:10-11`). Le parseur lit le profil (`packages/core/src/analyzer/parsers/ConfigParser.ts:657-673`) et refuse le mode fermé hors validation stricte (`packages/core/src/analyzer/parsers/ConfigParser.ts:788-794`). L'analyseur est strict par défaut (`packages/core/src/analyzer/Analyzer.ts:185`). L'émetteur optimisé sert au profil `minimal` ou au mode `closed` (`packages/core/src/generator/Generator.ts:201-203`).
 
