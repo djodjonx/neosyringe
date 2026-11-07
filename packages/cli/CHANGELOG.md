@@ -1,5 +1,27 @@
 # @djodjonx/neosyringe-cli
 
+## [0.5.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.4.1...neosyringe-cli-v0.5.0) (2026-11-07)
+
+
+### Features
+
+* **core:** stable diagnostics, retention report and explain command (T19) ([#50](https://github.com/djodjonx/neosyringe/issues/50)) ([fc0bbb9](https://github.com/djodjonx/neosyringe/commit/fc0bbb9a87bed0ec123aa9630f992a4cc78a49bc))
+
+
+### Bug Fixes
+
+* **core:** qualify package distribution and publish token manifests between packages (T15) ([#45](https://github.com/djodjonx/neosyringe/issues/45)) ([a324a56](https://github.com/djodjonx/neosyringe/commit/a324a56215277d3a6a2c913f3eb104d11f5d46c9))
+* **unplugin:** one compilation session for plugin, transformer and CLI (T11) ([#40](https://github.com/djodjonx/neosyringe/issues/40)) ([d02a5da](https://github.com/djodjonx/neosyringe/commit/d02a5da1498a7fa4d6bffba773eff9f5584021d0))
+* **unplugin:** recognise NeoSyringe markers by symbol provenance (T01) ([#35](https://github.com/djodjonx/neosyringe/issues/35)) ([f997f0f](https://github.com/djodjonx/neosyringe/commit/f997f0f253d7ba703ce8982fe57f48d5b3932282))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.3.0
+    * @djodjonx/neosyringe-ui bumped to 0.3.0
+
 ## [0.4.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-cli-v0.4.0...neosyringe-cli-v0.4.1) (2026-09-12)
 
 

@@ -1,5 +1,14 @@
 # @djodjonx/neosyringe
 
+## [0.3.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.3.0...neosyringe-v0.3.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **core:** own, dispose and scope resources explicitly with terminal destroy and createScope (T09) ([#46](https://github.com/djodjonx/neosyringe/issues/46)) ([06cec7a](https://github.com/djodjonx/neosyringe/commit/06cec7afa89fd8722ef7e31f469264de52e73af9))
+* **core:** qualify package distribution and publish token manifests between packages (T15) ([#45](https://github.com/djodjonx/neosyringe/issues/45)) ([a324a56](https://github.com/djodjonx/neosyringe/commit/a324a56215277d3a6a2c913f3eb104d11f5d46c9))
+* **neosyringe:** align public container types with generated capabilities (T03) ([#34](https://github.com/djodjonx/neosyringe/issues/34)) ([c2bb025](https://github.com/djodjonx/neosyringe/commit/c2bb025261e92d0d93285ce84fe707fae45edc03))
+
 ## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-v0.2.2...neosyringe-v0.3.0) (2026-06-15)
 
 

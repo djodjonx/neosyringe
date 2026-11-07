@@ -1,5 +1,33 @@
 # @djodjonx/neosyringe-plugin
 
+## [0.6.2](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.6.1...neosyringe-plugin-v0.6.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* **core:** canonical token identity without silent collision (T02) ([#37](https://github.com/djodjonx/neosyringe/issues/37)) ([c8be9d5](https://github.com/djodjonx/neosyringe/commit/c8be9d5e65f8fd170ba7bfd65e8aff3b9047913b))
+* **core:** closed optimization mode with roots, eager and safe graph pruning (T16) ([#48](https://github.com/djodjonx/neosyringe/issues/48)) ([f20cab3](https://github.com/djodjonx/neosyringe/commit/f20cab3c3bc90fb521d292f8faaa75cdb1d7da31))
+* **core:** reset caches on override and clearOverrides, build-time testOverrides (T10) ([#47](https://github.com/djodjonx/neosyringe/issues/47)) ([4ac260c](https://github.com/djodjonx/neosyringe/commit/4ac260c6fe20c59edb95a233e364b2cb2b2113e8))
+* **core:** validate factory dependencies in the graph and limit the factory context (T05) ([#39](https://github.com/djodjonx/neosyringe/issues/39)) ([3ad0be1](https://github.com/djodjonx/neosyringe/commit/3ad0be187bb61e5dc6bb7f858f355b4e41b1a105))
+* **core:** validate resolve and resolveAll against the container each call targets (T06) ([#42](https://github.com/djodjonx/neosyringe/issues/42)) ([cfc9347](https://github.com/djodjonx/neosyringe/commit/cfc9347e996cfefba63a874fe9c5c79a27801d83))
+* **unplugin:** annotate generated containers and definePartialConfig calls as PURE (T14) ([#36](https://github.com/djodjonx/neosyringe/issues/36)) ([33dc374](https://github.com/djodjonx/neosyringe/commit/33dc3741921fce3a464d6493b33f3d9072971286))
+* **unplugin:** devtools registry per container and file, serve-only, full serialization (T12) ([#41](https://github.com/djodjonx/neosyringe/issues/41)) ([86cba45](https://github.com/djodjonx/neosyringe/commit/86cba45822111f2614360b511bf2f5a05cf03721))
+* **unplugin:** one compilation session for plugin, transformer and CLI (T11) ([#40](https://github.com/djodjonx/neosyringe/issues/40)) ([d02a5da](https://github.com/djodjonx/neosyringe/commit/d02a5da1498a7fa4d6bffba773eff9f5584021d0))
+* **unplugin:** recognise NeoSyringe markers by symbol provenance (T01) ([#35](https://github.com/djodjonx/neosyringe/issues/35)) ([f997f0f](https://github.com/djodjonx/neosyringe/commit/f997f0f253d7ba703ce8982fe57f48d5b3932282))
+
+
+### Performance Improvements
+
+* **unplugin:** content-based tsconfig invalidation, per-instance caches and compile-cost benchmark (T18) ([#52](https://github.com/djodjonx/neosyringe/issues/52)) ([bf23efa](https://github.com/djodjonx/neosyringe/commit/bf23efa6bff03ed0f67cc86b45996381f1305a08))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.3.0
+    * @djodjonx/neosyringe-ui bumped to 0.3.0
+
 ## [0.6.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-plugin-v0.6.0...neosyringe-plugin-v0.6.1) (2026-09-12)
 
 

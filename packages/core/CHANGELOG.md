@@ -1,5 +1,34 @@
 # @djodjonx/neosyringe-core
 
+## [3.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.2.0...neosyringe-core-v3.3.0) (2026-11-07)
+
+
+### Features
+
+* **core:** direct per-registration access and explicit full and minimal profiles (T17) ([#49](https://github.com/djodjonx/neosyringe/issues/49)) ([2ddfadb](https://github.com/djodjonx/neosyringe/commit/2ddfadb5273ce0a2b3ecec18e68dc66240a28f64))
+* **core:** stable diagnostics, retention report and explain command (T19) ([#50](https://github.com/djodjonx/neosyringe/issues/50)) ([fc0bbb9](https://github.com/djodjonx/neosyringe/commit/fc0bbb9a87bed0ec123aa9630f992a4cc78a49bc))
+
+
+### Bug Fixes
+
+* **core:** canonical token identity without silent collision (T02) ([#37](https://github.com/djodjonx/neosyringe/issues/37)) ([c8be9d5](https://github.com/djodjonx/neosyringe/commit/c8be9d5e65f8fd170ba7bfd65e8aff3b9047913b))
+* **core:** closed optimization mode with roots, eager and safe graph pruning (T16) ([#48](https://github.com/djodjonx/neosyringe/issues/48)) ([f20cab3](https://github.com/djodjonx/neosyringe/commit/f20cab3c3bc90fb521d292f8faaa75cdb1d7da31))
+* **core:** follow the result of createScope() to its container in strict usage checks ([#57](https://github.com/djodjonx/neosyringe/issues/57)) ([84ceafd](https://github.com/djodjonx/neosyringe/commit/84ceafd8865171a54383dd4003be559ce7783a68))
+* **core:** give each multi contribution its own state, cache key and disposal (T08) ([#44](https://github.com/djodjonx/neosyringe/issues/44)) ([79e5409](https://github.com/djodjonx/neosyringe/commit/79e540904b849bc9885f54cb3fd0b056870e96d7))
+* **core:** one constructor signature and registration graph for both analysis paths (T04) ([#38](https://github.com/djodjonx/neosyringe/issues/38)) ([a6f51ed](https://github.com/djodjonx/neosyringe/commit/a6f51edc48113263bd10c056008e8b29727834ec))
+* **core:** own, dispose and scope resources explicitly with terminal destroy and createScope (T09) ([#46](https://github.com/djodjonx/neosyringe/issues/46)) ([06cec7a](https://github.com/djodjonx/neosyringe/commit/06cec7afa89fd8722ef7e31f469264de52e73af9))
+* **core:** qualify package distribution and publish token manifests between packages (T15) ([#45](https://github.com/djodjonx/neosyringe/issues/45)) ([a324a56](https://github.com/djodjonx/neosyringe/commit/a324a56215277d3a6a2c913f3eb104d11f5d46c9))
+* **core:** refuse a disposable transient captured by a singleton ([#56](https://github.com/djodjonx/neosyringe/issues/56)) ([9694a46](https://github.com/djodjonx/neosyringe/commit/9694a46a23a191aa88b2431402fcb6dae0ae9f0f))
+* **core:** reset caches on override and clearOverrides, build-time testOverrides (T10) ([#47](https://github.com/djodjonx/neosyringe/issues/47)) ([4ac260c](https://github.com/djodjonx/neosyringe/commit/4ac260c6fe20c59edb95a233e364b2cb2b2113e8))
+* **core:** resolve { all } of an open parent multi token in child factories ([#54](https://github.com/djodjonx/neosyringe/issues/54)) ([65f3521](https://github.com/djodjonx/neosyringe/commit/65f3521ef28c6c64c4817ba16247b7b636bb60c6))
+* **core:** shared async initialization with an explicit container state machine (T07) ([#43](https://github.com/djodjonx/neosyringe/issues/43)) ([d4c149a](https://github.com/djodjonx/neosyringe/commit/d4c149a1bbf0cb90382275b3bb5f6ee57de01fbd))
+* **core:** validate factory dependencies in the graph and limit the factory context (T05) ([#39](https://github.com/djodjonx/neosyringe/issues/39)) ([3ad0be1](https://github.com/djodjonx/neosyringe/commit/3ad0be187bb61e5dc6bb7f858f355b4e41b1a105))
+* **core:** validate resolve and resolveAll against the container each call targets (T06) ([#42](https://github.com/djodjonx/neosyringe/issues/42)) ([cfc9347](https://github.com/djodjonx/neosyringe/commit/cfc9347e996cfefba63a874fe9c5c79a27801d83))
+* **neosyringe:** align public container types with generated capabilities (T03) ([#34](https://github.com/djodjonx/neosyringe/issues/34)) ([c2bb025](https://github.com/djodjonx/neosyringe/commit/c2bb025261e92d0d93285ce84fe707fae45edc03))
+* **unplugin:** annotate generated containers and definePartialConfig calls as PURE (T14) ([#36](https://github.com/djodjonx/neosyringe/issues/36)) ([33dc374](https://github.com/djodjonx/neosyringe/commit/33dc3741921fce3a464d6493b33f3d9072971286))
+* **unplugin:** one compilation session for plugin, transformer and CLI (T11) ([#40](https://github.com/djodjonx/neosyringe/issues/40)) ([d02a5da](https://github.com/djodjonx/neosyringe/commit/d02a5da1498a7fa4d6bffba773eff9f5584021d0))
+* **unplugin:** recognise NeoSyringe markers by symbol provenance (T01) ([#35](https://github.com/djodjonx/neosyringe/issues/35)) ([f997f0f](https://github.com/djodjonx/neosyringe/commit/f997f0f253d7ba703ce8982fe57f48d5b3932282))
+
 ## [3.2.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-core-v3.1.2...neosyringe-core-v3.2.0) (2026-09-12)
 
 

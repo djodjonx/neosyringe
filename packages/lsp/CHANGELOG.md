@@ -1,5 +1,27 @@
 # @djodjonx/neosyringe-lsp
 
+## [0.5.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.4.6...neosyringe-lsp-v0.5.0) (2026-11-07)
+
+
+### Features
+
+* **core:** stable diagnostics, retention report and explain command (T19) ([#50](https://github.com/djodjonx/neosyringe/issues/50)) ([fc0bbb9](https://github.com/djodjonx/neosyringe/commit/fc0bbb9a87bed0ec123aa9630f992a4cc78a49bc))
+
+
+### Bug Fixes
+
+* **core:** canonical token identity without silent collision (T02) ([#37](https://github.com/djodjonx/neosyringe/issues/37)) ([c8be9d5](https://github.com/djodjonx/neosyringe/commit/c8be9d5e65f8fd170ba7bfd65e8aff3b9047913b))
+* **core:** one constructor signature and registration graph for both analysis paths (T04) ([#38](https://github.com/djodjonx/neosyringe/issues/38)) ([a6f51ed](https://github.com/djodjonx/neosyringe/commit/a6f51edc48113263bd10c056008e8b29727834ec))
+* **core:** validate factory dependencies in the graph and limit the factory context (T05) ([#39](https://github.com/djodjonx/neosyringe/issues/39)) ([3ad0be1](https://github.com/djodjonx/neosyringe/commit/3ad0be187bb61e5dc6bb7f858f355b4e41b1a105))
+* **core:** validate resolve and resolveAll against the container each call targets (T06) ([#42](https://github.com/djodjonx/neosyringe/issues/42)) ([cfc9347](https://github.com/djodjonx/neosyringe/commit/cfc9347e996cfefba63a874fe9c5c79a27801d83))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.3.0
+
 ## [0.4.6](https://github.com/djodjonx/neosyringe/compare/neosyringe-lsp-v0.4.5...neosyringe-lsp-v0.4.6) (2026-09-12)
 
 
