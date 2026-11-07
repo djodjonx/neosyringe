@@ -152,6 +152,7 @@ jobs:
         run: pnpm test
 
       - name: Run e2e
+        if: ${{ !cancelled() }}
         run: pnpm test:e2e
 
   required:
