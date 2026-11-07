@@ -2,6 +2,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
+import { sameFile, tsPath } from '../helpers/tsPath';
 import { Generator } from '../../src/generator/Generator';
 import type { DependencyGraph, DependencyNode } from '../../src/analyzer/types';
 
@@ -13,18 +14,18 @@ function serviceNode(): DependencyNode {
     target: ts.ScriptTarget.ES2020,
     module: ts.ModuleKind.ESNext,
   };
-  const sourceFile = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.ES2020, true);
   const host = ts.createCompilerHost(options);
   const originalGetSourceFile = host.getSourceFile.bind(host);
   host.getSourceFile = (name, languageVersion, onError, shouldCreateNewSourceFile) => {
-    if (name === fileName) return sourceFile;
+    if (sameFile(name, fileName)) return ts.createSourceFile(name, sourceText, languageVersion, true);
     return originalGetSourceFile(name, languageVersion, onError, shouldCreateNewSourceFile);
   };
-  host.fileExists = (name) => name === fileName || ts.sys.fileExists(name);
-  host.readFile = (name) => (name === fileName ? sourceText : ts.sys.readFile(name));
+  host.fileExists = (name) => sameFile(name, fileName) || ts.sys.fileExists(name);
+  host.readFile = (name) => (sameFile(name, fileName) ? sourceText : ts.sys.readFile(name));
   const program = ts.createProgram([fileName], options, host);
-  const statement = sourceFile.statements[0];
-  if (!ts.isClassDeclaration(statement) || !statement.name) {
+  const sourceFile = program.getSourceFile(tsPath(fileName));
+  const statement = sourceFile?.statements[0];
+  if (statement === undefined || !ts.isClassDeclaration(statement) || !statement.name) {
     throw new Error('classe Service absente');
   }
   const symbol = program.getTypeChecker().getSymbolAtLocation(statement.name);

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
+import { hasText, textAt, virtualResolved } from '../helpers/tsPath';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import type { DependencyGraph } from '../../src/analyzer/types';
 import { Generator } from '../../src/generator/Generator';
@@ -109,21 +110,17 @@ function programFrom(sources: Map<string, string>): ts.Program {
   const exists = host.fileExists.bind(host);
   const readFile = host.readFile.bind(host);
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const text = sources.get(fileName);
+    const text = textAt(sources, fileName);
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
     return read(fileName, languageVersion, onError, shouldCreateNewSourceFile);
   };
-  host.fileExists = (fileName) => sources.has(fileName) || exists(fileName);
-  host.readFile = (fileName) => sources.get(fileName) ?? readFile(fileName);
+  host.fileExists = (fileName) => hasText(sources, fileName) || exists(fileName);
+  host.readFile = (fileName) => textAt(sources, fileName) ?? readFile(fileName);
   host.resolveModuleNames = (moduleNames, containingFile) => moduleNames.map((moduleName) => {
-    if (moduleName.startsWith('.')) {
-      const base = path.resolve(path.dirname(containingFile), moduleName);
-      const candidates = [base, `${base}.ts`, `${base}.d.ts`];
-      for (const candidate of candidates) {
-        if (!sources.has(candidate)) continue;
-        const extension = candidate.endsWith('.d.ts') ? ts.Extension.Dts : ts.Extension.Ts;
-        return { resolvedFileName: candidate, extension, isExternalLibraryImport: false };
-      }
+    const candidate = virtualResolved(sources, containingFile, moduleName, ['.ts', '.d.ts']);
+    if (candidate !== undefined) {
+      const extension = candidate.endsWith('.d.ts') ? ts.Extension.Dts : ts.Extension.Ts;
+      return { resolvedFileName: candidate, extension, isExternalLibraryImport: false };
     }
     return ts.resolveModuleName(moduleName, containingFile, options, host).resolvedModule;
   });

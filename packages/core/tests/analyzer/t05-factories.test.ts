@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
+import { hasText, sameFile, textAt } from '../helpers/tsPath';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import { GraphValidator } from '../../src/generator/GraphValidator';
 import type { AnalysisError, DependencyGraph } from '../../src/analyzer/types';
@@ -239,11 +240,11 @@ function createProgram(sources: Map<string, string>): ts.Program {
   const originalGetSourceFile = host.getSourceFile.bind(host);
   const originalFileExists = host.fileExists.bind(host);
   host.getSourceFile = (fileName, languageVersion) => {
-    const text = sources.get(fileName);
+    const text = textAt(sources, fileName);
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
     return originalGetSourceFile(fileName, languageVersion);
   };
-  host.fileExists = (fileName) => sources.has(fileName) || originalFileExists(fileName);
+  host.fileExists = (fileName) => hasText(sources, fileName) || originalFileExists(fileName);
   return ts.createProgram([...sources.keys()], options, host);
 }
 
@@ -303,7 +304,7 @@ describe('T05 factories', () => {
     expect(warning?.code).toBe('NEO_FACTORY_DEPENDENCIES_REQUIRED');
     expect(warning?.message).toContain('opaque');
     const config = [...result.configs.values()].find(
-      (item) => item.sourceFile.fileName === REQUIRED_FILE && item.type === 'builder',
+      (item) => sameFile(item.sourceFile.fileName, REQUIRED_FILE) && item.type === 'builder',
     );
     const service = [...(config?.localInjections.values() ?? [])].find((info) =>
       info.tokenText.includes('OpaqueFactory'),
@@ -314,7 +315,7 @@ describe('T05 factories', () => {
   it('promise return is async', () => {
     const result = analyzer.extractForFile(ASYNC_FILE);
     const config = [...result.configs.values()].find(
-      (item) => item.sourceFile.fileName === ASYNC_FILE && item.type === 'builder',
+      (item) => sameFile(item.sourceFile.fileName, ASYNC_FILE) && item.type === 'builder',
     );
     const asyncPort = [...(config?.localInjections.values() ?? [])].find((info) =>
       info.tokenText.includes('AsyncPort'),

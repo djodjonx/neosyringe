@@ -1,4 +1,5 @@
 import * as ts from 'typescript';
+import { sameFile } from './tsPath';
 
 /**
  * Creates a TypeScript program with a single virtual (in-memory) source file.
@@ -22,8 +23,8 @@ export function createVirtualProgram(
   const compilerHost = ts.createCompilerHost(options);
   const originalGetSourceFile = compilerHost.getSourceFile.bind(compilerHost);
   compilerHost.getSourceFile = (name, languageVersion) => {
-    if (name === fileName) {
-      return ts.createSourceFile(fileName, content, languageVersion, true);
+    if (sameFile(name, fileName)) {
+      return ts.createSourceFile(name, content, languageVersion, true);
     }
     return originalGetSourceFile(name, languageVersion);
   };
