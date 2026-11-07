@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { buildWithVite, buildWithWebpack, errorText, type BundlerBuild } from './helpers/bundler-builds';
+import { buildWithRspack, buildWithVite, buildWithWebpack, errorText, type BundlerBuild } from './helpers/bundler-builds';
 import { runBundle } from './helpers/t21-bundle';
 
 // Real production builds of tests/e2e/fixtures/t21-closed. One build per fixture
@@ -108,6 +108,52 @@ describe('T22 real bundlers', () => {
   it('T22 webpack compile fails with NEO_MISSING_PROVIDER', () => {
     expect(webpackMissing).toBeInstanceOf(Error);
     const text = errorText(webpackMissing);
+    expect(text).toContain('NEO_MISSING_PROVIDER');
+    expect(text).toContain('IFromA');
+  });
+});
+
+// Separate suite so a name filter does not run the Vite and webpack builds.
+describe('T22 rspack real bundler', () => {
+  let rspackOpen: BundlerBuild;
+  let rspackClosed: BundlerBuild;
+  let rspackMissing: unknown;
+
+  beforeAll(async () => {
+    const app = fixture('app.ts');
+    expect(app).toContain(CLOSED_OPTION);
+    const heavy = fixture('heavy.ts');
+    const openFiles = { 'app.ts': app.replace(CLOSED_OPTION, ''), 'heavy.ts': heavy };
+    const closedFiles = { 'app.ts': app, 'heavy.ts': heavy };
+    const missingFiles = { 'app.ts': MISSING_PROVIDER };
+
+    rspackOpen = await buildWithRspack(openFiles);
+    rspackClosed = await buildWithRspack(closedFiles);
+    try {
+      rspackMissing = await buildWithRspack(missingFiles);
+    } catch (error) {
+      rspackMissing = error;
+    }
+  });
+
+  it('T22 rspack open bundle returns names and keeps the sentinel', async () => {
+    expect(namesOf(await runBundle(rspackOpen.code))).toEqual(['auth', 'log']);
+    expect(rspackOpen.code).toContain(SENTINEL);
+  });
+
+  it('T22 rspack closed bundle drops the sentinel and runs the effect', async () => {
+    expect(rspackClosed.code).not.toContain(SENTINEL);
+    expect(rspackClosed.code).toContain(EFFECT);
+    expect(await runBundle(rspackClosed.code)).toEqual({
+      names: ['auth', 'log'],
+      workerStarts: 1,
+      effects: [EFFECT],
+    });
+  });
+
+  it('T22 rspack compile fails with NEO_MISSING_PROVIDER', () => {
+    expect(rspackMissing).toBeInstanceOf(Error);
+    const text = errorText(rspackMissing);
     expect(text).toContain('NEO_MISSING_PROVIDER');
     expect(text).toContain('IFromA');
   });

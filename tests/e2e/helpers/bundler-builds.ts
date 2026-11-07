@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Real Vite and webpack production builds, using the built plugin
+// Real Vite, webpack and rspack production builds, using the built plugin
 // (packages/unplugin/dist/index.cjs). The factory reads NODE_ENV when it is
 // called (packages/unplugin/src/index.ts:66, packages/core/src/generator/DebugConfig.ts:22).
 
@@ -20,6 +20,7 @@ interface PluginApi {
   neoSyringePlugin: {
     vite: (options: { project: string }) => { name: string };
     webpack: (options: { project: string }) => { apply: (compiler: object) => void };
+    rspack: (options: { project: string }) => { apply: (compiler: object) => void };
   };
 }
 
@@ -42,6 +43,15 @@ interface WebpackCompiler {
 
 interface WebpackModule {
   (config: object, callback: (error: Error | null) => void): WebpackCompiler;
+}
+
+interface RspackCompiler {
+  close: (callback: (error?: Error | null) => void) => void;
+  run: (callback: (error: Error | null) => void) => void;
+}
+
+interface RspackModule {
+  rspack: (config: object) => RspackCompiler;
 }
 
 function writeProject(files: Record<string, string>): string {
@@ -190,6 +200,70 @@ export async function buildWithWebpack(files: Record<string, string>): Promise<B
       }
     });
     return { code: readFileSync(path.join(outDir, 'app.cjs'), 'utf8') };
+  } finally {
+    restoreEnv(previous);
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+export async function buildWithRspack(files: Record<string, string>): Promise<BundlerBuild> {
+  const dir = writeProject(files);
+  const outDir = path.join(dir, 'dist');
+  const previous = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = 'production';
+    const plugin = pluginRequire('./dist/index.cjs') as PluginApi;
+    const { rspack } = pluginRequire('@rspack/core') as RspackModule;
+    const project = path.join(dir, 'tsconfig.json');
+    await new Promise<void>((resolve, reject) => {
+      let compiler: RspackCompiler | undefined;
+      const finish = (error: unknown): void => {
+        const done = (): void => {
+          if (error) reject(error instanceof Error ? error : new Error(String(error)));
+          else resolve();
+        };
+        if (!compiler) {
+          done();
+          return;
+        }
+        compiler.close(() => done());
+      };
+      try {
+        // rspack(options, callback) closes the compiler before calling the
+        // callback in @rspack/core 2.3.1, so this helper calls rspack(options),
+        // then run, then close once.
+        compiler = rspack({
+          mode: 'production',
+          target: 'node',
+          context: dir,
+          entry: path.join(dir, 'app.ts'),
+          output: {
+            path: outDir,
+            filename: 'rspack.cjs',
+            library: { type: 'commonjs2' },
+          },
+          resolve: {
+            extensions: ['.ts', '.js'],
+          },
+          module: {
+            rules: [{
+              test: /\.ts$/,
+              use: [loaderPath],
+            }],
+          },
+          plugins: [plugin.neoSyringePlugin.rspack({ project })],
+          infrastructureLogging: { level: 'error' },
+        });
+        compiler.run((error) => {
+          // Callback error only. A missing provider throws at
+          // packages/unplugin/src/index.ts:168. This helper does not read stats.
+          finish(error);
+        });
+      } catch (error) {
+        finish(error);
+      }
+    });
+    return { code: readFileSync(path.join(outDir, 'rspack.cjs'), 'utf8') };
   } finally {
     restoreEnv(previous);
     rmSync(dir, { recursive: true, force: true });
