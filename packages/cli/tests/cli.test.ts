@@ -8,19 +8,46 @@ import * as ts from 'typescript';
 import { Analyzer } from '../../core/src/analyzer/Analyzer.js';
 import { GraphValidator } from '../../core/src/generator/GraphValidator.js';
 
+// Fixtures use no DOM and no Node types. `lib: ['ES2020']` is the tsconfig form;
+// createProgram takes the file name `lib.es2020.d.ts`. Each declaration file is
+// parsed once and reused. Only the virtual fixture differs per test.
+const parsedCompilerOptions = ts.convertCompilerOptionsFromJson(
+  {
+    lib: ['ES2020'],
+    types: [],
+  },
+  ts.sys.getCurrentDirectory(),
+);
+if (parsedCompilerOptions.errors.length > 0) {
+  const text = parsedCompilerOptions.errors
+    .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'))
+    .join('\n');
+  throw new Error(text);
+}
+const compilerOptions = parsedCompilerOptions.options;
+const baseHost = ts.createCompilerHost(compilerOptions);
+const readLibSourceFile = baseHost.getSourceFile.bind(baseHost);
+const libSourceFiles = new Map<string, ts.SourceFile>();
+
 describe('CLI - Validation Logic', () => {
   const createProgram = (fileName: string, fileContent: string) => {
-    const compilerHost = ts.createCompilerHost({});
-    const originalGetSourceFile = compilerHost.getSourceFile;
-
-    compilerHost.getSourceFile = (name, languageVersion) => {
-      if (name === fileName) {
-        return ts.createSourceFile(fileName, fileContent, languageVersion);
-      }
-      return originalGetSourceFile(name, languageVersion);
+    const compilerHost: ts.CompilerHost = {
+      ...baseHost,
+      getSourceFile(name, languageVersion, onError, shouldCreateNewSourceFile) {
+        if (name === fileName) {
+          return ts.createSourceFile(fileName, fileContent, languageVersion);
+        }
+        if (!shouldCreateNewSourceFile) {
+          const cached = libSourceFiles.get(name);
+          if (cached) return cached;
+        }
+        const sourceFile = readLibSourceFile(name, languageVersion, onError, shouldCreateNewSourceFile);
+        if (sourceFile?.isDeclarationFile) libSourceFiles.set(name, sourceFile);
+        return sourceFile;
+      },
     };
 
-    return ts.createProgram([fileName], {}, compilerHost);
+    return ts.createProgram([fileName], compilerOptions, compilerHost);
   };
 
   describe('Validation Success', () => {
