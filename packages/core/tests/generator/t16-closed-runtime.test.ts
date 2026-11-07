@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
+import { hasText, textAt, virtualResolved } from '../helpers/tsPath';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import { Generator } from '../../src/generator/Generator';
 import { GraphValidator } from '../../src/generator/GraphValidator';
@@ -415,18 +416,15 @@ function programFrom(sources: Map<string, string>): ts.Program {
   const read = host.getSourceFile.bind(host);
   const exists = host.fileExists.bind(host);
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const text = sources.get(fileName);
+    const text = textAt(sources, fileName);
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
     return read(fileName, languageVersion, onError, shouldCreateNewSourceFile);
   };
-  host.fileExists = (fileName) => sources.has(fileName) || exists(fileName);
+  host.fileExists = (fileName) => hasText(sources, fileName) || exists(fileName);
   host.resolveModuleNames = (moduleNames, containingFile) => moduleNames.map((moduleName) => {
-    if (moduleName.startsWith('.')) {
-      const base = path.resolve(path.dirname(containingFile), moduleName);
-      const candidate = sources.has(base) ? base : `${base}.ts`;
-      if (sources.has(candidate)) {
-        return { resolvedFileName: candidate, extension: ts.Extension.Ts, isExternalLibraryImport: false };
-      }
+    const candidate = virtualResolved(sources, containingFile, moduleName);
+    if (candidate !== undefined) {
+      return { resolvedFileName: candidate, extension: ts.Extension.Ts, isExternalLibraryImport: false };
     }
     return ts.resolveModuleName(moduleName, containingFile, options, host).resolvedModule;
   });

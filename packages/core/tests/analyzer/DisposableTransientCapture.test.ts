@@ -7,6 +7,7 @@ import { toStableDiagnostic } from '../../src/analyzer/errors/stableDiagnostic';
 import type { AnalysisError, DependencyGraph } from '../../src/analyzer/types';
 import { Generator } from '../../src/generator/Generator';
 import { createFastProgram, warmLibCache } from '../fastProgram';
+import { sameFile } from '../helpers/tsPath';
 
 const FILE = path.join(process.cwd(), 'disposable-transient-capture.ts');
 const CODE = 'NEO_DISPOSABLE_TRANSIENT_CAPTURED';
@@ -581,14 +582,14 @@ function programFrom(source: string): ts.Program {
   const exists = host.fileExists.bind(host);
   const readFile = host.readFile.bind(host);
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    if (fileName === FILE) return ts.createSourceFile(fileName, source, languageVersion, true);
-    if (fileName === STUB) return ts.createSourceFile(fileName, STUB_SOURCE, languageVersion, true);
+    if (sameFile(fileName, FILE)) return ts.createSourceFile(fileName, source, languageVersion, true);
+    if (sameFile(fileName, STUB)) return ts.createSourceFile(fileName, STUB_SOURCE, languageVersion, true);
     return read(fileName, languageVersion, onError, shouldCreateNewSourceFile);
   };
-  host.fileExists = (fileName) => fileName === FILE || fileName === STUB || exists(fileName);
+  host.fileExists = (fileName) => sameFile(fileName, FILE) || sameFile(fileName, STUB) || exists(fileName);
   host.readFile = (fileName) => {
-    if (fileName === STUB) return STUB_SOURCE;
-    if (fileName === FILE) return source;
+    if (sameFile(fileName, STUB)) return STUB_SOURCE;
+    if (sameFile(fileName, FILE)) return source;
     return readFile(fileName);
   };
   const resolved = {

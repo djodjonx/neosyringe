@@ -1,6 +1,6 @@
-import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
+import { tsPath, virtualResolved } from '../helpers/tsPath';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import { ASTVisitor } from '../../src/analyzer/visitors/ASTVisitor';
 
@@ -195,13 +195,13 @@ function collect(program: ts.Program, fileName: string): {
 }
 
 function remember(fileName: string, text: string): void {
-  const key = path.normalize(fileName);
+  const key = tsPath(fileName);
   if (memoryFiles.get(key) !== text) sourceCache.delete(key);
   memoryFiles.set(key, text);
 }
 
 function textOf(fileName: string): string | undefined {
-  return memoryFiles.get(path.normalize(fileName));
+  return memoryFiles.get(tsPath(fileName));
 }
 
 function resolvedModule(moduleName: string, containingFile: string): ts.ResolvedModuleFull | undefined {
@@ -212,16 +212,13 @@ function resolvedModule(moduleName: string, containingFile: string): ts.Resolved
       isExternalLibraryImport: false,
     };
   }
-  if (moduleName.startsWith('.')) {
-    const base = path.resolve(path.dirname(containingFile), moduleName);
-    const candidate = textOf(base) !== undefined ? base : `${base}.ts`;
-    if (textOf(candidate) !== undefined) {
-      return {
-        resolvedFileName: candidate,
-        extension: ts.Extension.Ts,
-        isExternalLibraryImport: false,
-      };
-    }
+  const candidate = virtualResolved(memoryFiles, containingFile, moduleName);
+  if (candidate !== undefined) {
+    return {
+      resolvedFileName: candidate,
+      extension: ts.Extension.Ts,
+      isExternalLibraryImport: false,
+    };
   }
   return undefined;
 }
@@ -236,18 +233,19 @@ function hostFor(options: ts.CompilerOptions): ts.CompilerHost {
   const realpath = host.realpath?.bind(host);
   host.getCurrentDirectory = () => ROOT;
   host.directoryExists = (directoryName) => {
-    const name = path.normalize(directoryName);
-    if (name === ROOT || name.startsWith(`${ROOT}${path.sep}`)) return true;
+    const name = tsPath(directoryName);
+    const root = tsPath(ROOT);
+    if (name === root || name.startsWith(`${root}/`)) return true;
     return directoryExists?.(directoryName) ?? false;
   };
   host.fileExists = (fileName) => textOf(fileName) !== undefined || fileExists(fileName);
   host.readFile = (fileName) => textOf(fileName) ?? readFile(fileName);
   host.realpath = (fileName) => {
-    if (textOf(fileName) !== undefined) return path.normalize(fileName);
+    if (textOf(fileName) !== undefined) return tsPath(fileName);
     return realpath ? realpath(fileName) : fileName;
   };
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const key = path.normalize(fileName);
+    const key = tsPath(fileName);
     const text = textOf(fileName);
     if (!shouldCreateNewSourceFile) {
       const hit = sourceCache.get(key);
@@ -256,7 +254,7 @@ function hostFor(options: ts.CompilerOptions): ts.CompilerHost {
     const created = text !== undefined
       ? ts.createSourceFile(fileName, text, languageVersion, true)
       : readSource(fileName, languageVersion, onError, shouldCreateNewSourceFile);
-    if (created && !shouldCreateNewSourceFile) sourceCache.set(path.normalize(created.fileName), created);
+    if (created && !shouldCreateNewSourceFile) sourceCache.set(tsPath(created.fileName), created);
     return created;
   };
   host.resolveModuleNames = (moduleNames, containingFile) => moduleNames.map((moduleName) => (

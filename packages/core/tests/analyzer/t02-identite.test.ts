@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
+import { hasText, textAt, virtualResolved } from '../helpers/tsPath';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import { NeoTokenError } from '../../src/analyzer/errors/NeoTokenError';
 import { GraphValidator } from '../../src/generator/GraphValidator';
@@ -172,24 +173,21 @@ function createProgram(sourceFiles: Map<string, string>): ts.Program {
   };
   const host = ts.createCompilerHost(options);
   const originalGetSourceFile = host.getSourceFile.bind(host);
-  host.fileExists = (fileName) => sourceFiles.has(fileName) || ts.sys.fileExists(fileName);
-  host.readFile = (fileName) => sourceFiles.get(fileName) ?? ts.sys.readFile(fileName);
+  host.fileExists = (fileName) => hasText(sourceFiles, fileName) || ts.sys.fileExists(fileName);
+  host.readFile = (fileName) => textAt(sourceFiles, fileName) ?? ts.sys.readFile(fileName);
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const text = sourceFiles.get(fileName);
+    const text = textAt(sourceFiles, fileName);
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
     return originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
   };
   host.resolveModuleNames = (moduleNames, containingFile) => moduleNames.map((moduleName) => {
-    if (moduleName.startsWith('.')) {
-      const base = path.resolve(path.dirname(containingFile), moduleName);
-      const candidate = sourceFiles.has(base) ? base : `${base}.ts`;
-      if (sourceFiles.has(candidate)) {
-        return {
-          resolvedFileName: candidate,
-          extension: ts.Extension.Ts,
-          isExternalLibraryImport: false,
-        };
-      }
+    const candidate = virtualResolved(sourceFiles, containingFile, moduleName);
+    if (candidate !== undefined) {
+      return {
+        resolvedFileName: candidate,
+        extension: ts.Extension.Ts,
+        isExternalLibraryImport: false,
+      };
     }
     return ts.resolveModuleName(moduleName, containingFile, options, host).resolvedModule;
   });

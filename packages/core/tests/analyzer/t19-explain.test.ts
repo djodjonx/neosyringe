@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
+import { hasText, sameFile, textAt, tsPath } from '../helpers/tsPath';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import type { AnalysisError, DependencyGraph } from '../../src/analyzer/types';
 import {
@@ -283,13 +284,13 @@ function programFrom(sources: Map<string, string>): ts.Program {
   const read = host.getSourceFile.bind(host);
   const exists = host.fileExists.bind(host);
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const text = sources.get(fileName);
+    const text = textAt(sources, fileName);
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
     return read(fileName, languageVersion, onError, shouldCreateNewSourceFile);
   };
-  host.fileExists = (fileName) => sources.has(fileName) || exists(fileName);
+  host.fileExists = (fileName) => hasText(sources, fileName) || exists(fileName);
   const directoryExists = host.directoryExists?.bind(host);
-  host.directoryExists = (directory) => directory === ROOT || (directoryExists?.(directory) ?? false);
+  host.directoryExists = (directory) => sameFile(directory, ROOT) || (directoryExists?.(directory) ?? false);
   return createFastProgram([...sources.keys()], options, host);
 }
 
@@ -431,8 +432,8 @@ describe('T19 explain and retention report', () => {
     const twins = report.containers.filter((item) => item.containerName === 'Twin');
     expect(twins).toHaveLength(2);
     expect(twins[0]?.containerKey).not.toBe(twins[1]?.containerKey);
-    expect(twins[0]?.sourceFile).toBe(TWINS);
-    expect(twins[1]?.sourceFile).toBe(TWINS);
+    expect(tsPath(twins[0]?.sourceFile ?? '')).toBe(tsPath(TWINS));
+    expect(tsPath(twins[1]?.sourceFile ?? '')).toBe(tsPath(TWINS));
     expect(twins.map((item) => item.entries.map((entry) => entry.token))).toEqual([['TwinOne'], ['TwinTwo']]);
     expect(new Set(report.containers.map((item) => item.containerKey)).size).toBe(report.containers.length);
     expect(explainRetention(graphs, 'TwinTwo', { container: 'Twin' }).results).toHaveLength(1);
@@ -504,11 +505,11 @@ describe('T19 explain and retention report', () => {
   });
 
   it('T19 diagnostic fields and duplicate code', () => {
-    const missing = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && error.type === 'missing' && error.sourceFile.fileName === MISSING);
-    const duplicate = strictErrors.find((error) => error.type === 'duplicate' && error.sourceFile.fileName === DUPLICATE);
-    const cycle = strictErrors.find((error) => error.type === 'cycle' && error.sourceFile.fileName === CYCLE);
-    const multiCycle = strictErrors.find((error) => error.type === 'cycle' && error.sourceFile.fileName === MULTI_CYCLE);
-    const miss = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && error.sourceFile.fileName === RESOLVE);
+    const missing = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && error.type === 'missing' && sameFile(error.sourceFile.fileName, MISSING));
+    const duplicate = strictErrors.find((error) => error.type === 'duplicate' && sameFile(error.sourceFile.fileName, DUPLICATE));
+    const cycle = strictErrors.find((error) => error.type === 'cycle' && sameFile(error.sourceFile.fileName, CYCLE));
+    const multiCycle = strictErrors.find((error) => error.type === 'cycle' && sameFile(error.sourceFile.fileName, MULTI_CYCLE));
+    const miss = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && sameFile(error.sourceFile.fileName, RESOLVE));
     if (!missing || !duplicate || !cycle || !multiCycle || !miss) throw new Error('expected diagnostics were not produced');
 
     expect(toStableDiagnostic(missing)).toMatchObject({
@@ -544,7 +545,7 @@ describe('T19 explain and retention report', () => {
   it('T19-A04 missing provider diagnostic names its container and source', () => {
     const needy = byName(graphs, 'Needy');
     const supplier = byName(graphs, 'Supplier');
-    const missing = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && error.sourceFile.fileName === NEEDY);
+    const missing = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && sameFile(error.sourceFile.fileName, NEEDY));
     if (!missing) throw new Error('missing provider error not produced');
 
     // The analyzer leaves containerId out of constructor-level misses: the unplugin tells them
@@ -582,8 +583,8 @@ describe('T19 explain and retention report', () => {
   it('T19 errors are attributed to their own container', () => {
     const needy = byName(graphs, 'Needy');
     const supplier = byName(graphs, 'Supplier');
-    const missing = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && error.sourceFile.fileName === NEEDY);
-    const miss = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && error.sourceFile.fileName === RESOLVE);
+    const missing = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && sameFile(error.sourceFile.fileName, NEEDY));
+    const miss = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && sameFile(error.sourceFile.fileName, RESOLVE));
     if (!missing || !miss) throw new Error('expected diagnostics were not produced');
     const owned = attributeErrors(graphs, strictErrors);
 
@@ -595,7 +596,7 @@ describe('T19 explain and retention report', () => {
   });
 
   it('T19 a container is named only when one container owns the error', () => {
-    const duplicate = strictErrors.find((error) => error.type === 'duplicate' && error.sourceFile.fileName === DUPLICATE);
+    const duplicate = strictErrors.find((error) => error.type === 'duplicate' && sameFile(error.sourceFile.fileName, DUPLICATE));
     if (!duplicate) throw new Error('duplicate error not produced');
     const own = byName(graphs, 'Duplicate');
     const twin = { ...own, containerKey: 'twin-key', containerName: 'Twin' };
@@ -612,7 +613,7 @@ describe('T19 explain and retention report', () => {
   });
 
   it('T19 a diagnostic outside every container range names no container', () => {
-    const outside = (file: string) => strictErrors.find((error) => error.code === 'NEO_UNKNOWN_CONTAINER' && error.sourceFile.fileName === file);
+    const outside = (file: string) => strictErrors.find((error) => error.code === 'NEO_UNKNOWN_CONTAINER' && sameFile(error.sourceFile.fileName, file));
     const twoContainers = outside(STRAY_TWO);
     const oneContainer = outside(STRAY_ONE);
     if (!twoContainers || !oneContainer) throw new Error('unknown receiver error not produced');
@@ -643,7 +644,7 @@ describe('T19 explain and retention report', () => {
   it('T19 a container id of another graph is not claimed by range', () => {
     const needy = byName(graphs, 'Needy');
     const supplier = byName(graphs, 'Supplier');
-    const missing = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && error.sourceFile.fileName === NEEDY);
+    const missing = strictErrors.find((error) => error.code === 'NEO_MISSING_PROVIDER' && sameFile(error.sourceFile.fileName, NEEDY));
     if (!missing) throw new Error('missing provider error not produced');
     const claimed = { ...missing, containerId: supplier.containerKey };
 

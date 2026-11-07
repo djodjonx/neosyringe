@@ -1,5 +1,5 @@
-import path from 'node:path';
 import * as ts from 'typescript';
+import { hasText, textAt, tsPath, virtualResolved } from './tsPath';
 
 const ROOT = '/virtual/t09-capture';
 const STUB = `${ROOT}/neo-stub.ts`;
@@ -32,11 +32,11 @@ export function memoryProgram(files: ReadonlyMap<string, string>): ts.Program {
   const readFile = host.readFile.bind(host);
   const fileExists = host.fileExists.bind(host);
   host.getCurrentDirectory = () => ROOT;
-  host.fileExists = (fileName) => texts.has(path.normalize(fileName)) || fileExists(fileName);
-  host.readFile = (fileName) => texts.get(path.normalize(fileName)) ?? readFile(fileName);
-  host.realpath = (fileName) => path.normalize(fileName);
+  host.fileExists = (fileName) => hasText(texts, fileName) || fileExists(fileName);
+  host.readFile = (fileName) => textAt(texts, fileName) ?? readFile(fileName);
+  host.realpath = (fileName) => (hasText(texts, fileName) ? tsPath(fileName) : fileName);
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const text = texts.get(path.normalize(fileName));
+    const text = textAt(texts, fileName);
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
     return readSource(fileName, languageVersion, onError, shouldCreateNewSourceFile);
   };
@@ -44,10 +44,8 @@ export function memoryProgram(files: ReadonlyMap<string, string>): ts.Program {
     if (moduleName === '@djodjonx/neosyringe') {
       return { resolvedFileName: STUB, extension: ts.Extension.Ts, isExternalLibraryImport: false };
     }
-    if (!moduleName.startsWith('.')) return undefined;
-    const base = path.resolve(path.dirname(containingFile), moduleName);
-    const candidate = texts.has(path.normalize(base)) ? base : `${base}.ts`;
-    if (!texts.has(path.normalize(candidate))) return undefined;
+    const candidate = virtualResolved(texts, containingFile, moduleName);
+    if (candidate === undefined) return undefined;
     return { resolvedFileName: candidate, extension: ts.Extension.Ts, isExternalLibraryImport: false };
   };
   host.resolveModuleNames = (names, containingFile) => names.map((name) => resolve(name, containingFile));

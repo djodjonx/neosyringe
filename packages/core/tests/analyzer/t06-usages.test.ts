@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
+import { sameFile, tsPath } from '../helpers/tsPath';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import type { AnalysisError, ConfigGraph } from '../../src/analyzer/types';
 
@@ -383,7 +384,7 @@ describe('T06 usages par conteneur', () => {
       `NEO_MISSING_PROVIDER: 'IFoo' is not in container '${containerB.containerKey}'`,
     );
     expect(missing[0]?.containerId).toBe(containerB.containerKey);
-    expect(missing[0]?.sourceFile.fileName).toBe(A01_B);
+    expect(tsPath(missing[0]?.sourceFile.fileName ?? '')).toBe(tsPath(A01_B));
     expect(missing[0]?.node.getText()).toContain('containerB.resolve');
     expect(bar).toHaveLength(0);
     expect(usageErrors(analyzer.extractForFile(A01_A).errors)).toHaveLength(0);
@@ -403,17 +404,17 @@ describe('T06 usages par conteneur', () => {
     const registered = analyzer.extractForFile(A03_REG);
     const missing = usageErrors(used.errors);
     const useKey = [...used.configs.values()].find(
-      (config) => config.name === 'container' && config.sourceFile.fileName === A03_USE,
+      (config) => config.name === 'container' && sameFile(config.sourceFile.fileName, A03_USE),
     )?.containerKey;
     const regKey = [...registered.configs.values()].find(
-      (config) => config.name === 'container' && config.sourceFile.fileName === A03_REG,
+      (config) => config.name === 'container' && sameFile(config.sourceFile.fileName, A03_REG),
     )?.containerKey;
 
     expect(missing).toHaveLength(1);
     expect(missing[0]?.code).toBe('NEO_MISSING_PROVIDER');
     expect(missing[0]?.containerId).toBe(useKey);
     expect(missing[0]?.containerId).not.toBe(regKey);
-    expect(missing[0]?.sourceFile.fileName).toBe(A03_USE);
+    expect(tsPath(missing[0]?.sourceFile.fileName ?? '')).toBe(tsPath(A03_USE));
     expect(usageErrors(registered.errors)).toHaveLength(0);
   });
 
@@ -425,7 +426,7 @@ describe('T06 usages par conteneur', () => {
     const strict = usageErrors(analyzer.extractForFile(A05).errors);
     const imported = usageErrors(analyzer.extractForFile(A05_IMPORT).errors);
     const containerB = [...analyzer.extractForFile(A05).configs.values()].find(
-      (config) => config.name === 'containerB' && config.sourceFile.fileName === A05,
+      (config) => config.name === 'containerB' && sameFile(config.sourceFile.fileName, A05),
     );
     if (!containerB) throw new Error('missing config containerB');
     const alias = strict.find((error) => error.node.getText().startsWith('c.resolve'));

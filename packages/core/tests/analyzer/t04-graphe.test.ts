@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
+import { hasText, sameFile, textAt } from '../helpers/tsPath';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import { DependencyAnalyzer } from '../../src/analyzer/validators/DependencyAnalyzer';
 import { resolveConstructorSignature } from '../../src/analyzer/shared/registrationGraph';
@@ -243,11 +244,11 @@ function createProgram(sources: Map<string, string>): ts.Program {
   const originalGetSourceFile = host.getSourceFile.bind(host);
   const originalFileExists = host.fileExists.bind(host);
   host.getSourceFile = (fileName, languageVersion) => {
-    const text = sources.get(fileName);
+    const text = textAt(sources, fileName);
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
     return originalGetSourceFile(fileName, languageVersion);
   };
-  host.fileExists = (fileName) => sources.has(fileName) || originalFileExists(fileName);
+  host.fileExists = (fileName) => hasText(sources, fileName) || originalFileExists(fileName);
   return ts.createProgram([...sources.keys()], options, host);
 }
 
@@ -278,7 +279,7 @@ function serviceNode(graph: DependencyGraph, className: string): DependencyNode 
 function builderDefinition(analyzer: Analyzer, fileName: string, className: string) {
   const modular = analyzer.extractForFile(fileName);
   const config = [...modular.configs.values()].find(
-    (item) => item.sourceFile.fileName === fileName && item.type === 'builder',
+    (item) => sameFile(item.sourceFile.fileName, fileName) && item.type === 'builder',
   );
   const info = [...(config?.localInjections.values() ?? [])].find(
     (item) => item.definition.implementationSymbol?.getName() === className,
@@ -329,8 +330,8 @@ describe('T04 graphe et constructeurs', () => {
 
   it('T04-A06 deux fichiers', () => {
     const graphs = analyzer.extractAll();
-    const graphA = graphs.find((graph) => graph.sourceFileName === FILE_A);
-    const graphB = graphs.find((graph) => graph.sourceFileName === FILE_B);
+    const graphA = graphs.find((graph) => graph.sourceFileName !== undefined && sameFile(graph.sourceFileName, FILE_A));
+    const graphB = graphs.find((graph) => graph.sourceFileName !== undefined && sameFile(graph.sourceFileName, FILE_B));
     expect(graphA).toBeDefined();
     expect(graphB).toBeDefined();
     expect(graphA?.containerId).toBe('App');
@@ -349,7 +350,7 @@ describe('T04 graphe et constructeurs', () => {
       (node) => node.service.implementationSymbol?.getName() === 'EdgeDerived',
     );
     const modular = analyzer.extractForFile(EDGES_FILE);
-    const config = [...modular.configs.values()].find((item) => item.sourceFile.fileName === EDGES_FILE);
+    const config = [...modular.configs.values()].find((item) => sameFile(item.sourceFile.fileName, EDGES_FILE));
     const info = [...(config?.localInjections.values() ?? [])].find(
       (item) => item.definition.implementationSymbol?.getName() === 'EdgeDerived',
     );
@@ -414,8 +415,8 @@ describe('T04 graphe et constructeurs', () => {
 
   it('T04-W2 containerKey emprunté', () => {
     const graphs = analyzer.extractAll();
-    const parent = graphs.find((graph) => graph.sourceFileName === BORROW_FILE && graph.containerId === 'ParentApp');
-    const child = graphs.find((graph) => graph.sourceFileName === BORROW_FILE && graph.containerId === 'ChildApp');
+    const parent = graphs.find((graph) => graph.sourceFileName !== undefined && sameFile(graph.sourceFileName, BORROW_FILE) && graph.containerId === 'ParentApp');
+    const child = graphs.find((graph) => graph.sourceFileName !== undefined && sameFile(graph.sourceFileName, BORROW_FILE) && graph.containerId === 'ChildApp');
     expect(child?.borrowedRegistrations?.length ?? 0).toBeGreaterThan(0);
     expect(child?.borrowedRegistrations?.[0]?.containerId).toBe(parent?.containerKey);
     expect(child?.borrowedRegistrations?.[0]?.containerId).not.toBe(parent?.containerId);

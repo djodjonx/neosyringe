@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
+import { hasText, textAt } from '../helpers/tsPath';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import type { DependencyGraph } from '../../src/analyzer/types';
 import { GraphValidator, type GraphValidationResult } from '../../src/generator/GraphValidator';
@@ -134,11 +135,11 @@ function createProgram(fileName: string, fileContent: string): ts.Program {
   const read = host.getSourceFile.bind(host);
   const exists = host.fileExists.bind(host);
   host.getSourceFile = (name, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const text = sources.get(name);
+    const text = textAt(sources, name);
     if (text !== undefined) return ts.createSourceFile(name, text, languageVersion, true);
     return read(name, languageVersion, onError, shouldCreateNewSourceFile);
   };
-  host.fileExists = (name) => sources.has(name) || exists(name);
+  host.fileExists = (name) => hasText(sources, name) || exists(name);
   return createFastProgram([fileName], options, host);
 }
 

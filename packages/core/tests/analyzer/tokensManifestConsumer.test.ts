@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
+import { textAt, tsPath } from '../helpers/tsPath';
 import { NeoTokenError } from '../../src/analyzer/errors/NeoTokenError';
 import { HashUtils } from '../../src/analyzer/shared/HashUtils';
 import { TokenResolverService } from '../../src/analyzer/shared/TokenResolverService';
@@ -69,7 +70,7 @@ function programFrom(files: Record<string, string>): ts.Program {
   const host = ts.createCompilerHost(options);
   const original = host.getSourceFile.bind(host);
   host.getSourceFile = (fileName, languageVersion, onError, create) => {
-    const text = files[fileName];
+    const text = textAt(new Map(Object.entries(files)), fileName);
     if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
     return original(fileName, languageVersion, onError, create);
   };
@@ -263,7 +264,7 @@ describe('tokens manifest consumer', () => {
     const flat = installFlat('locate-flat');
     const flatFile = path.join(flat.pkg, 'dist/user.d.ts');
     expect(locatePackage(flatFile)).toEqual({
-      packageRoot: flat.pkg,
+      packageRoot: tsPath(flat.pkg),
       packageJsonPath: path.join(flat.pkg, 'package.json'),
       relativePath: 'dist/user.d.ts',
     });
@@ -273,7 +274,7 @@ describe('tokens manifest consumer', () => {
     cpSync(templatePkg, pnpmPkg, { recursive: true });
     const pnpmFile = path.join(pnpmPkg, 'dist/user.d.ts');
     expect(locatePackage(pnpmFile)).toEqual({
-      packageRoot: pnpmPkg,
+      packageRoot: tsPath(pnpmPkg),
       packageJsonPath: path.join(pnpmPkg, 'package.json'),
       relativePath: 'dist/user.d.ts',
     });
@@ -292,7 +293,7 @@ describe('tokens manifest consumer', () => {
     writeFileSync(path.join(nested, 'package.json'), JSON.stringify({ type: 'module' }));
     writeFileSync(path.join(nested, 'index.d.ts'), USER_DTS);
     expect(locatePackage(path.join(nested, 'index.d.ts'))).toEqual({
-      packageRoot: pkg,
+      packageRoot: tsPath(pkg),
       packageJsonPath: path.join(pkg, 'package.json'),
       relativePath: 'dist/esm/index.d.ts',
     });
@@ -305,7 +306,7 @@ describe('tokens manifest consumer', () => {
     writeFileSync(path.join(pnpmNested, 'package.json'), JSON.stringify({ type: 'module' }));
     writeFileSync(path.join(pnpmNested, 'index.d.ts'), USER_DTS);
     expect(locatePackage(path.join(pnpmNested, 'index.d.ts'))).toEqual({
-      packageRoot: pnpmPkg,
+      packageRoot: tsPath(pnpmPkg),
       packageJsonPath: path.join(pnpmPkg, 'package.json'),
       relativePath: 'dist/esm/index.d.ts',
     });
