@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0](https://github.com/djodjonx/neosyringe/compare/neosyringe-ui-v0.2.1...neosyringe-ui-v0.3.0) (2026-11-07)
+
+
+### Features
+
+* **core:** stable diagnostics, retention report and explain command (T19) ([#50](https://github.com/djodjonx/neosyringe/issues/50)) ([fc0bbb9](https://github.com/djodjonx/neosyringe/commit/fc0bbb9a87bed0ec123aa9630f992a4cc78a49bc))
+* **vscode:** codelens opens graph on correct container via postMessage ([91e267b](https://github.com/djodjonx/neosyringe/commit/91e267bc6f78cce3a75095c16741ee41300bc88a))
+
+
+### Bug Fixes
+
+* **ui:** declare DATA before running the inline standalone script ([cae054e](https://github.com/djodjonx/neosyringe/commit/cae054ecd8703913da3cb71ef1b9d9affef3ca43))
+* **ui:** rename 'Value' to 'useValue' in legend/stats, move detail panel below graph ([cbbbe5f](https://github.com/djodjonx/neosyringe/commit/cbbbe5f8e4a152dea7c75a57a5eec717b5280ed6))
+* **ui:** reset edge styles before highlighting new node selection ([b2d0033](https://github.com/djodjonx/neosyringe/commit/b2d0033ca3ff139fd50f1c74160d7de2939f64a2))
+* **unplugin:** devtools registry per container and file, serve-only, full serialization (T12) ([#41](https://github.com/djodjonx/neosyringe/issues/41)) ([86cba45](https://github.com/djodjonx/neosyringe/commit/86cba45822111f2614360b511bf2f5a05cf03721))
+* **vscode:** fix CSP blocking, event delegation, refresh, layout improvements ([97545a3](https://github.com/djodjonx/neosyringe/commit/97545a3f3dbf4c232eb58ddeb779312cd064e8a2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @djodjonx/neosyringe-core bumped to 3.3.0
+
 ## [0.2.1](https://github.com/djodjonx/neosyringe/compare/neosyringe-ui-v0.2.0...neosyringe-ui-v0.2.1) (2026-09-12)
 
 
