@@ -19,6 +19,7 @@ interface Job {
   needs: string[];
   if?: string;
   continueOnError: boolean;
+  timeoutMinutes: number | undefined;
   permissions: Record<string, string>;
   steps: Step[];
 }
@@ -65,6 +66,7 @@ function asJob(value: unknown): Job {
     needs: stringList(value.needs),
     if: typeof value.if === 'string' ? value.if : undefined,
     continueOnError: value['continue-on-error'] === true,
+    timeoutMinutes: typeof value['timeout-minutes'] === 'number' ? value['timeout-minutes'] : undefined,
     permissions: stringMap(value.permissions),
     steps: Array.isArray(value.steps) ? value.steps.map(asStep) : [],
   };
@@ -194,6 +196,14 @@ describe('CI workflows', () => {
       },
     });
     expect(success.status).toBe(0);
+  });
+
+  it('historical migration job is opt-in and not required', () => {
+    const jobs = loadJobs('.github/workflows/ci.yml');
+    const job = jobs['historical-migration'];
+    expect(job?.continueOnError).toBe(true);
+    expect(job?.timeoutMinutes).toBe(20);
+    expect(jobs.required?.needs ?? []).not.toContain('historical-migration');
   });
 
   it('T13-A06 jobs that run repo scripts check out first', () => {

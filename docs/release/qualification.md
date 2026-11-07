@@ -108,10 +108,34 @@ The full guide is `docs/guide/migration.md`. The table below only names what bre
 | Factories received the whole container | They receive `FactoryContext` | `tests/e2e/t20-docs-examples.test.ts::a factory may resolve only what it declares, and only while it runs` |
 | Open containers only | Closed mode is a second, separate change | `tests/e2e/t20-migration.test.ts::T20-A06 step 2 only: the same candidate turned closed keeps the values and the disposals` |
 
-Two parts of the migration protocol are not executed here.
+`pnpm migration:historical` (`package.json:14`) ran locally on 2026-11-07 and exited 0. It is opt-in. No unit suite calls it. The CI job `historical-migration` (`.github/workflows/ci.yml:119-135`) checks out, sets up Node 22, runs `pnpm build`, then `pnpm migration:historical`, with `continue-on-error: true` and `timeout-minutes: 20`. It is not in `required.needs` (`.github/workflows/ci.yml:141`, `tests/ci/workflows.test.ts:176`). This page does not cite a CI run of that job. Each build ran in a child process whose cwd was that project (`scripts/ci/historical-migration.mjs:851`). The block `builds read nothing under the repo` printed `under the repo: 0` for every build.
 
-- Step 1 asks for a consumer on the archives of the historical version. No historical archive was installed. The before and after files of `tests/e2e/t20-migration.test.ts` run against the same candidate build. The old behaviour is not re-run.
-- The token descriptor row (`docs/guide/migration.md:22`) is not executed by the migration test. The token manifest round trip is covered by `tests/e2e/t15-token-manifest.test.ts::producer token keeps key in consumer` and by the `node scripts/ci/consumer-dist.mjs` run below.
+The script printed `publish: no`. Installed pins: `@djodjonx/neosyringe` 0.3.0, `@djodjonx/neosyringe-plugin` 0.6.1, `@djodjonx/neosyringe-core` 3.2.0, `@djodjonx/neosyringe-ui` 0.2.1. `cli installed: no`. `lsp installed: no`. CLI 0.4.1 was packed only, and the script printed `--tokens-manifest in dist/index.mjs: no`.
+
+BEFORE (historical npm) behaviour:
+
+```
+syncInitialize "undefined"
+mocked "report from real"
+overriddenDirect "fake"
+disposed 1
+afterDestroy "no error"
+asyncBeforeInit, asyncEndpoint, asyncAfterDestroy: [LegacyAsync] This container has async services — call `await container.initialize()` before the first resolve().
+asyncClosed 0
+plain consumer, no direct read: disposed 0
+```
+
+`disposed 1` counts the FakeDatabase mock. The direct-read probe (`scripts/ci/historical-migration.mjs:94`) resolves Database after override, and destroy closes that mock. The plain BEFORE consumer, without the probe, printed `disposed 0` (`scripts/ci/historical-migration.mjs:532`). The real Database leaks on override. No client was created: `initialize()` threw the LegacyAsync message.
+
+Historical override replaced only the overridden token; the already cached Report kept the real Database; `overriddenDirect` printed fake (`scripts/ci/historical-migration.mjs:533`). override depended on a runtime check of `process`. The run printed `override checks process.env.NODE_ENV: yes` (`scripts/ci/historical-migration.mjs:469`).
+
+`real`, `restored`, `sharedLogger`, `childLine`, `parentClosedAfterChild`, `parentClosedAfterParent` and `overriddenDirect` matched the candidate (`"report from real"`, `true`, `"parent handled"`, 0, 1, `"fake"`). AFTER (candidate tarballs) printed `mocked` `"report from fake"`, `disposed` 2, `afterDestroy` `NEO_CONTAINER_DESTROYED`, `asyncBeforeInit` `NEO_NOT_INITIALIZED`, `asyncEndpoint` `"/api"`, `asyncClosed` 1, `asyncAfterDestroy` `NEO_CONTAINER_DESTROYED`, `syncInitialize` `"function"`. The comparison printed `declared` on those eight keys and `equal` on the rest.
+
+The candidate pack lines said each tarball carries the disk build. The sha256 block (`scripts/ci/historical-migration.mjs:600`) showed that the declaration file of `@djodjonx/neosyringe`, the module of `@djodjonx/neosyringe-plugin`, the generator module of `@djodjonx/neosyringe-core` and the module of `@djodjonx/neosyringe-ui` differed. The module of `@djodjonx/neosyringe` was the same hash on both sides (`1c72b827c7ce6a175c0b79329d5111e4c7d1a39e442920dd3d2022f413643486`). Version checks do not prove the candidate: the run printed `version check proves the candidate: no`. Both installs printed `nested @djodjonx packages: 0`.
+
+The candidate printed `NEO_FACTORY_DEPENDENCIES_REQUIRED` for factory `Report` with the default strict plugin and again with `validation: 'compatible'`. It printed `NEO_DISPOSABLE_TRANSIENT_CAPTURED` for container `Cap`. An override that was not awaited printed `{"during":"NEO_CONTAINER_BUSY","after":"fake","closed":1,"syncInitialize":"function"}`. Production `testOverrides` printed `NEO_TEST_API_DISABLED: testOverrides cannot be enabled when NODE_ENV is production` (`packages/core/src/generator/DebugConfig.ts:35`). Script note, not an observation: the FactoryContext block is the constant string `no code asserted: the guide row does not name one, and this script does not invent one` (`scripts/ci/historical-migration.mjs:666`). `FactoryContext` exposes `resolve` and `resolveAll` only (`packages/neosyringe/src/types.ts:94-97`). Closed mode printed `not run here. Closed mode stays on tests/e2e/t20-migration.test.ts` (`tests/e2e/t20-migration.test.ts:106`).
+
+The token row printed BEFORE producer key `User_547bb74f`. An earlier run quoted `User_2579db41`, which followed the temp directory. This run's producers were both `@acme/tokens` with entry src/tokens.ts (`scripts/ci/historical-migration.mjs:842`). The candidate consumer of the historical package, which depends on `@djodjonx/neosyringe` and ships no manifest, printed `NEO_TOKEN_BOUNDARY_UNSUPPORTED: manifest-absent @acme/tokens User` (`packages/core/src/analyzer/shared/tokensManifest.ts:330-334`). The candidate-built producer and the candidate consumer printed `producer key: User_4c3940c5`, `consumer key: User_4c3940c5`, `resolved: {"value":"same","syncInitialize":"function"}`. The last token block printed `historical key differs from candidate key: yes` and `same key across the rebuild: no`.
 
 ## Support matrix
 
@@ -188,7 +212,7 @@ A contractual refusal is not used as a proof for any NS row. The refusals of the
 - The bundlers and platforms marked "Not exercised" in the support matrix are not certified.
 - Initial and deferred chunks are distinguished for one esbuild ESM bundle (`node scripts/measure-chunk-split.mjs`, `docs/benchmarks/chunk-split-size.md`). Raw, minified, gzip level 9 and Brotli quality 11 are recorded per chunk. Gzip bytes depend on the Node zlib build. The initial chunk holds the container. The deferred chunk holds one synthetic heavy provider (500 methods) reached by a dynamic import. The static control has no deferred chunk. That meets the size part of the tree-shaking item (10-definition-termine.md, line 30 of the spec folder) for this esbuild case: the four costs are recorded, and initial and deferred chunks are told apart. It does not cover Rollup, any other bundler, or a real provider. `scripts/ci/consumer-dist.mjs` is a CI check, not this measure. The cjs bundles of `scripts/measure-t17-size.mjs` are still single outputs (`scripts/measure-t17-size.mjs:158`).
 - Compile cost at size 5000, shape `diamond` (4 commands, 8 rows) is indicative: those commands ran while `load1` went up to 33.52 and were not rerun. The groups of size 10, 100 and 1000 and the four size 5000 `linear` groups started with `load1` between 1.94 and 2.73; the four size 5000 `diamond` groups started between 2.43 and 31.08. The machine was shared. A rerun on a quiet machine is needed before relying on these numbers.
-- The migration from historical npm archives was not run (see Migration).
+- The migration from historical npm archives was run locally by `pnpm migration:historical` (exit 0, see Migration). The CI job is opt-in and not in `required.needs`. This page does not cite a CI run of that job.
 - Coverage thresholds are set per package in `packages/*/vitest.config.ts`. This work did not change a threshold.
 - The base CI run failed on Node 22 with one 5000 ms timeout, see Known issues. The candidate must be judged on its own CI run, which this page does not cite.
 
