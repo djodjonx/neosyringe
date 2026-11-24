@@ -1,5 +1,6 @@
 import type { DependencyGraph, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getFactoryName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
+import { MinIndexQueue } from './minHeap';
 import { afterStore, generateOverrideMultiGuard, isBorrowedInstance } from './ResolveEmitter';
 
 /** Returns true if any node in the graph has an async factory. */
@@ -34,31 +35,72 @@ interface OrderedStep {
   line: string;
 }
 
-function stableOrder<T extends { id: string }>(steps: T[], before: Map<string, Set<string>>): T[] {
-  const remaining = new Set(steps.map((step) => step.id));
-  const byId = new Map(steps.map((step) => [step.id, step]));
-  const ordered: T[] = [];
-  while (remaining.size > 0) {
-    let picked: string | undefined;
-    for (const step of steps) {
-      if (!remaining.has(step.id)) continue;
-      const preds = before.get(step.id);
-      if (!preds || [...preds].every((pred) => !remaining.has(pred))) {
-        picked = step.id;
-        break;
-      }
-    }
-    if (!picked) {
-      for (const step of steps) {
-        if (remaining.has(step.id)) ordered.push(step);
-      }
-      break;
-    }
-    remaining.delete(picked);
-    const step = byId.get(picked);
-    if (step) ordered.push(step);
+/**
+ * Ready steps leave in initial-index order. A constraint cycle is not a
+ * service cycle: the steps that never become ready keep their source order.
+ */
+export function stableOrder<T extends { id: string }>(
+  steps: readonly T[],
+  before: ReadonlyMap<string, ReadonlySet<string>>,
+  stats?: { visits: number; heapOps: number; comparisons: number },
+): T[] {
+  const visit = (): void => {
+    if (stats) stats.visits += 1;
+  };
+  const heapOp = (): void => {
+    if (stats) stats.heapOps += 1;
+  };
+  const ranks = new Map<string, number>();
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index];
+    if (!step || ranks.has(step.id)) throw new Error('duplicate step id');
+    ranks.set(step.id, index);
   }
-  return ordered;
+  const pending = Array.from({ length: steps.length }, () => 0);
+  const successors: number[][] = [];
+  for (let index = 0; index < steps.length; index += 1) successors.push([]);
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index];
+    if (!step) continue;
+    visit();
+    for (const predecessor of before.get(step.id) ?? []) {
+      visit();
+      const rank = ranks.get(predecessor);
+      if (rank === undefined) continue;
+      pending[index] = (pending[index] ?? 0) + 1;
+      successors[rank]?.push(index);
+    }
+  }
+  const ready = new MinIndexQueue(stats);
+  for (let index = 0; index < pending.length; index += 1) {
+    if ((pending[index] ?? 0) === 0) {
+      ready.push(index);
+      heapOp();
+    }
+  }
+  const emitted = new Set<number>();
+  const result: T[] = [];
+  while (ready.size > 0) {
+    const index = ready.pop();
+    heapOp();
+    emitted.add(index);
+    const step = steps[index];
+    if (step) result.push(step);
+    visit();
+    for (const next of successors[index] ?? []) {
+      visit();
+      const count = (pending[next] ?? 0) - 1;
+      pending[next] = count;
+      if (count === 0) {
+        ready.push(next);
+        heapOp();
+      }
+    }
+  }
+  steps.forEach((step, index) => {
+    if (!emitted.has(index)) result.push(step);
+  });
+  return result;
 }
 
 function collectMultiAsyncLines(
