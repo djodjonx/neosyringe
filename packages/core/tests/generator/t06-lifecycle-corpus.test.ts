@@ -105,7 +105,8 @@ describe('T06 lifecycle corpus', () => {
 
     const multi = loadSource(MULTI);
     const checked = new GraphValidator().validateAll(multi.graph('multiBox'));
-    expect(checked.errors.some((error) => error.code === 'NEO_CYCLE')).toBe(false);
+    // Topic 13: the multi cycle is now detected by GraphValidator.
+    expect(checked.errors.some((error) => error.code === 'NEO_CYCLE')).toBe(true);
 
     const scenarios = CORPUS_SEEDS.map((seed) => scenarioFor(seed));
     expect(scenarios.some((scenario) => scenario.profile === 'minimal')).toBe(true);

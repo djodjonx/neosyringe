@@ -37,6 +37,11 @@ describe('CycleValidator — multi-injection tokens', () => {
         /IPlugin.*->.*IPlugin/.test(e.message)
       )
     ).toBe(true);
+    // Exactly one error, anchored on the one contribution.
+    expect(cycleErrors.map(e => e.message)).toEqual(['Circular dependency detected: IPlugin -> IPlugin']);
+    expect(cycleErrors.map(e => e.node.getText())).toEqual([
+      '{ token: useInterface<IPlugin>(), provider: PluginA, multi: true }',
+    ]);
   });
 
   it('should not raise a false positive when multi and local tokens do not cycle', () => {
@@ -88,5 +93,14 @@ describe('CycleValidator — multi-injection tokens', () => {
     const cycleErrors = result.errors.filter(e => e.type === 'cycle');
     // Both PluginA and PluginB participate in the self-cycle — expect exactly 2 errors.
     expect(cycleErrors.length).toBe(2);
+    // One error on each contribution, in registration order.
+    expect(cycleErrors.map(e => e.message)).toEqual([
+      'Circular dependency detected: IPlugin -> IPlugin',
+      'Circular dependency detected: IPlugin -> IPlugin',
+    ]);
+    expect(cycleErrors.map(e => e.node.getText())).toEqual([
+      '{ token: useInterface<IPlugin>(), provider: PluginA, multi: true }',
+      '{ token: useInterface<IPlugin>(), provider: PluginB, multi: true }',
+    ]);
   });
 });
