@@ -216,17 +216,27 @@ export function factoryContextNeeds(graph: DependencyGraph): { opaque: boolean; 
 }
 
 /** A sync throw from warmup or from the factory must expire the context before it escapes. */
-function emitInvocation(warmup: string, release: string): string {
-  const resultBlock = `const __neoResult = userFactory(__neoContext);
-    if (__neoResult && typeof __neoResult.then === 'function') {
-      return Promise.resolve(__neoResult).then(
-        (value) => { __neoExpire(); ${release} return value; },
-        (err) => { __neoExpire(); ${release} throw err; },
-      );
-    }
-    __neoExpire();
-    ${release}
-    return __neoResult;`;
+function emitInvocation(warmup: string, release: string, hasAsync: boolean): string {
+  // The flag covers the synchronous factory call only, not an await continuation.
+  // Sync containers never read it: their initialize() does not branch on _syncInit.
+  const call = `const __neoResult = userFactory(__neoContext);
+      if (__neoResult && typeof __neoResult.then === 'function') {
+        return Promise.resolve(__neoResult).then(
+          (value) => { __neoExpire(); ${release} return value; },
+          (err) => { __neoExpire(); ${release} throw err; },
+        );
+      }
+      __neoExpire();
+      ${release}
+      return __neoResult;`;
+  const resultBlock = hasAsync
+    ? `this._syncInit += 1;
+    try {
+      ${call}
+    } finally {
+      this._syncInit -= 1;
+    }`
+    : call;
   return `try {
     ${warmup}
     ${resultBlock}
@@ -288,7 +298,7 @@ function emitFactoryBody(
       },
     };
     ${holdStart}
-    ${emitInvocation('', release)}`;
+    ${emitInvocation('', release, hasAsync)}`;
   }
   return `const userFactory = ${userFactory};
     const __neoAllowed = new Map([${entries}]);
@@ -309,7 +319,7 @@ function emitFactoryBody(
       },
     };
     ${holdStart}
-    ${emitInvocation(warmup, release)}`;
+    ${emitInvocation(warmup, release, hasAsync)}`;
 }
 
 /** A captured useValue is read once. Hand-built graphs keep the original expression. */

@@ -390,7 +390,8 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
 
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) {
+    // A stored undefined is a value. A missing token still falls through.
+    if (result !== undefined || this.instances.has(token)) {
       this.notifyResolve(token, result);
       return result;
     }
@@ -633,7 +634,8 @@ function containerState(
   const borrowedList = borrowedSeeds(graph).join(', ');
   const scopeFields = `private _closed = false;
   private _borrowed = new Set<any>([${borrowedList}]);
-  private _destroyWork?: Promise<void>;`;
+  private _destroyWork?: Promise<void>;
+  private _syncInit = 0;`;
   const eagerField = !hasAsync && eagerLines.length > 0 ? '\n  private _eagerOnce = false;' : '';
   const stateFields = hasAsync
     ? `private _state: 'created' | 'initializing' ${minimal ? '' : "| 'reconfiguring' "}| 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';

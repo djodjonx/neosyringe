@@ -183,7 +183,9 @@ export function generateInitializeMethod(
   lines.push(...orderedAsyncLines(graph, sorted, getImport, minimal));
   lines.push(...eagerLines);
 
+  // Joining the in-flight promise from a sync factory still on the stack deadlocks. Only state 'initializing' refuses.
   const initializeOutput = `public async initialize(): Promise<void> {
+    if (this._state === 'initializing' && this._syncInit > 0) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._state === 'initializing') return this._initWork;
     if (this._state === 'ready') return Promise.resolve();
     if (this._state === 'failed') return Promise.reject(this._failure);
