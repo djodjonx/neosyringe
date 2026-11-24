@@ -19,6 +19,7 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<any>([]);
   private _destroyWork?: Promise<void>;
+  private _syncInit = 0;
 
   // -- Factories --
   
@@ -178,7 +179,8 @@ class NeoContainer {
 
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) {
+    // A stored undefined is a value. A missing token still falls through.
+    if (result !== undefined || this.instances.has(token)) {
       this.notifyResolve(token, result);
       return result;
     }
@@ -345,6 +347,7 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<any>([]);
   private _destroyWork?: Promise<void>;
+  private _syncInit = 0;
 
   // -- Factories --
   
@@ -484,7 +487,8 @@ class NeoContainer {
 
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) {
+    // A stored undefined is a value. A missing token still falls through.
+    if (result !== undefined || this.instances.has(token)) {
       this.notifyResolve(token, result);
       return result;
     }
@@ -611,6 +615,7 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<any>([]);
   private _destroyWork?: Promise<void>;
+  private _syncInit = 0;
 
   // -- Factories --
   
@@ -750,7 +755,8 @@ class NeoContainer {
 
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) {
+    // A stored undefined is a value. A missing token still falls through.
+    if (result !== undefined || this.instances.has(token)) {
       this.notifyResolve(token, result);
       return result;
     }
@@ -877,6 +883,7 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<any>([]);
   private _destroyWork?: Promise<void>;
+  private _syncInit = 0;
 
   // -- Factories --
   
@@ -1020,7 +1027,8 @@ class NeoContainer {
 
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) {
+    // A stored undefined is a value. A missing token still falls through.
+    if (result !== undefined || this.instances.has(token)) {
       this.notifyResolve(token, result);
       return result;
     }
@@ -1148,6 +1156,7 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<any>([]);
   private _destroyWork?: Promise<void>;
+  private _syncInit = 0;
 
   // -- Factories --
   
@@ -1287,7 +1296,8 @@ class NeoContainer {
 
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) {
+    // A stored undefined is a value. A missing token still falls through.
+    if (result !== undefined || this.instances.has(token)) {
       this.notifyResolve(token, result);
       return result;
     }
@@ -1414,6 +1424,7 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<any>([]);
   private _destroyWork?: Promise<void>;
+  private _syncInit = 0;
 
   // -- Factories --
   
@@ -1444,15 +1455,15 @@ class NeoContainer {
     try {
     
     const __neoResult = userFactory(__neoContext);
-    if (__neoResult && typeof __neoResult.then === 'function') {
-      return Promise.resolve(__neoResult).then(
-        (value) => { __neoExpire();  return value; },
-        (err) => { __neoExpire();  throw err; },
-      );
-    }
-    __neoExpire();
-    
-    return __neoResult;
+      if (__neoResult && typeof __neoResult.then === 'function') {
+        return Promise.resolve(__neoResult).then(
+          (value) => { __neoExpire();  return value; },
+          (err) => { __neoExpire();  throw err; },
+        );
+      }
+      __neoExpire();
+      
+      return __neoResult;
   } catch (__neoThrown) { __neoExpire();  throw __neoThrown; }
   }
   
@@ -1595,7 +1606,8 @@ class NeoContainer {
 
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) {
+    // A stored undefined is a value. A missing token still falls through.
+    if (result !== undefined || this.instances.has(token)) {
       this.notifyResolve(token, result);
       return result;
     }
@@ -1738,6 +1750,7 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<any>([]);
   private _destroyWork?: Promise<void>;
+  private _syncInit = 0;
 
   // -- Factories --
   
@@ -1881,7 +1894,8 @@ class NeoContainer {
 
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) {
+    // A stored undefined is a value. A missing token still falls through.
+    if (result !== undefined || this.instances.has(token)) {
       this.notifyResolve(token, result);
       return result;
     }
@@ -2016,6 +2030,7 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<any>([]);
   private _destroyWork?: Promise<void>;
+  private _syncInit = 0;
 
   // -- Factories --
   
@@ -2155,7 +2170,8 @@ class NeoContainer {
 
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) {
+    // A stored undefined is a value. A missing token still falls through.
+    if (result !== undefined || this.instances.has(token)) {
       this.notifyResolve(token, result);
       return result;
     }
