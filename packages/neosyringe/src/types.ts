@@ -2,7 +2,7 @@
  * Represents a generic class constructor.
  * @template T - The type of the instance created by the constructor.
  */
-export type Constructor<T = any> = new (...args: any[]) => T;
+export type Constructor<T = unknown> = new (...args: never[]) => T;
 
 /**
  * Defines the lifecycle of a service.
@@ -86,7 +86,58 @@ export type PropertyToken<T, C = unknown> = {
  * Represents a token that can be injected.
  * Can be a Class Constructor, an Interface Token, or a Property Token.
  */
-export type Token<T = any> = Constructor<T> | InterfaceToken<T> | PropertyToken<T, any>;
+export type Token<T = unknown> = Constructor<T> | InterfaceToken<T> | PropertyToken<T, unknown>;
+
+/** Value carried by a token. `never` when the token is not a Token. */
+export type ValueOf<T> = T extends Token<infer V> ? V : never;
+
+/** Tuple of values, in the same positions as the token tuple. */
+export type ValuesOf<T extends readonly Token<unknown>[]> = { -readonly [K in keyof T]: ValueOf<T[K]> };
+
+/** Token that a scope may receive as a value. A class constructor is not a scope input. */
+export type InputToken = InterfaceToken<unknown> | PropertyToken<unknown, unknown>;
+
+/** One scope value. The pair is checked as a unit so a union cannot trade values across tokens. */
+export type InputEntry = { readonly token: InputToken; readonly useValue: unknown };
+
+/** One override pair. Checked as a unit, same as {@link InputEntry}. */
+export type OverrideEntry = readonly [Token<unknown>, () => unknown];
+
+type InvalidInput<E> = E extends InputEntry
+  ? [E['useValue']] extends [ValueOf<E['token']>] ? never : E
+  : E;
+
+type BadInput<E extends readonly InputEntry[]> = {
+  [K in keyof E]: [InvalidInput<E[K]>] extends [never] ? never : K
+}[number];
+
+/** `unknown` when every pair matches and the token sets are the same. A union of pairs is checked one pair at a time. */
+export type InputGuard<I extends readonly InputToken[], E extends readonly InputEntry[]> =
+  [BadInput<E>] extends [never]
+    ? [Exclude<I[number], E[number]['token']>, Exclude<E[number]['token'], I[number]>] extends [never, never]
+      ? unknown
+      : never
+    : never;
+
+type InvalidOverride<E> = E extends OverrideEntry
+  ? [ReturnType<E[1]>] extends [ValueOf<E[0]>] ? never : E
+  : E;
+
+type BadOverride<E extends readonly OverrideEntry[]> = {
+  [K in keyof E]: [InvalidOverride<E[K]>] extends [never] ? never : K
+}[number];
+
+/** `unknown` when every override pair matches. */
+export type OverrideGuard<E extends readonly OverrideEntry[]> = [BadOverride<E>] extends [never] ? unknown : never;
+
+/**
+ * Argument list of a future `createScope`. No method takes it in this stage.
+ * An empty input list makes the values optional. Any other list requires them.
+ */
+export type ScopeArguments<I extends readonly InputToken[], E extends readonly InputEntry[]> =
+  I extends readonly []
+    ? [options?: { readonly values: E & InputGuard<I, E> }]
+    : [options: { readonly values: E & InputGuard<I, E> }];
 
 /**
  * What a factory is allowed to resolve. It is not the full container.
@@ -178,20 +229,23 @@ type EnsureFactory<E> =
       : never
     : unknown;
 
-type InjectionsOk<I> =
-  I extends readonly unknown[]
-    ? number extends I['length']
-      ? unknown
-      : I extends readonly [infer Head, ...infer Tail]
-        ? EnsureFactory<Head> extends never
-          ? never
-          : InjectionsOk<Tail>
-        : unknown
-    : unknown;
+type InvalidFactoryIndices<I extends readonly unknown[]> = {
+  [K in keyof I]: EnsureFactory<I[K]> extends never ? K : never
+}[number];
+
+type InjectionsOk<I> = I extends readonly unknown[]
+  ? [InvalidFactoryIndices<I>] extends [never] ? unknown : never
+  : unknown;
+
+type FactorySites<I> = {
+  [K in keyof I]: EnsureFactory<I[K]> extends never ? never : I[K]
+};
 
 type InjectionGuard<C> =
   C extends { injections: infer I extends readonly unknown[] }
-    ? InjectionsOk<I>
+    ? [InvalidFactoryIndices<I>] extends [never]
+      ? InjectionsOk<I>
+      : { readonly injections: FactorySites<I> }
     : unknown;
 
 /**
@@ -199,7 +253,7 @@ type InjectionGuard<C> =
  * The four shapes are disjoint: autowire, class for a token, factory, or useValue.
  * Optional `never` keys reject the other shape's fields on a widened value too.
  */
-export type Injection<T = any> =
+export type Injection<T = unknown> =
   | {
       token: Constructor<T>;
       lifecycle?: Lifecycle;
@@ -228,7 +282,7 @@ export type Injection<T = any> =
       useValue?: never;
     }
   | {
-      token: InterfaceToken<T> | PropertyToken<T, any>;
+      token: InterfaceToken<T> | PropertyToken<T, unknown>;
       useValue: T;
       lifecycle?: Lifecycle;
       scoped?: boolean;
@@ -277,7 +331,7 @@ export interface PartialConfig {
    * });
    * ```
    */
-  expects?: readonly Token<any>[];
+  expects?: readonly Token<unknown>[];
 }
 
 /**
@@ -408,7 +462,7 @@ export function useInterface<T>(): InterfaceToken<T> {
  *
  * @throws {Error} If called at runtime without the build plugin.
  */
-export function useProperty<T, C extends Constructor<any> = Constructor<any>>(
+export function useProperty<T, C extends Constructor<unknown> = Constructor<unknown>>(
   targetClass: C,
   paramName: string
 ): PropertyToken<T, InstanceType<C>> {
@@ -420,6 +474,9 @@ export function useProperty<T, C extends Constructor<any> = Constructor<any>>(
 /**
  * Declares the tokens provided by a legacy container.
  * This is a type-level helper; it returns the container instance as-is at runtime.
+ *
+ * Unvalidated trust boundary: `T` is not checked against the runtime value.
+ * A lying annotation still compiles. Callers own that claim.
  *
  * @template T - A map of Token -> Type provided by the container.
  * @param container - The legacy container instance.
