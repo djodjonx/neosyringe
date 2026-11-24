@@ -26,6 +26,28 @@ export function compareBudget(baseline, candidate) {
   return { verdict: 'pass', ratio, noise };
 }
 
+export function caseKey(item) {
+  return `${item.shape}|${item.profile}|${item.mode}|${item.size}`;
+}
+
+// k is compared per case below: an errored case has no k.
+function comparableParams(params) {
+  const rest = { ...params };
+  delete rest.k;
+  return JSON.stringify(rest);
+}
+
+function assertBatchK(baseline, candidate) {
+  const left = baseline.params?.k ?? {};
+  const right = candidate.params?.k ?? {};
+  const measured = new Map((baseline.cases ?? []).filter((item) => !item.error).map((item) => [caseKey(item), item]));
+  for (const item of candidate.cases ?? []) {
+    const key = caseKey(item);
+    if (item.error || !measured.has(key)) continue;
+    if (JSON.stringify(left[key]) !== JSON.stringify(right[key])) throw new Error(`params mismatch: k ${key}`);
+  }
+}
+
 function assertEnvironment(baseline, candidate) {
   if (baseline.environment.node !== candidate.environment.node) throw new Error('environment mismatch: node');
   if (baseline.environment.typescript !== candidate.environment.typescript) {
@@ -33,7 +55,7 @@ function assertEnvironment(baseline, candidate) {
   }
   if (baseline.environment.cpu !== candidate.environment.cpu) throw new Error('environment mismatch: cpu');
   if (baseline.environment.flags !== candidate.environment.flags) throw new Error('environment mismatch: flags');
-  if (JSON.stringify(baseline.params) !== JSON.stringify(candidate.params)) throw new Error('params mismatch');
+  if (comparableParams(baseline.params) !== comparableParams(candidate.params)) throw new Error('params mismatch');
 }
 
 function assertMetric(name, metric, size) {
@@ -51,7 +73,11 @@ function assertMetric(name, metric, size) {
 }
 
 export function assertReport(baseline, candidate) {
+  if ((baseline.cases ?? []).length === 0 && (candidate.cases ?? []).length === 0) {
+    throw new Error('report has no case');
+  }
   assertEnvironment(baseline, candidate);
+  assertBatchK(baseline, candidate);
   const names = [];
   for (const report of [baseline, candidate]) {
     for (const item of report.cases ?? []) {

@@ -28,7 +28,11 @@ jobs:
           NEOSYRINGE_BENCH_MODES: open
           NEOSYRINGE_BENCH_RESOLVE_COUNT: '1000'
           NEOSYRINGE_BENCH_REPORT: runtime-report.json
-        run: node tests/bench/runtime-cost.mjs
+        run: |
+          if [ -f tests/bench/baselines/runtime-report.json ]; then
+            export NEOSYRINGE_BENCH_K_FROM=tests/bench/baselines/runtime-report.json
+          fi
+          node tests/bench/runtime-cost.mjs
 
       # Informative only. pipefail keeps a budget failure visible; continue-on-error does not certify it.
       - name: Compare

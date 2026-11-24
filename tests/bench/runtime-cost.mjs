@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { gzipSync } from 'node:zlib';
-import { makeOrder, summarize } from './lib/measure.mjs';
+import { makeOrder, sampleMinimumNs, summarize, timerResolutionNs } from './lib/measure.mjs';
 
 const root = repoRoot();
 const require = createRequire(path.join(root, 'packages/unplugin/package.json'));
@@ -103,6 +103,14 @@ function assertDisposed(instances) {
   if (!Array.isArray(instances) || instances.length === 0 || instances.some((instance) => instance.disposed !== 1)) {
     throw new Error('destroy did not dispose instance');
   }
+}
+function assertCreated(box) {
+  if (!box || typeof box.destroy !== 'function' || typeof box.resolve !== 'function') {
+    throw new Error('create produced nothing');
+  }
+}
+function assertScope(scope) {
+  if (!scope || typeof scope.destroy !== 'function') throw new Error('createScope produced nothing');
 }`;
 
 function injectionList(entries, tokenName) {
@@ -380,8 +388,7 @@ async function closePair(pair) {
   await pair.parent.destroy();
 }
 export async function createHarness() {
-  let current = await openPair();
-  let settled = false;
+  const current = await openPair();
   return {
     shape: 'parent',
     size: ${spec.size},
@@ -389,15 +396,6 @@ export async function createHarness() {
     resolve(index) {
       if (index < childCount) return current.child.resolve(childTokens[index]);
       return current.parent.resolve(parentTokens[index - childCount]);
-    },
-    async recreate() {
-      if (!settled) await closePair(current);
-      current = await openPair();
-      settled = false;
-    },
-    async settle() {
-      settled = true;
-      await closePair(current);
     },
     async scopeDisposeCounts() {
       const pair = await openPair();
@@ -427,47 +425,105 @@ export async function createHarness() {
       await pair.parent.destroy();
       return counts;
     },
-    async timeCreate() {
-      const started = performance.now();
-      const pair = { parent: createParent(), child: null };
-      pair.child = createChild(pair.parent);
-      const elapsed = performance.now() - started;
-      await closePair(pair);
-      return elapsed * 1e6;
-    },
-    async timeCreateScope() {
-      const pair = await openPair();
-      const started = performance.now();
-      const scope = pair.child.createScope();
-      const elapsed = performance.now() - started;
-      await scope.destroy();
-      await closePair(pair);
-      return elapsed * 1e6;
-    },
-    async timeInitialize() {
-      const parent = createParent();
-      const child = createChild(parent);
-      const started = performance.now();
-      await child.initialize();
-      const elapsed = performance.now() - started;
-      assertReady(child, BenchReadyChild);
-      assertReady(parent, BenchReadyParent);
-      await child.destroy();
-      await parent.destroy();
-      return elapsed * 1e6;
-    },
-    // destroy metric times child.destroy() only.
-    async timeDestroy() {
-      const pair = await openPair();
-      const childInstances = childTokens.map((token) => pair.child.resolve(token));
-      const parentInstances = parentTokens.map((token) => pair.parent.resolve(token));
-      const started = performance.now();
-      await pair.child.destroy();
-      const elapsed = performance.now() - started;
-      assertDisposed(childInstances);
-      assertUntouched(parentInstances);
-      await pair.parent.destroy();
-      return elapsed * 1e6;
+    // measure.mjs times batches.*.time only. prepare, check and release stay outside.
+    batches: {
+      create: {
+        time(_state, k) {
+          const items = [];
+          for (let index = 0; index < k; index += 1) {
+            const parent = createParent();
+            items.push({ parent, child: createChild(parent) });
+          }
+          return items;
+        },
+        check(item) {
+          if (!item || !item.parent || !item.child) throw new Error('create produced nothing');
+          assertCreated(item.parent);
+          assertCreated(item.child);
+        },
+        async release(_state, items) {
+          for (const item of items) await closePair(item);
+        },
+      },
+      createScope: {
+        async prepare() { return openPair(); },
+        time(pair, k) {
+          const items = [];
+          for (let index = 0; index < k; index += 1) items.push(pair.child.createScope());
+          return items;
+        },
+        check(item) { assertScope(item); },
+        async release(pair, items) {
+          for (const item of items) await item.destroy();
+          await closePair(pair);
+        },
+      },
+      initialize: {
+        prepare(k) {
+          const items = [];
+          for (let index = 0; index < k; index += 1) {
+            const parent = createParent();
+            items.push({ parent, child: createChild(parent) });
+          }
+          return items;
+        },
+        async time(items) {
+          for (const item of items) await item.child.initialize();
+          return items;
+        },
+        check(item) {
+          assertReady(item.child, BenchReadyChild);
+          assertReady(item.parent, BenchReadyParent);
+        },
+        async release(_state, items) {
+          for (const item of items) {
+            await item.child.destroy();
+            await item.parent.destroy();
+          }
+        },
+      },
+      // destroy times child.destroy() only. The parent stays at disposed 0.
+      destroy: {
+        async prepare(k) {
+          const items = [];
+          for (let index = 0; index < k; index += 1) {
+            const pair = await openPair();
+            const childInstances = childTokens.map((token) => pair.child.resolve(token));
+            const parentInstances = parentTokens.map((token) => pair.parent.resolve(token));
+            items.push({ pair, childInstances, parentInstances });
+          }
+          return items;
+        },
+        async time(items) {
+          for (const item of items) await item.pair.child.destroy();
+          return items;
+        },
+        check(item) {
+          assertDisposed(item.childInstances);
+          assertUntouched(item.parentInstances);
+        },
+        async release(_state, items) {
+          for (const item of items) await item.pair.parent.destroy();
+        },
+      },
+      'cold-resolve': {
+        async prepare(k) {
+          const items = [];
+          for (let index = 0; index < k; index += 1) items.push(await openPair());
+          return items;
+        },
+        time(pairs) {
+          const items = [];
+          for (const pair of pairs) items.push(pair.child.resolve(childTokens[0]));
+          return items;
+        },
+        check(item) {
+          if (!item || item.value !== 0) throw new Error('incorrect resolution');
+        },
+        async release(pairs) {
+          for (const pair of pairs) await closePair(pair);
+        },
+      },
     },
     ${heapFn()}
   };
@@ -484,6 +540,13 @@ export async function createHarness() {
   const resolveBody = multi
     ? 'return current.resolveAll(multiToken)[index];'
     : 'return current.resolve(tokens[index]);';
+  const coldRead = multi
+    ? 'box.resolveAll(multiToken)'
+    : `box.resolve(tokens[${spec.size - 1}])`;
+  const coldCheck = multi
+    ? `const found = item && item[${spec.size - 1}];
+          if (!found || found.value !== ${spec.size - 1}) throw new Error('incorrect resolution');`
+    : `if (!item || item.value !== ${spec.size - 1}) throw new Error('incorrect resolution');`;
   const destroyInstances = multi
     ? 'const instances = box.resolveAll(multiToken);'
     : 'const instances = tokens.map((token) => box.resolve(token));';
@@ -512,23 +575,13 @@ async function openBox() {
   return box;
 }
 export async function createHarness() {
-  let current = await openBox();
-  let settled = false;
+  const current = await openBox();
   return {
     shape: ${JSON.stringify(spec.shape)},
     size: ${spec.size},
     coldIndex: ${spec.size - 1},
     resolvePerCall: ${multi ? spec.size : 1},
     resolve(index) { ${resolveBody} },
-    async recreate() {
-      if (!settled) await current.destroy();
-      current = await openBox();
-      settled = false;
-    },
-    async settle() {
-      settled = true;
-      await current.destroy();
-    },
     async scopeDisposeCounts() {
       const box = await openBox();
       const scope = box.createScope();
@@ -539,39 +592,82 @@ export async function createHarness() {
       await box.destroy();
       return instances.map((instance, index) => instance.disposed - before[index]);
     },
-    async timeCreate() {
-      const started = performance.now();
-      const box = createBox();
-      const elapsed = performance.now() - started;
-      await box.destroy();
-      return elapsed * 1e6;
-    },
-    async timeCreateScope() {
-      const box = createBox();
-      const started = performance.now();
-      const scope = box.createScope();
-      const elapsed = performance.now() - started;
-      await scope.destroy();
-      await box.destroy();
-      return elapsed * 1e6;
-    },
-    async timeInitialize() {
-      const box = createBox();
-      const started = performance.now();
-      await box.initialize();
-      const elapsed = performance.now() - started;
-      assertReady(box, BenchReady);
-      await box.destroy();
-      return elapsed * 1e6;
-    },
-    async timeDestroy() {
-      const box = await openBox();
-      ${destroyInstances}
-      const started = performance.now();
-      await box.destroy();
-      const elapsed = performance.now() - started;
-      assertDisposed(instances);
-      return elapsed * 1e6;
+    // measure.mjs times batches.*.time only. prepare, check and release stay outside.
+    batches: {
+      create: {
+        time(_state, k) {
+          const items = [];
+          for (let index = 0; index < k; index += 1) items.push(createBox());
+          return items;
+        },
+        check(item) { assertCreated(item); },
+        async release(_state, items) {
+          for (const item of items) await item.destroy();
+        },
+      },
+      createScope: {
+        async prepare() { return openBox(); },
+        time(box, k) {
+          const items = [];
+          for (let index = 0; index < k; index += 1) items.push(box.createScope());
+          return items;
+        },
+        check(item) { assertScope(item); },
+        async release(box, items) {
+          for (const item of items) await item.destroy();
+          await box.destroy();
+        },
+      },
+      initialize: {
+        prepare(k) {
+          const items = [];
+          for (let index = 0; index < k; index += 1) items.push(createBox());
+          return items;
+        },
+        async time(items) {
+          for (const item of items) await item.initialize();
+          return items;
+        },
+        check(item) { assertReady(item, BenchReady); },
+        async release(_state, items) {
+          for (const item of items) await item.destroy();
+        },
+      },
+      destroy: {
+        async prepare(k) {
+          const items = [];
+          for (let index = 0; index < k; index += 1) {
+            const box = await openBox();
+            ${destroyInstances}
+            items.push({ box, instances });
+          }
+          return items;
+        },
+        async time(items) {
+          for (const item of items) await item.box.destroy();
+          return items;
+        },
+        check(item) { assertDisposed(item.instances); },
+        release() {},
+      },
+      'cold-resolve': {
+        async prepare(k) {
+          const items = [];
+          for (let index = 0; index < k; index += 1) items.push(await openBox());
+          return items;
+        },
+        time(boxes) {
+          const items = [];
+          for (const box of boxes) items.push(${coldRead});
+          return items;
+        },
+        check(item) {
+          ${coldCheck}
+        },
+        async release(boxes) {
+          for (const box of boxes) await box.destroy();
+        },
+      },
     },
     ${heapFn()}
   };
@@ -600,11 +696,18 @@ function messageOf(error) {
   return String(error);
 }
 
-function runWorker(file) {
+function runWorker(file, batchK, minimumNs, calibrate) {
+  const env = { ...process.env };
+  if (batchK) env.NEOSYRINGE_BENCH_BATCH_K = JSON.stringify(batchK);
+  else delete env.NEOSYRINGE_BENCH_BATCH_K;
+  if (minimumNs) env.NEOSYRINGE_BENCH_MINIMUM_NS = String(minimumNs);
+  else delete env.NEOSYRINGE_BENCH_MINIMUM_NS;
+  if (calibrate) env.NEOSYRINGE_BENCH_CALIBRATE = '1';
+  else delete env.NEOSYRINGE_BENCH_CALIBRATE;
   const run = spawnSync(process.execPath, ['--expose-gc', worker, file], {
     encoding: 'utf8',
     cwd: root,
-    env: process.env,
+    env,
   });
   if (run.status !== 0) {
     throw new Error((run.stderr || run.stdout || 'worker failed').trim());
@@ -612,6 +715,44 @@ function runWorker(file) {
   const line = run.stdout.trim().split('\n').findLast((item) => item.startsWith('{'));
   if (!line) throw new Error('worker returned no report');
   return JSON.parse(line);
+}
+
+function caseKey(spec) {
+  return `${spec.shape}|${spec.profile}|${spec.mode}|${spec.size}`;
+}
+
+function prescribedTable() {
+  const file = process.env.NEOSYRINGE_BENCH_K_FROM || '';
+  if (!file) return undefined;
+  const raw = JSON.parse(readFileSync(path.resolve(file), 'utf8'));
+  const table = raw?.params?.k;
+  if (!table || typeof table !== 'object' || Array.isArray(table)) throw new Error('missing batch k');
+  return table;
+}
+
+function lockedK(table, spec) {
+  if (!table) return undefined;
+  const row = table[caseKey(spec)];
+  if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('missing batch k');
+  return row;
+}
+
+function recordRun(item, processIndex, state, keepSchedule) {
+  const run = runWorker(item.file, item.batchK, state.minimumNs, false);
+  if (state.resolutionNs === undefined) {
+    state.resolutionNs = run.timerResolutionNs;
+    state.minimumNs = run.sampleMinimumNs;
+  }
+  if (!item.batchK) item.batchK = run.k;
+  item.runs.push(run);
+  if (!keepSchedule) return;
+  state.schedule.push({
+    process: processIndex,
+    shape: item.spec.shape,
+    profile: item.spec.profile,
+    mode: item.spec.mode,
+    size: item.spec.size,
+  });
 }
 
 function aggregate(perProcess) {
@@ -642,9 +783,15 @@ function buildRepeated(spec) {
   return { source, rows };
 }
 
-function assemble(spec, checksum, resolveCountUsed, buildRows, source, runs) {
+function assemble(spec, buildRows, source, runs) {
   if (runs.length !== processes) throw new Error('missing process sample');
-  if (runs.some((run) => run.count !== resolveCountUsed)) throw new Error('resolve count mismatch');
+  const resolveCountUsed = runs[0].count;
+  const kText = JSON.stringify(runs[0].k);
+  if (!Number.isInteger(resolveCountUsed) || runs.some((run) => run.count !== resolveCountUsed)) {
+    throw new Error('resolve count mismatch');
+  }
+  if (!runs[0].k || runs.some((run) => JSON.stringify(run.k) !== kText)) throw new Error('batch k mismatch');
+  const checksum = checksumOf(spec.size, resolveCountUsed);
   const min = esbuild.transformSync(source, { minify: true, format: 'esm', target: 'es2022' }).code;
   const metrics = {};
   const names = Object.keys(runs[0].metrics);
@@ -655,7 +802,18 @@ function assemble(spec, checksum, resolveCountUsed, buildRows, source, runs) {
       if (!metric || metric.unit !== unit) throw new Error(`missing metric ${name}`);
       return metric.samples;
     });
-    metrics[name] = { unit, ...aggregate(rows) };
+    const metric = { unit, ...aggregate(rows) };
+    const firstShort = runs[0].metrics[name].shortSamples;
+    if (Number.isInteger(firstShort)) {
+      let shortSamples = 0;
+      for (const run of runs) {
+        const value = run.metrics[name].shortSamples;
+        if (!Number.isInteger(value) || value < 0) throw new Error(`missing metric ${name}`);
+        shortSamples += value;
+      }
+      metric.shortSamples = shortSamples;
+    }
+    metrics[name] = metric;
   }
   const build = aggregate(buildRows);
   metrics.build = { unit: 'ms', ...build };
@@ -675,6 +833,7 @@ function assemble(spec, checksum, resolveCountUsed, buildRows, source, runs) {
     },
     metrics,
     flags: JSON.stringify(runs[0].flags),
+    k: runs[0].k,
   };
 }
 
@@ -685,6 +844,7 @@ for (const mode of modes) if (!knownModes.has(mode)) throw new Error(`unknown mo
 const work = mkdtempSync(path.join(os.tmpdir(), 'neosyringe-runtime-'));
 const built = [];
 const schedule = [];
+const clock = { resolutionNs: undefined, minimumNs: undefined, schedule };
 try {
   for (const size of sizes) {
     for (const shape of shapes) {
@@ -708,6 +868,26 @@ try {
       }
     }
   }
+  // One calibration process per case. Its samples are not kept.
+  // NEOSYRINGE_BENCH_K_FROM locks that k. A lock whose probe misses the minimum is a case error.
+  const prescribed = prescribedTable();
+  for (const item of built) {
+    if (item.error) continue;
+    try {
+      const locked = lockedK(prescribed, item.spec);
+      const run = runWorker(item.file, locked, clock.minimumNs, true);
+      if (clock.resolutionNs === undefined) {
+        clock.resolutionNs = run.timerResolutionNs;
+        clock.minimumNs = run.sampleMinimumNs;
+      }
+      if (!run.k) throw new Error('missing batch k');
+      item.batchK = run.k;
+    } catch (error) {
+      item.error = messageOf(error);
+      item.runs = [];
+      console.error(`${item.spec.shape} ${item.spec.profile} ${item.spec.mode} ${item.spec.size}: ${item.error}`);
+    }
+  }
   for (let processIndex = 0; processIndex < processes; processIndex += 1) {
     const order = built.map((_, index) => index);
     if (processIndex % 2 === 1) order.reverse();
@@ -715,14 +895,7 @@ try {
       const item = built[index];
       if (item.error) continue;
       try {
-        item.runs.push(runWorker(item.file));
-        schedule.push({
-          process: processIndex,
-          shape: item.spec.shape,
-          profile: item.spec.profile,
-          mode: item.spec.mode,
-          size: item.spec.size,
-        });
+        recordRun(item, processIndex, clock, true);
       } catch (error) {
         item.error = messageOf(error);
         item.runs = [];
@@ -747,7 +920,7 @@ const cases = built.map((item) => {
     };
   }
   try {
-    return assemble(item.spec, item.checksum, item.caseCount, item.buildRows, item.source, item.runs);
+    return assemble(item.spec, item.buildRows, item.source, item.runs);
   } catch (error) {
     console.error(`${item.spec.shape} ${item.spec.profile} ${item.spec.mode} ${item.spec.size}: ${messageOf(error)}`);
     return {
@@ -764,6 +937,12 @@ const cases = built.map((item) => {
 
 const flags = cases.find((item) => item.flags)?.flags ?? JSON.stringify(['--expose-gc']);
 const cpu = os.cpus()[0]?.model ?? 'unknown';
+const resolutionNs = clock.resolutionNs ?? timerResolutionNs();
+const minimumNs = clock.minimumNs ?? sampleMinimumNs(resolutionNs);
+const batchK = {};
+for (const item of cases) {
+  if (item.k) batchK[`${item.shape}|${item.profile}|${item.mode}|${item.size}`] = item.k;
+}
 const report = {
   environment: {
     node: process.version,
@@ -775,6 +954,7 @@ const report = {
     memory: os.totalmem(),
     os: `${os.type()} ${os.release()} ${os.platform()}`,
     flags,
+    timerResolutionNs: resolutionNs,
   },
   params: {
     sizes,
@@ -785,6 +965,8 @@ const report = {
     samples,
     resolveCount,
     resolveBatches,
+    sampleMinimumNs: minimumNs,
+    k: batchK,
     multiResolveCount: 'max(256, floor(50000 / size))',
     buildGroups: '5x7; size>=1000 is 1x7',
     caseOrder: 'process-outer, reverse-odd',

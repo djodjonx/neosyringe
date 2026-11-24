@@ -1,6 +1,6 @@
 // Compares two runtime reports. Reads both files and writes nothing.
 import { readFileSync } from 'node:fs';
-import { assertReport, compareBudget, distribution } from './lib/performance-budget.mjs';
+import { assertReport, caseKey, compareBudget, distribution } from './lib/performance-budget.mjs';
 
 const args = process.argv.slice(2);
 if (args.length !== 4 || args[0] !== '--baseline' || args[2] !== '--candidate') {
@@ -19,10 +19,6 @@ try {
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
-}
-
-function caseKey(item) {
-  return `${item.shape}|${item.profile}|${item.mode}|${item.size}`;
 }
 
 function medianOf(samples) {
