@@ -562,14 +562,12 @@ describe('T17 direct accessors and runtime profiles', () => {
       expect(run.trace).toContain('transient distinct true');
       expect(run.trace).toContain('consumer holds single true');
     }
-    // Known reference divergence: the reference reads a cached `undefined` as "absent" and
-    // falls through to not-found. The optimized emitter keeps the value (spec: "valeur undefined conservée").
+    // A stored undefined singleton is returned by both emitters (packages/core/src/generator/Generator.ts:394).
     expect(optimized.trace).toContain('undef first undefined');
     expect(optimized.trace).toContain('undef second undefined');
-    expect(reference.trace).toContain('undef first not-found');
-    expect(reference.trace).toContain('undef second not-found');
-    const comparable = (trace: readonly string[]): string[] => trace.filter((line) => !line.startsWith('undef '));
-    expect(comparable(optimized.trace)).toEqual(comparable(reference.trace));
+    expect(reference.trace).toContain('undef first undefined');
+    expect(reference.trace).toContain('undef second undefined');
+    expect(optimized.trace).toEqual(reference.trace);
   });
 
   it('T17-A01 closed mode: a local undefined shadows a parent token instead of falling through to it', async () => {
@@ -597,9 +595,10 @@ describe('T17 direct accessors and runtime profiles', () => {
     expect((byDefault.container.resolve('Consumer') as { x: unknown }).x).toBeUndefined();
     expect(count(sink, 'create X')).toBe(1);
 
-    // Recorded reference divergence (Generator.ts `result !== undefined`): the parent value wins.
-    expect(reference.container.resolve('X')).toBe('from-parent');
-    expect((reference.container.resolve('Consumer') as { x: unknown }).x).toBe('from-parent');
+    // A stored undefined stays local on the reference emitter too (packages/core/src/generator/Generator.ts:394).
+    expect(reference.container.resolve('X')).toBeUndefined();
+    expect(reference.container.resolve('X')).toBeUndefined();
+    expect((reference.container.resolve('Consumer') as { x: unknown }).x).toBeUndefined();
   });
 
   it('T17-A02 two scopes and a shared parent behave the same after optimization', async () => {
