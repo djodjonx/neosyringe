@@ -22,6 +22,7 @@
  * There is no cache switch. The content graph map is gone, and the bench
  * runs one path. The host-program identity reuse stays on that path.
  */
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -417,7 +418,7 @@ function row(spec, metric, values) {
     if (metric.endsWith('_ms')) return value.toFixed(1);
     return String(Math.round(value));
   };
-  return [spec.size, spec.shape, spec.profile, spec.mode, spec.tool, metric, fmt(mid), fmt(min), fmt(max)].join('\t');
+  return [spec.size, spec.shape, spec.profile, spec.mode, spec.tool, metric, fmt(mid), fmt(min), fmt(max), JSON.stringify(values)].join('\t');
 }
 
 const cpu = os.cpus()[0]?.model ?? 'unknown';
@@ -430,7 +431,18 @@ console.log(`# cpu ${cpu} x${os.cpus().length}`);
 console.log(`# ram_bytes ${os.totalmem()}`);
 console.log(`# os ${os.type()} ${os.release()} ${os.platform()}`);
 console.log(`# reps ${reps} warmup 1`);
-console.log('# size\tshape\tprofile\tmode\ttool\tmetric\tmedian\tmin\tmax');
+console.log(`# environment ${JSON.stringify({
+  node: process.version,
+  typescript: ts.version,
+  sha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+  dirty: execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim().length > 0,
+  cpu,
+  cores: os.cpus().length,
+  memory: os.totalmem(),
+  os: `${os.type()} ${os.release()} ${os.platform()}`,
+  flags: JSON.stringify(process.execArgv),
+})}`);
+console.log('# size\tshape\tprofile\tmode\ttool\tmetric\tmedian\tmin\tmax\tsamples_json');
 
 let loaded;
 const stop = () => {
