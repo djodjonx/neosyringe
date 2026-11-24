@@ -20,7 +20,15 @@ export interface BenchEnvironment {
   readonly memory: number;
   readonly os: string;
   readonly flags: string;
+  readonly timerResolutionNs: number;
 }
+
+export type BenchParam =
+  | string
+  | number
+  | boolean
+  | readonly BenchParam[]
+  | { readonly [key: string]: BenchParam };
 
 export interface MetricReport {
   readonly unit: string;
@@ -44,10 +52,11 @@ export interface BenchCase {
 
 export interface BenchReport {
   readonly environment: BenchEnvironment;
-  readonly params: Readonly<Record<string, string | number | boolean | readonly (string | number)[]>>;
+  readonly params: Readonly<Record<string, BenchParam>>;
   readonly cases: readonly BenchCase[];
 }
 
 export function distribution(samples: readonly number[]): Distribution;
 export function compareBudget(baseline: Distribution, candidate: Distribution): BudgetVerdict;
+export function caseKey(item: BenchCase): string;
 export function assertReport(baseline: BenchReport, candidate: BenchReport): readonly string[];

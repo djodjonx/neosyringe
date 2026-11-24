@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { assertReport, compareBudget, distribution } from '../../scripts/ci/lib/performance-budget.mjs';
-import type { BenchEnvironment, BenchReport, MetricReport } from '../../scripts/ci/lib/performance-budget.mjs';
+import type { BenchCase, BenchEnvironment, BenchReport, MetricReport } from '../../scripts/ci/lib/performance-budget.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const cli = path.join(root, 'scripts/ci/performance-budget.mjs');
@@ -21,6 +21,7 @@ const environment: BenchEnvironment = {
   memory: 1000,
   os: 'test',
   flags: '["--expose-gc"]',
+  timerResolutionNs: 50_000,
 };
 
 function tempDir(): string {
@@ -174,6 +175,68 @@ describe('performance budget', () => {
     const base = report({ 'warm-resolve': metric(100) });
     const other: BenchReport = { ...base, params: { ...base.params, samples: 8 } };
     expect(() => assertReport(base, other)).toThrow('params mismatch');
+  });
+
+  it('params k mismatch', () => {
+    const base = report({ 'warm-resolve': metric(100) });
+    const left: BenchReport = { ...base, params: { ...base.params, k: { 'flat|full|open|10': { create: 64 } } } };
+    const right: BenchReport = { ...base, params: { ...base.params, k: { 'flat|full|open|10': { create: 128 } } } };
+    expect(() => assertReport(left, right)).toThrow('params mismatch');
+  });
+
+  it('an errored candidate case keeps the other cases compared', () => {
+    const rowK = { create: 1000 };
+    const caseOf = (size: number): BenchCase => ({
+      shape: 'flat', profile: 'full', mode: 'open', size, metrics: { 'warm-resolve': metric(100) },
+    });
+    const base = report({});
+    const baseline: BenchReport = {
+      environment,
+      params: { ...base.params, sizes: [10, 100], k: { 'flat|full|open|10': rowK, 'flat|full|open|100': rowK } },
+      cases: [caseOf(10), caseOf(100)],
+    };
+    const candidate: BenchReport = {
+      environment,
+      params: { ...base.params, sizes: [10, 100], k: { 'flat|full|open|10': rowK } },
+      cases: [caseOf(10), { shape: 'flat', profile: 'full', mode: 'open', size: 100, error: 'batch k exceeded' }],
+    };
+    const run = runCli(baseline, candidate);
+    expect(run.status).toBe(1);
+    expect(`${run.stdout}\n${run.stderr}`).not.toContain('params mismatch');
+    const lines = run.stdout.split('\n');
+    expect(lines).toContain('flat\tfull\topen\t10\twarm-resolve\t100\t100\t1.000\t0.000\tpass');
+    expect(lines).toContain('flat\tfull\topen\t100\t-\t-\t-\t-\t-\tfail');
+    expect(lines).toContain('verdict fail');
+  });
+
+  it('a different k for a measured case is refused', () => {
+    const caseOf = (size: number): BenchCase => ({
+      shape: 'flat', profile: 'full', mode: 'open', size, metrics: { 'warm-resolve': metric(100) },
+    });
+    const base = report({});
+    const make = (width: number, second: BenchCase): BenchReport => ({
+      environment,
+      params: {
+        ...base.params,
+        sizes: [10, 100],
+        k: { 'flat|full|open|10': { create: width }, 'flat|full|open|100': { create: 1000 } },
+      },
+      cases: [caseOf(10), second],
+    });
+    expect(() => assertReport(make(1000, caseOf(100)), make(10_000, caseOf(100))))
+      .toThrow('params mismatch: k flat|full|open|10');
+    const errored: BenchCase = { shape: 'flat', profile: 'full', mode: 'open', size: 100, error: 'batch k exceeded' };
+    expect(() => assertReport(make(1000, caseOf(100)), make(10_000, errored)))
+      .toThrow('params mismatch: k flat|full|open|10');
+    expect(assertReport(make(1000, caseOf(100)), make(1000, errored))).toContain('warm-resolve');
+  });
+
+  it('empty report is refused', () => {
+    const base = report({ 'warm-resolve': metric(100) });
+    const empty: BenchReport = { ...base, cases: [] };
+    const run = runCli(empty, empty);
+    expect(run.status).toBe(1);
+    expect(`${run.stdout}\n${run.stderr}`).toContain('report has no case');
   });
 
   it('missing baseline case fails', () => {
