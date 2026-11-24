@@ -123,7 +123,7 @@ export function graphsForProgram(
   return clean.map(cloneGraph);
 }
 
-/** Drops the last graphs. The session does not keep a map of older ones. */
+/** Drops the last graphs. Identity keys stay until the file is deleted or the session closes. */
 export function releaseGraphCache(state: SessionState): void {
   state.graphs = undefined;
   state.graphProgram = undefined;

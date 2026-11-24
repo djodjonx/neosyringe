@@ -391,6 +391,38 @@ describe('T15 token manifest', () => {
     expect(schemaDiag?.message).not.toMatch(/User_[0-9a-f]{8}/);
   });
 
+  it('barrel re-export keeps one key in two consumers', () => {
+    const directRoot = keep(mkdtempSync(path.join(tmpdir(), 'neosyringe-t15-direct-')));
+    const barrelRoot = keep(mkdtempSync(path.join(tmpdir(), 'neosyringe-t15-barrel-')));
+    const directPkg = installLayout(directRoot, 'flat', '1.0.0', 'tokens-v1');
+    const barrelPkg = installLayout(barrelRoot, 'flat', '1.0.0', 'tokens-v1');
+    const directDts = path.join(directPkg, 'dist/types.d.ts').split(path.sep).join('/');
+    const barrelDts = path.join(barrelPkg, 'dist/types.d.ts').split(path.sep).join('/');
+    const barrelFile = path.join(barrelRoot, 'barrel.ts');
+    writeFileSync(barrelFile, `export type { User } from '${barrelDts}';\n`);
+    const directFile = path.join(directRoot, 'consumer.ts');
+    const barrelConsumer = path.join(barrelRoot, 'consumer.ts');
+    const directProgram = programFrom({
+      [directFile]: consumerSource(
+        [{ binding: 'User', from: directDts }],
+        'export const userProbe: User = null!;\n',
+      ),
+    });
+    const barrelProgram = programFrom({
+      [barrelFile]: readFileSync(barrelFile, 'utf8'),
+      [barrelConsumer]: consumerSource(
+        [{ binding: 'User', from: barrelFile.split(path.sep).join('/') }],
+        'export const userProbe: User = null!;\n',
+      ),
+    });
+    const directKey = new TokenResolverService(directProgram.getTypeChecker())
+      .getTypeId(variableType(directProgram, directFile, 'userProbe'));
+    const barrelKey = new TokenResolverService(barrelProgram.getTypeChecker())
+      .getTypeId(variableType(barrelProgram, barrelConsumer, 'userProbe'));
+    expect(directKey).toBe(producerUserKey);
+    expect(barrelKey).toBe(directKey);
+  });
+
   it('optional node_modules parameter without a manifest does not crash', () => {
     const root = keep(mkdtempSync(path.join(tmpdir(), 'neosyringe-t15-public-optional-')));
     const plain = path.join(root, 'node_modules/@acme/plain/dist');

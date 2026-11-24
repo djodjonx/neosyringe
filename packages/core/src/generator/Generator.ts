@@ -9,7 +9,12 @@ import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMeth
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
 import { TSContext } from '../TSContext';
-import { HashUtils } from '../analyzer/shared/HashUtils';
+import {
+  artifactDescriptor,
+  hashArtifactDescriptor,
+  resolveArtifactIdentity,
+  type CollisionRegistry,
+} from '../analyzer/shared/artifactIdentity';
 
 /**
  * Returns a usable identifier name for a symbol in the context of direct symbol names
@@ -113,7 +118,16 @@ export class Generator {
      * Undefined picks `optimized` for the minimal profile and for closed mode, and
      * `reference` otherwise, so an open full container keeps today's text.
      */
-    private emitter?: 'reference' | 'optimized'
+    private emitter?: 'reference' | 'optimized',
+    /**
+     * Shared collision registry for this build, and an optional hash used by tests
+     * to force two descriptors onto one key. The suffix is an artifact id, never
+     * a public token id.
+     */
+    private identityOptions?: {
+      collisions?: CollisionRegistry;
+      hash?: (descriptor: string) => string;
+    }
   ) {
     // Check for analysis errors and throw the first one for CLI compatibility
     if (graph.errors && graph.errors.length > 0) {
@@ -134,24 +148,29 @@ export class Generator {
     //
     // In separate-output-file mode (useDirectSymbolNames=false), each container
     // already lives alone in its own generated file, so no suffix is needed —
-    // keep names stable there for backward compatibility.
-    const suffix = this.useDirectSymbolNames ? `_${this.getGeneratedClassSuffix()}` : '';
+    // keep names stable there for backward compatibility. The identity is still
+    // registered, so two containers that collapse to one key fail in either mode.
+    const artifactKey = this.getGeneratedClassSuffix();
+    const suffix = this.useDirectSymbolNames ? `_${artifactKey}` : '';
     this.containerClassName = `NeoContainer${suffix}`;
     this.notFoundErrorClassName = `NeoServiceNotFoundError${suffix}`;
   }
 
   /**
-   * Computes a short, deterministic, per-call-site hash used to uniquify the
-   * generated class names (see constructor). Prefers the source file + AST
-   * position of the `defineBuilderConfig` call (unique per call site); falls
-   * back to `containerId` when positions aren't available (e.g. hand-built
-   * graphs in unit tests).
+   * Artifact id for this container. The class suffix uses it in direct mode.
+   * Registration runs in both modes: a second, different descriptor on the same
+   * key throws `identity collision`.
    */
   private getGeneratedClassSuffix(): string {
-    const key = this.graph.sourceFileName !== undefined && this.graph.defineBuilderConfigStart !== undefined
-      ? `${this.graph.sourceFileName}:${this.graph.defineBuilderConfigStart}`
-      : this.graph.containerId;
-    return HashUtils.hashString(key);
+    const identity = resolveArtifactIdentity({
+      sourceFileName: this.graph.sourceFileName,
+      defineBuilderConfigStart: this.graph.defineBuilderConfigStart,
+      containerId: this.graph.containerId,
+    });
+    const descriptor = artifactDescriptor(identity);
+    const key = hashArtifactDescriptor(descriptor, this.identityOptions?.hash);
+    this.identityOptions?.collisions?.register(key, descriptor);
+    return key;
   }
 
   /**
@@ -334,7 +353,7 @@ export class Generator {
         debugGetters: this.emitDebugGetter(emitted),
       });
       // Imports are read after the class: emitting it is what registers them.
-      return `${openModeMark(sourceGraph.optimizationMode)}
+      return `${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
 ${this.renderImportLines(imports, sourceGraph).join('\n')}
 ${[...captureHoists(sourceGraph), ...residualValueReads(sourceGraph)].join('\n')}
 
@@ -437,7 +456,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
 
     const { rootFields, assertRootMethod } = rootMembers(emitted, closed, getImport);
 
-    return `${openModeMark(sourceGraph.optimizationMode)}
+    return `${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
 ${importLines.join('\n')}
 ${captureLines.join('\n')}
 
@@ -647,6 +666,11 @@ function containerState(
     : `${minimal ? '' : 'private _reconfiguring = false;\n  '}private _failure?: unknown;
   ${scopeFields}`;
   return { stateFields, eagerField };
+}
+
+/** Leading text of every generated container. Empty: the container imports nothing from Node. */
+function generatedContainerHeader(): string {
+  return '';
 }
 
 function runtimeHelpers(hasAsync: boolean): string {

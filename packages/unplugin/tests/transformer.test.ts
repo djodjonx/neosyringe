@@ -3,14 +3,20 @@ import * as ts from 'typescript';
 import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
 import { Generator, GraphValidator } from '@djodjonx/neosyringe-core/generator';
 
-vi.mock('@djodjonx/neosyringe-core/analyzer', () => ({
-  Analyzer: vi.fn().mockImplementation(() => ({
-    extract: vi.fn().mockReturnValue({ nodes: new Map(), errors: [] }),
-  })),
-  HashUtils: {
-    generateTokenId: vi.fn().mockReturnValue('IService_abc123'),
-  },
-}));
+vi.mock('@djodjonx/neosyringe-core/analyzer', async () => {
+  const actual = await vi.importActual<typeof import('@djodjonx/neosyringe-core/analyzer')>(
+    '@djodjonx/neosyringe-core/analyzer',
+  );
+  return {
+    ...actual,
+    Analyzer: vi.fn().mockImplementation(() => ({
+      extract: vi.fn().mockReturnValue({ nodes: new Map(), errors: [] }),
+    })),
+    HashUtils: {
+      generateTokenId: vi.fn().mockReturnValue('IService_abc123'),
+    },
+  };
+});
 
 vi.mock('@djodjonx/neosyringe-core/generator', () => ({
   Generator: vi.fn().mockImplementation(() => ({

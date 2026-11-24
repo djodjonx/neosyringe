@@ -32,8 +32,13 @@ export class TSContext {
     this._ts = instance;
   }
 
+  /** Project root set by the caller. Undefined when nobody set one. Does not read the process cwd. */
+  static get knownProjectRoot(): string | undefined {
+    return projectRootStore.getStore() ?? this._projectRoot;
+  }
+
   static get projectRoot(): string {
-    return projectRootStore.getStore() ?? this._projectRoot ?? process.cwd();
+    return this.knownProjectRoot ?? process.cwd();
   }
 
   static set projectRoot(root: string) {

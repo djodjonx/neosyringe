@@ -85,6 +85,10 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       if ((graph.sourceFileName ?? '').replace(/\\/g, '/') === key) state.devtoolsGraphs.delete(graphKey);
     }
   };
+  // Rollup and Vite each get their own hook object. Both call this.
+  const clearCollisions = (): void => {
+    state.collisions?.clear();
+  };
   // session.ts createProgram keeps only the last transformed root. buildEnd needs every file.
   const sourceTexts = new Map<string, string>();
 
@@ -179,10 +183,27 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       if (change.event === 'delete') {
         forgetDevtoolsFile(id);
         releaseGraphCache(state);
+        // bind drops this file's keys. The published class has no public release yet.
+        state.collisions?.bind(programFileName(id));
       }
     },
 
+    rollup: {
+      closeBundle() {
+        if (!this.meta.watchMode) clearCollisions();
+      },
+      closeWatcher() {
+        clearCollisions();
+      },
+    },
+
     vite: {
+      closeBundle() {
+        if (!this.meta.watchMode) clearCollisions();
+      },
+      closeWatcher() {
+        clearCollisions();
+      },
       configureServer(server) {
         if (process.env.NODE_ENV === 'production') return;
         if (options.devtools !== true) return;
