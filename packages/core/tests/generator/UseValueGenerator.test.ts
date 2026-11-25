@@ -79,7 +79,7 @@ describe('Generator - useValue', () => {
       roots: [],
     };
 
-    const code = new Generator(graph).generate();
+    const code = new Generator(graph, false, undefined, true, false, 'reference').generate();
 
     expect(code).toContain('return new Import_0.UserService(this.resolve("AppConfig_abc"))');
   });

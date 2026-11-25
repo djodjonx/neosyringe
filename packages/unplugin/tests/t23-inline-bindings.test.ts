@@ -202,7 +202,9 @@ describe('T23-G2 a renamed import keeps its local binding', () => {
   it('T23-G2 the container class reads the class by the local binding of the import, with no extra import', () => {
     const code = transformedApp(RENAMED);
     expect(code).toContain('return new Renamed();');
-    expect(code).toContain('if (token === Renamed) {');
+    // The dispatch table keys the class by the local binding, `Renamed`, not by the exported name `Logger`.
+    expect(code).toMatch(/\[Renamed, NeoContainer_\w+\.prototype\._get_Logger_[a-f0-9]+\]/);
+    expect(code).toContain('this.instances.has(Renamed)');
     expect(code).not.toMatch(/new Logger\(/);
     expect(code).not.toContain('__neo_Import_');
   });
@@ -693,7 +695,14 @@ describe('T23-G3 a rewrite adds a runtime dependency only where the user text re
   it('T23-G3 a name whose every read the plugin rewrites registers no import', () => {
     const code = transformedApp(DROPPED_READ);
     expect(code).not.toContain('__neo_Import_');
-    expect(code).not.toContain('__neo_Type_');
+    // The typed getter of the partial's own token `IR` is bound by an `import type`; `IA`, whose only read the
+    // plugin rewrites, is bound by none beyond the one the user wrote.
+    const importLines = code.split('\n').filter((line) => /^import\b/.test(line));
+    expect(importLines.filter((line) => line.includes('__neo_Type_'))).toEqual(["import type { IR as __neo_Type_IR } from './part';"]);
+    expect(importLines.filter((line) => /\bIA\b/.test(line))).toEqual(["import { part, type IA } from './part';"]);
+    // No module beyond the ones the user's own imports name.
+    const userModules = runtimeImportsOf(DROPPED_READ['app.ts'] ?? '');
+    expect(runtimeImportsOf(code).filter((module) => !userModules.includes(module))).toEqual([]);
   });
 });
 

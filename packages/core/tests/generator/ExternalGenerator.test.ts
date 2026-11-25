@@ -46,7 +46,7 @@ describe('Generator - External Bindings', () => {
       roots: ['FeatureService'],
     };
 
-    const generator = new Generator(graph, false, '/src');
+    const generator = new Generator(graph, false, '/src', true, false, 'reference');
     const code = generator.generate();
 
     // 1. Verify Import — paths are relative to outputDir ('/src')

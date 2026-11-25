@@ -68,7 +68,7 @@ describe('resolveAll — Analyzer to Generator integration', () => {
     `);
 
     const graph = new Analyzer(program).extract();
-    const code = new Generator(graph, true).generate();
+    const code = new Generator(graph, true, undefined, true, false, 'reference').generate();
 
     // resolveAll exists
     expect(code).toContain('public resolveAll<T>');
@@ -76,8 +76,17 @@ describe('resolveAll — Analyzer to Generator integration', () => {
     // IPlugin should NOT appear in resolveLocal's own body (bounded by the next
     // member — the debug getters — not by end-of-file, which would also catch
     // the unrelated _dependencyGraph/_graph debug data that legitimately
-    // mentions IPlugin).
+    // mentions IPlugin). The section must exist: an empty one would pass for any token.
     const resolveLocalSection = code.split('private resolveLocal')[1]?.split('public get _graph')[0] ?? '';
+    expect(resolveLocalSection).toContain('return undefined;');
     expect(resolveLocalSection).not.toContain('IPlugin');
+
+    // The default emitter has no resolveLocal: a multi token has no row in the dispatch table, only in the list table.
+    const dispatched = new Generator(graph, true).generate();
+    expect(dispatched).not.toContain('private resolveLocal');
+    expect(dispatched).toContain('private static __neoListsTable()');
+    expect(dispatched).not.toMatch(/private static __neoDispatch\b/);
+    const listsTable = dispatched.split('private static __neoListsTable()')[1]?.split('\n  }')[0] ?? '';
+    expect(listsTable).toContain('IPlugin');
   });
 });

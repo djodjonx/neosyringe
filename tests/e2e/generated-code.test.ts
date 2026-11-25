@@ -37,7 +37,7 @@ describe('E2E - Generated Code Validation', () => {
     const validator = new GraphValidator();
     validator.validate(graph);
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, undefined, true, false, 'reference');
     return generator.generate();
   };
 

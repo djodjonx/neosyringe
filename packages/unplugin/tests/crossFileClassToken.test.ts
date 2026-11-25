@@ -59,7 +59,7 @@ describe('Plugin — cross-file bare class token wiring', () => {
     // "SharedRepo" identifier (which would be a ReferenceError — the child file only
     // ever imports the *type*, never the runtime value).
     expect(result).toMatch(/import \* as __neo_Import_\d+ from '\.\/parent-root';/);
-    expect(result).toMatch(/new ConsumerA\(this\.resolve\(__neo_Import_\d+\.SharedRepo\)\)/);
+    expect(result).toMatch(/new ConsumerA\(this\._resolveInternal\(__neo_Import_\d+\.SharedRepo\)\)/);
   });
 
   it('does not throw building the child', () => {

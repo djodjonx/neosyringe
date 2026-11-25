@@ -40,7 +40,7 @@ describe('Generator', () => {
       roots: ['UserService'],
     };
 
-    const generator = new Generator(graph, false, '/src');
+    const generator = new Generator(graph, false, '/src', true, false, 'reference');
     const code = generator.generate();
 
     // Verify Imports — paths are relative to outputDir ('/src')
@@ -123,7 +123,7 @@ describe('Generator', () => {
       roots: [],
     };
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, undefined, true, false, 'reference');
     const code = generator.generate();
 
     // Singleton Logic: Check cache

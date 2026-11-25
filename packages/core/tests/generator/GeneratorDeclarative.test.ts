@@ -44,7 +44,7 @@ describe('Generator - Declarative Config', () => {
       containerName: 'TestContainer'
     };
 
-    const generator = new Generator(graph, false, '/src');
+    const generator = new Generator(graph, false, '/src', true, false, 'reference');
     const code = generator.generate();
 
     // 1. Check Imports — paths are relative to outputDir ('/src')

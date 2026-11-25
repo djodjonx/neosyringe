@@ -60,7 +60,7 @@ describe('FactoryEmitter — parent/legacy container wiring', () => {
 
     new GraphValidator().validate(graph); // must not throw
 
-    const code = new Generator(graph, true).generate();
+    const code = new Generator(graph, true, undefined, true, false, 'reference').generate();
 
     expect(code).not.toContain('new UserService(undefined)');
     expect(code).toMatch(/new UserService\(this\.resolve\("ILogger_[a-f0-9]+"\)\)/);
@@ -96,7 +96,7 @@ describe('FactoryEmitter — parent/legacy container wiring', () => {
 
     new GraphValidator().validate(graph);
 
-    const code = new Generator(graph, true).generate();
+    const code = new Generator(graph, true, undefined, true, false, 'reference').generate();
 
     expect(code).not.toContain('new UserService(undefined)');
     expect(code).toMatch(/new UserService\(this\.resolve\("AuthService_[a-f0-9]+"\)\)/);
@@ -134,7 +134,7 @@ describe('FactoryEmitter — parent/legacy container wiring', () => {
 
     new GraphValidator().validate(graph); // must not throw
 
-    const code = new Generator(graph, true).generate();
+    const code = new Generator(graph, true, undefined, true, false, 'reference').generate();
 
     expect(code).not.toContain('new UserService(undefined)');
     // Referenced via an explicit namespace import (not a bare "SharedRepo" identifier —

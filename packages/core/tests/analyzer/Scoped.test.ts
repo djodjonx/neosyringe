@@ -342,7 +342,7 @@ describe('Scoped Injection', () => {
 
       const analyzer = new Analyzer(program);
       const graph = analyzer.extract();
-      const generator = new Generator(graph);
+      const generator = new Generator(graph, false, undefined, true, false, 'reference');
       const code = generator.generate();
 
       // Should have factory

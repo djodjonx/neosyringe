@@ -29,7 +29,7 @@ describe('Generator - Factory Support', () => {
       roots: ['IConfig']
     };
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, undefined, true, false, 'reference');
     const code = generator.generate();
 
     // Should contain the factory wrapper
@@ -155,7 +155,7 @@ describe('Generator - Factory Support', () => {
       roots: ['AppService']
     };
 
-const generator = new Generator(graph);
+const generator = new Generator(graph, false, undefined, true, false, 'reference');
     const code = generator.generate();
 
     // Should have factory for IConfig

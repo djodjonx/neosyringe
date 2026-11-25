@@ -955,11 +955,20 @@ describe('T17 direct accessors and runtime profiles', () => {
     const internal = methodText(optimized.source, 'private _resolveInternal(token: unknown): unknown {');
     expect(internal).not.toContain('_get_');
     expect(internal).not.toContain('_direct_');
-    expect(internal).not.toContain('token === "Local"');
+    // No local provider has a row in a closed container that no factory reads freely: the class has no dispatch table.
+    expect(internal).not.toContain('__neoDispatch');
+    expect(optimized.source).not.toMatch(/__neoDispatch\b/);
+    // The internal list resolver reads the declared multi token only; the exported root has its own table.
     const internalAll = methodText(optimized.source, 'private _resolveAllInternal(token: unknown): unknown[] {');
-    expect(internalAll).toContain('token === "Item_1"');
-    expect(internalAll).not.toContain('token === "Other_1"');
-    expect(methodText(optimized.source, 'public resolveAll(token: unknown): unknown[] {')).not.toContain('_resolveAllInternal(');
+    expect(internalAll).toContain('__neoListsTable()');
+    expect(internalAll).not.toContain('__neoRootListsTable()');
+    expect(methodText(optimized.source, 'private static __neoListsTable()')).toContain('"Item_1"');
+    expect(methodText(optimized.source, 'private static __neoListsTable()')).not.toContain('"Other_1"');
+    const publicAll = methodText(optimized.source, 'public resolveAll(token: unknown): unknown[] {');
+    expect(publicAll).not.toContain('_resolveAllInternal(');
+    expect(publicAll).toContain('__neoRootListsTable()');
+    expect(methodText(optimized.source, 'private static __neoRootListsTable()')).toContain('"Other_1"');
+    expect(methodText(optimized.source, 'private static __neoRootListsTable()')).not.toContain('"Item_1"');
 
     // An opaque factory may ask for any token, so the dispatcher lists every local provider again.
     const opaqueRun = await differential(closedGraph(true), async ({ container, log }) => {
@@ -968,7 +977,8 @@ describe('T17 direct accessors and runtime profiles', () => {
     }, { parentGraph });
     expect(opaqueRun.optimized.trace).toEqual(opaqueRun.reference.trace);
     expect(opaqueRun.optimized.trace).toEqual(['local local']);
-    expect(methodText(opaqueRun.optimized.source, 'private _resolveInternal(token: unknown): unknown {')).toContain('token === "Local"');
+    expect(methodText(opaqueRun.optimized.source, 'private _resolveInternal(token: unknown): unknown {')).toContain('__neoDispatchTable()');
+    expect(methodText(opaqueRun.optimized.source, 'private static __neoDispatchTable()')).toContain('"Local"');
   });
 
   it('T17-W12 an override on a token nobody registered wins on resolve and notifies', async () => {
@@ -1030,13 +1040,17 @@ describe('T17 direct accessors and runtime profiles', () => {
     expect(typeof full.container.on).toBe('function');
   });
 
-  it('T17-P9 the default full profile keeps the reference emission', async () => {
+  it('T17-P9 the default full profile uses the optimized emission', async () => {
     const graph = graphOf([
       ['Local', factoryNode('Local', '() => ({ name: "local" })')],
     ]);
     const byDefault = open(graph, undefined, { testOverrides: true });
+    const optimized = open(graph, 'optimized', { testOverrides: true });
     const reference = open(graph, 'reference', { testOverrides: true });
-    expect(byDefault.source).toBe(reference.source);
+    expect(byDefault.source).toBe(optimized.source);
+    expect(byDefault.source).not.toBe(reference.source);
+    expect(byDefault.source).toContain('_direct_Local');
+    expect(byDefault.source).not.toContain('resolveLocal');
     const { container } = byDefault;
     assertFull(container);
     const seen: string[] = [];
