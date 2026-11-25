@@ -105,7 +105,8 @@ describe('T03 C1 a consumer that writes into a graph never writes into the share
     const shared = new Analyzer(program).extractAll();
     expect(graphs[0]).not.toBe(shared[0]);
 
-    // What collectEmbeddings does: it writes the rewritten source into the registration.
+    // What a consumer does when it writes into a registration. The plugin writes `factoryRewrites` and
+    // `valueRewrites` there (attachRewrites), never into the snapshot.
     for (const graph of graphs) {
       for (const node of graph.nodes.values()) node.service.factorySource = '() => "REWRITTEN"';
     }
@@ -124,8 +125,13 @@ describe('T03 C1 a consumer that writes into a graph never writes into the share
     if (!program) throw new Error('the session keeps no program');
     const graphs = new Analyzer(program).extractAll();
     expect(graphs).toHaveLength(1);
-    for (const node of graphs[0]?.nodes.values() ?? []) {
-      expect(node.service.factorySource).toContain('useInterface<IPort>');
+    const services = [...(graphs[0]?.nodes.values() ?? [])].map((node) => node.service);
+    expect(services.length).toBeGreaterThan(0);
+    for (const service of services) {
+      // The transform rewrote the marker (see the code above), and carried that on its own copy of the graph.
+      expect(service.factoryRewrites).toBeUndefined();
+      expect(service.valueRewrites).toBeUndefined();
+      expect(service.factorySource).toContain('useInterface<IPort>');
     }
   });
 });

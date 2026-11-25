@@ -411,7 +411,8 @@ describe('T11 source maps', () => {
       }
     }
     // 34 before the unique factory returned `{ tag: ... }` so that the build and the IDE agree it fits `Unique`; the extra word is one more segment.
-    expect(checked).toBe(35);
+    // 38 with the origin carried by the generator: the `1` of the useValue and the `2` of each twin factory were skipped by the text search (their text occurs more than once) and are mapped now.
+    expect(checked).toBe(38);
 
     const uniqueAt = source.indexOf(unique);
     const uniquePos = positionOf(source, uniqueAt);

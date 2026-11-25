@@ -26,8 +26,9 @@ vi.mock('@djodjonx/neosyringe-core/generator', async () => {
   return {
     NamePool: actual.NamePool,
     reservedNamesOf: actual.reservedNamesOf,
+    snapshotOfFiles: actual.snapshotOfFiles,
     Generator: vi.fn().mockImplementation(() => ({
-      generate: vi.fn().mockReturnValue('class __CatsContainer__ {}'),
+      generateRendered: vi.fn().mockReturnValue({ code: 'class __CatsContainer__ {}', copies: [] }),
       generateInstantiation: vi.fn().mockReturnValue('new __CatsContainer__()'),
     })),
     GraphValidator: vi.fn().mockImplementation(() => ({
@@ -98,7 +99,7 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(Generator).mockImplementation(function () {
       return {
-        generate: vi.fn().mockReturnValue('class __CatsContainer__ {}'),
+        generateRendered: vi.fn().mockReturnValue({ code: 'class __CatsContainer__ {}', copies: [] }),
         generateInstantiation: vi.fn().mockReturnValue('new __CatsContainer__()'),
       };
     } as any);
