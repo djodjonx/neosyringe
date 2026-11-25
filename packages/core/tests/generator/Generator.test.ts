@@ -49,11 +49,11 @@ describe('Generator', () => {
 
     // Verify Factory Functions
     // C depends on nothing -> new Import_0.ConsoleLogger()
-    expect(code).toContain('private create_ILogger(): unknown {');
+    expect(code).toContain('private create_ILogger(): InstanceType<typeof Import_0.ConsoleLogger> {');
     expect(code).toContain('return new Import_0.ConsoleLogger();');
 
     // B depends on C -> new Import_1.UserService(this.resolve(Import_0.ConsoleLogger))
-    expect(code).toContain('private create_UserService(): unknown {');
+    expect(code).toContain('private create_UserService(): InstanceType<typeof Import_1.UserService> {');
     expect(code).toContain('return new Import_1.UserService(this.resolve(Import_0.ConsoleLogger));');
 
     // Verify Container Class
@@ -147,7 +147,7 @@ describe('Generator', () => {
       const generator = new Generator(graph);
       const code = generator.generate();
 
-      expect(code).toContain('private create__scope_Package(): unknown');
+      expect(code).toContain('private create__scope_Package(): InstanceType<typeof Import_0.Pkg>');
   });
 
   it('should respect export modifiers for container variable', () => {

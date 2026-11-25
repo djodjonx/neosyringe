@@ -206,6 +206,16 @@ function expectCopyMapped(
 
 const HEADER = "import { defineBuilderConfig } from '@djodjonx/neosyringe';";
 
+/**
+ * The namespace the output imports `./part` through. A factory of another file is copied into this one, and the
+ * names its text reads are bound by that import (T23-G3): each read is generated text, the rest stays a copy.
+ */
+function partNamespaceOf(output: Output): string {
+  const found = output.code.match(/import \* as (__neo_Import_\d+) from '\.\/part';/);
+  if (!found) throw new Error('no namespace import of ./part in the output');
+  return found[1];
+}
+
 /** Two class tokens, one factory text written twice. */
 function twinSource(eol: string): string {
   return [
@@ -349,9 +359,18 @@ describe('T23-P5 a factory written in another file maps to that file (B3)', () =
     const space = workspace({ 'part.ts': PART, 'app.ts': APP_WITH_PART });
     const output = transform(space, 'app.ts', APP_WITH_PART);
     const foreign = "() => new Remote('from the partial file')";
-    const generated = output.code.indexOf(foreign);
+    // `Remote` is a name of part.ts: the output reads it through the namespace import (generated text), the
+    // text on each side of it is still a copy, mapped to its own line and column of part.ts.
+    const namespace = partNamespaceOf(output);
+    const head = '() => new ';
+    const tail = "('from the partial file')";
+    const generated = output.code.indexOf(`${head}${namespace}.Remote${tail}`);
     expect(generated).toBeGreaterThan(-1);
-    expect(expectCopyMapped(output, generated, PART, PART.indexOf(foreign), foreign.length, 'part.ts')).toBeGreaterThan(3);
+    expect(output.code).not.toContain(foreign);
+    const from = PART.indexOf(foreign);
+    expect(expectCopyMapped(output, generated, PART, from, head.length, 'part.ts')).toBeGreaterThan(1);
+    const tailAt = generated + head.length + `${namespace}.Remote`.length;
+    expect(expectCopyMapped(output, tailAt, PART, from + head.length + 'Remote'.length, tail.length, 'part.ts')).toBeGreaterThan(1);
     const own = "() => ({ local: 'in the container file' })";
     expect(expectCopyMapped(output, output.code.indexOf(own), APP_WITH_PART, APP_WITH_PART.indexOf(own), own.length, 'app.ts'))
       .toBeGreaterThan(3);
@@ -392,10 +411,15 @@ describe('T23-P5 the map the TypeScript transformer emits names the other file t
     const map = JSON.parse(files.get('app.js.map') ?? '{}') as PluginMap;
     expect(map.sources).toEqual(['app.ts', 'part.ts']);
     expect(map.sourcesContent).toEqual([APP_WITH_PART, PART]);
-    const factory = "new Remote('from the partial file')";
-    const traced = tracerOf({ code: js, map })(js.indexOf(factory));
-    expect({ source: traced.source, line: traced.line, column: traced.column })
-      .toEqual({ source: 'part.ts', ...positionOf(PART, PART.indexOf(factory)) });
+    // `Remote` is read through the namespace import of part.ts; `new` and the argument are copies of part.ts.
+    const keyword = 'new __neo_Import_';
+    const argument = "('from the partial file')";
+    const keywordAt = tracerOf({ code: js, map })(js.indexOf(keyword));
+    expect({ source: keywordAt.source, line: keywordAt.line, column: keywordAt.column })
+      .toEqual({ source: 'part.ts', ...positionOf(PART, PART.indexOf("new Remote('from the partial file')")) });
+    const argumentAt = tracerOf({ code: js, map })(js.indexOf(argument));
+    expect({ source: argumentAt.source, line: argumentAt.line, column: argumentAt.column })
+      .toEqual({ source: 'part.ts', ...positionOf(PART, PART.indexOf(argument)) });
   });
 });
 
@@ -518,11 +542,19 @@ describe('T23-P5 a rewritten marker inside a factory splits the copy (B2, B3)', 
       '',
     ].join('\n');
     const output = transform(workspace({ 'part.ts': part, 'app.ts': app }), 'app.ts', app);
+    // `IA` is a type of part.ts, read in a type position only: it is imported with `import type`, so the copy
+    // adds no runtime dependency. The text on each side stays a copy.
+    expect(output.code).toContain("import type { IA as __neo_Type_IA } from './part';");
     const before = '(k: { resolve(token: unknown): IA }) => k.resolve(';
-    const generated = output.code.indexOf(before);
+    const head = '(k: { resolve(token: unknown): ';
+    const tail = ' }) => k.resolve(';
+    const generated = output.code.indexOf(`${head}__neo_Type_IA${tail}`);
     expect(generated).toBeGreaterThan(-1);
     expect(output.code).not.toContain('useInterface<');
-    expect(expectCopyMapped(output, generated, part, part.indexOf(before), before.length, 'part.ts')).toBeGreaterThan(3);
+    const from = part.indexOf(before);
+    expect(expectCopyMapped(output, generated, part, from, head.length, 'part.ts')).toBeGreaterThan(3);
+    const tailAt = generated + head.length + '__neo_Type_IA'.length;
+    expect(expectCopyMapped(output, tailAt, part, from + head.length + 'IA'.length, tail.length, 'part.ts')).toBeGreaterThan(1);
   });
 });
 

@@ -52,11 +52,11 @@ describe('Generator - Declarative Config', () => {
 
     // 2. Check Factories
     // create_ILogger -> new ConsoleLogger()
-    expect(code).toContain('private create_ILogger(): unknown {');
+    expect(code).toContain('private create_ILogger(): InstanceType<typeof Import_0.ConsoleLogger> {');
     expect(code).toContain('return new Import_0.ConsoleLogger();');
 
     // create_UserService -> new UserService(resolve("ILogger"))
-    expect(code).toContain('private create_UserService(): unknown {');
+    expect(code).toContain('private create_UserService(): InstanceType<typeof Import_0.UserService> {');
     // For interface token, we expect the STRING literal "ILogger" to be passed
     expect(code).toContain('this.resolve("ILogger")');
 

@@ -63,6 +63,8 @@ export interface StrictInput {
   consumer: EmittedModule;
   /** Extra ambient declarations (e.g. the `parent` identifier an inlined container reads). */
   ambient?: string;
+  /** Other source files of the program (the user's own modules). They are inputs, never subjects. */
+  extraFiles?: readonly { file: string; text: string }[];
 }
 
 function flatten(message: string | ts.DiagnosticMessageChain): string {
@@ -77,6 +79,7 @@ export function checkStrict(input: StrictInput): StrictDiagnostic[] {
   const files = new Map<string, string>();
   const at = (name: string): string => join(input.dir, name).replace(/\\/g, '/');
   files.set(at(input.userSource.file), input.userSource.text);
+  for (const extra of input.extraFiles ?? []) files.set(at(extra.file), extra.text);
   for (const output of input.outputs) files.set(at(output.file), output.code);
   files.set(at(input.consumer.file), input.consumer.code);
   const ambientName = at('ambient.d.ts');
