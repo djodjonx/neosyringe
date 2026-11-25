@@ -29,27 +29,27 @@ class NeoContainer {
 
   // -- Factories --
   
-  private create_ILogger_40a89407(): unknown {
+  private create_ILogger_40a89407(): InstanceType<typeof Import_0.ConsoleLogger> {
     return new Import_0.ConsoleLogger();
   }
   
-  private create_IDatabase_5d4f4cb7(): unknown {
+  private create_IDatabase_5d4f4cb7(): InstanceType<typeof Import_0.PostgresDB> {
     return new Import_0.PostgresDB(this.resolve("ILogger_40a89407"));
   }
   
-  private create_ICache_d95eb76f(): unknown {
+  private create_ICache_d95eb76f(): InstanceType<typeof Import_0.RedisCache> {
     return new Import_0.RedisCache(this.resolve("ILogger_40a89407"));
   }
   
-  private create_UserRepository_ccb9cdae(): unknown {
+  private create_UserRepository_ccb9cdae(): InstanceType<typeof Import_0.UserRepository> {
     return new Import_0.UserRepository(this.resolve("IDatabase_5d4f4cb7"), this.resolve("ICache_d95eb76f"));
   }
   
-  private create_UserService_883381ff(): unknown {
+  private create_UserService_883381ff(): InstanceType<typeof Import_0.UserService> {
     return new Import_0.UserService(this.resolve(Import_0.UserRepository), this.resolve("ILogger_40a89407"));
   }
   
-  private create_AuthService_2d28d7a2(): unknown {
+  private create_AuthService_2d28d7a2(): InstanceType<typeof Import_0.AuthService> {
     return new Import_0.AuthService(this.resolve(Import_0.UserService), this.resolve("ILogger_40a89407"));
   }
 
@@ -366,7 +366,7 @@ class NeoContainer {
 
   // -- Factories --
   
-  private create_ILogger_40a89407(): unknown {
+  private create_ILogger_40a89407(): InstanceType<typeof Import_0.ConsoleLogger> {
     return new Import_0.ConsoleLogger();
   }
 
@@ -643,7 +643,7 @@ class NeoContainer {
 
   // -- Factories --
   
-  private create_NewService_4f96ffdd(): unknown {
+  private create_NewService_4f96ffdd(): InstanceType<typeof Import_0.NewService> {
     return new Import_0.NewService(this.resolve("LegacyService_46f42bdb"));
   }
 
@@ -920,11 +920,11 @@ class NeoContainer {
 
   // -- Factories --
   
-  private create_SingletonService_ef57b246(): unknown {
+  private create_SingletonService_ef57b246(): InstanceType<typeof Import_0.SingletonService> {
     return new Import_0.SingletonService();
   }
   
-  private create_TransientService_035fe2c5(): unknown {
+  private create_TransientService_035fe2c5(): InstanceType<typeof Import_0.TransientService> {
     return new Import_0.TransientService();
   }
 
@@ -1202,7 +1202,7 @@ class NeoContainer {
 
   // -- Factories --
   
-  private create_AppService_f5397b19(): unknown {
+  private create_AppService_f5397b19(): InstanceType<typeof Import_0.AppService> {
     return new Import_0.AppService();
   }
 
@@ -1518,7 +1518,7 @@ class NeoContainer {
   } catch (__neoThrown) { __neoExpire();  throw __neoThrown; }
   }
   
-  private create_ApiService_75972c9e(): unknown {
+  private create_ApiService_75972c9e(): InstanceType<typeof Import_0.ApiService> {
     return new Import_0.ApiService(this.resolve("PropertyToken:ApiService.apiUrl_8db03951"));
   }
 
@@ -1814,11 +1814,11 @@ class NeoContainer {
 
   // -- Factories --
   
-  private create_Logger_8b5cbb1b(): unknown {
+  private create_Logger_8b5cbb1b(): InstanceType<typeof Import_0.Logger> {
     return new Import_0.Logger();
   }
   
-  private create_UserService_883381ff(): unknown {
+  private create_UserService_883381ff(): InstanceType<typeof Import_0.UserService> {
     return new Import_0.UserService(this.resolve(Import_0.Logger));
   }
 
@@ -2103,7 +2103,7 @@ class NeoContainer {
 
   // -- Factories --
   
-  private create_SimpleService_0c8fd872(): unknown {
+  private create_SimpleService_0c8fd872(): InstanceType<typeof Import_0.SimpleService> {
     return new Import_0.SimpleService();
   }
 
