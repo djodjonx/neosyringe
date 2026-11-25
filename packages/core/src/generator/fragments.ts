@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { SourceOrigin } from '../analyzer/types';
+import type { SourceOrigin, SourceRewrite } from '../analyzer/types';
 
 /**
  * Helpers an emitter can ask for by id. Only the two generic resolvers are named here:
@@ -215,21 +215,69 @@ export function render(parts: readonly Part[], snapshot: Snapshot): {
 
 /**
  * Turns the text of a user expression into parts. A range that still reads the same text in the
- * snapshot is a `source` part (a copy that can be mapped). Anything else, text the plugin
- * rewrote, or a graph built without an origin, is generated text: no mapping is claimed for it.
+ * snapshot is a `source` part (a copy that can be mapped). `rewrites` are changes the plugin makes
+ * inside that range: each one becomes generated text and the text between them stays `source`.
+ * Text the snapshot does not hold, or a graph built without an origin, is generated text: no
+ * mapping is claimed for it.
  */
-export type UserCopy = (text: string, origin: SourceOrigin | undefined) => readonly Part[];
+export type UserCopy = (
+  text: string,
+  origin: SourceOrigin | undefined,
+  rewrites?: readonly SourceRewrite[],
+) => readonly Part[];
+
+/**
+ * The rewrites that sit inside `origin`, in position order. One that starts inside the previous
+ * one is dropped: two edits of one range cannot both apply.
+ */
+function rewritesInside(origin: SourceOrigin, rewrites: readonly SourceRewrite[]): SourceRewrite[] {
+  const end = origin.start + origin.length;
+  const inside = rewrites
+    .filter((rewrite) => rewrite.start >= origin.start && rewrite.end >= rewrite.start && rewrite.end <= end)
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  const kept: SourceRewrite[] = [];
+  let cursor = origin.start;
+  for (const rewrite of inside) {
+    if (rewrite.start < cursor) continue;
+    kept.push(rewrite);
+    cursor = rewrite.end;
+  }
+  return kept;
+}
+
+/** `text` with its rewrites applied, as plain text. */
+function rewrittenText(text: string, origin: SourceOrigin | undefined, rewrites: readonly SourceRewrite[] | undefined): string {
+  if (!origin || !rewrites || rewrites.length === 0) return text;
+  let result = '';
+  let cursor = origin.start;
+  for (const rewrite of rewritesInside(origin, rewrites)) {
+    result += text.slice(cursor - origin.start, rewrite.start - origin.start) + rewrite.text;
+    cursor = rewrite.end;
+  }
+  return result + text.slice(cursor - origin.start);
+}
 
 /** The copy used when no snapshot is available: every expression is generated text. */
-export const generatedCopy: UserCopy = (text) => [generatedText(text)];
+export const generatedCopy: UserCopy = (text, origin, rewrites) => [generatedText(rewrittenText(text, origin, rewrites))];
 
 export function copyFromSnapshot(snapshot: Snapshot): UserCopy {
-  return (text, origin) => {
+  return (text, origin, rewrites) => {
     if (!origin) return [generatedText(text)];
     const source = snapshot.files.get(origin.file);
     if (source === undefined || source.slice(origin.start, origin.start + origin.length) !== text) {
-      return [generatedText(text)];
+      return [generatedText(rewrittenText(text, origin, rewrites))];
     }
-    return [{ kind: 'source', snapshot: snapshot.id, file: origin.file, start: origin.start, length: origin.length }];
+    const parts: Part[] = [];
+    const copy = (start: number, end: number): void => {
+      if (end > start) parts.push({ kind: 'source', snapshot: snapshot.id, file: origin.file, start, length: end - start });
+    };
+    let cursor = origin.start;
+    for (const rewrite of rewritesInside(origin, rewrites ?? [])) {
+      copy(cursor, rewrite.start);
+      if (rewrite.text.length > 0) parts.push(generatedText(rewrite.text));
+      cursor = rewrite.end;
+    }
+    copy(cursor, origin.start + origin.length);
+    return parts;
   };
 }

@@ -26,6 +26,16 @@ export interface SourceOrigin {
 }
 
 /**
+ * A change the plugin makes inside a copied expression: the range `start`..`end` of the origin file
+ * (absolute UTF-16 offsets) is written as `text`. Plain data. The text around it is still a copy.
+ */
+export interface SourceRewrite {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/**
  * Represents a single service definition in the dependency graph.
  */
 export interface ServiceDefinition {
@@ -65,11 +75,17 @@ export interface ServiceDefinition {
   /** Where `factorySource` was read: file, start and length of the provider expression. Plain data. */
   factoryOrigin?: SourceOrigin;
 
+  /** Changes to apply inside `factoryOrigin` when the factory is copied. `factorySource` stays the original text. */
+  factoryRewrites?: readonly SourceRewrite[];
+
   /** The raw source text of the value expression (for 'value' type). */
   valueSource?: string;
 
   /** Where `valueSource` was read: file, start and length of the useValue expression. Plain data. */
   valueOrigin?: SourceOrigin;
+
+  /** Changes to apply inside `valueOrigin` when the value is copied. `valueSource` stays the original text. */
+  valueRewrites?: readonly SourceRewrite[];
 
   /**
    * Expression that reads a useValue capture.

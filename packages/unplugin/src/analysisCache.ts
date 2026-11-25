@@ -77,7 +77,7 @@ function cloneNode(node: DependencyNode): DependencyNode {
   };
 }
 
-/** Copy a graph before collectEmbeddings writes factorySource or valueSource. */
+/** Copy a graph before attachRewrites writes the rewrites of a provider or a useValue into it. */
 export function cloneGraph(graph: DependencyGraph): DependencyGraph {
   const nodes = new Map<string, DependencyNode>();
   for (const [id, node] of graph.nodes) nodes.set(id, cloneNode(node));
@@ -107,7 +107,7 @@ export function cloneGraph(graph: DependencyGraph): DependencyGraph {
  * A host program keeps one clean copy for the other files of that same Program.
  *
  * The graphs `build` returns belong to the analysis snapshot of their Program, which every
- * analyzer on that Program shares. A transform writes into the graphs it gets (collectEmbeddings),
+ * analyzer on that Program shares. A transform writes into the graphs it gets (attachRewrites),
  * so every path returns copies and never the snapshot's own objects.
  */
 export function graphsForProgram(

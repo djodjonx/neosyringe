@@ -290,7 +290,7 @@ function emitFactoryBody(
   const userFactory = concat(
     service.factorySource === undefined
       ? [generatedText('undefined')]
-      : copy(service.factorySource, service.factoryOrigin),
+      : copy(service.factorySource, service.factoryOrigin, service.factoryRewrites),
   );
   const label = JSON.stringify(getSimpleName(service.tokenId));
   const opaqueFactory = service.opaque === true;
@@ -377,9 +377,9 @@ function emitFactoryBody(
 
 /** A captured useValue is read once. Hand-built graphs keep the original expression. */
 function capturedValue(node: DependencyNode, copy: UserCopy): Piece {
-  const { valueCapture, valueSource, valueOrigin } = node.service;
+  const { valueCapture, valueSource, valueOrigin, valueRewrites } = node.service;
   if (valueCapture !== undefined) return valueCapture;
-  if (valueSource !== undefined) return concat(copy(valueSource, valueOrigin));
+  if (valueSource !== undefined) return concat(copy(valueSource, valueOrigin, valueRewrites));
   return 'undefined';
 }
 

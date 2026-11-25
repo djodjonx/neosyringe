@@ -802,7 +802,7 @@ function captureHoists(graph: DependencyGraph, copy: UserCopy): Fragment[] {
     const name = node.service.valueCapture;
     const expr = node.service.valueSource;
     if (!name || !expr || node.service.valueCaptureRead) return;
-    lines.push(fragment`const ${name} = ${concat(copy(expr, node.service.valueOrigin))};`);
+    lines.push(fragment`const ${name} = ${concat(copy(expr, node.service.valueOrigin, node.service.valueRewrites))};`);
   });
   return lines;
 }

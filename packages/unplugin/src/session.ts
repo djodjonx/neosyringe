@@ -2,8 +2,8 @@ import * as path from 'node:path';
 import { TraceMap, decodedMappings, encodedMappings, originalPositionFor, type SourceMapSegment } from '@jridgewell/trace-mapping';
 import * as ts from 'typescript';
 import { Analyzer, CollisionRegistry, formatUnsupportedMarker, resolveNeoMarker, resolveProjectConfig, sourceFileUsesMarker, stableCodeOf, stableSeverityOf } from '@djodjonx/neosyringe-core/analyzer';
-import type { AnalysisError, DependencyGraph, DependencyNode } from '@djodjonx/neosyringe-core/analyzer';
-import { Generator, GraphValidator, NamePool, reservedNamesOf, type GraphValidationError } from '@djodjonx/neosyringe-core/generator';
+import type { AnalysisError, DependencyGraph, DependencyNode, SourceOrigin, SourceRewrite } from '@djodjonx/neosyringe-core/analyzer';
+import { Generator, GraphValidator, NamePool, reservedNamesOf, snapshotOfFiles, type CopyMapping, type GraphValidationError, type Snapshot } from '@djodjonx/neosyringe-core/generator';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { serializeGraph } from '@djodjonx/neosyringe-ui';
 import type { SerializableGraph } from '@djodjonx/neosyringe-ui';
@@ -22,9 +22,12 @@ const VLQ_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345678
 
 export interface SessionSourceMap {
   version: 3;
+  /** The transformed file first, then every other file a copy comes from. */
   sources: string[];
   names: string[];
   mappings: string;
+  /** The text of each source, in the order of `sources`. */
+  sourcesContent?: string[];
 }
 
 export interface ResolvedSessionConfig {
@@ -88,11 +91,56 @@ export interface SessionOutput {
   map: SessionSourceMap | null;
 }
 
+/**
+ * A range of an edit's text copied from one source. `gen` is where it starts in the edit text,
+ * `orig` where it starts in the source, both in UTF-16 units. `source` is an index into the
+ * `sources` of the map: 0 is the transformed file, the default.
+ */
+export interface MappedCopy {
+  gen: number;
+  orig: number;
+  length: number;
+  source?: number;
+}
+
 interface MappedEdit {
   start: number;
   end: number;
   text: string;
-  copies?: { gen: number; orig: number; length: number }[];
+  copies?: MappedCopy[];
+}
+
+/** A source of a map other than the transformed file. */
+export interface MapSource {
+  name: string;
+  text: string;
+}
+
+/**
+ * Turns the copies a Generator rendered into the copies of an edit. `files` is the list of source
+ * files of the map, the transformed file first; a file not in it yet is appended, so the order of
+ * `files` is the order of first use. Positions stay UTF-16 offsets: the line and the column are
+ * computed once the text of each source is known (`applyMappedEdits`).
+ */
+export function copiesToSegments(copies: readonly CopyMapping[], files: string[]): MappedCopy[] {
+  return copies.map((copy) => {
+    let source = files.indexOf(copy.sourceFile);
+    if (source < 0) source = files.push(copy.sourceFile) - 1;
+    return { gen: copy.generatedStart, orig: copy.sourceStart, length: copy.length, source };
+  });
+}
+
+/**
+ * The name of `file` in a map that names the transformed file `primaryName`, in the same path style:
+ * the path from the directory of `primaryFile` to `file`, joined to the directory of `primaryName`.
+ * An absolute name gives an absolute name, a name relative to a map gives a name relative to it.
+ * A name written with backslashes only is answered with backslashes.
+ */
+export function siblingSourceName(primaryName: string, primaryFile: string, file: string): string {
+  const posix = path.posix;
+  const from = posix.dirname(normalizeModuleId(primaryFile));
+  const name = posix.join(posix.dirname(normalizeModuleId(primaryName)), posix.relative(from, file.replace(/\\/g, '/')));
+  return primaryName.includes('\\') && !primaryName.includes('/') ? name.replace(/\//g, '\\') : name;
 }
 
 /** `\` → `/`, then drop `?query` and `#hash`. */
@@ -154,10 +202,18 @@ function vlq(value: number): string {
   }
 }
 
+/** LF, CR, U+2028 and U+2029 end a line; CR LF is one line end (the LF ends it). */
+function isLineEnd(code: number): boolean {
+  return code === 10 || code === 13 || code === 0x2028 || code === 0x2029;
+}
+
 function lineStartsOf(code: string): number[] {
   const starts = [0];
   for (let i = 0; i < code.length; i += 1) {
-    if (code.charCodeAt(i) === 10) starts.push(i + 1);
+    const char = code.charCodeAt(i);
+    if (!isLineEnd(char)) continue;
+    if (char === 13 && code.charCodeAt(i + 1) === 10) continue;
+    starts.push(i + 1);
   }
   return starts;
 }
@@ -191,9 +247,13 @@ function copiedOrigin(from: number, index: number): number {
   return from + index;
 }
 
-function encodeMappings(segments: readonly { genLine: number; genCol: number; orig: number }[], original: string): string {
-  const starts = lineStartsOf(original);
+function encodeMappings(
+  segments: readonly { genLine: number; genCol: number; orig: number; source: number }[],
+  texts: readonly string[],
+): string {
+  const starts = texts.map(lineStartsOf);
   let prevGenCol = 0;
+  let prevSource = 0;
   let prevSrcLine = 0;
   let prevSrcCol = 0;
   let line = 0;
@@ -204,14 +264,15 @@ function encodeMappings(segments: readonly { genLine: number; genCol: number; or
       groups.push([]);
       prevGenCol = 0;
     }
-    const pos = positionAt(starts, segment.orig);
+    const pos = positionAt(starts[segment.source], segment.orig);
     groups[line].push(
       vlq(segment.genCol - prevGenCol) +
-      vlq(0) +
+      vlq(segment.source - prevSource) +
       vlq(pos.line - prevSrcLine) +
       vlq(pos.column - prevSrcCol),
     );
     prevGenCol = segment.genCol;
+    prevSource = segment.source;
     prevSrcLine = pos.line;
     prevSrcCol = pos.column;
   }
@@ -222,8 +283,15 @@ function encodeMappings(segments: readonly { genLine: number; genCol: number; or
  * Applies edits on the original text and emits one v3 map.
  * Segments sit on line starts, copy boundaries and word starts.
  * trace-mapping does not interpolate columns, so a word start keeps its column.
+ * A copy may come from another file: `extras` are the sources 1, 2, ... of the map. A copy that
+ * names a source the map does not have is not mapped.
  */
-export function applyMappedEdits(code: string, edits: readonly MappedEdit[], sourceName: string): { code: string; map: SessionSourceMap } {
+export function applyMappedEdits(
+  code: string,
+  edits: readonly MappedEdit[],
+  sourceName: string,
+  extras: readonly MapSource[] = [],
+): { code: string; map: SessionSourceMap } {
   const sorted = edits
     .filter((edit) => edit.start >= 0 && edit.end >= edit.start && edit.start <= code.length)
     .map((edit) => ({ ...edit, end: Math.min(edit.end, code.length) }))
@@ -237,27 +305,38 @@ export function applyMappedEdits(code: string, edits: readonly MappedEdit[], sou
   }
 
   const parts: string[] = [];
-  const segments: { genLine: number; genCol: number; orig: number }[] = [];
+  const segments: { genLine: number; genCol: number; orig: number; source: number }[] = [];
   let genLine = 0;
   let genCol = 0;
   let mappedBefore = false;
   let prevWord = false;
-  const emit = (text: string, originalAt: ((index: number) => number) | null): void => {
-    if (originalAt === null) mappedBefore = false;
+  // A CR already ended its line: the LF right after it, even in the next piece, ends nothing more.
+  let afterCr = false;
+  const emit = (text: string, from: { source: number; at: (index: number) => number } | null): void => {
+    // Reset before the empty check: an empty generated text between two copies still ends the first one.
+    if (from === null) mappedBefore = false;
     if (text.length === 0) return;
     for (let index = 0; index < text.length; index += 1) {
       const codePoint = text.charCodeAt(index);
-      if (codePoint === 10) {
+      if (isLineEnd(codePoint)) {
+        if (codePoint === 10 && afterCr) {
+          afterCr = false;
+          continue;
+        }
+        afterCr = codePoint === 13;
         genLine += 1;
         genCol = 0;
         mappedBefore = false;
         prevWord = false;
         continue;
       }
-      const origin = originalAt === null ? -1 : originalAt(index);
+      afterCr = false;
+      const origin = from === null ? -1 : from.at(index);
       const mapped = origin >= 0;
-      if (mapped && mappedSegment(genCol === 0, !mappedBefore, isWordChar(codePoint), prevWord)) {
-        segments.push({ genLine, genCol, orig: origin });
+      // The first character of a copy starts a segment, whatever the copy before it was (same place, other
+      // place, other source): every copy is preceded by an `emit(..., null)` that cleared `mappedBefore`.
+      if (from !== null && mapped && mappedSegment(genCol === 0, !mappedBefore, isWordChar(codePoint), prevWord)) {
+        segments.push({ genLine, genCol, orig: origin, source: from.source });
       }
       mappedBefore = mapped;
       prevWord = isWordChar(codePoint);
@@ -269,10 +348,11 @@ export function applyMappedEdits(code: string, edits: readonly MappedEdit[], sou
     const copies = [...(edit.copies ?? [])].sort((a, b) => a.gen - b.gen);
     let at = 0;
     for (const copy of copies) {
-      if (copy.gen < at || copy.length <= 0) continue;
+      const source = copy.source ?? 0;
+      if (copy.gen < at || copy.length <= 0 || source < 0 || source > extras.length) continue;
       emit(edit.text.slice(at, copy.gen), null);
       const length = Math.min(copy.length, edit.text.length - copy.gen);
-      emit(edit.text.slice(copy.gen, copy.gen + length), (index) => copiedOrigin(copy.orig, index));
+      emit(edit.text.slice(copy.gen, copy.gen + length), { source, at: (index) => copiedOrigin(copy.orig, index) });
       at = copy.gen + length;
     }
     emit(edit.text.slice(at), null);
@@ -280,19 +360,22 @@ export function applyMappedEdits(code: string, edits: readonly MappedEdit[], sou
 
   let from = 0;
   for (const edit of chosen) {
-    emit(code.slice(from, edit.start), (index) => copiedOrigin(from, index));
+    const kept = from;
+    emit(code.slice(kept, edit.start), { source: 0, at: (index) => copiedOrigin(kept, index) });
     emitReplacement(edit);
     from = edit.end;
   }
-  emit(code.slice(from), (index) => copiedOrigin(from, index));
+  const tail = from;
+  emit(code.slice(tail), { source: 0, at: (index) => copiedOrigin(tail, index) });
   const edited = parts.join('');
   return {
     code: edited,
     map: {
       version: 3,
-      sources: [sourceName],
+      sources: [sourceName, ...extras.map((extra) => extra.name)],
       names: [],
-      mappings: encodeMappings(segments, code),
+      mappings: encodeMappings(segments, [code, ...extras.map((extra) => extra.text)]),
+      sourcesContent: [code, ...extras.map((extra) => extra.text)],
     },
   };
 }
@@ -358,32 +441,6 @@ function rejectUnsupportedMarkers(sourceFile: ts.SourceFile, checker: ts.TypeChe
   visit(sourceFile);
 }
 
-function propertyInitializer(node: ts.Node, name: string): ts.Expression | undefined {
-  if (!ts.isObjectLiteralExpression(node)) return undefined;
-  for (const prop of node.properties) {
-    if (!ts.isPropertyAssignment(prop)) continue;
-    const propName = prop.name;
-    if ((ts.isIdentifier(propName) || ts.isStringLiteral(propName)) && propName.text === name) {
-      return prop.initializer;
-    }
-  }
-  return undefined;
-}
-
-/** Applies use-site edits that sit entirely inside one embedded expression. */
-function rewriteEmbedded(code: string, start: number, end: number, edits: readonly SourceEdit[]): string {
-  const inner = edits
-    .filter((edit) => edit.start >= start && edit.end <= end)
-    .sort((a, b) => b.start - a.start);
-  let text = code.slice(start, end);
-  for (const edit of inner) {
-    const relStart = edit.start - start;
-    const relEnd = edit.end - start;
-    text = text.slice(0, relStart) + edit.text + text.slice(relEnd);
-  }
-  return text;
-}
-
 function visitServices(graph: DependencyGraph, visit: (node: DependencyNode) => void): void {
   for (const node of graph.nodes.values()) visit(node);
   if (!graph.multiNodes) return;
@@ -407,71 +464,67 @@ function cachedForeignUseEdits(
 }
 
 /**
- * Rewrites use-site calls inside a provider or useValue before the generator
- * copies that text. The original offset is the initializer's start.
- * A registration that lives in another file is rewritten from that file.
- * Its offset belongs to that file, so it is not a source-map copy.
+ * The edits that sit entirely inside `origin`, as rewrites of that range. A use-site call inside a
+ * provider or a useValue is one of them: the generator writes its text, and copies the rest.
  */
-function collectEmbeddings(
+export function rewritesIn(origin: SourceOrigin, edits: readonly SourceEdit[]): SourceRewrite[] {
+  const end = origin.start + origin.length;
+  return edits
+    .filter((edit) => edit.start >= origin.start && edit.end <= end)
+    .map(({ start, end: stop, text }) => ({ start, end: stop, text }))
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+}
+
+/**
+ * Carries the use-site rewrites of a provider or a useValue on the graph, as data next to its origin.
+ * `factorySource` and `valueSource` keep the original text: the copy is still a copy.
+ * A registration that lives in another file is rewritten from the edits of that file.
+ */
+export function attachRewrites(
   graph: DependencyGraph,
   sourceFile: ts.SourceFile,
-  code: string,
   edits: readonly SourceEdit[],
   checker: ts.TypeChecker,
   usedTokens: Map<string, UsedTokenEntry>,
   foreignEdits: Map<ts.SourceFile, readonly SourceEdit[]>,
-): { orig: number; needle: string }[] {
-  const found: { orig: number; needle: string }[] = [];
+): void {
   visitServices(graph, (node) => {
-    if (!node.service?.registrationNode) return;
-    const registration = node.service.registrationNode;
-    const registrationFile = registration.getSourceFile();
-    const foreign = registrationFile !== sourceFile;
-    const text = foreign ? registrationFile.text : code;
-    const fileEdits = foreign
-      ? cachedForeignUseEdits(registrationFile, checker, usedTokens, foreignEdits)
-      : edits;
-    const factory = node.service.type === 'factory' ? node.service.factorySource : undefined;
-    const value = node.service.type === 'value' ? node.service.valueSource : undefined;
-    const initializer = factory !== undefined
-      ? propertyInitializer(registration, 'provider')
-      : value !== undefined
-        ? propertyInitializer(registration, 'useValue')
-        : undefined;
-    if (!initializer) return;
-    const start = initializer.getStart(registrationFile);
-    const end = initializer.getEnd();
-    const needle = text.slice(start, end);
-    if (needle !== (factory !== undefined ? factory : value)) return;
-    const rewritten = rewriteEmbedded(text, start, end, fileEdits);
-    if (factory !== undefined) node.service.factorySource = rewritten;
-    else node.service.valueSource = rewritten;
-    if (foreign) return;
-    found.push({ orig: start, needle });
+    const { service } = node;
+    const origin = service.type === 'factory' ? service.factoryOrigin : service.type === 'value' ? service.valueOrigin : undefined;
+    if (!origin || !service.registrationNode) return;
+    const registrationFile = service.registrationNode.getSourceFile();
+    if (registrationFile.fileName !== origin.file) return;
+    const fileEdits = registrationFile === sourceFile
+      ? edits
+      : cachedForeignUseEdits(registrationFile, checker, usedTokens, foreignEdits);
+    const rewrites = rewritesIn(origin, fileEdits);
+    if (rewrites.length === 0) return;
+    if (service.type === 'factory') service.factoryRewrites = rewrites;
+    else service.valueRewrites = rewrites;
   });
-  return found;
 }
 
-/** One whole-token hit, or none. A second hit, or a hit inside an identifier, is not mapped. */
-function soleWholeToken(haystack: string, needle: string): number | undefined {
-  if (needle.length === 0) return undefined;
-  let found = -1;
-  let count = 0;
-  let from = 0;
-  while (from < haystack.length) {
-    const at = haystack.indexOf(needle, from);
-    if (at < 0) break;
-    const before = at > 0 ? haystack.charCodeAt(at - 1) : 0;
-    const afterAt = at + needle.length;
-    const after = afterAt < haystack.length ? haystack.charCodeAt(afterAt) : 0;
-    if (!isWordChar(before) && !isWordChar(after)) {
-      count += 1;
-      found = at;
-      if (count > 1) return undefined;
-    }
-    from = at + 1;
+/**
+ * The texts the generators copy from, read from the analysis Program, once for every container of a
+ * file. Only the files the graphs name as an origin are held: the id is a hash of what is held, and a
+ * Program holds thousands of files nobody copies from. A file the Program does not hold is left out:
+ * a generator copies nothing from a file the snapshot lacks, it never reads the text from elsewhere.
+ */
+export function analysisSnapshot(graphs: readonly DependencyGraph[], program: ts.Program): Snapshot {
+  const files = new Map<string, string>();
+  const read = (file: string): void => {
+    if (files.has(file)) return;
+    const text = program.getSourceFile(file)?.text;
+    if (text !== undefined) files.set(file, text);
+  };
+  for (const graph of graphs) {
+    visitServices(graph, (node) => {
+      for (const origin of [node.service.factoryOrigin, node.service.valueOrigin]) {
+        if (origin) read(origin.file);
+      }
+    });
   }
-  return count === 1 ? found : undefined;
+  return snapshotOfFiles(files);
 }
 
 function isProjectParse(fileName: string, root: string): boolean {
@@ -722,10 +775,11 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
   const names = new NamePool(
     sourceFile ? reservedNamesOf(sourceFile, checker) : [],
   );
+  // The texts every container of this file copies from. The first source of the map is this file.
+  const snapshot = analysisSnapshot(thisFileGraphs, program);
+  const mapFiles: string[] = [sourceFile?.fileName ?? key];
   for (const graph of thisFileGraphs) {
-    const embeddings = sourceFile
-      ? collectEmbeddings(graph, sourceFile, input.code, useEdits, checker, input.state.usedTokens, foreignEdits)
-      : [];
+    if (sourceFile) attachRewrites(graph, sourceFile, useEdits, checker, input.state.usedTokens, foreignEdits);
     const generator = new Generator(
       graph,
       true,
@@ -734,24 +788,19 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
       input.testOverrides,
       undefined,
       { collisions: input.state.collisions, hash: input.state.artifactHash },
-      { names },
+      { names, snapshot },
     );
-    const containerClass = generator.generate();
+    const rendered = generator.generateRendered();
+    const containerClass = rendered.code;
     const instantiation = generator.generateInstantiation();
     const start = graph.variableStatementStart!;
     const end = graph.defineBuilderConfigEnd!;
     const varDecl = input.code.slice(start, graph.defineBuilderConfigStart!);
     const text = containerClass + '\n' + varDecl + instantiation;
-    const copies: { gen: number; orig: number; length: number }[] = [];
+    // The generator says where each user expression was copied from; the class text starts the edit text.
+    const copies: MappedCopy[] = copiesToSegments(rendered.copies, mapFiles);
     if (varDecl.length > 0) {
       copies.push({ gen: containerClass.length + 1, orig: start, length: varDecl.length });
-    }
-    // Provider and useValue positions come from the injection object.
-    // Map one only when that exact text occurs once, on a whole token, in the class.
-    for (const embedding of embeddings) {
-      const gen = soleWholeToken(text, embedding.needle);
-      if (gen === undefined) continue;
-      copies.push({ gen, orig: embedding.orig, length: embedding.needle.length });
     }
     edits.push({ start, end, text, copies });
     if (graph.exportedVariableName) input.state.generatedContainerVars.add(graph.exportedVariableName);
@@ -782,7 +831,16 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
   }
 
   if (edits.length === 0) return { code: input.code, map: null };
-  const edited = applyMappedEdits(input.code, edits, input.id);
+  // The other files a copy comes from are sources 1, 2, ... of this map. The ts transformer emit
+  // (`composeMapText`) and the plugin map carry them. A Rollup or Vite build keeps only source 0 of a
+  // transform map (rollup@4.55.2 node-entry.js:20304 builds `new Link(map, [source])`, :20228-20230 skips
+  // the other indexes), so there a stack frame in a factory of another file maps to the neighbouring
+  // segment of this file. Known limit, pinned by "T23-P6 known limit" in t23-provenance.test.ts.
+  const extras: MapSource[] = mapFiles.slice(1).map((file) => ({
+    name: siblingSourceName(input.id, mapFiles[0], file),
+    text: snapshot.files.get(file) ?? '',
+  }));
+  const edited = applyMappedEdits(input.code, edits, input.id, extras);
   return { code: edited.code, map: edited.map };
 }
 
@@ -877,6 +935,26 @@ function composeMapText(
     }
   }
 
+  // A copy from another file adds a source to the emitted map, once per file, named like the
+  // transformed file is (same directory style as its entry in `sources`).
+  const outSources: (string | null)[] = [...sources];
+  const extraSources = new Map<SessionFileMap, Map<number, number>>();
+  const extraIndexOf = (record: SessionFileMap, sessionIndex: number, primaryIndex: number): number => {
+    const known = extraSources.get(record) ?? new Map<number, number>();
+    extraSources.set(record, known);
+    const existing = known.get(sessionIndex);
+    if (existing !== undefined) return existing;
+    const primaryName = sources[primaryIndex];
+    const file = record.map.sources[sessionIndex];
+    const created = outSources.length;
+    outSources.push(primaryName == null
+      ? file
+      : siblingSourceName(primaryName, record.map.sources[0], file));
+    if (nextContent) nextContent.push(record.map.sourcesContent?.[sessionIndex] ?? null);
+    known.set(sessionIndex, created);
+    return created;
+  };
+
   const decoded = decodedMappings(new TraceMap({
     version: 3,
     file: emitted.file,
@@ -906,13 +984,16 @@ function composeMapText(
       }
       // Copied columns outside the container are word-start granular.
       // The session map records word starts, and trace-mapping does not fill the gap.
-      const pos = originalPositionFor(tracerFor(record), { line: sourceLine + 1, column: sourceColumn });
+      const tracer = tracerFor(record);
+      const pos = originalPositionFor(tracer, { line: sourceLine + 1, column: sourceColumn });
       if (pos.line == null || pos.column == null) continue;
       const composedLine = pos.line - 1;
       const composedColumn = pos.column;
+      const sessionIndex = pos.source == null ? 0 : Math.max(0, tracer.resolvedSources.indexOf(pos.source));
+      const composedSource = sessionIndex === 0 ? sourceIndex : extraIndexOf(record, sessionIndex, sourceIndex);
       next.push(nameIndex === undefined
-        ? [generatedColumn, sourceIndex, composedLine, composedColumn]
-        : [generatedColumn, sourceIndex, composedLine, composedColumn, nameIndex]);
+        ? [generatedColumn, composedSource, composedLine, composedColumn]
+        : [generatedColumn, composedSource, composedLine, composedColumn, nameIndex]);
     }
     return next;
   });
@@ -921,14 +1002,14 @@ function composeMapText(
     version: 3,
     file: emitted.file,
     names: emitted.names ?? [],
-    sources,
+    sources: outSources,
     sourcesContent: nextContent,
     mappings,
   }));
   const output: EmittedSourceMap = {
     version: 3,
     file: emitted.file,
-    sources,
+    sources: outSources,
     names: emitted.names ?? [],
     mappings: encoded,
   };
