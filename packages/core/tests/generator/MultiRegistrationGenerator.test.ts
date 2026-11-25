@@ -63,7 +63,7 @@ describe('Generator - resolveAll', () => {
 
     const code = new Generator(graph).generate();
 
-    expect(code).toContain('public resolveAll<T>(token: any): T[]');
+    expect(code).toContain('public resolveAll<T>(token: unknown): T[]');
     expect(code).toContain('"IPlugin_def"');
     expect(code).toContain('this.create_IPlugin_def_0()');
     expect(code).toContain('this.create_IPlugin_def_1()');

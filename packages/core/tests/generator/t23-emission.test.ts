@@ -7,6 +7,9 @@ import type { DependencyGraph, DependencyNode, FactoryDependency, RetentionReaso
 import { createVirtualProgram } from '../helpers/createVirtualProgram';
 import { captureRoot, memoryProgram } from '../helpers/memoryModules';
 
+/** The type a generated factory declaration carries: the user text is assigned to it, so it is checked against it. */
+const FACTORY_TYPE = '(context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[] }) => unknown';
+
 interface RuntimeContainer {
   resolve: (token: unknown) => unknown;
   resolveAll: (token: unknown) => unknown[];
@@ -275,7 +278,7 @@ describe('T23 user expressions are copies with a source range (B2)', () => {
     const factory = serviceOf(graph, 'Port');
     factory.factorySource = '() => ({ n: 99 })';
     const rendered = new Generator(graph, false).generateRendered();
-    expect(rendered.code).toContain('const userFactory = () => ({ n: 99 });');
+    expect(rendered.code).toContain(`const userFactory: ${FACTORY_TYPE} = () => ({ n: 99 });`);
     const texts = rendered.copies.map((copy) => SOURCE.slice(copy.sourceStart, copy.sourceStart + copy.length));
     expect(texts).toHaveLength(2);
     expect(texts.sort()).toEqual(['() => ({ n: 1 })', "{ name: 'prod' }"]);
@@ -285,7 +288,7 @@ describe('T23 user expressions are copies with a source range (B2)', () => {
   it('T23-B2 a graph built by hand has no origin: its text is emitted and nothing is copied', () => {
     const graph = graphOf([['Local', factoryNode('Local', '() => ({ n: 3 })')]]);
     const rendered = new Generator(graph, false).generateRendered();
-    expect(rendered.code).toContain('const userFactory = () => ({ n: 3 });');
+    expect(rendered.code).toContain(`const userFactory: ${FACTORY_TYPE} = () => ({ n: 3 });`);
     expect(rendered.copies).toEqual([]);
   });
 
@@ -334,7 +337,7 @@ describe('T23 emitters without a copy function emit user text as generated text 
     const [created] = generateFactories(graph, ['Local'], () => 'Unused', () => 'Unused');
     expect(created.parts.every((part) => part.kind === 'generated')).toBe(true);
     expect(created.parts.map((part) => (part.kind === 'generated' ? part.text : '')).join(''))
-      .toContain('const userFactory = () => ({ n: 5 });');
+      .toContain(`const userFactory: ${FACTORY_TYPE} = () => ({ n: 5 });`);
     expect(created.needs).toEqual([]);
   });
 
@@ -397,7 +400,7 @@ describe('T23 an origin without a source file to read is generated text (R7)', (
     const graph = graphOf([['Local', node]]);
     const rendered = new Generator(graph, true).generateRendered();
     expect(rendered.copies).toEqual([]);
-    expect(rendered.code).toContain('const userFactory = () => ({ n: 5 });');
+    expect(rendered.code).toContain(`const userFactory: ${FACTORY_TYPE} = () => ({ n: 5 });`);
     expect(rendered.code).toBe(new Generator(graph, true).generate());
   });
 });

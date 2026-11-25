@@ -58,7 +58,7 @@ describe('Generator - External Bindings', () => {
 
     // 2. Verify FeatureService Factory
     // Should resolve SharedKernel via this.resolve()
-    expect(code).toContain('private create_FeatureService(): any {');
+    expect(code).toContain('private create_FeatureService(): unknown {');
     // Import_0 is FeatureService, Import_1 is SharedKernel
     expect(code).toContain('return new Import_0.FeatureService(this.resolve(Import_1.SharedKernel));');
 

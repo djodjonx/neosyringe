@@ -42,7 +42,7 @@ describe('resolveAll — Analyzer to Generator integration', () => {
 
     const code = new Generator(graph, true).generate();
 
-    expect(code).toContain('public resolveAll<T>(token: any): T[]');
+    expect(code).toContain('public resolveAll<T>(token: unknown): T[]');
     expect(code).toContain('new AuthMiddleware()');
     expect(code).toContain('new LogMiddleware()');
     expect(code).toContain('new RateLimiter()');

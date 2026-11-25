@@ -33,7 +33,7 @@ describe('Generator - useValue', () => {
 
     const code = new Generator(graph).generate();
 
-    expect(code).toContain("private create_DatabaseConfig_abc(): any {");
+    expect(code).toContain("private create_DatabaseConfig_abc(): unknown {");
     expect(code).toContain("return { url: 'localhost', port: 5432 };");
     expect(code).not.toContain('new undefined');
     expect(code).not.toContain('userFactory');

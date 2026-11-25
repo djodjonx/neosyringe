@@ -33,8 +33,8 @@ describe('Generator - Factory Support', () => {
     const code = generator.generate();
 
     // Should contain the factory wrapper
-    expect(code).toContain('private create_IConfig(): any');
-    expect(code).toContain('const userFactory =');
+    expect(code).toContain('private create_IConfig(): unknown');
+    expect(code).toContain('const userFactory: (context:');
     expect(code).toContain('apiUrl');
     expect(code).toContain('const __neoResult = userFactory(__neoContext)');
     expect(code).not.toContain('userFactory(this)');
@@ -160,7 +160,7 @@ const generator = new Generator(graph);
 
     // Should have factory for IConfig
     expect(code).toContain('private create_IConfig');
-    expect(code).toContain('const userFactory =');
+    expect(code).toContain('const userFactory: (context:');
 
     // Should have class instantiation for AppService
     expect(code).toContain('private create_AppService');

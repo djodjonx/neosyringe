@@ -910,7 +910,7 @@ describe('T17 direct accessors and runtime profiles', () => {
     const depKey = tokenId(graph, 'PrivDep');
     const rootKey = tokenId(graph, 'PrivRoot');
     const { container, source: code } = open(graph, undefined, { modules: () => ({ dep: depKey }) });
-    expect(methodText(code, 'public resolve<T>(token: any): T {')).not.toContain('_resolveInternal(');
+    expect(methodText(code, 'public resolve(token: unknown): unknown {')).not.toContain('_resolveInternal(');
     expect(code).not.toContain('_resolveInternal');
     expect(code).not.toContain('_resolveAllInternal');
     expect(container.resolve(rootKey)).toEqual({ n: 5 });
@@ -952,14 +952,14 @@ describe('T17 direct accessors and runtime profiles', () => {
     expect(optimized.trace).toEqual(reference.trace);
     expect(optimized.trace).toEqual(['parent from-parent local local items n1,n2']);
 
-    const internal = methodText(optimized.source, 'private _resolveInternal<T>(token: any): T {');
+    const internal = methodText(optimized.source, 'private _resolveInternal(token: unknown): unknown {');
     expect(internal).not.toContain('_get_');
     expect(internal).not.toContain('_direct_');
     expect(internal).not.toContain('token === "Local"');
-    const internalAll = methodText(optimized.source, 'private _resolveAllInternal<T>(token: any): T[] {');
+    const internalAll = methodText(optimized.source, 'private _resolveAllInternal(token: unknown): unknown[] {');
     expect(internalAll).toContain('token === "Item_1"');
     expect(internalAll).not.toContain('token === "Other_1"');
-    expect(methodText(optimized.source, 'public resolveAll<T>(token: any): T[] {')).not.toContain('_resolveAllInternal(');
+    expect(methodText(optimized.source, 'public resolveAll(token: unknown): unknown[] {')).not.toContain('_resolveAllInternal(');
 
     // An opaque factory may ask for any token, so the dispatcher lists every local provider again.
     const opaqueRun = await differential(closedGraph(true), async ({ container, log }) => {
@@ -968,7 +968,7 @@ describe('T17 direct accessors and runtime profiles', () => {
     }, { parentGraph });
     expect(opaqueRun.optimized.trace).toEqual(opaqueRun.reference.trace);
     expect(opaqueRun.optimized.trace).toEqual(['local local']);
-    expect(methodText(opaqueRun.optimized.source, 'private _resolveInternal<T>(token: any): T {')).toContain('token === "Local"');
+    expect(methodText(opaqueRun.optimized.source, 'private _resolveInternal(token: unknown): unknown {')).toContain('token === "Local"');
   });
 
   it('T17-W12 an override on a token nobody registered wins on resolve and notifies', async () => {

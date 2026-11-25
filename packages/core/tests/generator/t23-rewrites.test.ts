@@ -12,6 +12,9 @@ import {
 import type { DependencyGraph, DependencyNode, SourceOrigin, SourceRewrite } from '../../src/analyzer/types';
 import { createVirtualProgram } from '../helpers/createVirtualProgram';
 
+/** The type a generated factory declaration carries: the user text is assigned to it, so it is checked against it. */
+const FACTORY_TYPE = '(context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[] }) => unknown';
+
 interface RuntimeContainer {
   resolve: (token: unknown) => unknown;
   destroy: () => Promise<void>;
@@ -85,7 +88,7 @@ describe('T23-S2 a rewrite is data on the graph: the text around it is still a c
     const factory = serviceOf(graph, 'Port');
     factory.factoryRewrites = [rewriteOf('() => ({ n: 1 })', '1', '99')];
     const rendered = new Generator(graph, false).generateRendered();
-    expect(rendered.code).toContain('const userFactory = () => ({ n: 99 });');
+    expect(rendered.code).toContain(`const userFactory: ${FACTORY_TYPE} = () => ({ n: 99 });`);
     expect(copiedTexts(rendered.copies).filter(notTheValue)).toEqual(['() => ({ n: ', ' })']);
     expect(rendered.copies.map((copy) => rendered.code.slice(copy.generatedStart, copy.generatedStart + copy.length)))
       .toContain('() => ({ n: ');
@@ -116,7 +119,7 @@ describe('T23-S2 a rewrite is data on the graph: the text around it is still a c
     const factory = serviceOf(graph, 'Port');
     factory.factoryRewrites = [rewriteOf('() => ({ n: 1 })', '()', '(a)'), rewriteOf('() => ({ n: 1 })', '1', '7')];
     const rendered = new Generator(graph, false).generateRendered();
-    expect(rendered.code).toContain('const userFactory = (a) => ({ n: 7 });');
+    expect(rendered.code).toContain(`const userFactory: ${FACTORY_TYPE} = (a) => ({ n: 7 });`);
     expect(copiedTexts(rendered.copies).filter(notTheValue)).toEqual([' => ({ n: ', ' })']);
   });
 
@@ -142,7 +145,7 @@ describe('T23-S2 a rewrite is data on the graph: the text around it is still a c
       variableExportModifier: 'export',
     };
     const rendered = new Generator(graph, false).generateRendered();
-    expect(rendered.code).toContain('const userFactory = () => ({ n:5});');
+    expect(rendered.code).toContain(`const userFactory: ${FACTORY_TYPE} = () => ({ n:5});`);
     expect(rendered.copies).toEqual([]);
   });
 });

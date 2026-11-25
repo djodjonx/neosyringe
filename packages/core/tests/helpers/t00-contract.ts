@@ -91,7 +91,7 @@ export type Emit = (cell: ContractCell) => Promise<Executed>;
 
 export const PARENT_DISPOSE_KEY = '__t00ParentDisposes';
 
-function sourceFor(cell: ContractCell): string {
+export function sourceFor(cell: ContractCell): string {
   const closed = cell.mode === 'closed';
   const parent = cell.owner === 'parent';
   const sync = cell.timing === 'sync';
@@ -158,7 +158,7 @@ function sourceFor(cell: ContractCell): string {
   `;
 }
 
-function programOf(fileName: string, source: string): ts.Program {
+export function programOf(fileName: string, source: string): ts.Program {
   const options: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.ESNext,
@@ -178,7 +178,7 @@ function programOf(fileName: string, source: string): ts.Program {
   return createFastProgram([fileName], options, host);
 }
 
-function named(graphs: readonly DependencyGraph[], name: string): DependencyGraph {
+export function named(graphs: readonly DependencyGraph[], name: string): DependencyGraph {
   const graph = graphs.find((item) => item.exportedVariableName === name);
   if (!graph) throw new Error(`missing container ${name}`);
   const messages = (graph.errors ?? [])

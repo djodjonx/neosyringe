@@ -49,11 +49,11 @@ describe('Generator', () => {
 
     // Verify Factory Functions
     // C depends on nothing -> new Import_0.ConsoleLogger()
-    expect(code).toContain('private create_ILogger(): any {');
+    expect(code).toContain('private create_ILogger(): unknown {');
     expect(code).toContain('return new Import_0.ConsoleLogger();');
 
     // B depends on C -> new Import_1.UserService(this.resolve(Import_0.ConsoleLogger))
-    expect(code).toContain('private create_UserService(): any {');
+    expect(code).toContain('private create_UserService(): unknown {');
     expect(code).toContain('return new Import_1.UserService(this.resolve(Import_0.ConsoleLogger));');
 
     // Verify Container Class
@@ -147,7 +147,7 @@ describe('Generator', () => {
       const generator = new Generator(graph);
       const code = generator.generate();
 
-      expect(code).toContain('private create__scope_Package(): any');
+      expect(code).toContain('private create__scope_Package(): unknown');
   });
 
   it('should respect export modifiers for container variable', () => {
@@ -253,7 +253,7 @@ describe('Generator', () => {
       const code = new Generator(graph).generate();
 
       expect(code).toContain('throw new NeoServiceNotFoundError(`[${this.name}] Service not found or token not registered: ${NeoContainer.formatToken(token)}`);');
-      expect(code).toContain('private static formatToken(token: any): string {');
+      expect(code).toContain('private static formatToken(token: unknown): string {');
       // Class tokens: use the declared name, not the whole stringified class body.
       expect(code).toContain(`if (typeof token === 'function') return token.name || String(token);`);
       // String tokens: strip the trailing content-hash suffix, same convention as
