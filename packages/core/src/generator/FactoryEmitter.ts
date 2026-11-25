@@ -102,8 +102,9 @@ export function resolveConstructorArgs(
   hasAsync = false,
   closed = false,
   direct?: DirectReads,
+  className?: string,
 ): { text: string; needs: HelperId[] } {
-  return constructorArguments(dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct);
+  return constructorArguments(dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct, className);
 }
 
 function constructorArguments(
@@ -114,6 +115,7 @@ function constructorArguments(
   hasAsync: boolean,
   closed: boolean,
   direct: DirectReads | undefined,
+  className?: string,
 ): { text: string; needs: HelperId[] } {
   const calls = resolutionCalls(hasAsync, closed || direct !== undefined);
   let reads = false;
@@ -121,9 +123,21 @@ function constructorArguments(
     reads = true;
     return `${calls.one}(${argument})`;
   };
-  const text = dependencies.map(depId => {
+  const text = dependencies.map((depId, position) => {
     const depNode = graph.nodes.get(depId);
-    if (direct && isLocalRegistration(graph, depId)) return directRead(depId, direct);
+    if (direct && isLocalRegistration(graph, depId)) {
+      // An accessor answers `unknown`. The argument is read where the class declares its parameter, so the
+      // one assertion names that parameter and nothing else. It is safe because of an analyzer invariant, not
+      // because of this text: the edge's token id is the id of the constructor parameter's type
+      // (analyzer/shared/registrationGraph.ts, `pushSlot`: `tokens.getTypeId(tokenType)`), and the provider
+      // registered under an interface token was checked assignable to that type
+      // (analyzer/validators/TypeValidator.ts, `checkTypeCompatibility`). A mismatch is an analysis error, so no
+      // output exists for it. Test: packages/core/tests/analyzer/TypeValidation.test.ts, 'should throw
+      // TypeMismatchError when provider does not implement token interface'. S3b removes this assertion
+      // (concrete accessor types, topic 23 P8).
+      const read = directRead(depId, direct);
+      return className === undefined ? read : `${read} as ConstructorParameters<typeof ${className}>[${position}]`;
+    }
     if (!depNode) {
       // Not registered locally — check whether it's satisfied by a parent/legacy
       // container (see DependencyGraph.parentResolvableTokens for why only this
@@ -222,12 +236,16 @@ function directContextResolve(
 ): string {
   const locals = [...listed.locals.entries()];
   const hasOther = listed.entries.some(([key]) => !listed.locals.has(key));
-  if (locals.length === 0 && !hasOther) return 'return undefined;';
+  // `T` is the type the user's factory text asks for. The accessors answer `unknown`, and no accessor type can be
+  // assigned to a type the caller picks, so each direct read carries the one assertion `as T`: the same
+  // contract as the public `resolve<T>(token)`. Concrete accessor types (S3b) narrow the accessor, not this
+  // assertion. The empty case is unreachable (the allow-list guard above it always throws).
+  if (locals.length === 0 && !hasOther) return 'return undefined as T;';
   const lines = locals.map(([key, tokenId], index) => {
-    const read = `return ${directRead(tokenId, direct)};`;
+    const read = `return ${directRead(tokenId, direct)} as T;`;
     return !hasOther && index === locals.length - 1 ? read : `if (token === ${key}) ${read}`;
   });
-  if (hasOther) lines.push(`return ${fallback()}(token);`);
+  if (hasOther) lines.push(`return ${fallback()}<T>(token);`);
   return lines.join('\n        ');
 }
 
@@ -250,12 +268,22 @@ export function factoryContextNeeds(graph: DependencyGraph): { opaque: boolean; 
   return needs;
 }
 
+/**
+ * What a factory body reads of its context. The calls are generic: the factory text is the user's and states
+ * the type it expects (`new UserService(ctx.resolve(loggerToken))` asks for an `ILogger`), the context only
+ * forwards a token. A context that answered `unknown` would refuse that text (TS2345) in the Program the
+ * transformer builds from the transformed source, and would refuse a parameter annotated with the public
+ * `FactoryContext`. The closures below are `<T,>(token: unknown): T`: the trailing comma keeps the arrow
+ * generic when the output lands in a `.tsx` file.
+ */
+const FACTORY_CONTEXT = '{ resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[] }';
+
 /** A sync throw from warmup or from the factory must expire the context before it escapes. */
 function emitInvocation(warmup: string, release: string, hasAsync: boolean): string {
   // The flag covers the synchronous factory call only, not an await continuation.
   // Sync containers never read it: their initialize() does not branch on _syncInit.
   const call = `const __neoResult = userFactory(__neoContext);
-      if (__neoResult && typeof __neoResult.then === 'function') {
+      if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') {
         return Promise.resolve(__neoResult).then(
           (value) => { __neoExpire(); ${release} return value; },
           (err) => { __neoExpire(); ${release} throw err; },
@@ -326,45 +354,48 @@ function emitFactoryBody(
   const holdStart = '';
   const release = '';
   const expireStmt = 'const __neoExpire = () => { __neoExpired = true; };';
-  const failStmt = `const __neoFail = (code, detail) => {
-      const error = new Error(code + ': factory ' + ${label} + ' ' + detail);
+  const failStmt = `const __neoFail = (code: string, detail: string): never => {
+      const error = new Error(code + ': factory ' + ${label} + ' ' + detail) as Error & { code: string };
       error.code = code;
       throw error;
     };`;
+  const typedFactory = `const userFactory: (context: ${FACTORY_CONTEXT}) => unknown =`;
   if (opaqueFactory) {
-    const opaqueBody = fragment`const userFactory = ${userFactory};
+    const opaqueBody = fragment`${typedFactory} ${userFactory};
     let __neoExpired = false;
     ${expireStmt}
     ${failStmt}
     const __neoContext = {
-      resolve: (token) => {
+      resolve: <T,>(token: unknown): T => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-        return ${one()}(token);
+        return ${one()}<T>(token);
       },
-      resolveAll: (token) => {
+      resolveAll: <T,>(token: unknown): T[] => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-        return ${all()}(token);
+        return ${all()}<T>(token);
       },
     };
     ${holdStart}
     ${emitInvocation('', release, hasAsync)}`;
     return withNeeds(opaqueBody, [...needs]);
   }
-  const resolveTail = direct ? directContextResolve(listed, direct, one) : `return ${one()}(token);`;
-  const resolveAllTail = direct && !allowed.some(([, isAll]) => isAll) ? 'return undefined;' : `return ${all()}(token);`;
-  const declaredBody = fragment`const userFactory = ${userFactory};
-    const __neoAllowed = new Map([${entries}]);
+  const resolveTail = direct ? directContextResolve(listed, direct, one) : `return ${one()}<T>(token);`;
+  // No declared `all` dependency: the guard above always throws, this line is never reached. It still has to be a
+  // list: `undefined` is not assignable to `T[]`, and no assertion turns it into one without a double assertion.
+  const resolveAllTail = direct && !allowed.some(([, isAll]) => isAll) ? 'return [];' : `return ${all()}<T>(token);`;
+  const declaredBody = fragment`${typedFactory} ${userFactory};
+    const __neoAllowed = new Map<unknown, 'simple' | 'all'>([${entries}]);
     let __neoExpired = false;
     ${expireStmt}
     ${failStmt}
     const __neoContext = {
-      resolve: (token) => {
+      resolve: <T,>(token: unknown): T => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         const mode = __neoAllowed.get(token);
         if (mode !== 'simple' && mode !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
         ${resolveTail}
       },
-      resolveAll: (token) => {
+      resolveAll: <T,>(token: unknown): T[] => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         if (__neoAllowed.get(token) !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
         ${resolveAllTail}
@@ -383,10 +414,10 @@ function capturedValue(node: DependencyNode, copy: UserCopy): Piece {
   return 'undefined';
 }
 
-/** One `private create_X(): any { ... }` method. */
+/** One `private create_X(): unknown { ... }` method. */
 function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = []): Fragment {
   return withNeeds(fragment`
-  private ${factoryId}(): any {
+  private ${factoryId}(): unknown {
     ${body}
   }`, needs);
 }
@@ -402,7 +433,7 @@ function construction(
   direct: DirectReads | undefined,
   className: string,
 ): { body: string; needs: HelperId[] } {
-  const args = constructorArguments(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct);
+  const args = constructorArguments(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct, className);
   return { body: `return new ${className}(${args.text});`, needs: args.needs };
 }
 

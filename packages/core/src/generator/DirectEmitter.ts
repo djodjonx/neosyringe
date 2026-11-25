@@ -26,7 +26,10 @@ import {
   generateDirectContributions,
   generateDirectResolveAll,
   generateMultiResolveGuard,
+  legacyParentInterface,
   parentOpenCheck,
+  resolveListenerOverload,
+  singleOverload,
 } from './ResolveEmitter';
 import {
   generateCreateScopeMethod,
@@ -62,10 +65,12 @@ export interface OptimizedContainerInput {
   debugGetters: string;
   /** How a user expression enters the output. Absent: generated text, no copy. */
   copy?: UserCopy;
+  /** Name of the generated interface that types the `useContainer` parents. Absent: `NeoLegacyParent`. */
+  legacyParentName?: string;
 }
 
 function mockMethod(): string {
-  return `private _mock(token: any): any {
+  return `private _mock(token: unknown): unknown {
     if (!this.instances.has(token)) {
       const __neoMock = this.overrides.get(token)!();
       this.instances.set(token, __neoMock);
@@ -83,12 +88,12 @@ function eventMembers(): string {
    * container). Returns an unsubscribe function. A listener that throws is
    * caught and ignored.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  ${resolveListenerOverload()}
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -100,7 +105,7 @@ function eventMembers(): string {
 }
 
 function formatTokenMember(): string {
-  return `private static formatToken(token: any): string {
+  return `private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
     const parts = token.split('_');
@@ -123,7 +128,7 @@ function legacyAndNotFound(input: OptimizedContainerInput): string {
                     if (legacyResult != null) this._borrowed.add(legacyResult);${notify}
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
@@ -175,21 +180,21 @@ function resolveMethods(
 ): { publicMethod: Fragment; internalMethod: string } {
   const guard = input.hasAsync ? 'this._guardPublic();\n    ' : '';
   const multiGuard = generateMultiResolveGuard(input.graph, input.getImport, input.hasAsync);
-  const internalMethod = `private _resolveInternal<T>(token: any): T {
+  const internalMethod = `${singleOverload('private', '_resolveInternal')}
     ${resolveInterior(input, resolveCases(input, listLocals ? input.sorted : []), multiGuard)}
   }`;
   if (!input.closed) {
     // The open public method calls the dispatcher, so it asks for it.
     return {
-      publicMethod: withNeeds(fragment`public resolve<T>(token: any): T {
-    ${guard}return this._resolveInternal<T>(token);
+      publicMethod: withNeeds(fragment`${singleOverload('public', 'resolve')}
+    ${guard}return this._resolveInternal(token);
   }`, ['resolveSingle']),
       internalMethod,
     };
   }
   const roots = input.graph.publicRoots ?? [];
   return {
-    publicMethod: fragment`public resolve<T>(token: any): T {
+    publicMethod: fragment`${singleOverload('public', 'resolve')}
     ${guard}this._assertRoot(token, false);
     ${resolveInterior(input, resolveCases(input, roots), '')}
   }`,
@@ -210,6 +215,7 @@ function resolveMethods(
 export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment {
   const { graph, sorted, getImport, getForeignImport, hasAsync, closed, minimal } = input;
   const copy = input.copy ?? generatedCopy;
+  const parentName = input.legacyParentName ?? 'NeoLegacyParent';
   const direct: DirectReads = { notify: !minimal };
   const honourOverrides = !minimal && input.testOverrides;
   const creators = [
@@ -248,7 +254,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const destroy = generateDestroyMethod(graph, sorted, getImport, hasAsync, minimal);
   const tableFields = minimal
     ? ''
-    : `\n  private overrides = new Map<any, () => any>();\n  private resolveListeners = new Set<(token: any, instance: any) => void>();`;
+    : `\n  private overrides = new Map<unknown, () => unknown>();\n  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();`;
   const members: Piece[] = [
     input.runtimeHelpers + input.assertRootMethod,
     initialize,
@@ -267,13 +273,15 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   if (many) members.push(many);
   members.push(input.debugGetters);
 
-  const container = fragment`class ${input.notFoundErrorClassName} extends Error {
+  const container = fragment`${legacyParentInterface(parentName)}
+
+class ${input.notFoundErrorClassName} extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class ${input.className} {
-  private instances = new Map<any, any>();${tableFields}
+  private instances = new Map<unknown, unknown>();${tableFields}
   ${input.stateFields}${input.rootFields}
 
   // -- Factories --
@@ -283,7 +291,7 @@ class ${input.className} {
   ${accessors.join('\n  ')}
 
   constructor(
-    private legacy?: any[],
+    private legacy?: ${parentName}[],
     private name: string = 'NeoContainer'
   ) {}
 

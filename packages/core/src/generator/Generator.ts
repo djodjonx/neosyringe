@@ -4,7 +4,7 @@ import { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
-import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, parentOpenCheck, isBorrowedInstance, afterStore } from './ResolveEmitter';
+import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, legacyParentInterface, parentOpenCheck, resolveListenerOverload, singleOverload, isBorrowedInstance, afterStore } from './ResolveEmitter';
 import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
@@ -89,6 +89,8 @@ export class Generator {
   private readonly containerClassName: string;
   /** Name of the generated "not found" error class — see {@link getGeneratedClassSuffix}. */
   private readonly notFoundErrorClassName: string;
+  /** Interface that types the `useContainer` parents the class reads. */
+  private readonly legacyParentName: string;
   /** Identity of this container among the artifacts of the build. Keys the names it takes from the pool. */
   private readonly artifactKey: string;
   /** Names of generated top-level bindings. Shared by every Generator of one source file. */
@@ -184,6 +186,7 @@ export class Generator {
     const suffix = this.useDirectSymbolNames ? `_${artifactKey}` : '';
     this.containerClassName = this.names.forKey(`class:${artifactKey}`, `NeoContainer${suffix}`);
     this.notFoundErrorClassName = this.names.forKey(`error:${artifactKey}`, `NeoServiceNotFoundError${suffix}`);
+    this.legacyParentName = this.names.forKey(`legacy:${artifactKey}`, `NeoLegacyParent${suffix}`);
   }
 
   /**
@@ -434,6 +437,7 @@ export class Generator {
         testOverrides: this.testOverrides,
         className: this.containerClassName,
         notFoundErrorClassName: this.notFoundErrorClassName,
+        legacyParentName: this.legacyParentName,
         eagerLines,
         stateFields: `${state.stateFields}${state.eagerField}`,
         ...rootMembers(emitted, closed, getImport),
@@ -514,7 +518,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
@@ -523,22 +527,22 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${this.containerClassName}.formatToken(token)}\`);`;
 
     const resolveMethod = hasAsync
-      ? `public resolve<T>(token: any): T {
+      ? `${singleOverload('public', 'resolve')}
     this._guardPublic();
-    ${closed ? assertOne + '\n    ' : ''}return this._resolveInternal<T>(token);
+    ${closed ? assertOne + '\n    ' : ''}return this._resolveInternal(token);
   }
 
-  private _resolveInternal<T>(token: any): T {${resolveInterior}
+  ${singleOverload('private', '_resolveInternal')}${resolveInterior}
   }`
       : closed
-        ? `public resolve<T>(token: any): T {
+        ? `${singleOverload('public', 'resolve')}
     ${assertOne}
-    return this._resolveInternal<T>(token);
+    return this._resolveInternal(token);
   }
 
-  private _resolveInternal<T>(token: any): T {${resolveInterior}
+  ${singleOverload('private', '_resolveInternal')}${resolveInterior}
   }`
-        : `public resolve<T>(token: any): T {
+        : `${singleOverload('public', 'resolve')}
     ${resolveGuard}${resolveInterior}
   }`;
 
@@ -548,22 +552,24 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
 ${importLines.join('\n')}
 ${concat(captureLines, '\n')}
 
+${legacyParentInterface(this.legacyParentName)}
+
 class ${this.notFoundErrorClassName} extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class ${this.containerClassName} {
-  private instances = new Map<any, any>();
-  private overrides = new Map<any, () => any>();
-  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  private instances = new Map<unknown, unknown>();
+  private overrides = new Map<unknown, () => unknown>();
+  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();
   ${stateFields}${eagerField}${rootFields}
 
   // -- Factories --
   ${concat([...factories, ...multiFactories], '\n  ')}
 
   constructor(
-    private legacy?: any[],
+    private legacy?: ${this.legacyParentName}[],
     private name: string = 'NeoContainer'
   ) {}
 
@@ -583,12 +589,12 @@ class ${this.containerClassName} {
    * caught and ignored — a bug in an observability hook must never break the
    * actual resolution it's observing.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  ${resolveListenerOverload()}
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     ${borrowNotify}for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -605,7 +611,7 @@ class ${this.containerClassName} {
    * name (not its entire stringified source), and a string token has its
    * trailing content-hash suffix stripped (not the raw hashed id).
    */
-  private static formatToken(token: any): string {
+  private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
     const parts = token.split('_');
@@ -620,7 +626,7 @@ class ${this.containerClassName} {
 
   ${resolveAllMethod}
 
-  private resolveLocal(token: any): any {
+  private resolveLocal(token: unknown): unknown {
     ${resolveCases.join('\n    ')}
     return undefined;
   }
@@ -740,7 +746,7 @@ function containerState(
 ): { stateFields: string; eagerField: string } {
   const borrowedList = borrowedSeeds(graph).join(', ');
   const scopeFields = `private _closed = false;
-  private _borrowed = new Set<any>([${borrowedList}]);
+  private _borrowed = new Set<unknown>([${borrowedList}]);
   private _destroyWork?: Promise<void>;
   private _syncInit = 0;`;
   const eagerField = !hasAsync && eagerLines.length > 0 ? '\n  private _eagerOnce = false;' : '';
@@ -749,7 +755,7 @@ function containerState(
   private _initWork?: Promise<void>;
   private _failure: unknown;
   private _initRunning = false;
-  private _initJournal: any[] = [];
+  private _initJournal: unknown[] = [];
   ${scopeFields}`
     : `${minimal ? '' : 'private _reconfiguring = false;\n  '}private _failure?: unknown;
   ${scopeFields}`;
@@ -776,11 +782,11 @@ function rootMembers(
 ): { rootFields: string; assertRootMethod: string } {
   const exported = closed ? exportedRootIds(graph) : undefined;
   const rootFields = exported
-    ? `\n  private _singleRoots = new Set<any>([${rootKeyExprs(exported.single, graph, getImport)}]);\n  private _multiRoots = new Set<any>([${rootKeyExprs(exported.multi, graph, getImport)}]);`
+    ? `\n  private _singleRoots = new Set<unknown>([${rootKeyExprs(exported.single, graph, getImport)}]);\n  private _multiRoots = new Set<unknown>([${rootKeyExprs(exported.multi, graph, getImport)}]);`
     : '';
   const assertRootMethod = closed ? `
 
-  private _assertRoot(token: any, all: boolean): void {
+  private _assertRoot(token: unknown, all: boolean): void {
     if ((all ? this._multiRoots : this._singleRoots).has(token)) return;
     const error = new Error('NEO_ROOT_NOT_EXPORTED: [' + this.name + '] token is not an exported root') as Error & { code: string };
     error.code = 'NEO_ROOT_NOT_EXPORTED';

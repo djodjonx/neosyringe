@@ -3,6 +3,23 @@ import { getFactoryName, multiRegistrationKey, resolveTokenKey, type GetImport }
 import { MinIndexQueue } from './minHeap';
 import { afterStore, generateOverrideMultiGuard, isBorrowedInstance } from './ResolveEmitter';
 
+/**
+ * What a cached singleton is read as when it is disposed. The cache holds `unknown`; one assertion
+ * per read states what the slot guarantees. `unguarded`: the analyzer found a `dispose` method, so the
+ * call is made as is (a missing one throws the same TypeError as before). `guarded`: the factory may
+ * return anything, so `dispose` is looked up first.
+ */
+const DISPOSABLE = '{ dispose(): unknown }';
+
+/**
+ * What `_assertParents` reads of a `useContainer` parent. A parent is a container or an adapter, and either
+ * may carry a closed flag and a name. A container keeps both private, so they cannot be part of the shape
+ * `legacy` is typed with (a class with a private member is not assignable to a shape that lists it);
+ * each read states the shape it needs and nothing else. The read is inline so no statement is added.
+ */
+const LEGACY_STATE = '{ _closed?: boolean; name?: string }';
+const MAYBE_DISPOSABLE = '{ dispose?: () => unknown } | null | undefined';
+
 /** Returns true if any node in the graph has an async factory. */
 export function hasAsyncFactories(graph: DependencyGraph): boolean {
   for (const node of graph.nodes.values()) {
@@ -196,6 +213,10 @@ function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport:
 }
 
 /**
+ * About `(this._state as string)` below: the cleanup awaits a dispose, and destroy() may set 'destroying'
+ * in the meantime. The check above that threw on 'destroying' narrows the property for the compiler, which
+ * does not follow state across an await. The assertion widens it back; it adds no runtime code.
+ *
  * Generates the initialize() method that pre-creates all async singleton factories
  * in topological order. Called whenever this container OR its useContainer
  * parent/legacy chain has async factories (see DependencyGraph.parentHasAsyncInitialize) —
@@ -248,31 +269,31 @@ export function generateInitializeMethod(
     } catch (__neoInitError) {
       this._failure = __neoInitError;
       if (this._state === 'destroying') throw __neoInitError;
-      const __neoCleanup = [];
+      const __neoCleanup: unknown[] = [];
       const __neoSeen = new Set();
       for (const __neoKey of [...this._initJournal].reverse()) {
-        const __neoInst = this.instances.get(__neoKey);
+        const __neoInst = this.instances.get(__neoKey) as ${MAYBE_DISPOSABLE};
         this.instances.delete(__neoKey);
         if (__neoInst == null || this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)) continue;
         __neoSeen.add(__neoInst);
         try {
           if (typeof __neoInst.dispose === 'function') {
             const __neoResult = __neoInst.dispose();
-            if (__neoResult && typeof __neoResult.then === 'function') await __neoResult;
+            if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') await __neoResult;
           }
         } catch (__neoDisposeError) {
           __neoCleanup.push(__neoDisposeError);
         }
       }
       if (__neoCleanup.length === 0) {
-        if (this._state !== 'destroying') this._state = 'failed';
+        if ((this._state as string) !== 'destroying') this._state = 'failed';
         throw __neoInitError;
       }
       const __neoWrapped = new Error(__neoInitError instanceof Error ? __neoInitError.message : String(__neoInitError)) as Error & { cause?: unknown; cleanupErrors?: unknown[] };
       __neoWrapped.cause = __neoInitError;
       __neoWrapped.cleanupErrors = __neoCleanup;
       this._failure = __neoWrapped;
-      if (this._state !== 'destroying') this._state = 'failed';
+      if ((this._state as string) !== 'destroying') this._state = 'failed';
       throw __neoWrapped;
     } finally {
       this._initRunning = false;
@@ -350,7 +371,7 @@ export function generateCreateScopeMethod(className: string, hasAsync: boolean, 
   if (this._touchClosed(false)) {
     throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
   }`;
-  return `public createScope(): this {
+  return `public createScope(): ${className} {
     ${guard}
     return new ${className}(this.legacy, this.name);
   }`;
@@ -368,8 +389,8 @@ export function assertParentsMethod(): string {
   return `private _assertParents(): void {
     if (!this.legacy) return;
     for (const legacyContainer of this.legacy) {
-      if (legacyContainer && legacyContainer._closed) {
-        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      if (legacyContainer && (legacyContainer as ${LEGACY_STATE})._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + (legacyContainer as ${LEGACY_STATE}).name);
       }
     }
   }`;
@@ -502,27 +523,28 @@ function combinedDisposals(
 function disposeCall(slot: DisposalSlot, immediateAwait: boolean): string {
   if (slot.guarded) {
     const follow = immediateAwait
-      ? `if (__neoResult && typeof __neoResult.then === 'function') await __neoResult;`
-      : `if (__neoResult && typeof __neoResult.then === 'function') __neoPending.push(__neoResult);`;
+      ? `if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') await __neoResult;`
+      : `if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult);`;
     return `if (typeof __neoInst?.dispose === 'function') { const __neoResult = __neoInst.dispose(); ${follow} }`;
   }
   if (immediateAwait) {
-    return `const __neoResult = (__neoInst as any).dispose(); if (__neoResult && typeof __neoResult.then === 'function') await __neoResult;`;
+    return `const __neoResult = __neoInst.dispose(); if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') await __neoResult;`;
   }
-  return `(__neoInst as any).dispose();`;
+  return `__neoInst.dispose();`;
 }
 
 function disposeSlot(slot: DisposalSlot, immediateAwait: boolean): string {
   const call = disposeCall(slot, immediateAwait);
-  return `if (this.instances.has(${slot.tokenKey})) { const __neoInst = this.instances.get(${slot.tokenKey}); if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { ${call} } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }`;
+  const read = slot.guarded ? MAYBE_DISPOSABLE : DISPOSABLE;
+  return `if (this.instances.has(${slot.tokenKey})) { const __neoInst = this.instances.get(${slot.tokenKey}) as ${read}; if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { ${call} } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }`;
 }
 
 function sharedDisposalLines(slots: DisposalSlot[], awaitClose: boolean): string[] {
-  const lines = ['const __neoSeen = new Set();', 'const __neoErrors = [];'];
+  const lines = ['const __neoSeen = new Set();', 'const __neoErrors: unknown[] = [];'];
   const early = slots.filter((slot) => !slot.late);
   const late = slots.filter((slot) => slot.late);
   const defer = awaitClose && early.some((slot) => slot.guarded);
-  if (defer) lines.push('const __neoPending = [];');
+  if (defer) lines.push('const __neoPending: unknown[] = [];');
   for (const slot of early) lines.push(disposeSlot(slot, false));
   if (defer) {
     lines.push('for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }');
@@ -578,7 +600,7 @@ export function generateOverrideMethods(
     : `this._failure = __neoReconfigureError; this._reconfiguring = false;`;
   const multiGuard = generateOverrideMultiGuard(graph, getImport);
 
-  return `public override(token: any, factory: () => any): Promise<void> {
+  return `public override(token: unknown, factory: () => unknown): Promise<void> {
     ${testApiGate}
     ${busyCheck}
     ${destroyedCheck}
@@ -598,7 +620,7 @@ export function generateOverrideMethods(
   }
 
   private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks = [];
+    const __neoMocks: unknown[] = [];
     for (const __neoToken of this.overrides.keys()) {
       if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
     }

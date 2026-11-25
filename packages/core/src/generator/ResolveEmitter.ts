@@ -1,6 +1,50 @@
 import type { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getDirectName, getFactoryName, getReadName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
 
+/**
+ * `name<T>(token): T` as an overload over an `unknown` implementation. The body hands out `unknown`
+ * values, and the caller picks the type it expects: the overload states that contract, the
+ * implementation never asserts it (TYPES-SAFETY.md, "Méthodes générées").
+ */
+export function singleOverload(access: 'public' | 'private', name: string): string {
+  return `${access} ${name}<T>(token: unknown): T;
+  ${access} ${name}(token: unknown): unknown {`;
+}
+
+/** Same as {@link singleOverload}, for the methods that answer a list. */
+export function listOverload(access: 'public' | 'private', name: string): string {
+  return `${access} ${name}<T>(token: unknown): T[];
+  ${access} ${name}(token: unknown): unknown[] {`;
+}
+
+/**
+ * `on('resolve', listener)` as an overload over an `unknown` implementation. The container stores and calls
+ * every listener with a token of any kind, so the implementation takes `unknown`. A consumer types its listener
+ * with the public shape (`(token: Token<unknown>, instance: unknown) => void`, packages/neosyringe/src/types.ts),
+ * and on the transformer path the exported container is typed by this class, so a listener with an `unknown`
+ * token only would force a consumer cast. The overload is generic in the token (`K`) instead: tsc erases a type
+ * parameter when it compares an overload with its implementation, so the pair is accepted without `any`, and a
+ * call infers `K` from the consumer's listener. `Token` itself is not declared in the generated file.
+ */
+export function resolveListenerOverload(): string {
+  return `public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
+  public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {`;
+}
+
+/**
+ * The part of a `useContainer` parent the generated container reads: a NeoSyringe container or an adapter
+ * from `declareContainerTokens`. Every member is optional because an adapter may answer none of them.
+ * The closed flag and the name are read through one local assertion in `_assertParents`: on a container
+ * they are private, so they cannot be part of a shape a container is assigned to.
+ */
+export function legacyParentInterface(name: string): string {
+  return `interface ${name} {
+  resolve?(token: unknown): unknown;
+  resolveAll?(token: unknown): unknown;
+  initialize?(): unknown;
+}`;
+}
+
 /** useValue and an explicit borrowed factory stay out of the disposal journal. A value is never owned. */
 export function isBorrowedInstance(service: ServiceDefinition): boolean {
   return service.ownership === 'borrowed' || service.type === 'value';
@@ -164,17 +208,17 @@ export function generateResolveAllMethod(
   if (closed) return closedResolveAll(graph, getImport, hasAsync, open, tail);
   if (!graph.multiNodes || graph.multiNodes.size === 0) {
     if (!hasAsync) {
-      return `public resolveAll<T>(token: any): T[] {
+      return `${listOverload('public', 'resolveAll')}
     ${open}
     ${tail}
   }`;
     }
-    return `public resolveAll<T>(token: any): T[] {
+    return `${listOverload('public', 'resolveAll')}
     this._guardPublic('resolveAll()');
-    return this._resolveAllInternal<T>(token);
+    return this._resolveAllInternal(token);
   }
 
-  private _resolveAllInternal<T>(token: any): T[] {
+  ${listOverload('private', '_resolveAllInternal')}
     ${open}
     ${tail}
   }`;
@@ -192,19 +236,19 @@ export function generateResolveAllMethod(
   }
 
   if (!hasAsync) {
-    return `public resolveAll<T>(token: any): T[] {
+    return `${listOverload('public', 'resolveAll')}
     ${open}
     ${cases.join('\n    ')}
     ${tail}
   }`;
   }
 
-  return `public resolveAll<T>(token: any): T[] {
+  return `${listOverload('public', 'resolveAll')}
     this._guardPublic('resolveAll()');
-    return this._resolveAllInternal<T>(token);
+    return this._resolveAllInternal(token);
   }
 
-  private _resolveAllInternal<T>(token: any): T[] {
+  ${listOverload('private', '_resolveAllInternal')}
     ${open}
     ${cases.join('\n    ')}
     ${tail}
@@ -231,12 +275,12 @@ function closedResolveAll(
   }
   const body = cases.length === 0 ? `${open}\n    ${tail}` : `${open}\n    ${cases.join('\n    ')}\n    ${tail}`;
   const guard = hasAsync ? `this._guardPublic('resolveAll()');\n    ` : '';
-  return `public resolveAll<T>(token: any): T[] {
+  return `${listOverload('public', 'resolveAll')}
     ${guard}this._assertRoot(token, true);
-    return this._resolveAllInternal<T>(token);
+    return this._resolveAllInternal(token);
   }
 
-  private _resolveAllInternal<T>(token: any): T[] {
+  ${listOverload('private', '_resolveAllInternal')}
     ${body}
   }`;
 }
@@ -283,12 +327,12 @@ export function generateDirectAccessors(
     ${stored}
     return instance;`;
     accessors.push(`
-  private ${getDirectName(tokenId)}(): any {
+  private ${getDirectName(tokenId)}(): unknown {
     ${mock}${body}
   }`);
     if (profile.minimal) continue;
     accessors.push(`
-  private ${getReadName(tokenId)}(): any {
+  private ${getReadName(tokenId)}(): unknown {
     const __neoValue = this.${getDirectName(tokenId)}();
     this.notifyResolve(${tokenKey}, __neoValue);
     return __neoValue;
@@ -310,21 +354,21 @@ export function generateDirectContributions(
       const key = multiRegistrationKey(node, tokenId, index);
       if (node.service.lifecycle === 'transient') {
         accessors.push(`
-  private ${getDirectName(tokenId, index)}(): any {
+  private ${getDirectName(tokenId, index)}(): unknown {
     return this.${factoryId}();
   }`);
         return;
       }
       if (hasAsync && node.service.isAsync) {
         accessors.push(`
-  private ${getDirectName(tokenId, index)}(): any {
+  private ${getDirectName(tokenId, index)}(): unknown {
     return this.instances.get(${key});
   }`);
         return;
       }
       const stored = afterStore('inst', 'k', hasAsync, isBorrowedInstance(node.service));
       accessors.push(`
-  private ${getDirectName(tokenId, index)}(): any {
+  private ${getDirectName(tokenId, index)}(): unknown {
     const k = ${key};
     if (this.instances.has(k)) return this.instances.get(k);
     const inst = this.${factoryId}();
@@ -369,21 +413,21 @@ export function generateDirectResolveAll(
     }
     return cases.join('\n    ');
   };
-  const internalMethod = `private _resolveAllInternal<T>(token: any): T[] {
+  const internalMethod = `${listOverload('private', '_resolveAllInternal')}
     ${open}
     ${casesFor(internalIds)}
     ${tail}
   }`;
   if (!closed) {
     return {
-      publicMethod: `public resolveAll<T>(token: any): T[] {
-    ${guard}return this._resolveAllInternal<T>(token);
+      publicMethod: `${listOverload('public', 'resolveAll')}
+    ${guard}return this._resolveAllInternal(token);
   }`,
       internalMethod,
     };
   }
   return {
-    publicMethod: `public resolveAll<T>(token: any): T[] {
+    publicMethod: `${listOverload('public', 'resolveAll')}
     ${guard}this._assertRoot(token, true);
     ${open}
     ${casesFor(graph.publicMultiRoots ?? [])}
