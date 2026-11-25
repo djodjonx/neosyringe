@@ -25,7 +25,6 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _syncInit = 0;
 
   // -- Factories --
   
@@ -178,48 +177,12 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: unknown, factory: () => unknown): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.set(token, factory); });
+  public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   public clearOverrides(): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.clear(); });
-  }
-
-  private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks: unknown[] = [];
-    for (const __neoToken of this.overrides.keys()) {
-      if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
-    }
-    try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
-      for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
-      if (__neoErrors.length > 0) {
-        const __neoDisposeFailure = new AggregateError(__neoErrors);
-        if (this._reconfiguring) { this._failure = __neoDisposeFailure; this._reconfiguring = false; }
-        throw __neoDisposeFailure;
-      }
-      apply();
-      if (this._reconfiguring) { this._failure = undefined; this._reconfiguring = false; }
-    } catch (__neoReconfigureError) {
-      if (this._reconfiguring) {
-        this._failure = __neoReconfigureError; this._reconfiguring = false;
-      }
-      throw __neoReconfigureError;
-    }
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   /**
@@ -306,12 +269,9 @@ class NeoContainer {
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
     try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
+      this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
     } catch (__neoDestroyError) {
       return Promise.reject(__neoDestroyError);
     }
@@ -386,7 +346,6 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _syncInit = 0;
 
   // -- Factories --
   
@@ -454,48 +413,12 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: unknown, factory: () => unknown): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.set(token, factory); });
+  public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   public clearOverrides(): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.clear(); });
-  }
-
-  private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks: unknown[] = [];
-    for (const __neoToken of this.overrides.keys()) {
-      if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
-    }
-    try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
-      for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
-      if (__neoErrors.length > 0) {
-        const __neoDisposeFailure = new AggregateError(__neoErrors);
-        if (this._reconfiguring) { this._failure = __neoDisposeFailure; this._reconfiguring = false; }
-        throw __neoDisposeFailure;
-      }
-      apply();
-      if (this._reconfiguring) { this._failure = undefined; this._reconfiguring = false; }
-    } catch (__neoReconfigureError) {
-      if (this._reconfiguring) {
-        this._failure = __neoReconfigureError; this._reconfiguring = false;
-      }
-      throw __neoReconfigureError;
-    }
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   /**
@@ -582,12 +505,9 @@ class NeoContainer {
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
     try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
+      this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
     } catch (__neoDestroyError) {
       return Promise.reject(__neoDestroyError);
     }
@@ -662,7 +582,6 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _syncInit = 0;
 
   // -- Factories --
   
@@ -730,48 +649,12 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: unknown, factory: () => unknown): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.set(token, factory); });
+  public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   public clearOverrides(): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.clear(); });
-  }
-
-  private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks: unknown[] = [];
-    for (const __neoToken of this.overrides.keys()) {
-      if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
-    }
-    try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
-      for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
-      if (__neoErrors.length > 0) {
-        const __neoDisposeFailure = new AggregateError(__neoErrors);
-        if (this._reconfiguring) { this._failure = __neoDisposeFailure; this._reconfiguring = false; }
-        throw __neoDisposeFailure;
-      }
-      apply();
-      if (this._reconfiguring) { this._failure = undefined; this._reconfiguring = false; }
-    } catch (__neoReconfigureError) {
-      if (this._reconfiguring) {
-        this._failure = __neoReconfigureError; this._reconfiguring = false;
-      }
-      throw __neoReconfigureError;
-    }
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   /**
@@ -858,12 +741,9 @@ class NeoContainer {
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
     try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
+      this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
     } catch (__neoDestroyError) {
       return Promise.reject(__neoDestroyError);
     }
@@ -938,7 +818,6 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _syncInit = 0;
 
   // -- Factories --
   
@@ -1020,48 +899,12 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: unknown, factory: () => unknown): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.set(token, factory); });
+  public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   public clearOverrides(): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.clear(); });
-  }
-
-  private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks: unknown[] = [];
-    for (const __neoToken of this.overrides.keys()) {
-      if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
-    }
-    try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
-      for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
-      if (__neoErrors.length > 0) {
-        const __neoDisposeFailure = new AggregateError(__neoErrors);
-        if (this._reconfiguring) { this._failure = __neoDisposeFailure; this._reconfiguring = false; }
-        throw __neoDisposeFailure;
-      }
-      apply();
-      if (this._reconfiguring) { this._failure = undefined; this._reconfiguring = false; }
-    } catch (__neoReconfigureError) {
-      if (this._reconfiguring) {
-        this._failure = __neoReconfigureError; this._reconfiguring = false;
-      }
-      throw __neoReconfigureError;
-    }
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   /**
@@ -1148,12 +991,9 @@ class NeoContainer {
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
     try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
+      this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
     } catch (__neoDestroyError) {
       return Promise.reject(__neoDestroyError);
     }
@@ -1228,7 +1068,6 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _syncInit = 0;
 
   // -- Factories --
   
@@ -1296,48 +1135,12 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: unknown, factory: () => unknown): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.set(token, factory); });
+  public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   public clearOverrides(): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.clear(); });
-  }
-
-  private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks: unknown[] = [];
-    for (const __neoToken of this.overrides.keys()) {
-      if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
-    }
-    try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
-      for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
-      if (__neoErrors.length > 0) {
-        const __neoDisposeFailure = new AggregateError(__neoErrors);
-        if (this._reconfiguring) { this._failure = __neoDisposeFailure; this._reconfiguring = false; }
-        throw __neoDisposeFailure;
-      }
-      apply();
-      if (this._reconfiguring) { this._failure = undefined; this._reconfiguring = false; }
-    } catch (__neoReconfigureError) {
-      if (this._reconfiguring) {
-        this._failure = __neoReconfigureError; this._reconfiguring = false;
-      }
-      throw __neoReconfigureError;
-    }
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   /**
@@ -1424,12 +1227,9 @@ class NeoContainer {
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
     try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
+      this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
     } catch (__neoDestroyError) {
       return Promise.reject(__neoDestroyError);
     }
@@ -1504,7 +1304,6 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _syncInit = 0;
 
   // -- Factories --
   
@@ -1655,51 +1454,12 @@ class NeoContainer {
     };
   }
 
-  public override(token: unknown, factory: () => unknown): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.set(token, factory); });
+  public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   public clearOverrides(): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.clear(); });
-  }
-
-  private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks: unknown[] = [];
-    for (const __neoToken of this.overrides.keys()) {
-      if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
-    }
-    try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    const __neoPending: unknown[] = [];
-    if (this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) { const __neoInst = this.instances.get("PropertyToken:ApiService.apiUrl_8db03951") as { dispose?: () => unknown } | null | undefined; if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { if (typeof __neoInst?.dispose === 'function') { const __neoResult = __neoInst.dispose(); if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult); } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }
-    for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }
-    this.instances.clear();
-      for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
-      if (__neoErrors.length > 0) {
-        const __neoDisposeFailure = new AggregateError(__neoErrors);
-        if (this._reconfiguring) { this._failure = __neoDisposeFailure; this._reconfiguring = false; }
-        throw __neoDisposeFailure;
-      }
-      apply();
-      if (this._reconfiguring) { this._failure = undefined; this._reconfiguring = false; }
-    } catch (__neoReconfigureError) {
-      if (this._reconfiguring) {
-        this._failure = __neoReconfigureError; this._reconfiguring = false;
-      }
-      throw __neoReconfigureError;
-    }
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   /**
@@ -1874,7 +1634,6 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _syncInit = 0;
 
   // -- Factories --
   
@@ -1959,48 +1718,12 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: unknown, factory: () => unknown): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.set(token, factory); });
+  public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   public clearOverrides(): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.clear(); });
-  }
-
-  private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks: unknown[] = [];
-    for (const __neoToken of this.overrides.keys()) {
-      if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
-    }
-    try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
-      for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
-      if (__neoErrors.length > 0) {
-        const __neoDisposeFailure = new AggregateError(__neoErrors);
-        if (this._reconfiguring) { this._failure = __neoDisposeFailure; this._reconfiguring = false; }
-        throw __neoDisposeFailure;
-      }
-      apply();
-      if (this._reconfiguring) { this._failure = undefined; this._reconfiguring = false; }
-    } catch (__neoReconfigureError) {
-      if (this._reconfiguring) {
-        this._failure = __neoReconfigureError; this._reconfiguring = false;
-      }
-      throw __neoReconfigureError;
-    }
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   /**
@@ -2087,12 +1810,9 @@ class NeoContainer {
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
     try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
+      this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
     } catch (__neoDestroyError) {
       return Promise.reject(__neoDestroyError);
     }
@@ -2167,7 +1887,6 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _syncInit = 0;
 
   // -- Factories --
   
@@ -2235,48 +1954,12 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: unknown, factory: () => unknown): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.set(token, factory); });
+  public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   public clearOverrides(): Promise<void> {
-    if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
-    if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
-    if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));
-    this._reconfiguring = true;
-    return this._reconfigure(() => { this.overrides.clear(); });
-  }
-
-  private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks: unknown[] = [];
-    for (const __neoToken of this.overrides.keys()) {
-      if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
-    }
-    try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
-      for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
-      if (__neoErrors.length > 0) {
-        const __neoDisposeFailure = new AggregateError(__neoErrors);
-        if (this._reconfiguring) { this._failure = __neoDisposeFailure; this._reconfiguring = false; }
-        throw __neoDisposeFailure;
-      }
-      apply();
-      if (this._reconfiguring) { this._failure = undefined; this._reconfiguring = false; }
-    } catch (__neoReconfigureError) {
-      if (this._reconfiguring) {
-        this._failure = __neoReconfigureError; this._reconfiguring = false;
-      }
-      throw __neoReconfigureError;
-    }
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
   /**
@@ -2363,12 +2046,9 @@ class NeoContainer {
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
     try {
-      const __neoSeen = new Set();
-    const __neoErrors: unknown[] = [];
-    this.instances.clear();
+      this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
     } catch (__neoDestroyError) {
       return Promise.reject(__neoDestroyError);
     }
