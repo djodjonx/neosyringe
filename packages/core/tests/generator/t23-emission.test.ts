@@ -338,7 +338,8 @@ describe('T23 emitters without a copy function emit user text as generated text 
     expect(created.parts.every((part) => part.kind === 'generated')).toBe(true);
     expect(created.parts.map((part) => (part.kind === 'generated' ? part.text : '')).join(''))
       .toContain(`const userFactory: ${FACTORY_TYPE} = () => ({ n: 5 });`);
-    expect(created.needs).toEqual([]);
+    // A declared factory asks for the policy and the lease of its declaration, and nothing else.
+    expect(created.needs).toEqual(['factoryPolicy', 'factoryLease']);
   });
 
   it('T23-P10 a snapshot passed as provenance is the only place copies come from', () => {

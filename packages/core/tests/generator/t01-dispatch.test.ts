@@ -103,6 +103,9 @@ function programFor(files: ReadonlyMap<string, string>): ts.Program {
 
 interface BuildOptions {
   testOverrides?: boolean;
+  /** Modules the container file imports (path from the container's directory, then text) and the `require` that serves them. */
+  modules?: ReadonlyMap<string, string>;
+  require?: (id: string) => unknown;
 }
 
 interface Built {
@@ -176,7 +179,9 @@ function build(source: string, emitter: Emitter, options: BuildOptions = {}): Bu
   warmLibCache();
   fileCounter += 1;
   const fileName = `/virtual/t01/inline-${fileCounter}.ts`;
-  const graphs = new Analyzer(programFor(new Map([[fileName, source]]))).extractAll();
+  const files = new Map([[fileName, source]]);
+  for (const [path, text] of options.modules ?? []) files.set(`/virtual/t01/${path}`, text);
+  const graphs = new Analyzer(programFor(files)).extractAll().filter((graph) => graph.sourceFileName === fileName);
   const ordered = [...graphs].sort((left, right) => (right.variableStatementStart ?? 0) - (left.variableStatementStart ?? 0));
   let code = source;
   for (const graph of ordered) {
@@ -188,9 +193,9 @@ function build(source: string, emitter: Emitter, options: BuildOptions = {}): Bu
     const generator = new Generator(graph, true, undefined, false, options.testOverrides ?? false, emitter);
     code = `${code.slice(0, start)}${generator.generate()}\nexport const ${name} = ${generator.generateInstantiation()};${code.slice(end)}`;
   }
-  const exports = execute(code, (id) => {
+  const exports = execute(code, options.require ?? ((id) => {
     throw new Error(`unexpected import ${id}`);
-  });
+  }));
   return wrap(code, exports, graphs);
 }
 
@@ -771,6 +776,36 @@ export const box = defineBuilderConfig({
       for (const field of ['__neoRootLists', '__neoLists']) {
         expect(memberText(built.code, `private static ${field}Table(`), `${field} has the row`).toContain(`.prototype.${reader}`);
       }
+    });
+  });
+
+  it('P20 a key undefined at the first read is read again', async () => {
+    // The import cycle of CommonJS output: at the first dynamic read the namespace holds no `Late` yet.
+    class LateClass { readonly n = 9; }
+    const namespace: { Late: unknown } = { Late: undefined };
+    const source = `${HEAD}
+import { Late } from './late';
+export const box = defineBuilderConfig({ name: 'Box', injections: [{ token: Late }] });
+`;
+    const modules = new Map([['late.ts', 'export class Late { n = 9; }\n']]);
+    const require = (id: string): unknown => {
+      if (id === './late') return namespace;
+      throw new Error(`unexpected import ${id}`);
+    };
+    await withBuilt(source, undefined, { modules, require }, (built) => {
+      expectTables(built.code, DISPATCH);
+      const box = built.box();
+      // Whatever this call does, it must not fix the table over a key that was not there yet.
+      codeOf(() => box.resolve(undefined));
+      namespace.Late = LateClass;
+      const late = box.resolve(LateClass);
+      expect(late).toBeInstanceOf(LateClass);
+      expect(box.resolve(LateClass)).toBe(late);
+      const table = tableOf(box, '__neoDispatch');
+      expect(table).toBeInstanceOf(Map);
+      expect(table instanceof Map && table.has(LateClass)).toBe(true);
+      expect(table instanceof Map && table.has(undefined)).toBe(false);
+      return undefined;
     });
   });
 
