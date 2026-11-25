@@ -8,6 +8,19 @@ import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGua
 import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
+import {
+  NamePool,
+  concat,
+  copyFromSnapshot,
+  fragment,
+  render,
+  snapshotOfFiles,
+  type CopyMapping,
+  type Fragment,
+  type Piece,
+  type Snapshot,
+  type UserCopy,
+} from './fragments';
 import { TSContext } from '../TSContext';
 import {
   artifactDescriptor,
@@ -76,6 +89,10 @@ export class Generator {
   private readonly containerClassName: string;
   /** Name of the generated "not found" error class — see {@link getGeneratedClassSuffix}. */
   private readonly notFoundErrorClassName: string;
+  /** Identity of this container among the artifacts of the build. Keys the names it takes from the pool. */
+  private readonly artifactKey: string;
+  /** Names of generated top-level bindings. Shared by every Generator of one source file. */
+  private readonly names: NamePool;
 
   /**
    * Creates a new Generator.
@@ -127,6 +144,17 @@ export class Generator {
     private identityOptions?: {
       collisions?: CollisionRegistry;
       hash?: (descriptor: string) => string;
+    },
+    /**
+     * Where the output comes from. `names` is the pool of the source file this output is
+     * written into: pass the same pool to every Generator of one file so their bindings never
+     * collide with each other or with a name the file declares. Absent: a private pool, which is
+     * right when the output has a file of its own. `snapshot` is the text user expressions are
+     * copied from. Absent: the files the graph was read from.
+     */
+    private provenance?: {
+      snapshot?: Snapshot;
+      names?: NamePool;
     }
   ) {
     // Check for analysis errors and throw the first one for CLI compatibility
@@ -151,9 +179,11 @@ export class Generator {
     // keep names stable there for backward compatibility. The identity is still
     // registered, so two containers that collapse to one key fail in either mode.
     const artifactKey = this.getGeneratedClassSuffix();
+    this.artifactKey = artifactKey;
+    this.names = provenance?.names ?? new NamePool([]);
     const suffix = this.useDirectSymbolNames ? `_${artifactKey}` : '';
-    this.containerClassName = `NeoContainer${suffix}`;
-    this.notFoundErrorClassName = `NeoServiceNotFoundError${suffix}`;
+    this.containerClassName = this.names.forKey(`class:${artifactKey}`, `NeoContainer${suffix}`);
+    this.notFoundErrorClassName = this.names.forKey(`error:${artifactKey}`, `NeoServiceNotFoundError${suffix}`);
   }
 
   /**
@@ -171,6 +201,11 @@ export class Generator {
     const key = hashArtifactDescriptor(descriptor, this.identityOptions?.hash);
     this.identityOptions?.collisions?.register(key, descriptor);
     return key;
+  }
+
+  /** The namespace alias of an import of `filePath`. One per file for this container, kept free of every other name of the source file. */
+  private importAlias(filePath: string, preferred: string): string {
+    return this.names.forKey(`import:${this.artifactKey}:${filePath}`, preferred);
   }
 
   /**
@@ -227,7 +262,60 @@ export class Generator {
    * @returns TypeScript source code for the generated container.
    */
   public generate(): string {
-    const sourceGraph = this.graph;
+    return this.generateRendered().code;
+  }
+
+  /**
+   * The container code, and where each user expression in it was copied from.
+   * `copies` lists a range of `code` and the range of the source file it is a copy of, both in
+   * UTF-16 units. An expression the plugin rewrote is generated text and has no entry.
+   */
+  public generateRendered(): { code: string; copies: readonly CopyMapping[] } {
+    const snapshot = this.snapshotOfGraph();
+    return render(this.build(copyFromSnapshot(snapshot)).parts, snapshot);
+  }
+
+  /** The files the graph's user expressions were read from, as the analysis saw them. */
+  private snapshotOfGraph(): Snapshot {
+    if (this.provenance?.snapshot) return this.provenance.snapshot;
+    const files = new Map<string, string>();
+    visitServices(this.graph, (node) => {
+      for (const origin of [node.service.factoryOrigin, node.service.valueOrigin]) {
+        if (!origin || files.has(origin.file)) continue;
+        // A registration is parsed from the file its origin names, so the node's file holds that text.
+        const file = node.service.registrationNode.getSourceFile?.();
+        if (file) files.set(origin.file, file.text);
+      }
+    });
+    return snapshotOfFiles(files);
+  }
+
+  /**
+   * Hoisted useValue consts get their name from the pool, so a name the file declares is never
+   * taken twice. A name nobody else wants stays as the analysis wrote it.
+   */
+  private withPooledCaptures(graph: DependencyGraph): DependencyGraph {
+    let changed = false;
+    const pooled = (node: DependencyNode): DependencyNode => {
+      const capture = node.service.valueCapture;
+      if (!capture || node.service.valueCaptureRead) return node;
+      const name = this.names.forKey(`capture:${this.artifactKey}:${capture}`, capture);
+      if (name === capture) return node;
+      changed = true;
+      return { ...node, service: { ...node.service, valueCapture: name } };
+    };
+    const nodes = new Map<TokenId, DependencyNode>();
+    for (const [tokenId, node] of graph.nodes) nodes.set(tokenId, pooled(node));
+    let multiNodes = graph.multiNodes;
+    if (graph.multiNodes) {
+      multiNodes = new Map();
+      for (const [tokenId, list] of graph.multiNodes) multiNodes.set(tokenId, list.map(pooled));
+    }
+    return changed ? { ...graph, nodes, multiNodes } : graph;
+  }
+
+  private build(copy: UserCopy): Fragment {
+    const sourceGraph = this.withPooledCaptures(this.graph);
     const emitted = dropUnreachable(sourceGraph);
     const sorted = topologicalSort(emitted.nodes);
     const imports = new Map<string, string>(); // filePath -> importAliasPrefix
@@ -266,7 +354,7 @@ export class Generator {
           if (!imports.has(filePath)) {
             // Use __neo_ prefix to avoid collisions with any existing identifier in the
             // user's file (code is injected inline, not in a separate generated file).
-            imports.set(filePath, `__neo_Import_${imports.size}`);
+            imports.set(filePath, this.importAlias(filePath, `__neo_Import_${imports.size}`));
           }
         }
       }
@@ -295,7 +383,7 @@ export class Generator {
       }
       const filePath = decl.getSourceFile().fileName;
       if (!imports.has(filePath)) {
-        imports.set(filePath, `Import_${imports.size}`);
+        imports.set(filePath, this.importAlias(filePath, `Import_${imports.size}`));
       }
       return `${imports.get(filePath)}.${symbol.getName()}`;
     };
@@ -318,7 +406,7 @@ export class Generator {
       const filePath = decl.getSourceFile().fileName;
       const prefix = this.useDirectSymbolNames ? '__neo_Import_' : 'Import_';
       if (!imports.has(filePath)) {
-        imports.set(filePath, `${prefix}${imports.size}`);
+        imports.set(filePath, this.importAlias(filePath, `${prefix}${imports.size}`));
       }
       return `${imports.get(filePath)}.${symbol.getName()}`;
     };
@@ -351,17 +439,18 @@ export class Generator {
         ...rootMembers(emitted, closed, getImport),
         runtimeHelpers: runtimeHelpers(hasAsync),
         debugGetters: this.emitDebugGetter(emitted),
+        copy,
       });
       // Imports are read after the class: emitting it is what registers them.
-      return `${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
+      return fragment`${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
 ${this.renderImportLines(imports, sourceGraph).join('\n')}
-${[...captureHoists(sourceGraph), ...residualValueReads(sourceGraph)].join('\n')}
+${concat([...captureHoists(sourceGraph, copy), ...residualValueReads(sourceGraph)], '\n')}
 
 ${containerClass}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     }
 
-    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed);
+    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy);
     const resolveCases = generateResolveCases(
       emitted,
       sorted,
@@ -369,7 +458,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
       hasAsync,
       `${this.containerClassName}.formatToken`,
     );
-    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed);
+    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy);
     const resolveAllMethod = generateResolveAllMethod(emitted, getImport, hasAsync, closed);
     const initializeMethod = hasAsync
       ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines)
@@ -389,8 +478,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     const borrowNotify = '';
     const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines);
     const runtimeHelpersText = runtimeHelpers(hasAsync);
-    const captureLines = captureHoists(sourceGraph);
-    for (const line of residualValueReads(sourceGraph)) captureLines.push(line);
+    const captureLines: Piece[] = [...captureHoists(sourceGraph, copy), ...residualValueReads(sourceGraph)];
     const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
     const assertOne = closed ? 'this._assertRoot(token, false);' : '';
     const resolveInterior = `
@@ -456,9 +544,9 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
 
     const { rootFields, assertRootMethod } = rootMembers(emitted, closed, getImport);
 
-    return `${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
+    return fragment`${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
 ${importLines.join('\n')}
-${captureLines.join('\n')}
+${concat(captureLines, '\n')}
 
 class ${this.notFoundErrorClassName} extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
@@ -472,7 +560,7 @@ class ${this.containerClassName} {
   ${stateFields}${eagerField}${rootFields}
 
   // -- Factories --
-  ${[...factories, ...multiFactories].join('\n  ')}
+  ${concat([...factories, ...multiFactories], '\n  ')}
 
   constructor(
     private legacy?: any[],
@@ -708,13 +796,13 @@ function visitServices(graph: DependencyGraph, visit: (node: DependencyNode) => 
 }
 
 /** Direct useValue consts. Partial captures are property reads and stay at `new`. */
-function captureHoists(graph: DependencyGraph): string[] {
-  const lines: string[] = [];
+function captureHoists(graph: DependencyGraph, copy: UserCopy): Fragment[] {
+  const lines: Fragment[] = [];
   visitServices(graph, (node) => {
     const name = node.service.valueCapture;
     const expr = node.service.valueSource;
-    if (!name || !expr || !name.startsWith('__neoCapture_')) return;
-    lines.push(`const ${name} = ${expr};`);
+    if (!name || !expr || node.service.valueCaptureRead) return;
+    lines.push(fragment`const ${name} = ${concat(copy(expr, node.service.valueOrigin))};`);
   });
   return lines;
 }
@@ -768,7 +856,7 @@ function residualValueReads(graph: DependencyGraph): string[] {
   visitServices(graph, (node) => {
     if (!isUnreachable(graph, node)) return;
     const capture = node.service.valueCapture;
-    if (!capture || capture.startsWith('__neoCapture_')) return;
+    if (!capture || !node.service.valueCaptureRead) return;
     lines.push(`void ${capture};`);
   });
   return lines;

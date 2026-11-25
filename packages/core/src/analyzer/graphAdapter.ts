@@ -375,8 +375,10 @@ export class GraphAdapter {
         lifecycle: 'singleton',
         isInterfaceToken: collected.isInterfaceToken === true,
         valueSource: collected.valueSource,
+        valueOrigin: collected.valueOrigin,
         // A direct useValue is hoisted once. A partial reads the property from the expression written in `extends`.
         valueCapture: !binding && merge ? undefined : valueCaptureFor(graph.containerKey, index, binding),
+        valueCaptureRead: binding ? true : undefined,
         ownership: collected.ownership,
         isScoped,
       };
@@ -396,6 +398,7 @@ export class GraphAdapter {
         isInterfaceToken: collected.isInterfaceToken === true,
         isValueToken: collected.isValueToken === true,
         factorySource: collected.factorySource,
+        factoryOrigin: collected.factoryOrigin,
         isScoped,
         isAsync: collected.isAsync,
         isDisposable: collected.isDisposable,

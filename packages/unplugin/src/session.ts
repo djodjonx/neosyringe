@@ -3,7 +3,7 @@ import { TraceMap, decodedMappings, encodedMappings, originalPositionFor, type S
 import * as ts from 'typescript';
 import { Analyzer, CollisionRegistry, formatUnsupportedMarker, resolveNeoMarker, resolveProjectConfig, sourceFileUsesMarker, stableCodeOf, stableSeverityOf } from '@djodjonx/neosyringe-core/analyzer';
 import type { AnalysisError, DependencyGraph, DependencyNode } from '@djodjonx/neosyringe-core/analyzer';
-import { Generator, GraphValidator, type GraphValidationError } from '@djodjonx/neosyringe-core/generator';
+import { Generator, GraphValidator, NamePool, reservedNamesOf, type GraphValidationError } from '@djodjonx/neosyringe-core/generator';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { serializeGraph } from '@djodjonx/neosyringe-ui';
 import type { SerializableGraph } from '@djodjonx/neosyringe-ui';
@@ -716,6 +716,12 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
     if (!input.state.collisions) input.state.collisions = new CollisionRegistry();
     input.state.collisions.bind(key);
   }
+  // One pool per source file and per call: the containers of this file are written into the same
+  // scope, so their generated names must not collide with each other or with a name the file declares.
+  // The checker holds the bindings of the file (a `var` hoisted out of a block included).
+  const names = new NamePool(
+    sourceFile ? reservedNamesOf(sourceFile, checker) : [],
+  );
   for (const graph of thisFileGraphs) {
     const embeddings = sourceFile
       ? collectEmbeddings(graph, sourceFile, input.code, useEdits, checker, input.state.usedTokens, foreignEdits)
@@ -728,6 +734,7 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
       input.testOverrides,
       undefined,
       { collisions: input.state.collisions, hash: input.state.artifactHash },
+      { names },
     );
     const containerClass = generator.generate();
     const instantiation = generator.generateInstantiation();

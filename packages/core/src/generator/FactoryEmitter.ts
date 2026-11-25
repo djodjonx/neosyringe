@@ -2,6 +2,17 @@ import type * as ts from 'typescript';
 import type { DependencyGraph, DependencyNode, FactoryDependency, TokenId } from '../analyzer/types';
 import { FACTORY_NAME_SANITIZER } from '../analyzer/shared/constants';
 import { getSimpleName } from '../analyzer/utils/TokenUtils';
+import {
+  concat,
+  fragment,
+  generatedCopy,
+  generatedText,
+  withNeeds,
+  type Fragment,
+  type HelperId,
+  type Piece,
+  type UserCopy,
+} from './fragments';
 
 /**
  * Resolves a TypeScript symbol to a string reference usable in generated code.
@@ -70,13 +81,19 @@ function isLocalRegistration(graph: DependencyGraph, tokenId: TokenId): boolean 
  *   `{ token: X }` there themselves), a class living in the parent's file is
  *   not guaranteed to be in scope in the child's file at all.
  */
-function resolutionCalls(hasAsync: boolean, closed = false): { one: string; all: string } {
+function resolutionCalls(hasAsync: boolean, closed = false): { one: string; all: string; internal: boolean } {
   // Closed sync factories must not call the public resolve. ADR006 lines 29-33.
+  // `internal` is the one answer to "do the calls go through the private helpers": the emitters
+  // take their helper needs from it, so the text of the call and the need cannot drift apart.
   return hasAsync || closed
-    ? { one: 'this._resolveInternal', all: 'this._resolveAllInternal' }
-    : { one: 'this.resolve', all: 'this.resolveAll' };
+    ? { one: 'this._resolveInternal', all: 'this._resolveAllInternal', internal: true }
+    : { one: 'this.resolve', all: 'this.resolveAll', internal: false };
 }
 
+/**
+ * The constructor arguments as text, with the helpers of the generated class that text calls.
+ * A caller that writes `text` into a class must declare `needs` there.
+ */
 export function resolveConstructorArgs(
   dependencies: TokenId[],
   graph: DependencyGraph,
@@ -85,9 +102,26 @@ export function resolveConstructorArgs(
   hasAsync = false,
   closed = false,
   direct?: DirectReads,
-): string {
-  const read = resolutionCalls(hasAsync, closed || direct !== undefined).one;
-  return dependencies.map(depId => {
+): { text: string; needs: HelperId[] } {
+  return constructorArguments(dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct);
+}
+
+function constructorArguments(
+  dependencies: TokenId[],
+  graph: DependencyGraph,
+  getImport: GetImport,
+  getForeignImport: GetImport,
+  hasAsync: boolean,
+  closed: boolean,
+  direct: DirectReads | undefined,
+): { text: string; needs: HelperId[] } {
+  const calls = resolutionCalls(hasAsync, closed || direct !== undefined);
+  let reads = false;
+  const called = (argument: string): string => {
+    reads = true;
+    return `${calls.one}(${argument})`;
+  };
+  const text = dependencies.map(depId => {
     const depNode = graph.nodes.get(depId);
     if (direct && isLocalRegistration(graph, depId)) return directRead(depId, direct);
     if (!depNode) {
@@ -95,13 +129,13 @@ export function resolveConstructorArgs(
       // container (see DependencyGraph.parentResolvableTokens for why only this
       // subset of parent-provided tokens is safe to wire this way via a string key).
       if (graph.parentResolvableTokens?.has(depId)) {
-        return `${read}(${JSON.stringify(depId)})`;
+        return called(JSON.stringify(depId));
       }
       // A bare class token from the parent: resolved by class identity, not by
       // string, so we need the actual class reference — see parentClassTokenSymbols.
       const classSymbol = graph.parentClassTokenSymbols?.get(depId);
       if (classSymbol) {
-        return `${read}(${getForeignImport(classSymbol)})`;
+        return called(getForeignImport(classSymbol));
       }
       if (graph.parentProvidedTokens?.has(depId)) {
         // GraphValidator considers this dependency satisfied, but no symbol could
@@ -118,14 +152,15 @@ export function resolveConstructorArgs(
     }
 
     if (depNode.service.isInterfaceToken || depNode.service.isValueToken) {
-      return `${read}(${JSON.stringify(depNode.service.tokenId)})`;
+      return called(JSON.stringify(depNode.service.tokenId));
     } else if (depNode.service.tokenSymbol) {
-      return `${read}(${getImport(depNode.service.tokenSymbol)})`;
+      return called(getImport(depNode.service.tokenSymbol));
     } else if (depNode.service.implementationSymbol) {
-      return `${read}(${getImport(depNode.service.implementationSymbol)})`;
+      return called(getImport(depNode.service.implementationSymbol));
     }
     return 'undefined';
   }).join(', ');
+  return { text, needs: reads && calls.internal ? ['resolveSingle'] : [] };
 }
 
 /**
@@ -183,7 +218,7 @@ function factoryAllowList(
 function directContextResolve(
   listed: ReturnType<typeof factoryAllowList>,
   direct: DirectReads,
-  fallback: string,
+  fallback: () => string,
 ): string {
   const locals = [...listed.locals.entries()];
   const hasOther = listed.entries.some(([key]) => !listed.locals.has(key));
@@ -192,7 +227,7 @@ function directContextResolve(
     const read = `return ${directRead(tokenId, direct)};`;
     return !hasOther && index === locals.length - 1 ? read : `if (token === ${key}) ${read}`;
   });
-  if (hasOther) lines.push(`return ${fallback}(token);`);
+  if (hasOther) lines.push(`return ${fallback()}(token);`);
   return lines.join('\n        ');
 }
 
@@ -248,32 +283,46 @@ function emitFactoryBody(
   graph: DependencyGraph,
   getImport: GetImport,
   hasAsync: boolean,
-  closed = false,
-  direct?: DirectReads,
-): string {
-  const userFactory = service.factorySource ?? 'undefined';
+  closed: boolean,
+  direct: DirectReads | undefined,
+  copy: UserCopy,
+): Fragment {
+  const userFactory = concat(
+    service.factorySource === undefined
+      ? [generatedText('undefined')]
+      : copy(service.factorySource, service.factoryOrigin),
+  );
   const label = JSON.stringify(getSimpleName(service.tokenId));
   const opaqueFactory = service.opaque === true;
   const listed = factoryAllowList(service, graph, getImport);
   const allowed = listed.entries;
   const entries = allowed.map(([key, all]) => `[${key}, ${all ? '"all"' : '"simple"'}]`).join(', ');
   const calls = resolutionCalls(hasAsync, closed || direct !== undefined);
+  // A helper is a need only where its call is written into the text below.
+  const needs = new Set<HelperId>();
+  const internal = calls.internal;
+  const one = (): string => {
+    if (internal) needs.add('resolveSingle');
+    return calls.one;
+  };
+  const all = (): string => {
+    if (internal) needs.add('resolveAll');
+    return calls.all;
+  };
   const warmupLines: string[] = [];
   if (!opaqueFactory) {
-    for (const [key, all] of allowed) {
+    for (const [key, isAll] of allowed) {
       const depIsTransient = listed.skipWarm.get(key) === true;
       if (depIsTransient) continue;
       const local = listed.locals.get(key);
-      if (direct && local !== undefined && !all) {
+      if (direct && local !== undefined && !isAll) {
         warmupLines.push(`${directRead(local, direct)};`);
         continue;
       }
-      warmupLines.push(all ? `${calls.all}(${key});` : `${calls.one}(${key});`);
+      warmupLines.push(isAll ? `${all()}(${key});` : `${one()}(${key});`);
     }
   }
   const warmup = warmupLines.join('\n    ');
-  const resolveTail = direct ? directContextResolve(listed, direct, calls.one) : `return ${calls.one}(token);`;
-  const resolveAllTail = direct && !allowed.some(([, all]) => all) ? 'return undefined;' : `return ${calls.all}(token);`;
   const holdStart = '';
   const release = '';
   const expireStmt = 'const __neoExpire = () => { __neoExpired = true; };';
@@ -283,24 +332,27 @@ function emitFactoryBody(
       throw error;
     };`;
   if (opaqueFactory) {
-    return `const userFactory = ${userFactory};
+    const opaqueBody = fragment`const userFactory = ${userFactory};
     let __neoExpired = false;
     ${expireStmt}
     ${failStmt}
     const __neoContext = {
       resolve: (token) => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-        return ${calls.one}(token);
+        return ${one()}(token);
       },
       resolveAll: (token) => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-        return ${calls.all}(token);
+        return ${all()}(token);
       },
     };
     ${holdStart}
     ${emitInvocation('', release, hasAsync)}`;
+    return withNeeds(opaqueBody, [...needs]);
   }
-  return `const userFactory = ${userFactory};
+  const resolveTail = direct ? directContextResolve(listed, direct, one) : `return ${one()}(token);`;
+  const resolveAllTail = direct && !allowed.some(([, isAll]) => isAll) ? 'return undefined;' : `return ${all()}(token);`;
+  const declaredBody = fragment`const userFactory = ${userFactory};
     const __neoAllowed = new Map([${entries}]);
     let __neoExpired = false;
     ${expireStmt}
@@ -320,11 +372,38 @@ function emitFactoryBody(
     };
     ${holdStart}
     ${emitInvocation(warmup, release, hasAsync)}`;
+  return withNeeds(declaredBody, [...needs]);
 }
 
 /** A captured useValue is read once. Hand-built graphs keep the original expression. */
-function capturedValue(node: DependencyNode): string {
-  return node.service.valueCapture ?? node.service.valueSource ?? 'undefined';
+function capturedValue(node: DependencyNode, copy: UserCopy): Piece {
+  const { valueCapture, valueSource, valueOrigin } = node.service;
+  if (valueCapture !== undefined) return valueCapture;
+  if (valueSource !== undefined) return concat(copy(valueSource, valueOrigin));
+  return 'undefined';
+}
+
+/** One `private create_X(): any { ... }` method. */
+function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = []): Fragment {
+  return withNeeds(fragment`
+  private ${factoryId}(): any {
+    ${body}
+  }`, needs);
+}
+
+/** `return new Class(args);`, with the need of the generic resolver its arguments call. */
+function construction(
+  node: DependencyNode,
+  graph: DependencyGraph,
+  getImport: GetImport,
+  getForeignImport: GetImport,
+  hasAsync: boolean,
+  closed: boolean,
+  direct: DirectReads | undefined,
+  className: string,
+): { body: string; needs: HelperId[] } {
+  const args = constructorArguments(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct);
+  return { body: `return new ${className}(${args.text});`, needs: args.needs };
 }
 
 /** Generates a factory method for each service in topological order. */
@@ -336,8 +415,9 @@ export function generateFactories(
   hasAsync = false,
   closed = false,
   direct?: DirectReads,
-): string[] {
-  const factories: string[] = [];
+  copy: UserCopy = generatedCopy,
+): Fragment[] {
+  const factories: Fragment[] = [];
 
   for (const tokenId of sorted) {
     const node = graph.nodes.get(tokenId);
@@ -347,19 +427,13 @@ export function generateFactories(
     const factoryId = getFactoryName(tokenId);
 
     if (node.service.type === 'value' && node.service.valueSource !== undefined) {
-      factories.push(`
-  private ${factoryId}(): any {
-    return ${capturedValue(node)};
-  }`);
+      factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`));
       continue;
     }
 
     if (node.service.type === 'factory' && node.service.factorySource) {
-      const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct);
-      factories.push(`
-  private ${factoryId}(): any {
-    ${body}
-  }`);
+      const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy);
+      factories.push(creator(factoryId, body, body.needs));
     } else {
       if (!node.service.implementationSymbol) {
         throw new Error(
@@ -368,12 +442,8 @@ export function generateFactories(
         );
       }
       const className = getImport(node.service.implementationSymbol);
-      const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct);
-
-      factories.push(`
-  private ${factoryId}(): any {
-    return new ${className}(${args});
-  }`);
+      const built = construction(node, graph, getImport, getForeignImport, hasAsync, closed, direct, className);
+      factories.push(creator(factoryId, built.body, built.needs));
     }
   }
 
@@ -388,8 +458,9 @@ export function generateMultiFactories(
   hasAsync = false,
   closed = false,
   direct?: DirectReads,
-): string[] {
-  const factories: string[] = [];
+  copy: UserCopy = generatedCopy,
+): Fragment[] {
+  const factories: Fragment[] = [];
   if (!graph.multiNodes) return factories;
 
   for (const [tokenId, nodes] of graph.multiNodes) {
@@ -397,24 +468,15 @@ export function generateMultiFactories(
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
 
       if (node.service.type === 'factory' && node.service.factorySource) {
-        const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct);
-        factories.push(`
-  private ${factoryId}(): any {
-    ${body}
-  }`);
+        const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy);
+        factories.push(creator(factoryId, body, body.needs));
       } else if (node.service.type === 'value' && node.service.valueSource !== undefined) {
-        factories.push(`
-  private ${factoryId}(): any {
-    return ${capturedValue(node)};
-  }`);
+        factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`));
       } else {
         if (!node.service.implementationSymbol) return;
         const className = getImport(node.service.implementationSymbol);
-        const args = resolveConstructorArgs(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct);
-        factories.push(`
-  private ${factoryId}(): any {
-    return new ${className}(${args});
-  }`);
+        const built = construction(node, graph, getImport, getForeignImport, hasAsync, closed, direct, className);
+        factories.push(creator(factoryId, built.body, built.needs));
       }
     });
   }

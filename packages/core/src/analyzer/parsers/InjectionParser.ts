@@ -1,11 +1,17 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { TokenId, AnalysisError, FactoryDependency, ValidationMode } from '../types';
+import type { TokenId, AnalysisError, FactoryDependency, SourceOrigin, ValidationMode } from '../types';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { containerKeyFor } from '../shared/registrationGraph';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 
 export type ParsedRegistrationType = 'explicit' | 'autowire' | 'factory' | 'value';
+
+/** File, start and length of the exact text `node.getText(sourceFile)` returns. */
+function originOf(node: ts.Node, sourceFile: ts.SourceFile): SourceOrigin {
+  const start = node.getStart(sourceFile);
+  return { file: sourceFile.fileName, start, length: node.getEnd() - start };
+}
 
 export interface ParsedInjection {
   readonly __kind: 'parsed';
@@ -21,8 +27,10 @@ export interface ParsedInjection {
   isScoped: boolean;
   lifecycle: 'singleton' | 'transient';
   valueSource?: string;
+  valueOrigin?: SourceOrigin;
   useFactory: boolean;
   factorySource?: string;
+  factoryOrigin?: SourceOrigin;
   isAsync: boolean;
   implementationSymbol?: ts.Symbol;
   registrationType: ParsedRegistrationType;
@@ -200,6 +208,7 @@ export class InjectionParser {
         isScoped,
         lifecycle: 'singleton',
         valueSource: valueNode.getText(sourceFile),
+        valueOrigin: originOf(valueNode, sourceFile),
         useFactory: false,
         isAsync: false,
         registrationType: 'value',
@@ -263,6 +272,8 @@ export class InjectionParser {
 
     const factorySource =
       registrationType === 'factory' && providerNode ? providerNode.getText(sourceFile) : undefined;
+    const factoryOrigin =
+      registrationType === 'factory' && providerNode ? originOf(providerNode, sourceFile) : undefined;
 
     // 9. Capture local identifier names for default exports.
     // When `import Auth from './AuthService'` is used, getSymbolAtLocation returns an alias
@@ -294,6 +305,7 @@ export class InjectionParser {
       valueSource: undefined,
       useFactory,
       factorySource,
+      factoryOrigin,
       isAsync,
       implementationSymbol,
       registrationType,

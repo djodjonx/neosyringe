@@ -16,6 +16,16 @@ export type TokenId = string;
 export type RegistrationType = 'explicit' | 'autowire' | 'parent' | 'factory' | 'value';
 
 /**
+ * Where a copied expression sits in its source file. Plain data: `start` and `length` are
+ * UTF-16 offsets into the text of `file` as the analysis read it.
+ */
+export interface SourceOrigin {
+  file: string;
+  start: number;
+  length: number;
+}
+
+/**
  * Represents a single service definition in the dependency graph.
  */
 export interface ServiceDefinition {
@@ -52,8 +62,14 @@ export interface ServiceDefinition {
   /** The raw source text of the factory function (for code generation). */
   factorySource?: string;
 
+  /** Where `factorySource` was read: file, start and length of the provider expression. Plain data. */
+  factoryOrigin?: SourceOrigin;
+
   /** The raw source text of the value expression (for 'value' type). */
   valueSource?: string;
+
+  /** Where `valueSource` was read: file, start and length of the useValue expression. Plain data. */
+  valueOrigin?: SourceOrigin;
 
   /**
    * Expression that reads a useValue capture.
@@ -61,6 +77,13 @@ export interface ServiceDefinition {
    * A partial value reads the `extends` expression the consumer wrote (`P.part`, `p`, `part`), then `.injections[i].useValue`.
    */
   valueCapture?: string;
+
+  /**
+   * True when `valueCapture` is an expression read where the container is built (a partial's
+   * `P.part.injections[i].useValue`), not the name of a const hoisted before the class.
+   * Absent: `valueCapture` names a hoisted const. The generator never guesses it from the text.
+   */
+  valueCaptureRead?: boolean;
 
   /** True if this injection is scoped to the local container. */
   isScoped?: boolean;

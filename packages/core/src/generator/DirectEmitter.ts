@@ -1,5 +1,17 @@
 import type { DependencyGraph, TokenId } from '../analyzer/types';
 import {
+  concat,
+  fragment,
+  generatedCopy,
+  generatedText,
+  selectHelpers,
+  withNeeds,
+  type Fragment,
+  type Helper,
+  type Piece,
+  type UserCopy,
+} from './fragments';
+import {
   generateFactories,
   generateMultiFactories,
   getReadName,
@@ -48,6 +60,8 @@ export interface OptimizedContainerInput {
   runtimeHelpers: string;
   assertRootMethod: string;
   debugGetters: string;
+  /** How a user expression enters the output. Absent: generated text, no copy. */
+  copy?: UserCopy;
 }
 
 function mockMethod(): string {
@@ -155,23 +169,27 @@ function resolveInterior(input: OptimizedContainerInput, cases: string, multiGua
  * The dispatcher lists a local provider only when an opaque factory may ask for any token;
  * otherwise it serves parent tokens alone, a declared local dependency has its own accessor.
  */
-function resolveMethods(input: OptimizedContainerInput, listLocals: boolean): { publicMethod: string; internalMethod: string } {
+function resolveMethods(
+  input: OptimizedContainerInput,
+  listLocals: boolean,
+): { publicMethod: Fragment; internalMethod: string } {
   const guard = input.hasAsync ? 'this._guardPublic();\n    ' : '';
   const multiGuard = generateMultiResolveGuard(input.graph, input.getImport, input.hasAsync);
   const internalMethod = `private _resolveInternal<T>(token: any): T {
     ${resolveInterior(input, resolveCases(input, listLocals ? input.sorted : []), multiGuard)}
   }`;
   if (!input.closed) {
+    // The open public method calls the dispatcher, so it asks for it.
     return {
-      publicMethod: `public resolve<T>(token: any): T {
+      publicMethod: withNeeds(fragment`public resolve<T>(token: any): T {
     ${guard}return this._resolveInternal<T>(token);
-  }`,
+  }`, ['resolveSingle']),
       internalMethod,
     };
   }
   const roots = input.graph.publicRoots ?? [];
   return {
-    publicMethod: `public resolve<T>(token: any): T {
+    publicMethod: fragment`public resolve<T>(token: any): T {
     ${guard}this._assertRoot(token, false);
     ${resolveInterior(input, resolveCases(input, roots), '')}
   }`,
@@ -189,13 +207,14 @@ function resolveMethods(input: OptimizedContainerInput, listLocals: boolean): { 
  * Minimal profile: CoreContainer only. No on/override/clearOverrides, no overrides map,
  * no listeners, no notify branch. Destroy, initialize and createScope are unchanged.
  */
-export function emitOptimizedContainer(input: OptimizedContainerInput): string {
+export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment {
   const { graph, sorted, getImport, getForeignImport, hasAsync, closed, minimal } = input;
+  const copy = input.copy ?? generatedCopy;
   const direct: DirectReads = { notify: !minimal };
   const honourOverrides = !minimal && input.testOverrides;
   const creators = [
-    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct),
-    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct),
+    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy),
+    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy),
   ];
   const accessors = [
     ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides }, `${input.className}.formatToken`),
@@ -205,12 +224,21 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): string {
   const listLocals = !closed || needs.opaque;
   const resolve = resolveMethods(input, listLocals);
   const resolveAll = generateDirectResolveAll(graph, getImport, hasAsync, closed, minimal, listLocals ? undefined : needs.multiAll);
+  const resolveAllPublic = withNeeds(fragment`${resolveAll.publicMethod}`, closed ? [] : ['resolveAll']);
 
-  // Closed: a generic dispatcher exists only when a parent token, a declared multi token or an
-  // opaque factory still has to be reached by token. A factory with no such need has none.
-  const creatorText = creators.join('\n');
-  const needsInternalResolve = !closed || creatorText.includes('this._resolveInternal(');
-  const needsInternalResolveAll = !closed || creatorText.includes('this._resolveAllInternal(');
+  // Each generic resolver is declared only when a fragment asks for it. Open: the public methods
+  // call it. Closed: only a factory that reads a parent token, a declared multi token or any token
+  // (opaque) does. The emitters declare that; no text, user text included, is searched.
+  const catalog: Helper[] = [
+    { id: 'resolveSingle', parts: [generatedText(resolve.internalMethod)], needs: [] },
+    { id: 'resolveAll', parts: [generatedText(resolveAll.internalMethod)], needs: [] },
+  ];
+  // Deviation from the spec's `linkHelpers`: the helpers are kept in their slots (after `resolve`,
+  // after `resolveAll`) and not put before every root, because moving them would change the
+  // emitted class. `selectHelpers` is the first half of `linkHelpers`: same catalog, same needs.
+  const linked = new Map(
+    selectHelpers([...creators, resolve.publicMethod, resolveAllPublic], catalog).map((helper) => [helper.id, helper]),
+  );
 
   const initialize = hasAsync
     ? generateInitializeMethod(graph, sorted, getImport, hasAsync, input.eagerLines, minimal)
@@ -221,7 +249,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): string {
   const tableFields = minimal
     ? ''
     : `\n  private overrides = new Map<any, () => any>();\n  private resolveListeners = new Set<(token: any, instance: any) => void>();`;
-  const members: string[] = [
+  const members: Piece[] = [
     input.runtimeHelpers + input.assertRootMethod,
     initialize,
     generateCreateScopeMethod(input.className, hasAsync, minimal),
@@ -232,12 +260,14 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): string {
   }
   if (honourOverrides) members.push(mockMethod());
   members.push(resolve.publicMethod);
-  if (needsInternalResolve) members.push(resolve.internalMethod);
-  members.push(formatTokenMember(), destroy, resolveAll.publicMethod);
-  if (needsInternalResolveAll) members.push(resolveAll.internalMethod);
+  const single = linked.get('resolveSingle');
+  if (single) members.push(single);
+  members.push(formatTokenMember(), destroy, resolveAllPublic);
+  const many = linked.get('resolveAll');
+  if (many) members.push(many);
   members.push(input.debugGetters);
 
-  return `class ${input.notFoundErrorClassName} extends Error {
+  const container = fragment`class ${input.notFoundErrorClassName} extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
@@ -247,7 +277,7 @@ class ${input.className} {
   ${input.stateFields}${input.rootFields}
 
   // -- Factories --
-  ${creators.join('\n  ')}
+  ${concat(creators, '\n  ')}
 
   // -- Accessors --
   ${accessors.join('\n  ')}
@@ -257,6 +287,8 @@ class ${input.className} {
     private name: string = 'NeoContainer'
   ) {}
 
-  ${members.join('\n\n  ')}
+  ${concat(members, '\n\n  ')}
 }`;
+  // Every need is met by a helper above: what leaves here asks for nothing.
+  return { parts: container.parts, needs: [] };
 }

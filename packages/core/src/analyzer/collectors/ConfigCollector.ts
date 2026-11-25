@@ -543,7 +543,9 @@ export class ConfigCollector implements IConfigCollector {
       isInterfaceToken: parsed.isInterfaceToken || undefined,
       isValueToken: parsed.isValueToken || undefined,
       valueSource: parsed.valueSource,
+      valueOrigin: parsed.valueOrigin,
       factorySource: parsed.factorySource,
+      factoryOrigin: parsed.factoryOrigin,
       isScoped: parsed.isScoped,
       isAsync: parsed.isAsync || undefined,
       isDisposable: parsed.isDisposable || undefined,
@@ -601,6 +603,7 @@ export class ConfigCollector implements IConfigCollector {
       const index = this.injectionIndex(partial, info.node);
       if (index === undefined) return;
       info.definition.valueCapture = valueCaptureFor(partial.containerKey, index, binding);
+      info.definition.valueCaptureRead = true;
     };
     for (const info of partial.localInjections.values()) write(info);
     if (partial.multiInjections) {
