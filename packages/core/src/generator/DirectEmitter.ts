@@ -11,6 +11,7 @@ import {
   type Piece,
   type UserCopy,
 } from './fragments';
+import { emitDispatchField, emitDispatchRead, type DispatchEntry } from './dispatchEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 import {
   generateFactories,
@@ -28,6 +29,7 @@ import {
   generateDirectResolveAll,
   generateMultiResolveGuard,
   legacyParentInterface,
+  type ListReader,
   parentOpenCheck,
   resolveListenerOverload,
   singleOverload,
@@ -145,16 +147,21 @@ function legacyAndNotFound(input: OptimizedContainerInput): string {
     throw new ${input.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${input.className}.formatToken(token)}\`);`;
 }
 
-/** One case per retained provider. A pruned provider has no case, no accessor, no key. */
-function resolveCases(input: OptimizedContainerInput, ids: Iterable<TokenId>): string {
-  const cases: string[] = [];
+/**
+ * One row per retained provider: its token, and the accessor that answers it. A pruned provider has no row, no
+ * accessor, no key. Two providers never share a token: the analyzer refuses a duplicate registration.
+ */
+function dispatchEntries(input: OptimizedContainerInput, ids: Iterable<TokenId>): DispatchEntry[] {
+  const entries: DispatchEntry[] = [];
   for (const tokenId of ids) {
     const node = input.graph.nodes.get(tokenId);
     if (!node || node.service.type === 'parent') continue;
-    const access = input.minimal ? getDirectName(tokenId) : getReadName(tokenId);
-    cases.push(`if (token === ${resolveTokenKey(node.service, input.getImport)}) return this.${access}();`);
+    entries.push({
+      keyExpression: resolveTokenKey(node.service, input.getImport),
+      accessor: input.minimal ? getDirectName(tokenId) : getReadName(tokenId),
+    });
   }
-  return cases.join('\n    ');
+  return entries;
 }
 
 function overrideBlock(input: OptimizedContainerInput): string {
@@ -167,30 +174,46 @@ function overrideBlock(input: OptimizedContainerInput): string {
     }`;
 }
 
-function resolveInterior(input: OptimizedContainerInput, cases: string, multiGuard: string): string {
+/**
+ * The guards come before the table read: state, parents, the refused multi token, the override that wins over a
+ * cached instance. A table miss falls through to the parent containers and to the not-found error.
+ */
+function resolveInterior(input: OptimizedContainerInput, read: string, multiGuard: string): string {
   return `${parentOpenCheck(input.hasAsync, input.minimal)}
     ${multiGuard}
     ${overrideBlock(input)}
-    ${cases}
+    ${read}
     ${legacyAndNotFound(input)}`;
+}
+
+/** A table is declared only when a row can be served from it. */
+function tableRead(input: OptimizedContainerInput, field: string, entries: readonly DispatchEntry[]): string {
+  return entries.length === 0 ? '' : emitDispatchRead(input.className, field);
+}
+
+function tableField(input: OptimizedContainerInput, field: string, entries: readonly DispatchEntry[]): string {
+  return entries.length === 0 ? '' : emitDispatchField(input.className, field, entries);
 }
 
 /**
  * Public resolve plus the internal dispatcher.
- * Open: `_resolveInternal` lists every local provider.
- * Closed: `resolve` lists the exported roots only and never reaches the generic dispatcher.
- * The dispatcher lists a local provider only when an opaque factory may ask for any token;
+ * Open: `_resolveInternal` reads `__neoDispatch`, one row per local provider.
+ * Closed: `resolve` reads `__neoRoots`, one row per exported root, and never reaches the generic dispatcher.
+ * The dispatcher has rows for the local providers only when an opaque factory may ask for any token;
  * otherwise it serves parent tokens alone, a declared local dependency has its own accessor.
+ * `internalTable` is declared with `_resolveInternal`, `rootsTable` with the closed `resolve`.
  */
 function resolveMethods(
   input: OptimizedContainerInput,
   listLocals: boolean,
-): { publicMethod: Fragment; internalMethod: string } {
+): { publicMethod: Fragment; internalMethod: string; internalTable: string; rootsTable: string } {
   const guard = input.hasAsync ? 'this._guardPublic();\n    ' : '';
   const multiGuard = generateMultiResolveGuard(input.graph, input.getImport, input.hasAsync);
+  const local = dispatchEntries(input, listLocals ? input.sorted : []);
   const internalMethod = `${singleOverload('private', '_resolveInternal')}
-    ${resolveInterior(input, resolveCases(input, listLocals ? input.sorted : []), multiGuard)}
+    ${resolveInterior(input, tableRead(input, '__neoDispatch', local), multiGuard)}
   }`;
+  const internalTable = tableField(input, '__neoDispatch', local);
   if (!input.closed) {
     // The open public method calls the dispatcher, so it asks for it.
     return {
@@ -198,16 +221,46 @@ function resolveMethods(
     ${guard}return this._resolveInternal(token);
   }`, ['resolveSingle']),
       internalMethod,
+      internalTable,
+      rootsTable: '',
     };
   }
-  const roots = input.graph.publicRoots ?? [];
+  const roots = dispatchEntries(input, input.graph.publicRoots ?? []);
   return {
     publicMethod: fragment`${singleOverload('public', 'resolve')}
     ${guard}this._assertRoot(token, false);
-    ${resolveInterior(input, resolveCases(input, roots), '')}
+    ${resolveInterior(input, tableRead(input, '__neoRoots', roots), '')}
   }`,
     internalMethod,
+    internalTable,
+    rootsTable: tableField(input, '__neoRoots', roots),
   };
+}
+
+function joined(members: readonly string[]): string {
+  return members.filter((member) => member !== '').join('\n\n  ');
+}
+
+/**
+ * The readers of the multi tokens, and the two tables over them: `__neoRootLists` over the exported roots
+ * (closed), `__neoLists` over the internal tokens when `_resolveAllInternal` is emitted. A token that is both
+ * has one reader and a row in each table.
+ */
+function listMembers(
+  input: OptimizedContainerInput,
+  publicLists: readonly ListReader[],
+  internalLists: readonly ListReader[],
+): string[] {
+  const readers = new Map<TokenId, ListReader>();
+  for (const reader of [...internalLists, ...publicLists]) {
+    if (!readers.has(reader.tokenId)) readers.set(reader.tokenId, reader);
+  }
+  const rows = (lists: readonly ListReader[]): DispatchEntry[] => lists.map((reader) => reader.entry);
+  return [
+    ...[...readers.values()].map((reader) => reader.method),
+    ...(publicLists.length > 0 ? [emitDispatchField(input.className, '__neoRootLists', rows(publicLists), 'list')] : []),
+    ...(internalLists.length > 0 ? [emitDispatchField(input.className, '__neoLists', rows(internalLists), 'list')] : []),
+  ];
 }
 
 /**
@@ -238,14 +291,22 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const needs = factoryContextNeeds(graph);
   const listLocals = !closed || needs.opaque;
   const resolve = resolveMethods(input, listLocals);
-  const resolveAll = generateDirectResolveAll(graph, getImport, hasAsync, closed, minimal, listLocals ? undefined : needs.multiAll);
+  const resolveAll = generateDirectResolveAll(
+    graph,
+    getImport,
+    hasAsync,
+    closed,
+    minimal,
+    input.className,
+    listLocals ? undefined : needs.multiAll,
+  );
   const resolveAllPublic = withNeeds(fragment`${resolveAll.publicMethod}`, closed ? [] : ['resolveAll']);
 
   // Each generic resolver is declared only when a fragment asks for it. Open: the public methods
   // call it. Closed: only a factory that reads a parent token, a declared multi token or any token
   // (opaque) does. The emitters declare that; no text, user text included, is searched.
   const catalog: Helper[] = [
-    { id: 'resolveSingle', parts: [generatedText(resolve.internalMethod)], needs: [] },
+    { id: 'resolveSingle', parts: [generatedText(joined([resolve.internalMethod, resolve.internalTable]))], needs: [] },
     { id: 'resolveAll', parts: [generatedText(resolveAll.internalMethod)], needs: [] },
   ];
   // Deviation from the spec's `linkHelpers`: the helpers are kept in their slots (after `resolve`,
@@ -275,11 +336,13 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   }
   if (honourOverrides) members.push(mockMethod());
   members.push(resolve.publicMethod);
+  if (resolve.rootsTable !== '') members.push(resolve.rootsTable);
   const single = linked.get('resolveSingle');
   if (single) members.push(single);
   members.push(formatTokenMember(), destroy, resolveAllPublic);
   const many = linked.get('resolveAll');
   if (many) members.push(many);
+  members.push(...listMembers(input, resolveAll.publicLists, many ? resolveAll.internalLists : []));
   members.push(input.debugGetters);
 
   const container = fragment`${legacyParentInterface(parentName)}

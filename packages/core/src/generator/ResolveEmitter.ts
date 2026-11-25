@@ -1,5 +1,6 @@
 import type { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getDirectName, getFactoryName, getReadName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
+import { emitDispatchRead, type DispatchEntry } from './dispatchEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 
 /**
@@ -404,11 +405,48 @@ function directList(graph: DependencyGraph, tokenId: TokenId, minimal: boolean):
   return `{ const __neoAll = [${calls}]; for (const __neoNoted of __neoAll) this.notifyResolve(token, __neoNoted); return __neoAll.slice(); }`;
 }
 
+/** `_list_<id>`: the reader of one multi token, named like {@link getDirectName} and {@link getReadName}. */
+function getListName(tokenId: TokenId): string {
+  return getDirectName(tokenId).replace(/^_direct_/, '_list_');
+}
+
+/** One multi token as the shared `__neoLists` table serves it: its key, and the member that answers its contributions. */
+export interface ListReader {
+  tokenId: TokenId;
+  entry: DispatchEntry;
+  /** The member, as class text. The full profile notifies the resolve event with the asked token, so it takes it. */
+  method: string;
+}
+
+function listReader(
+  graph: DependencyGraph,
+  getImport: GetImport,
+  tokenId: TokenId,
+  minimal: boolean,
+): ListReader | undefined {
+  const nodes = graph.multiNodes?.get(tokenId);
+  if (!nodes || nodes.length === 0) return undefined;
+  const name = getListName(tokenId);
+  const param = minimal ? '' : 'token: unknown';
+  return {
+    tokenId,
+    entry: { keyExpression: resolveTokenKey(nodes[0].service, getImport), accessor: name },
+    method: `private ${name}(${param}): unknown[] {
+    ${directList(graph, tokenId, minimal)}
+  }`,
+  };
+}
+
 /**
  * resolveAll for the optimized emitter. Same shape in sync and async containers:
  * `resolveAll` checks the entry, `_resolveAllInternal` lists every local multi token.
  * Closed: the public method lists the exported multi roots only, and the internal
  * one lists `internalIds` (the multi tokens a factory context still reads), not every token.
+ *
+ * Both methods read a table of the class (dispatchEmitter.ts), one reader per multi token: `_resolveAllInternal`
+ * reads `__neoLists`, the closed public method reads `__neoRootLists`, which holds the exported roots and nothing
+ * else. The caller declares each table over the readers it keeps: `publicLists` for `__neoRootLists`, and
+ * `internalLists` for `__neoLists` when it emits `_resolveAllInternal`.
  */
 export function generateDirectResolveAll(
   graph: DependencyGraph,
@@ -416,23 +454,26 @@ export function generateDirectResolveAll(
   hasAsync: boolean,
   closed: boolean,
   minimal: boolean,
+  className: string,
   internalIds: Iterable<TokenId> = graph.multiNodes?.keys() ?? [],
-): { publicMethod: string; internalMethod: string } {
+): { publicMethod: string; internalMethod: string; publicLists: ListReader[]; internalLists: ListReader[] } {
   const tail = legacyResolveAll(!minimal);
   const open = parentOpenCheck(hasAsync, minimal);
   const guard = hasAsync ? `this._guardPublic('resolveAll()');\n    ` : '';
-  const casesFor = (ids: Iterable<TokenId>): string => {
-    const cases: string[] = [];
+  const readersFor = (ids: Iterable<TokenId>): ListReader[] => {
+    const readers: ListReader[] = [];
     for (const tokenId of ids) {
-      const nodes = graph.multiNodes?.get(tokenId);
-      if (!nodes || nodes.length === 0) continue;
-      cases.push(`if (token === ${resolveTokenKey(nodes[0].service, getImport)}) ${directList(graph, tokenId, minimal)}`);
+      const reader = listReader(graph, getImport, tokenId, minimal);
+      if (reader) readers.push(reader);
     }
-    return cases.join('\n    ');
+    return readers;
   };
+  const readFor = (readers: readonly ListReader[], field: string): string =>
+    (readers.length === 0 ? '' : emitDispatchRead(className, field, 'list'));
+  const internalLists = readersFor(internalIds);
   const internalMethod = `${listOverload('private', '_resolveAllInternal')}
     ${open}
-    ${casesFor(internalIds)}
+    ${readFor(internalLists, '__neoLists')}
     ${tail}
   }`;
   if (!closed) {
@@ -441,15 +482,20 @@ export function generateDirectResolveAll(
     ${guard}return this._resolveAllInternal(token);
   }`,
       internalMethod,
+      publicLists: [],
+      internalLists,
     };
   }
+  const publicLists = readersFor(graph.publicMultiRoots ?? []);
   return {
     publicMethod: `${listOverload('public', 'resolveAll')}
     ${guard}this._assertRoot(token, true);
     ${open}
-    ${casesFor(graph.publicMultiRoots ?? [])}
+    ${readFor(publicLists, '__neoRootLists')}
     ${tail}
   }`,
     internalMethod,
+    publicLists,
+    internalLists,
   };
 }

@@ -150,8 +150,7 @@ export class Generator {
     /**
      * Which container emitter to use. `reference` is the generic resolver, kept as the
      * witness; `optimized` emits one direct accessor per registration (DirectEmitter).
-     * Undefined picks `optimized` for the minimal profile and for closed mode, and
-     * `reference` otherwise, so an open full container keeps today's text.
+     * Undefined picks `optimized`, for every profile and mode.
      */
     private emitter?: 'reference' | 'optimized',
     /**
@@ -281,9 +280,9 @@ export class Generator {
     return importLines;
   }
 
-  private useOptimizedEmitter(graph: DependencyGraph): boolean {
-    if (this.emitter) return this.emitter === 'optimized';
-    return graph.runtimeProfile === 'minimal' || graph.optimizationMode === 'closed';
+  /** The optimized emitter is the default of every profile and mode. The reference emitter is asked for by name. */
+  private useOptimizedEmitter(): boolean {
+    return this.emitter !== 'reference';
   }
 
   /**
@@ -536,7 +535,7 @@ export class Generator {
     const resolveGuard = buildAsyncResolveGuard(hasAsync);
     const eagerLines = eagerSyncLines(emitted, getImport, hasAsync);
 
-    if (this.useOptimizedEmitter(emitted)) {
+    if (this.useOptimizedEmitter()) {
       const state = containerState(emitted, hasAsync, eagerLines, emitted.runtimeProfile === 'minimal');
       const containerClass = emitOptimizedContainer({
         graph: emitted,

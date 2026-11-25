@@ -1,20 +1,72 @@
-/** Red-commit stub: the shared dispatch table is not emitted yet. */
+/**
+ * Shared dispatch of the optimized container: a dynamic `resolve` or `resolveAll` finds the accessor of a token in a
+ * private static `Map` of the generated class, and calls it with the `this` of the container or scope that was asked.
+ * One table per class, shared by every scope (`.call(this)` selects the scope); no per-instance table, no `bind`.
+ *
+ * The table is built on the first dynamic read, not when the class is defined. A token is an expression of the user's
+ * file (an imported class, a class declared further down), and reading it while the class is defined would be a
+ * temporal dead zone for a class that comes later in the module.
+ *
+ * The table keeps the token values it read on that first call, for the life of the class. With CommonJS output and
+ * an import cycle, the first dynamic read can run while an imported token (`Import_N.X`, see `GetImport` in
+ * FactoryEmitter.ts) is still `undefined`: its row is then stored under `undefined` and never rebuilt. With ESM
+ * output the same read throws at once, a binding not yet initialized.
+ */
+
+/** `single` answers one value (`resolve`), `list` answers the contributions of a multi token (`resolveAll`). */
 export type DispatchKind = 'single' | 'list';
 
+/** One row: the token, and the member of the generated class that serves it. */
 export interface DispatchEntry {
+  /** Produced by `resolveTokenKey`, never by interpolating a raw user string. */
   readonly keyExpression: string;
   readonly accessor: string;
 }
 
-export function emitDispatchField(
-  _className: string,
-  _field: string,
-  _entries: readonly DispatchEntry[],
-  _kind: DispatchKind = 'single',
-): string {
-  return '';
+const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+function assertIdentifier(name: string): void {
+  if (!IDENTIFIER.test(name)) throw new Error('invalid generated identifier');
 }
 
-export function emitDispatchRead(_className: string, _field: string, _kind: DispatchKind = 'single'): string {
-  return '';
+/** The member a row stores. It is unbound: the call site passes `this`. */
+function memberType(className: string, kind: DispatchKind): string {
+  return kind === 'list' ? `(this: ${className}, token: unknown) => unknown[]` : `(this: ${className}) => unknown`;
+}
+
+/**
+ * The static field and the static method that builds it on first use. `field` is the name of the field, the method
+ * is `<field>Table`. Both are members of the class `className`, so they may name its private accessors.
+ */
+export function emitDispatchField(
+  className: string,
+  field: string,
+  entries: readonly DispatchEntry[],
+  kind: DispatchKind = 'single',
+): string {
+  assertIdentifier(className);
+  assertIdentifier(field);
+  const rows = entries.map((entry) => {
+    if (!IDENTIFIER.test(entry.accessor)) throw new Error('invalid generated accessor');
+    return `[${entry.keyExpression}, ${className}.prototype.${entry.accessor}]`;
+  });
+  const table = `Map<unknown, ${memberType(className, kind)}>`;
+  return `private static ${field}: ${table} | undefined;
+  private static ${field}Table(): ${table} {
+    let __neoTable = ${className}.${field};
+    if (__neoTable === undefined) {
+      __neoTable = new ${table}([${rows.join(', ')}]);
+      ${className}.${field} = __neoTable;
+    }
+    return __neoTable;
+  }`;
+}
+
+/** The read of one table: a hit answers, a miss falls through to what follows. A stored `undefined` is the accessor's answer. */
+export function emitDispatchRead(className: string, field: string, kind: DispatchKind = 'single'): string {
+  assertIdentifier(className);
+  assertIdentifier(field);
+  const args = kind === 'list' ? ', token' : '';
+  return `const __neoRead = ${className}.${field}Table().get(token);
+    if (__neoRead !== undefined) return __neoRead.call(this${args});`;
 }
