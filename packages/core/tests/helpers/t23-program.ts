@@ -65,6 +65,8 @@ export interface StrictInput {
   ambient?: string;
   /** Other source files of the program (the user's own modules). They are inputs, never subjects. */
   extraFiles?: readonly { file: string; text: string }[];
+  /** Lib files of the program (`lib.es2021.d.ts`). Absent: the es2022 lib of {@link STRICT_OPTIONS}. */
+  lib?: readonly string[];
 }
 
 function flatten(message: string | ts.DiagnosticMessageChain): string {
@@ -85,7 +87,8 @@ export function checkStrict(input: StrictInput): StrictDiagnostic[] {
   const ambientName = at('ambient.d.ts');
   files.set(ambientName, `${PROCESS_DECLARATION}${input.ambient ?? ''}`);
 
-  const host = cacheLibHost(ts.createCompilerHost(STRICT_OPTIONS));
+  const options: ts.CompilerOptions = input.lib === undefined ? STRICT_OPTIONS : { ...STRICT_OPTIONS, lib: [...input.lib] };
+  const host = cacheLibHost(ts.createCompilerHost(options));
   const read = host.getSourceFile.bind(host);
   const exists = host.fileExists.bind(host);
   host.getSourceFile = (name, languageVersion, onError, shouldCreateNewSourceFile) => {
@@ -98,7 +101,7 @@ export function checkStrict(input: StrictInput): StrictDiagnostic[] {
   host.directoryExists = (name) => name === input.dir || (directoryExists?.(name) ?? false);
   host.readFile = (name) => files.get(name) ?? ts.sys.readFile(name);
 
-  const program = ts.createProgram([...files.keys()], STRICT_OPTIONS, host);
+  const program = ts.createProgram([...files.keys()], options, host);
   const subjects = [...input.outputs, input.consumer];
   const result: StrictDiagnostic[] = [];
   for (const subject of subjects) {

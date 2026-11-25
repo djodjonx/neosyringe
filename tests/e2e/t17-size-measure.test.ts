@@ -32,15 +32,35 @@ interface Report {
   run: { open: unknown; closed: unknown; equal: boolean };
 }
 
-async function measure(): Promise<string> {
-  const { stdout } = await run(process.execPath, [script, '--json'], { cwd: repoRoot, maxBuffer: 16 * 1024 * 1024 });
+async function measure(args: readonly string[] = ['--json']): Promise<string> {
+  const { stdout } = await run(process.execPath, [script, ...args], { cwd: repoRoot, maxBuffer: 16 * 1024 * 1024 });
   return stdout;
+}
+
+const CONFIGS = ['open-debug-off', 'open-debug-on', 'closed-debug-off', 'closed-debug-on'] as const;
+
+interface BreakdownPart {
+  container: string;
+  total: number;
+  categories: Record<string, number>;
+}
+
+interface BreakdownRow {
+  total: number;
+  categories: Record<string, number>;
+  parts: BreakdownPart[];
+}
+
+interface Breakdown {
+  categories: string[];
+  graphs: Array<{ label: string; providers: number; containers: number; configs: Record<(typeof CONFIGS)[number], BreakdownRow> }>;
 }
 
 describe('T17 size measure script', () => {
   let first = '';
   let second = '';
   let report: Report;
+  let breakdown: Breakdown;
 
   beforeAll(async () => {
     // One after the other: the script bundles in a fixed directory per checkout, two runs of this checkout at once would clobber each other.
@@ -50,7 +70,8 @@ describe('T17 size measure script', () => {
     // The script must print one JSON object and nothing else: the table text is off in --json.
     expect(first.trimStart().startsWith('{')).toBe(true);
     report = JSON.parse(first) as Report;
-  }, 60_000);
+    breakdown = JSON.parse(await measure(['--breakdown', '--json'])) as Breakdown;
+  }, 120_000);
 
   it('T17-SIZE-P1 json lists the three variants with raw, minified, gzip, brotli and the levels', () => {
     expect(Object.keys(report.variants)).toEqual([...VARIANTS]);
@@ -95,5 +116,77 @@ describe('T17 size measure script', () => {
   it('T17-SIZE-P4 two runs print the same json', () => {
     expect(JSON.parse(second)).toEqual(report);
     expect(second).toBe(first);
+  });
+
+  it('T17-SIZE-P5 --breakdown lists categories whose bytes sum to the class size, for three graph sizes and several small containers', () => {
+    expect(breakdown.categories).toEqual(expect.arrayContaining(['creators', 'user-code']));
+    const graphs = breakdown.graphs;
+    expect(graphs.map((graph) => graph.label)).toEqual(['small', 'medium', 'large', 'many-small']);
+    expect(graphs.map((graph) => graph.providers)).toEqual([3, 12, 48, 3]);
+    expect(graphs.map((graph) => graph.containers)).toEqual([1, 1, 1, 6]);
+    for (const graph of graphs) {
+      for (const config of CONFIGS) {
+        const row = graph.configs[config];
+        expect(Object.keys(row.categories), `${graph.label} ${config}`).toEqual(breakdown.categories);
+        const sum = Object.values(row.categories).reduce((total, bytes) => total + bytes, 0);
+        expect(sum, `${graph.label} ${config}`).toBe(row.total);
+        // Every member of the class has a category: nothing is folded into a neighbour, and the fixture has no import.
+        expect(row.categories['other-members'], `${graph.label} ${config}`).toBe(0);
+        expect(row.categories.imports, `${graph.label} ${config}`).toBe(0);
+        for (const id of ['creators', 'user-code', 'accessors', 'factory-policy', 'resolve', 'lifecycle', 'events', 'runtime-helpers', 'state', 'class-shell', 'glue', 'debug-metadata']) {
+          expect(row.categories[id], `${graph.label} ${config} ${id}`).toBeGreaterThan(0);
+        }
+        // The copied user factories are fixture text, not NeoSyringe code: they are their own category, and they are smaller than the creators around them.
+        expect(row.categories['user-code'], `${graph.label} ${config} user-code`).toBeLessThan(row.categories.creators ?? 0);
+      }
+    }
+    // The same text as the optimized-full row of --json (open, debug off): the categories cut that text, they do not measure another.
+    const medium = graphs[1]?.configs['open-debug-off'];
+    expect(medium?.total).toBe(report.variants['optimized-full'].raw);
+    // Several small containers: each one is generated and categorized on its own, the row is the sum of the measured parts.
+    for (const config of CONFIGS) {
+      for (const graph of graphs) {
+        const row = graph.configs[config];
+        expect(row.parts, `${graph.label} ${config} parts`).toHaveLength(graph.containers);
+        expect(row.parts.reduce((total, part) => total + part.total, 0), `${graph.label} ${config} total`).toBe(row.total);
+        for (const id of breakdown.categories) {
+          expect(row.parts.reduce((total, part) => total + (part.categories[id] ?? 0), 0), `${graph.label} ${config} ${id}`).toBe(row.categories[id]);
+        }
+        for (const part of row.parts) {
+          const sum = Object.values(part.categories).reduce((total, bytes) => total + bytes, 0);
+          expect(sum, `${graph.label} ${config} ${part.container}`).toBe(part.total);
+          // The per-container categories are present in every container, not once for the file.
+          for (const id of ['lifecycle', 'runtime-helpers', 'resolve', 'class-shell', 'creators', 'user-code']) {
+            expect(part.categories[id], `${graph.label} ${config} ${part.container} ${id}`).toBeGreaterThan(0);
+          }
+        }
+      }
+      const many = graphs[3]?.configs[config];
+      // Distinct containers: distinct names and distinct sizes, not one text counted again.
+      expect(new Set(many?.parts.map((part) => part.container)).size, `many-small ${config} names`).toBe(6);
+      expect(new Set(many?.parts.map((part) => part.total)).size, `many-small ${config} totals`).toBe(6);
+    }
+  });
+
+  it('T17-SIZE-P6 --breakdown: debug metadata grows with the graph and only with debug on, closed drops the open dispatch tables', () => {
+    expect(breakdown.categories).toEqual(expect.arrayContaining(['debug-metadata']));
+    const [small, medium, large] = breakdown.graphs;
+    for (const graph of [small, medium, large]) {
+      if (!graph) throw new Error('graph missing');
+      for (const mode of ['open', 'closed'] as const) {
+        const off = graph.configs[`${mode}-debug-off`];
+        const on = graph.configs[`${mode}-debug-on`];
+        expect(on.total, `${graph.label} ${mode}`).toBeGreaterThan(off.total);
+        expect(on.categories['debug-metadata'], `${graph.label} ${mode}`).toBeGreaterThan(off.categories['debug-metadata'] ?? 0);
+        // Debug adds the metadata and nothing else.
+        expect(on.total - off.total, `${graph.label} ${mode}`).toBe((on.categories['debug-metadata'] ?? 0) - (off.categories['debug-metadata'] ?? 0));
+      }
+      expect(graph.configs['closed-debug-off'].categories['dispatch-tables'], graph.label).toBeLessThan(graph.configs['open-debug-off'].categories['dispatch-tables'] ?? 0);
+    }
+    const bytes = (graph: Breakdown['graphs'][number] | undefined, id: string): number => graph?.configs['open-debug-on'].categories[id] ?? 0;
+    for (const id of ['creators', 'accessors', 'factory-policy', 'debug-metadata']) {
+      expect(bytes(small, id), id).toBeLessThan(bytes(medium, id));
+      expect(bytes(medium, id), id).toBeLessThan(bytes(large, id));
+    }
   });
 });

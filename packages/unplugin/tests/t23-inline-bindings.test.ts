@@ -754,3 +754,33 @@ describe('T23-G3 a factory copied into the file that already holds what it reads
     expect(exported.greeting).toBe('from the container file');
   });
 });
+
+/** The parent and the class its child reads both live in the container file: the child reads `Logger` by its own name. */
+const PARENT_CLASS_OWN_FILE: Record<string, string> = {
+  'app.ts': `${NEO}
+
+export class Logger { readonly label = 'logger of the container file'; }
+export class Svc { constructor(readonly l: Logger) {} }
+
+export const parent = defineBuilderConfig({ name: 'OwnParent', injections: [{ token: Logger }] });
+export const child = defineBuilderConfig({ name: 'OwnChild', useContainer: parent, injections: [{ token: Svc }] });
+
+export const label: string = child.resolve<Svc>(Svc).l.label;
+export const isLogger: boolean = child.resolve<Svc>(Svc).l instanceof Logger;
+`,
+};
+
+describe('T23-G4 a parent class declared in the container file is read by its own name', () => {
+  it('T23-G4 the container file does not import itself and reads the parent class as `Logger`', () => {
+    const code = transformedApp(PARENT_CLASS_OWN_FILE);
+    expect(code).not.toMatch(/from '\.\/app'/);
+    expect(code).toMatch(/new Svc\(this\._resolveInternal\(Logger\)\)/);
+  });
+
+  it('T23-G4 the transformed program has no diagnostic and the bundle runs', async () => {
+    expect(diagnosticsOf(PARENT_CLASS_OWN_FILE)).toEqual([]);
+    const exported = await run(PARENT_CLASS_OWN_FILE);
+    expect(exported.label).toBe('logger of the container file');
+    expect(exported.isLogger).toBe(true);
+  });
+});
