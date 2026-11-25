@@ -34,23 +34,103 @@ class NeoContainer {
   }
   
   private create_IDatabase_5d4f4cb7(): InstanceType<typeof Import_0.PostgresDB> {
-    return new Import_0.PostgresDB(this.resolve("ILogger_40a89407"));
+    return new Import_0.PostgresDB(this._get_ILogger_40a89407());
   }
   
   private create_ICache_d95eb76f(): InstanceType<typeof Import_0.RedisCache> {
-    return new Import_0.RedisCache(this.resolve("ILogger_40a89407"));
+    return new Import_0.RedisCache(this._get_ILogger_40a89407());
   }
   
   private create_UserRepository_ccb9cdae(): InstanceType<typeof Import_0.UserRepository> {
-    return new Import_0.UserRepository(this.resolve("IDatabase_5d4f4cb7"), this.resolve("ICache_d95eb76f"));
+    return new Import_0.UserRepository(this._get_IDatabase_5d4f4cb7(), this._get_ICache_d95eb76f());
   }
   
   private create_UserService_883381ff(): InstanceType<typeof Import_0.UserService> {
-    return new Import_0.UserService(this.resolve(Import_0.UserRepository), this.resolve("ILogger_40a89407"));
+    return new Import_0.UserService(this._get_UserRepository_ccb9cdae(), this._get_ILogger_40a89407());
   }
   
   private create_AuthService_2d28d7a2(): InstanceType<typeof Import_0.AuthService> {
-    return new Import_0.AuthService(this.resolve(Import_0.UserService), this.resolve("ILogger_40a89407"));
+    return new Import_0.AuthService(this._get_UserService_883381ff(), this._get_ILogger_40a89407());
+  }
+
+  // -- Accessors --
+  
+  private _direct_ILogger_40a89407(): InstanceType<typeof Import_0.ConsoleLogger> {
+    if (this.instances.has("ILogger_40a89407")) return this.instances.get("ILogger_40a89407") as InstanceType<typeof Import_0.ConsoleLogger>;
+    const instance = this.create_ILogger_40a89407();
+    this.instances.set("ILogger_40a89407", instance);
+    return instance;
+  }
+  
+  private _get_ILogger_40a89407(): InstanceType<typeof Import_0.ConsoleLogger> {
+    const __neoValue = this._direct_ILogger_40a89407();
+    this.notifyResolve("ILogger_40a89407", __neoValue);
+    return __neoValue;
+  }
+  
+  private _direct_IDatabase_5d4f4cb7(): InstanceType<typeof Import_0.PostgresDB> {
+    if (this.instances.has("IDatabase_5d4f4cb7")) return this.instances.get("IDatabase_5d4f4cb7") as InstanceType<typeof Import_0.PostgresDB>;
+    const instance = this.create_IDatabase_5d4f4cb7();
+    this.instances.set("IDatabase_5d4f4cb7", instance);
+    return instance;
+  }
+  
+  private _get_IDatabase_5d4f4cb7(): InstanceType<typeof Import_0.PostgresDB> {
+    const __neoValue = this._direct_IDatabase_5d4f4cb7();
+    this.notifyResolve("IDatabase_5d4f4cb7", __neoValue);
+    return __neoValue;
+  }
+  
+  private _direct_ICache_d95eb76f(): InstanceType<typeof Import_0.RedisCache> {
+    if (this.instances.has("ICache_d95eb76f")) return this.instances.get("ICache_d95eb76f") as InstanceType<typeof Import_0.RedisCache>;
+    const instance = this.create_ICache_d95eb76f();
+    this.instances.set("ICache_d95eb76f", instance);
+    return instance;
+  }
+  
+  private _get_ICache_d95eb76f(): InstanceType<typeof Import_0.RedisCache> {
+    const __neoValue = this._direct_ICache_d95eb76f();
+    this.notifyResolve("ICache_d95eb76f", __neoValue);
+    return __neoValue;
+  }
+  
+  private _direct_UserRepository_ccb9cdae(): InstanceType<typeof Import_0.UserRepository> {
+    if (this.instances.has(Import_0.UserRepository)) return this.instances.get(Import_0.UserRepository) as InstanceType<typeof Import_0.UserRepository>;
+    const instance = this.create_UserRepository_ccb9cdae();
+    this.instances.set(Import_0.UserRepository, instance);
+    return instance;
+  }
+  
+  private _get_UserRepository_ccb9cdae(): InstanceType<typeof Import_0.UserRepository> {
+    const __neoValue = this._direct_UserRepository_ccb9cdae();
+    this.notifyResolve(Import_0.UserRepository, __neoValue);
+    return __neoValue;
+  }
+  
+  private _direct_UserService_883381ff(): InstanceType<typeof Import_0.UserService> {
+    if (this.instances.has(Import_0.UserService)) return this.instances.get(Import_0.UserService) as InstanceType<typeof Import_0.UserService>;
+    const instance = this.create_UserService_883381ff();
+    this.instances.set(Import_0.UserService, instance);
+    return instance;
+  }
+  
+  private _get_UserService_883381ff(): InstanceType<typeof Import_0.UserService> {
+    const __neoValue = this._direct_UserService_883381ff();
+    this.notifyResolve(Import_0.UserService, __neoValue);
+    return __neoValue;
+  }
+  
+  private _direct_AuthService_2d28d7a2(): InstanceType<typeof Import_0.AuthService> {
+    if (this.instances.has(Import_0.AuthService)) return this.instances.get(Import_0.AuthService) as InstanceType<typeof Import_0.AuthService>;
+    const instance = this.create_AuthService_2d28d7a2();
+    this.instances.set(Import_0.AuthService, instance);
+    return instance;
+  }
+  
+  private _get_AuthService_2d28d7a2(): InstanceType<typeof Import_0.AuthService> {
+    const __neoValue = this._direct_AuthService_2d28d7a2();
+    this.notifyResolve(Import_0.AuthService, __neoValue);
+    return __neoValue;
   }
 
   constructor(
@@ -147,8 +227,7 @@ class NeoContainer {
    * token and the resolved instance every time resolve() succeeds (whether
    * served from cache, freshly created, an override, or a parent/legacy
    * container). Returns an unsubscribe function. A listener that throws is
-   * caught and ignored — a bug in an observability hook must never break the
-   * actual resolution it's observing.
+   * caught and ignored.
    */
   public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
   public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
@@ -168,34 +247,19 @@ class NeoContainer {
 
   public resolve<T>(token: unknown): T;
   public resolve(token: unknown): unknown {
-    
+    return this._resolveInternal(token);
+  }
+
+  private _resolveInternal<T>(token: unknown): T;
+  private _resolveInternal(token: unknown): unknown {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
-    // 0. An overridden token always wins, even over a cached real instance.
-    if (this.overrides.has(token)) {
-      if (!this.instances.has(token)) {
-        const __neoMock = this.overrides.get(token)!();
-        this.instances.set(token, __neoMock);
-        if (__neoMock != null) this._borrowed.add(__neoMock);
-      }
-      const overridden = this.instances.get(token);
-      this.notifyResolve(token, overridden);
-      return overridden;
-    }
-
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    // A stored undefined is a value. A missing token still falls through.
-    if (result !== undefined || this.instances.has(token)) {
-      this.notifyResolve(token, result);
-      return result;
-    }
-
-    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
-    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
-    // ends up here)
+    
+    
+    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
+    if (__neoRead !== undefined) return __neoRead.call(this);
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -214,11 +278,16 @@ class NeoContainer {
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
 
-  /**
-   * Formats a token for error messages: a class token becomes its declared
-   * name (not its entire stringified source), and a string token has its
-   * trailing content-hash suffix stripped (not the raw hashed id).
-   */
+  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
+  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
+    let __neoTable = NeoContainer.__neoDispatch;
+    if (__neoTable === undefined) {
+      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>([["ILogger_40a89407", NeoContainer.prototype._get_ILogger_40a89407], ["IDatabase_5d4f4cb7", NeoContainer.prototype._get_IDatabase_5d4f4cb7], ["ICache_d95eb76f", NeoContainer.prototype._get_ICache_d95eb76f], [Import_0.UserRepository, NeoContainer.prototype._get_UserRepository_ccb9cdae], [Import_0.UserService, NeoContainer.prototype._get_UserService_883381ff], [Import_0.AuthService, NeoContainer.prototype._get_AuthService_2d28d7a2]]);
+      NeoContainer.__neoDispatch = __neoTable;
+    }
+    return __neoTable;
+  }
+
   private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
@@ -250,10 +319,16 @@ class NeoContainer {
 
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
+    return this._resolveAllInternal(token);
+  }
+
+  private _resolveAllInternal<T>(token: unknown): T[];
+  private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
+    
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
@@ -263,58 +338,6 @@ class NeoContainer {
       }
     }
     return [];
-  }
-
-  private resolveLocal(token: unknown): unknown {
-    if (token === "ILogger_40a89407") { 
-            if (!this.instances.has("ILogger_40a89407")) {
-                const instance = this.create_ILogger_40a89407();
-                this.instances.set("ILogger_40a89407", instance);
-                return instance;
-            }
-            return this.instances.get("ILogger_40a89407");
-           }
-    if (token === "IDatabase_5d4f4cb7") { 
-            if (!this.instances.has("IDatabase_5d4f4cb7")) {
-                const instance = this.create_IDatabase_5d4f4cb7();
-                this.instances.set("IDatabase_5d4f4cb7", instance);
-                return instance;
-            }
-            return this.instances.get("IDatabase_5d4f4cb7");
-           }
-    if (token === "ICache_d95eb76f") { 
-            if (!this.instances.has("ICache_d95eb76f")) {
-                const instance = this.create_ICache_d95eb76f();
-                this.instances.set("ICache_d95eb76f", instance);
-                return instance;
-            }
-            return this.instances.get("ICache_d95eb76f");
-           }
-    if (token === Import_0.UserRepository) { 
-            if (!this.instances.has(Import_0.UserRepository)) {
-                const instance = this.create_UserRepository_ccb9cdae();
-                this.instances.set(Import_0.UserRepository, instance);
-                return instance;
-            }
-            return this.instances.get(Import_0.UserRepository);
-           }
-    if (token === Import_0.UserService) { 
-            if (!this.instances.has(Import_0.UserService)) {
-                const instance = this.create_UserService_883381ff();
-                this.instances.set(Import_0.UserService, instance);
-                return instance;
-            }
-            return this.instances.get(Import_0.UserService);
-           }
-    if (token === Import_0.AuthService) { 
-            if (!this.instances.has(Import_0.AuthService)) {
-                const instance = this.create_AuthService_2d28d7a2();
-                this.instances.set(Import_0.AuthService, instance);
-                return instance;
-            }
-            return this.instances.get(Import_0.AuthService);
-           }
-    return undefined;
   }
 
   // For debugging/inspection — token IDs are stripped by DCE in production
@@ -370,6 +393,21 @@ class NeoContainer {
     return new Import_0.ConsoleLogger();
   }
 
+  // -- Accessors --
+  
+  private _direct_ILogger_40a89407(): InstanceType<typeof Import_0.ConsoleLogger> {
+    if (this.instances.has("ILogger_40a89407")) return this.instances.get("ILogger_40a89407") as InstanceType<typeof Import_0.ConsoleLogger>;
+    const instance = this.create_ILogger_40a89407();
+    this.instances.set("ILogger_40a89407", instance);
+    return instance;
+  }
+  
+  private _get_ILogger_40a89407(): InstanceType<typeof Import_0.ConsoleLogger> {
+    const __neoValue = this._direct_ILogger_40a89407();
+    this.notifyResolve("ILogger_40a89407", __neoValue);
+    return __neoValue;
+  }
+
   constructor(
     private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
@@ -464,8 +502,7 @@ class NeoContainer {
    * token and the resolved instance every time resolve() succeeds (whether
    * served from cache, freshly created, an override, or a parent/legacy
    * container). Returns an unsubscribe function. A listener that throws is
-   * caught and ignored — a bug in an observability hook must never break the
-   * actual resolution it's observing.
+   * caught and ignored.
    */
   public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
   public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
@@ -485,34 +522,19 @@ class NeoContainer {
 
   public resolve<T>(token: unknown): T;
   public resolve(token: unknown): unknown {
-    
+    return this._resolveInternal(token);
+  }
+
+  private _resolveInternal<T>(token: unknown): T;
+  private _resolveInternal(token: unknown): unknown {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
-    // 0. An overridden token always wins, even over a cached real instance.
-    if (this.overrides.has(token)) {
-      if (!this.instances.has(token)) {
-        const __neoMock = this.overrides.get(token)!();
-        this.instances.set(token, __neoMock);
-        if (__neoMock != null) this._borrowed.add(__neoMock);
-      }
-      const overridden = this.instances.get(token);
-      this.notifyResolve(token, overridden);
-      return overridden;
-    }
-
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    // A stored undefined is a value. A missing token still falls through.
-    if (result !== undefined || this.instances.has(token)) {
-      this.notifyResolve(token, result);
-      return result;
-    }
-
-    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
-    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
-    // ends up here)
+    
+    
+    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
+    if (__neoRead !== undefined) return __neoRead.call(this);
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -531,11 +553,16 @@ class NeoContainer {
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
 
-  /**
-   * Formats a token for error messages: a class token becomes its declared
-   * name (not its entire stringified source), and a string token has its
-   * trailing content-hash suffix stripped (not the raw hashed id).
-   */
+  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
+  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
+    let __neoTable = NeoContainer.__neoDispatch;
+    if (__neoTable === undefined) {
+      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>([["ILogger_40a89407", NeoContainer.prototype._get_ILogger_40a89407]]);
+      NeoContainer.__neoDispatch = __neoTable;
+    }
+    return __neoTable;
+  }
+
   private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
@@ -567,10 +594,16 @@ class NeoContainer {
 
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
+    return this._resolveAllInternal(token);
+  }
+
+  private _resolveAllInternal<T>(token: unknown): T[];
+  private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
+    
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
@@ -580,18 +613,6 @@ class NeoContainer {
       }
     }
     return [];
-  }
-
-  private resolveLocal(token: unknown): unknown {
-    if (token === "ILogger_40a89407") { 
-            if (!this.instances.has("ILogger_40a89407")) {
-                const instance = this.create_ILogger_40a89407();
-                this.instances.set("ILogger_40a89407", instance);
-                return instance;
-            }
-            return this.instances.get("ILogger_40a89407");
-           }
-    return undefined;
   }
 
   // For debugging/inspection — token IDs are stripped by DCE in production
@@ -644,7 +665,22 @@ class NeoContainer {
   // -- Factories --
   
   private create_NewService_4f96ffdd(): InstanceType<typeof Import_0.NewService> {
-    return new Import_0.NewService(this.resolve("LegacyService_46f42bdb"));
+    return new Import_0.NewService(this._resolveInternal("LegacyService_46f42bdb"));
+  }
+
+  // -- Accessors --
+  
+  private _direct_NewService_4f96ffdd(): InstanceType<typeof Import_0.NewService> {
+    if (this.instances.has(Import_0.NewService)) return this.instances.get(Import_0.NewService) as InstanceType<typeof Import_0.NewService>;
+    const instance = this.create_NewService_4f96ffdd();
+    this.instances.set(Import_0.NewService, instance);
+    return instance;
+  }
+  
+  private _get_NewService_4f96ffdd(): InstanceType<typeof Import_0.NewService> {
+    const __neoValue = this._direct_NewService_4f96ffdd();
+    this.notifyResolve(Import_0.NewService, __neoValue);
+    return __neoValue;
   }
 
   constructor(
@@ -741,8 +777,7 @@ class NeoContainer {
    * token and the resolved instance every time resolve() succeeds (whether
    * served from cache, freshly created, an override, or a parent/legacy
    * container). Returns an unsubscribe function. A listener that throws is
-   * caught and ignored — a bug in an observability hook must never break the
-   * actual resolution it's observing.
+   * caught and ignored.
    */
   public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
   public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
@@ -762,34 +797,19 @@ class NeoContainer {
 
   public resolve<T>(token: unknown): T;
   public resolve(token: unknown): unknown {
-    
+    return this._resolveInternal(token);
+  }
+
+  private _resolveInternal<T>(token: unknown): T;
+  private _resolveInternal(token: unknown): unknown {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
-    // 0. An overridden token always wins, even over a cached real instance.
-    if (this.overrides.has(token)) {
-      if (!this.instances.has(token)) {
-        const __neoMock = this.overrides.get(token)!();
-        this.instances.set(token, __neoMock);
-        if (__neoMock != null) this._borrowed.add(__neoMock);
-      }
-      const overridden = this.instances.get(token);
-      this.notifyResolve(token, overridden);
-      return overridden;
-    }
-
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    // A stored undefined is a value. A missing token still falls through.
-    if (result !== undefined || this.instances.has(token)) {
-      this.notifyResolve(token, result);
-      return result;
-    }
-
-    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
-    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
-    // ends up here)
+    
+    
+    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
+    if (__neoRead !== undefined) return __neoRead.call(this);
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -808,11 +828,16 @@ class NeoContainer {
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
 
-  /**
-   * Formats a token for error messages: a class token becomes its declared
-   * name (not its entire stringified source), and a string token has its
-   * trailing content-hash suffix stripped (not the raw hashed id).
-   */
+  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
+  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
+    let __neoTable = NeoContainer.__neoDispatch;
+    if (__neoTable === undefined) {
+      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>([[Import_0.NewService, NeoContainer.prototype._get_NewService_4f96ffdd]]);
+      NeoContainer.__neoDispatch = __neoTable;
+    }
+    return __neoTable;
+  }
+
   private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
@@ -844,10 +869,16 @@ class NeoContainer {
 
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
+    return this._resolveAllInternal(token);
+  }
+
+  private _resolveAllInternal<T>(token: unknown): T[];
+  private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
+    
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
@@ -857,18 +888,6 @@ class NeoContainer {
       }
     }
     return [];
-  }
-
-  private resolveLocal(token: unknown): unknown {
-    if (token === Import_0.NewService) { 
-            if (!this.instances.has(Import_0.NewService)) {
-                const instance = this.create_NewService_4f96ffdd();
-                this.instances.set(Import_0.NewService, instance);
-                return instance;
-            }
-            return this.instances.get(Import_0.NewService);
-           }
-    return undefined;
   }
 
   // For debugging/inspection — token IDs are stripped by DCE in production
@@ -928,6 +947,31 @@ class NeoContainer {
     return new Import_0.TransientService();
   }
 
+  // -- Accessors --
+  
+  private _direct_SingletonService_ef57b246(): InstanceType<typeof Import_0.SingletonService> {
+    if (this.instances.has(Import_0.SingletonService)) return this.instances.get(Import_0.SingletonService) as InstanceType<typeof Import_0.SingletonService>;
+    const instance = this.create_SingletonService_ef57b246();
+    this.instances.set(Import_0.SingletonService, instance);
+    return instance;
+  }
+  
+  private _get_SingletonService_ef57b246(): InstanceType<typeof Import_0.SingletonService> {
+    const __neoValue = this._direct_SingletonService_ef57b246();
+    this.notifyResolve(Import_0.SingletonService, __neoValue);
+    return __neoValue;
+  }
+  
+  private _direct_TransientService_035fe2c5(): InstanceType<typeof Import_0.TransientService> {
+    return this.create_TransientService_035fe2c5();
+  }
+  
+  private _get_TransientService_035fe2c5(): InstanceType<typeof Import_0.TransientService> {
+    const __neoValue = this._direct_TransientService_035fe2c5();
+    this.notifyResolve(Import_0.TransientService, __neoValue);
+    return __neoValue;
+  }
+
   constructor(
     private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
@@ -1022,8 +1066,7 @@ class NeoContainer {
    * token and the resolved instance every time resolve() succeeds (whether
    * served from cache, freshly created, an override, or a parent/legacy
    * container). Returns an unsubscribe function. A listener that throws is
-   * caught and ignored — a bug in an observability hook must never break the
-   * actual resolution it's observing.
+   * caught and ignored.
    */
   public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
   public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
@@ -1043,34 +1086,19 @@ class NeoContainer {
 
   public resolve<T>(token: unknown): T;
   public resolve(token: unknown): unknown {
-    
+    return this._resolveInternal(token);
+  }
+
+  private _resolveInternal<T>(token: unknown): T;
+  private _resolveInternal(token: unknown): unknown {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
-    // 0. An overridden token always wins, even over a cached real instance.
-    if (this.overrides.has(token)) {
-      if (!this.instances.has(token)) {
-        const __neoMock = this.overrides.get(token)!();
-        this.instances.set(token, __neoMock);
-        if (__neoMock != null) this._borrowed.add(__neoMock);
-      }
-      const overridden = this.instances.get(token);
-      this.notifyResolve(token, overridden);
-      return overridden;
-    }
-
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    // A stored undefined is a value. A missing token still falls through.
-    if (result !== undefined || this.instances.has(token)) {
-      this.notifyResolve(token, result);
-      return result;
-    }
-
-    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
-    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
-    // ends up here)
+    
+    
+    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
+    if (__neoRead !== undefined) return __neoRead.call(this);
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -1089,11 +1117,16 @@ class NeoContainer {
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
 
-  /**
-   * Formats a token for error messages: a class token becomes its declared
-   * name (not its entire stringified source), and a string token has its
-   * trailing content-hash suffix stripped (not the raw hashed id).
-   */
+  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
+  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
+    let __neoTable = NeoContainer.__neoDispatch;
+    if (__neoTable === undefined) {
+      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>([[Import_0.SingletonService, NeoContainer.prototype._get_SingletonService_ef57b246], [Import_0.TransientService, NeoContainer.prototype._get_TransientService_035fe2c5]]);
+      NeoContainer.__neoDispatch = __neoTable;
+    }
+    return __neoTable;
+  }
+
   private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
@@ -1125,10 +1158,16 @@ class NeoContainer {
 
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
+    return this._resolveAllInternal(token);
+  }
+
+  private _resolveAllInternal<T>(token: unknown): T[];
+  private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
+    
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
@@ -1138,19 +1177,6 @@ class NeoContainer {
       }
     }
     return [];
-  }
-
-  private resolveLocal(token: unknown): unknown {
-    if (token === Import_0.SingletonService) { 
-            if (!this.instances.has(Import_0.SingletonService)) {
-                const instance = this.create_SingletonService_ef57b246();
-                this.instances.set(Import_0.SingletonService, instance);
-                return instance;
-            }
-            return this.instances.get(Import_0.SingletonService);
-           }
-    if (token === Import_0.TransientService) { return this.create_TransientService_035fe2c5(); }
-    return undefined;
   }
 
   // For debugging/inspection — token IDs are stripped by DCE in production
@@ -1206,6 +1232,21 @@ class NeoContainer {
     return new Import_0.AppService();
   }
 
+  // -- Accessors --
+  
+  private _direct_AppService_f5397b19(): InstanceType<typeof Import_0.AppService> {
+    if (this.instances.has(Import_0.AppService)) return this.instances.get(Import_0.AppService) as InstanceType<typeof Import_0.AppService>;
+    const instance = this.create_AppService_f5397b19();
+    this.instances.set(Import_0.AppService, instance);
+    return instance;
+  }
+  
+  private _get_AppService_f5397b19(): InstanceType<typeof Import_0.AppService> {
+    const __neoValue = this._direct_AppService_f5397b19();
+    this.notifyResolve(Import_0.AppService, __neoValue);
+    return __neoValue;
+  }
+
   constructor(
     private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
@@ -1300,8 +1341,7 @@ class NeoContainer {
    * token and the resolved instance every time resolve() succeeds (whether
    * served from cache, freshly created, an override, or a parent/legacy
    * container). Returns an unsubscribe function. A listener that throws is
-   * caught and ignored — a bug in an observability hook must never break the
-   * actual resolution it's observing.
+   * caught and ignored.
    */
   public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
   public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
@@ -1321,34 +1361,19 @@ class NeoContainer {
 
   public resolve<T>(token: unknown): T;
   public resolve(token: unknown): unknown {
-    
+    return this._resolveInternal(token);
+  }
+
+  private _resolveInternal<T>(token: unknown): T;
+  private _resolveInternal(token: unknown): unknown {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
-    // 0. An overridden token always wins, even over a cached real instance.
-    if (this.overrides.has(token)) {
-      if (!this.instances.has(token)) {
-        const __neoMock = this.overrides.get(token)!();
-        this.instances.set(token, __neoMock);
-        if (__neoMock != null) this._borrowed.add(__neoMock);
-      }
-      const overridden = this.instances.get(token);
-      this.notifyResolve(token, overridden);
-      return overridden;
-    }
-
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    // A stored undefined is a value. A missing token still falls through.
-    if (result !== undefined || this.instances.has(token)) {
-      this.notifyResolve(token, result);
-      return result;
-    }
-
-    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
-    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
-    // ends up here)
+    
+    
+    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
+    if (__neoRead !== undefined) return __neoRead.call(this);
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -1367,11 +1392,16 @@ class NeoContainer {
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
 
-  /**
-   * Formats a token for error messages: a class token becomes its declared
-   * name (not its entire stringified source), and a string token has its
-   * trailing content-hash suffix stripped (not the raw hashed id).
-   */
+  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
+  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
+    let __neoTable = NeoContainer.__neoDispatch;
+    if (__neoTable === undefined) {
+      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>([[Import_0.AppService, NeoContainer.prototype._get_AppService_f5397b19]]);
+      NeoContainer.__neoDispatch = __neoTable;
+    }
+    return __neoTable;
+  }
+
   private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
@@ -1403,10 +1433,16 @@ class NeoContainer {
 
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
+    return this._resolveAllInternal(token);
+  }
+
+  private _resolveAllInternal<T>(token: unknown): T[];
+  private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
+    
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
@@ -1416,18 +1452,6 @@ class NeoContainer {
       }
     }
     return [];
-  }
-
-  private resolveLocal(token: unknown): unknown {
-    if (token === Import_0.AppService) { 
-            if (!this.instances.has(Import_0.AppService)) {
-                const instance = this.create_AppService_f5397b19();
-                this.instances.set(Import_0.AppService, instance);
-                return instance;
-            }
-            return this.instances.get(Import_0.AppService);
-           }
-    return undefined;
   }
 
   // For debugging/inspection — token IDs are stripped by DCE in production
@@ -1494,12 +1518,12 @@ class NeoContainer {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         const mode = __neoAllowed.get(token);
         if (mode !== 'simple' && mode !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
-        return this.resolve<T>(token);
+        return undefined as T;
       },
       resolveAll: <T,>(token: unknown): T[] => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         if (__neoAllowed.get(token) !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
-        return this.resolveAll<T>(token);
+        return [];
       },
     };
     
@@ -1519,7 +1543,35 @@ class NeoContainer {
   }
   
   private create_ApiService_75972c9e(): InstanceType<typeof Import_0.ApiService> {
-    return new Import_0.ApiService(this.resolve("PropertyToken:ApiService.apiUrl_8db03951"));
+    return new Import_0.ApiService(this._get_PropertyToken_ApiService_apiUrl_8db03951() as ConstructorParameters<typeof Import_0.ApiService>[0]);
+  }
+
+  // -- Accessors --
+  
+  private _direct_PropertyToken_ApiService_apiUrl_8db03951(): unknown {
+    if (this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) return this.instances.get("PropertyToken:ApiService.apiUrl_8db03951");
+    const instance = this.create_PropertyToken_ApiService_apiUrl_8db03951();
+    this.instances.set("PropertyToken:ApiService.apiUrl_8db03951", instance);
+    return instance;
+  }
+  
+  private _get_PropertyToken_ApiService_apiUrl_8db03951(): unknown {
+    const __neoValue = this._direct_PropertyToken_ApiService_apiUrl_8db03951();
+    this.notifyResolve("PropertyToken:ApiService.apiUrl_8db03951", __neoValue);
+    return __neoValue;
+  }
+  
+  private _direct_ApiService_75972c9e(): InstanceType<typeof Import_0.ApiService> {
+    if (this.instances.has(Import_0.ApiService)) return this.instances.get(Import_0.ApiService) as InstanceType<typeof Import_0.ApiService>;
+    const instance = this.create_ApiService_75972c9e();
+    this.instances.set(Import_0.ApiService, instance);
+    return instance;
+  }
+  
+  private _get_ApiService_75972c9e(): InstanceType<typeof Import_0.ApiService> {
+    const __neoValue = this._direct_ApiService_75972c9e();
+    this.notifyResolve(Import_0.ApiService, __neoValue);
+    return __neoValue;
   }
 
   constructor(
@@ -1619,8 +1671,7 @@ class NeoContainer {
    * token and the resolved instance every time resolve() succeeds (whether
    * served from cache, freshly created, an override, or a parent/legacy
    * container). Returns an unsubscribe function. A listener that throws is
-   * caught and ignored — a bug in an observability hook must never break the
-   * actual resolution it's observing.
+   * caught and ignored.
    */
   public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
   public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
@@ -1640,34 +1691,19 @@ class NeoContainer {
 
   public resolve<T>(token: unknown): T;
   public resolve(token: unknown): unknown {
-    
+    return this._resolveInternal(token);
+  }
+
+  private _resolveInternal<T>(token: unknown): T;
+  private _resolveInternal(token: unknown): unknown {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
-    // 0. An overridden token always wins, even over a cached real instance.
-    if (this.overrides.has(token)) {
-      if (!this.instances.has(token)) {
-        const __neoMock = this.overrides.get(token)!();
-        this.instances.set(token, __neoMock);
-        if (__neoMock != null) this._borrowed.add(__neoMock);
-      }
-      const overridden = this.instances.get(token);
-      this.notifyResolve(token, overridden);
-      return overridden;
-    }
-
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    // A stored undefined is a value. A missing token still falls through.
-    if (result !== undefined || this.instances.has(token)) {
-      this.notifyResolve(token, result);
-      return result;
-    }
-
-    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
-    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
-    // ends up here)
+    
+    
+    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
+    if (__neoRead !== undefined) return __neoRead.call(this);
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -1686,11 +1722,16 @@ class NeoContainer {
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
 
-  /**
-   * Formats a token for error messages: a class token becomes its declared
-   * name (not its entire stringified source), and a string token has its
-   * trailing content-hash suffix stripped (not the raw hashed id).
-   */
+  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
+  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
+    let __neoTable = NeoContainer.__neoDispatch;
+    if (__neoTable === undefined) {
+      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>([["PropertyToken:ApiService.apiUrl_8db03951", NeoContainer.prototype._get_PropertyToken_ApiService_apiUrl_8db03951], [Import_0.ApiService, NeoContainer.prototype._get_ApiService_75972c9e]]);
+      NeoContainer.__neoDispatch = __neoTable;
+    }
+    return __neoTable;
+  }
+
   private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
@@ -1730,10 +1771,16 @@ class NeoContainer {
 
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
+    return this._resolveAllInternal(token);
+  }
+
+  private _resolveAllInternal<T>(token: unknown): T[];
+  private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
+    
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
@@ -1743,26 +1790,6 @@ class NeoContainer {
       }
     }
     return [];
-  }
-
-  private resolveLocal(token: unknown): unknown {
-    if (token === "PropertyToken:ApiService.apiUrl_8db03951") { 
-            if (!this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) {
-                const instance = this.create_PropertyToken_ApiService_apiUrl_8db03951();
-                this.instances.set("PropertyToken:ApiService.apiUrl_8db03951", instance);
-                return instance;
-            }
-            return this.instances.get("PropertyToken:ApiService.apiUrl_8db03951");
-           }
-    if (token === Import_0.ApiService) { 
-            if (!this.instances.has(Import_0.ApiService)) {
-                const instance = this.create_ApiService_75972c9e();
-                this.instances.set(Import_0.ApiService, instance);
-                return instance;
-            }
-            return this.instances.get(Import_0.ApiService);
-           }
-    return undefined;
   }
 
   // For debugging/inspection — token IDs are stripped by DCE in production
@@ -1819,7 +1846,35 @@ class NeoContainer {
   }
   
   private create_UserService_883381ff(): InstanceType<typeof Import_0.UserService> {
-    return new Import_0.UserService(this.resolve(Import_0.Logger));
+    return new Import_0.UserService(this._get_Logger_8b5cbb1b());
+  }
+
+  // -- Accessors --
+  
+  private _direct_Logger_8b5cbb1b(): InstanceType<typeof Import_0.Logger> {
+    if (this.instances.has(Import_0.Logger)) return this.instances.get(Import_0.Logger) as InstanceType<typeof Import_0.Logger>;
+    const instance = this.create_Logger_8b5cbb1b();
+    this.instances.set(Import_0.Logger, instance);
+    return instance;
+  }
+  
+  private _get_Logger_8b5cbb1b(): InstanceType<typeof Import_0.Logger> {
+    const __neoValue = this._direct_Logger_8b5cbb1b();
+    this.notifyResolve(Import_0.Logger, __neoValue);
+    return __neoValue;
+  }
+  
+  private _direct_UserService_883381ff(): InstanceType<typeof Import_0.UserService> {
+    if (this.instances.has(Import_0.UserService)) return this.instances.get(Import_0.UserService) as InstanceType<typeof Import_0.UserService>;
+    const instance = this.create_UserService_883381ff();
+    this.instances.set(Import_0.UserService, instance);
+    return instance;
+  }
+  
+  private _get_UserService_883381ff(): InstanceType<typeof Import_0.UserService> {
+    const __neoValue = this._direct_UserService_883381ff();
+    this.notifyResolve(Import_0.UserService, __neoValue);
+    return __neoValue;
   }
 
   constructor(
@@ -1916,8 +1971,7 @@ class NeoContainer {
    * token and the resolved instance every time resolve() succeeds (whether
    * served from cache, freshly created, an override, or a parent/legacy
    * container). Returns an unsubscribe function. A listener that throws is
-   * caught and ignored — a bug in an observability hook must never break the
-   * actual resolution it's observing.
+   * caught and ignored.
    */
   public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
   public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
@@ -1937,34 +1991,19 @@ class NeoContainer {
 
   public resolve<T>(token: unknown): T;
   public resolve(token: unknown): unknown {
-    
+    return this._resolveInternal(token);
+  }
+
+  private _resolveInternal<T>(token: unknown): T;
+  private _resolveInternal(token: unknown): unknown {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
-    // 0. An overridden token always wins, even over a cached real instance.
-    if (this.overrides.has(token)) {
-      if (!this.instances.has(token)) {
-        const __neoMock = this.overrides.get(token)!();
-        this.instances.set(token, __neoMock);
-        if (__neoMock != null) this._borrowed.add(__neoMock);
-      }
-      const overridden = this.instances.get(token);
-      this.notifyResolve(token, overridden);
-      return overridden;
-    }
-
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    // A stored undefined is a value. A missing token still falls through.
-    if (result !== undefined || this.instances.has(token)) {
-      this.notifyResolve(token, result);
-      return result;
-    }
-
-    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
-    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
-    // ends up here)
+    
+    
+    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
+    if (__neoRead !== undefined) return __neoRead.call(this);
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -1983,11 +2022,16 @@ class NeoContainer {
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
 
-  /**
-   * Formats a token for error messages: a class token becomes its declared
-   * name (not its entire stringified source), and a string token has its
-   * trailing content-hash suffix stripped (not the raw hashed id).
-   */
+  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
+  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
+    let __neoTable = NeoContainer.__neoDispatch;
+    if (__neoTable === undefined) {
+      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>([[Import_0.Logger, NeoContainer.prototype._get_Logger_8b5cbb1b], [Import_0.UserService, NeoContainer.prototype._get_UserService_883381ff]]);
+      NeoContainer.__neoDispatch = __neoTable;
+    }
+    return __neoTable;
+  }
+
   private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
@@ -2019,10 +2063,16 @@ class NeoContainer {
 
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
+    return this._resolveAllInternal(token);
+  }
+
+  private _resolveAllInternal<T>(token: unknown): T[];
+  private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
+    
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
@@ -2032,26 +2082,6 @@ class NeoContainer {
       }
     }
     return [];
-  }
-
-  private resolveLocal(token: unknown): unknown {
-    if (token === Import_0.Logger) { 
-            if (!this.instances.has(Import_0.Logger)) {
-                const instance = this.create_Logger_8b5cbb1b();
-                this.instances.set(Import_0.Logger, instance);
-                return instance;
-            }
-            return this.instances.get(Import_0.Logger);
-           }
-    if (token === Import_0.UserService) { 
-            if (!this.instances.has(Import_0.UserService)) {
-                const instance = this.create_UserService_883381ff();
-                this.instances.set(Import_0.UserService, instance);
-                return instance;
-            }
-            return this.instances.get(Import_0.UserService);
-           }
-    return undefined;
   }
 
   // For debugging/inspection — token IDs are stripped by DCE in production
@@ -2107,6 +2137,21 @@ class NeoContainer {
     return new Import_0.SimpleService();
   }
 
+  // -- Accessors --
+  
+  private _direct_SimpleService_0c8fd872(): InstanceType<typeof Import_0.SimpleService> {
+    if (this.instances.has(Import_0.SimpleService)) return this.instances.get(Import_0.SimpleService) as InstanceType<typeof Import_0.SimpleService>;
+    const instance = this.create_SimpleService_0c8fd872();
+    this.instances.set(Import_0.SimpleService, instance);
+    return instance;
+  }
+  
+  private _get_SimpleService_0c8fd872(): InstanceType<typeof Import_0.SimpleService> {
+    const __neoValue = this._direct_SimpleService_0c8fd872();
+    this.notifyResolve(Import_0.SimpleService, __neoValue);
+    return __neoValue;
+  }
+
   constructor(
     private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
@@ -2201,8 +2246,7 @@ class NeoContainer {
    * token and the resolved instance every time resolve() succeeds (whether
    * served from cache, freshly created, an override, or a parent/legacy
    * container). Returns an unsubscribe function. A listener that throws is
-   * caught and ignored — a bug in an observability hook must never break the
-   * actual resolution it's observing.
+   * caught and ignored.
    */
   public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
   public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
@@ -2222,34 +2266,19 @@ class NeoContainer {
 
   public resolve<T>(token: unknown): T;
   public resolve(token: unknown): unknown {
-    
+    return this._resolveInternal(token);
+  }
+
+  private _resolveInternal<T>(token: unknown): T;
+  private _resolveInternal(token: unknown): unknown {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
-    // 0. An overridden token always wins, even over a cached real instance.
-    if (this.overrides.has(token)) {
-      if (!this.instances.has(token)) {
-        const __neoMock = this.overrides.get(token)!();
-        this.instances.set(token, __neoMock);
-        if (__neoMock != null) this._borrowed.add(__neoMock);
-      }
-      const overridden = this.instances.get(token);
-      this.notifyResolve(token, overridden);
-      return overridden;
-    }
-
-    // 1. Try to resolve locally (or create if singleton)
-    const result = this.resolveLocal(token);
-    // A stored undefined is a value. A missing token still falls through.
-    if (result !== undefined || this.instances.has(token)) {
-      this.notifyResolve(token, result);
-      return result;
-    }
-
-    // 2. Delegate to parent/legacy containers (useContainer's target, whether a
-    // NeoSyringe container or a declareContainerTokens() legacy adapter, always
-    // ends up here)
+    
+    
+    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
+    if (__neoRead !== undefined) return __neoRead.call(this);
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -2268,11 +2297,16 @@ class NeoContainer {
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
   }
 
-  /**
-   * Formats a token for error messages: a class token becomes its declared
-   * name (not its entire stringified source), and a string token has its
-   * trailing content-hash suffix stripped (not the raw hashed id).
-   */
+  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
+  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
+    let __neoTable = NeoContainer.__neoDispatch;
+    if (__neoTable === undefined) {
+      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>([[Import_0.SimpleService, NeoContainer.prototype._get_SimpleService_0c8fd872]]);
+      NeoContainer.__neoDispatch = __neoTable;
+    }
+    return __neoTable;
+  }
+
   private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
@@ -2304,10 +2338,16 @@ class NeoContainer {
 
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
+    return this._resolveAllInternal(token);
+  }
+
+  private _resolveAllInternal<T>(token: unknown): T[];
+  private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
     this._assertParents();
+    
     if (this.legacy) {
       for (const __neoLegacy of this.legacy) {
         if (typeof __neoLegacy?.resolveAll === 'function') {
@@ -2317,18 +2357,6 @@ class NeoContainer {
       }
     }
     return [];
-  }
-
-  private resolveLocal(token: unknown): unknown {
-    if (token === Import_0.SimpleService) { 
-            if (!this.instances.has(Import_0.SimpleService)) {
-                const instance = this.create_SimpleService_0c8fd872();
-                this.instances.set(Import_0.SimpleService, instance);
-                return instance;
-            }
-            return this.instances.get(Import_0.SimpleService);
-           }
-    return undefined;
   }
 
   // For debugging/inspection — token IDs are stripped by DCE in production
