@@ -1,7 +1,7 @@
 import type { Node, SourceFile } from 'typescript';
 import { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
 import { getSimpleName } from '../analyzer/utils/TokenUtils';
-import { cycleEdges, cyclePaths, groupCycles, type CycleMember } from './cycleSearch';
+import { cycleEdges, cycleGroups, type CycleMember } from './cycleSearch';
 
 /**
  * Represents a validation error found in the dependency graph.
@@ -168,8 +168,7 @@ export class GraphValidator {
       }
     }
     const edges = cycleEdges(members, parentTokens);
-    const paths = cyclePaths(edges);
-    const reports = groupCycles(paths, (id) => located.get(id)?.tokenId ?? id, multiTokens);
+    const { reports } = cycleGroups(edges, (id) => located.get(id)?.tokenId ?? id, multiTokens);
     for (const report of reports) {
       // The anchor is the back-edge source: the last id before the repeated start.
       const anchorId = report.ids[report.ids.length - 2];

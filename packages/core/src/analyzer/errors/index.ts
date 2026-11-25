@@ -3,12 +3,14 @@ export { CycleError } from './CycleError';
 export { NeoTokenError, type NeoTokenErrorCode } from './NeoTokenError';
 export {
   toStableDiagnostic,
+  normalizeDiagnostic,
   containerLookupOf,
   containerLookupFor,
   attributeErrors,
   stableCodeOf,
   stableSeverityOf,
   type StableDiagnostic,
+  type NormalizedDiagnostic,
   type ContainerOwner,
   type ContainerLookup,
 } from './stableDiagnostic';

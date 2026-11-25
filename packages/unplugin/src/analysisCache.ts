@@ -94,6 +94,7 @@ export function cloneGraph(graph: DependencyGraph): DependencyGraph {
     publicRoots: graph.publicRoots ? [...graph.publicRoots] : undefined,
     publicMultiRoots: graph.publicMultiRoots ? [...graph.publicMultiRoots] : undefined,
     eagerRoots: graph.eagerRoots ? [...graph.eagerRoots] : undefined,
+    expectedExternalTokens: graph.expectedExternalTokens ? new Set(graph.expectedExternalTokens) : undefined,
     parentProvidedTokens: graph.parentProvidedTokens ? new Set(graph.parentProvidedTokens) : undefined,
     parentResolvableTokens: graph.parentResolvableTokens ? new Set(graph.parentResolvableTokens) : undefined,
     borrowedRegistrations: graph.borrowedRegistrations?.map((item) => ({ ...item })),
@@ -104,6 +105,10 @@ export function cloneGraph(graph: DependencyGraph): DependencyGraph {
  * Analyses on every call. A content graph cache was slower on the first build
  * than the same work without it, so a plugin transform keeps nothing.
  * A host program keeps one clean copy for the other files of that same Program.
+ *
+ * The graphs `build` returns belong to the analysis snapshot of their Program, which every
+ * analyzer on that Program shares. A transform writes into the graphs it gets (collectEmbeddings),
+ * so every path returns copies and never the snapshot's own objects.
  */
 export function graphsForProgram(
   state: SessionState,
@@ -115,7 +120,7 @@ export function graphsForProgram(
   if (!hostProgram) {
     state.graphs = undefined;
     state.graphProgram = undefined;
-    return fresh;
+    return fresh.map(cloneGraph);
   }
   const clean = fresh.map(cloneGraph);
   state.graphs = clean;

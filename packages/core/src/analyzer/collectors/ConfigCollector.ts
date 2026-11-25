@@ -1,7 +1,7 @@
 import type * as ts from 'typescript';
 import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
-import type { ConfigGraph, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError, ValidationMode } from '../types';
+import type { ConfigCollection, ConfigGraph, ExtendsLink, RejectedBuilder, ServiceDefinition, InjectionInfo, ConfigType, TokenId, AnalysisError, ValidationMode } from '../types';
 import { HashUtils, TokenResolverService, DEFAULT_EXPORT_CONTAINER_NAME } from '../shared';
 import { containerKeyFor, partialInjectionsSpreadError, stampRegistration, valueCaptureFor } from '../shared/registrationGraph';
 import { buildContainerTokenView } from './resolutionUsages';
@@ -12,12 +12,21 @@ import { closedModeDiagnostics, readOptimization, readRuntimeProfile, type Optim
 import { InjectionParser } from '../parsers/InjectionParser';
 import { DependencyAnalyzer } from '../validators/DependencyAnalyzer';
 
+/** Opaque factories of a closed builder and of the partials folded into it: single registrations, then multi ones. */
+interface OpaqueNames {
+  single: string[];
+  multi: string[];
+}
+
 /**
  * Interface for collecting configurations from source files.
  */
 export interface IConfigCollector {
   /** Collect all configs from the program */
   collect(): Map<string, ConfigGraph>;
+
+  /** Collect all configs, plus the builder calls that could not become one, in discovery order. */
+  collectAll(): ConfigCollection;
 }
 
 /**
@@ -42,7 +51,6 @@ export class ConfigCollector implements IConfigCollector {
   private readonly tokenResolverService: TokenResolverService;
   private readonly injectionParser: InjectionParser;
   private readonly dependencyAnalyzer: DependencyAnalyzer;
-  private readonly identifierIndexByFile = new Map<string, Map<string, ts.Identifier>>();
 
   constructor(
     private program: ts.Program,
@@ -56,19 +64,33 @@ export class ConfigCollector implements IConfigCollector {
   }
 
   collect(): Map<string, ConfigGraph> {
+    return this.collectAll().configs;
+  }
+
+  /**
+   * The only discovery of builders and partials. Every consumer (graphs, diagnostics, usages)
+   * reads this collection; none walks the program again.
+   */
+  collectAll(): ConfigCollection {
     const configs = new Map<string, ConfigGraph>();
+    const rejected: RejectedBuilder[] = [];
+    const discovery: Array<ConfigGraph | RejectedBuilder> = [];
     const containerIdsByFile = new Map<string, Map<string, ConfigGraph>>();
 
     for (const sourceFile of this.program.getSourceFiles()) {
       if (sourceFile.isDeclarationFile) continue;
 
       const fileConfigs = new Map<string, ConfigGraph>();
-      this.visitNode(sourceFile, sourceFile, configs, fileConfigs);
+      this.visitNode(sourceFile, sourceFile, configs, fileConfigs, rejected, discovery);
 
       if (fileConfigs.size > 0) {
         containerIdsByFile.set(sourceFile.fileName, fileConfigs);
       }
     }
+
+    // Roots and runtime profile are read once every config exists, so a root registered by an
+    // extended partial counts as registered.
+    this.finalizeOptimization(configs);
 
     // Validate no duplicate containerIds in the same file; errors are attached
     // to the offending config's valueErrors instead of thrown, so LSP keeps running.
@@ -76,7 +98,69 @@ export class ConfigCollector implements IConfigCollector {
     this.restampDependencyEdges(configs);
     this.bindExtendsCaptures(configs);
 
-    return configs;
+    return { configs, rejected, discovery };
+  }
+
+  /**
+   * Reads `optimization` and `runtime` of every builder. A token registered by a partial the
+   * builder extends (directly or through another partial) is known, as it is in the built graph.
+   */
+  private finalizeOptimization(configs: Map<string, ConfigGraph>): void {
+    for (const config of configs.values()) {
+      if (config.type !== 'builder') continue;
+      const configArg = config.node.arguments[0];
+      if (!configArg || !TSContext.ts.isObjectLiteralExpression(configArg)) continue;
+      const known = new Set<TokenId>();
+      const opaque: OpaqueNames = { single: [], multi: [] };
+      this.addKnownTokens(config, configs, known, new Set(), opaque);
+      const optimization: OptimizationTarget = {};
+      readOptimization(configArg, optimization, known, (expr) => this.tokenResolverService.resolveTokenId(expr));
+      readRuntimeProfile(configArg, optimization);
+      // Same order as the built graph: every single registration (partials first), then the multi ones.
+      const opaqueNames = [...opaque.single, ...opaque.multi];
+      const closedErrors = closedModeDiagnostics(
+        optimization.optimizationMode,
+        this.validation,
+        opaqueNames,
+        configArg,
+        config.sourceFile,
+      );
+      config.optimizationMode = optimization.optimizationMode;
+      config.publicRoots = optimization.publicRoots;
+      config.publicMultiRoots = optimization.publicMultiRoots;
+      config.eagerRoots = optimization.eagerRoots;
+      config.runtimeProfile = optimization.runtimeProfile;
+      config.optimizationErrors = optimization.errors;
+      const added = [...(optimization.errors ?? []), ...closedErrors];
+      if (added.length > 0) config.valueErrors = [...(config.valueErrors ?? []), ...added];
+    }
+  }
+
+  private addKnownTokens(
+    config: ConfigGraph,
+    configs: Map<string, ConfigGraph>,
+    known: Set<TokenId>,
+    seen: Set<string>,
+    opaque: OpaqueNames,
+  ): void {
+    for (const link of config.extendsLinks ?? []) {
+      if (seen.has(link.key)) continue;
+      seen.add(link.key);
+      const partial = configs.get(link.key);
+      if (partial) this.addKnownTokens(partial, configs, known, seen, opaque);
+    }
+    for (const [id, info] of config.localInjections) {
+      known.add(id);
+      if (info.definition.opaque === true) opaque.single.push(info.definition.tokenId);
+    }
+    if (config.multiInjections) {
+      for (const [id, infos] of config.multiInjections) {
+        known.add(id);
+        for (const info of infos) {
+          if (info.definition.opaque === true) opaque.multi.push(info.definition.tokenId);
+        }
+      }
+    }
   }
 
   private validateContainerIdCollisions(
@@ -125,15 +209,22 @@ export class ConfigCollector implements IConfigCollector {
     node: ts.Node,
     sourceFile: ts.SourceFile,
     configs: Map<string, ConfigGraph>,
-    fileConfigs?: Map<string, ConfigGraph>
+    fileConfigs: Map<string, ConfigGraph> | undefined,
+    rejected: RejectedBuilder[],
+    discovery: Array<ConfigGraph | RejectedBuilder>,
   ): void {
     if (TSContext.ts.isCallExpression(node)) {
-      const config = this.tryParseConfig(node, sourceFile);
-      if (config) {
+      const parsed = this.tryParseConfig(node, sourceFile);
+      if (parsed && 'reason' in parsed) {
+        rejected.push(parsed);
+        discovery.push(parsed);
+      } else if (parsed) {
+        const config = parsed;
         // Identity is the container key (relative path + position + text), not the name.
         // Per-file key uses name:position so the same name in another file is not a duplicate.
         const uniqueKey = config.containerKey ?? `${sourceFile.fileName}:${config.name}`;
         configs.set(uniqueKey, config);
+        discovery.push(config);
         if (fileConfigs) {
           const fileUniqueKey = `${config.name}:${node.getStart()}`;
           fileConfigs.set(fileUniqueKey, config);
@@ -141,7 +232,8 @@ export class ConfigCollector implements IConfigCollector {
       }
     }
 
-    TSContext.ts.forEachChild(node, (child) => this.visitNode(child, sourceFile, configs, fileConfigs));
+    TSContext.ts.forEachChild(node, (child) =>
+      this.visitNode(child, sourceFile, configs, fileConfigs, rejected, discovery));
   }
 
   /**
@@ -157,7 +249,7 @@ export class ConfigCollector implements IConfigCollector {
   private tryParseConfig(
     node: ts.CallExpression,
     sourceFile: ts.SourceFile
-  ): ConfigGraph | null {
+  ): ConfigGraph | RejectedBuilder | null {
     const marker = resolveNeoMarker(this.checker, node);
 
     if (marker === 'defineBuilderConfig') {
@@ -175,15 +267,15 @@ export class ConfigCollector implements IConfigCollector {
     node: ts.CallExpression,
     sourceFile: ts.SourceFile,
     type: ConfigType
-  ): ConfigGraph | null {
+  ): ConfigGraph | RejectedBuilder | null {
     // Get the variable name
     const name = this.getConfigName(node);
-    if (!name) return null;
+    if (!name) return type === 'builder' ? { node, reason: 'shape' } : null;
 
     // Parse the config object
     const configArg = node.arguments[0];
     if (!configArg || !TSContext.ts.isObjectLiteralExpression(configArg)) {
-      return null;
+      return type === 'builder' ? { node, reason: 'not-object-literal' } : null;
     }
 
     // Generate unique container ID from 'name' field or hash
@@ -191,7 +283,7 @@ export class ConfigCollector implements IConfigCollector {
     const containerKey = containerKeyFor(node);
 
     // Collect injections and detect internal duplicates
-    const { injections: localInjections, duplicates, valueErrors, multiInjections } = this.collectInjections(
+    const { injections: localInjections, duplicates, valueErrors, rejected, conflicts, multiInjections } = this.collectInjections(
       configArg,
       sourceFile,
       containerKey,
@@ -203,10 +295,12 @@ export class ConfigCollector implements IConfigCollector {
     const extendsRefs = type === 'builder' ? this.getExtendsRefs(configArg) : [];
     const useContainerRef = type === 'builder' ? this.getUseContainerRef(configArg) : null;
 
+    // The parent is named by identity, not by text: `useContainer: P` may be an alias of another variable.
+    const parent = type === 'builder' ? this.resolveUseContainer(configArg) : undefined;
+    const extendsLinks = this.extendsLinksOf(configArg);
+
     // Get legacy parent tokens (for builders with declareContainerTokens parent)
-    const legacyParentTokens = type === 'builder' && useContainerRef
-      ? this.extractLegacyParentTokens(useContainerRef, sourceFile)
-      : undefined;
+    const legacyParentTokens = parent?.kind === 'declared' ? parent.tokens : undefined;
 
     // Collect expected external tokens (for partials only)
     const { tokens: expectedExternalTokens, errors: expectedErrors } = type === 'partial'
@@ -215,27 +309,8 @@ export class ConfigCollector implements IConfigCollector {
 
     // Get container name
     const containerName = this.getContainerName(configArg);
-    const known = new Set<TokenId>(localInjections.keys());
-    if (multiInjections) {
-      for (const id of multiInjections.keys()) known.add(id);
-    }
-    const optimization: OptimizationTarget = {};
-    if (type === 'builder') {
-      readOptimization(configArg, optimization, known, (expr) => this.tokenResolverService.resolveTokenId(expr));
-      readRuntimeProfile(configArg, optimization);
-    }
-    const opaqueNames: string[] = [];
-    const collectOpaque = (info: InjectionInfo) => {
-      if (info.definition.opaque === true) opaqueNames.push(info.definition.tokenId);
-    };
-    for (const info of localInjections.values()) collectOpaque(info);
-    if (multiInjections) {
-      for (const infos of multiInjections.values()) infos.forEach(collectOpaque);
-    }
-    const closedErrors = type === 'builder'
-      ? closedModeDiagnostics(optimization.optimizationMode, this.validation, opaqueNames, configArg, sourceFile)
-      : [];
-    const mergedValueErrors = [...valueErrors, ...expectedErrors, ...(optimization.errors ?? []), ...closedErrors];
+    // Optimization and runtime are read in finalizeOptimization, once every partial is known.
+    const mergedValueErrors = [...valueErrors, ...expectedErrors];
 
     return {
       containerId,
@@ -253,11 +328,11 @@ export class ConfigCollector implements IConfigCollector {
       containerName,
       valueErrors: mergedValueErrors.length > 0 ? mergedValueErrors : undefined,
       multiInjections: multiInjections && multiInjections.size > 0 ? multiInjections : undefined,
-      optimizationMode: optimization.optimizationMode,
-      publicRoots: optimization.publicRoots,
-      publicMultiRoots: optimization.publicMultiRoots,
-      eagerRoots: optimization.eagerRoots,
-      runtimeProfile: optimization.runtimeProfile,
+      extendsLinks: extendsLinks.length > 0 ? extendsLinks : undefined,
+      useContainerKey: parent?.kind === 'config' ? parent.key : undefined,
+      useContainerKind: parent?.kind,
+      rejectedInjections: rejected.length > 0 ? rejected : undefined,
+      conflicts: conflicts.length > 0 ? conflicts : undefined,
     };
   }
 
@@ -282,29 +357,33 @@ export class ConfigCollector implements IConfigCollector {
     sourceFile: ts.SourceFile,
     containerKey: string,
     isPartial: boolean,
-  ): { injections: Map<TokenId, InjectionInfo>; duplicates: InjectionInfo[]; valueErrors: AnalysisError[]; multiInjections?: Map<TokenId, InjectionInfo[]> } {
+  ): { injections: Map<TokenId, InjectionInfo>; duplicates: InjectionInfo[]; valueErrors: AnalysisError[]; rejected: AnalysisError[]; conflicts: InjectionInfo[]; multiInjections?: Map<TokenId, InjectionInfo[]> } {
     const injections = new Map<TokenId, InjectionInfo>();
     const duplicates: InjectionInfo[] = [];
     const valueErrors: AnalysisError[] = [];
+    const rejected: AnalysisError[] = [];
+    const conflicts: InjectionInfo[] = [];
     let multiInjections: Map<TokenId, InjectionInfo[]> | undefined;
 
     // Find the 'injections' property
     const injectionsProperty = this.findProperty(configObj, 'injections');
     if (!injectionsProperty || !TSContext.ts.isArrayLiteralExpression(injectionsProperty.initializer)) {
-      return { injections, duplicates, valueErrors };
+      return { injections, duplicates, valueErrors, rejected, conflicts };
     }
 
     if (isPartial) {
       const spread = partialInjectionsSpreadError(injectionsProperty.initializer.elements);
       if (spread) {
-        valueErrors.push({
+        const error: AnalysisError = {
           type: 'unsupported',
           code: spread.code,
           message: spread.message,
           node: spread.node,
           sourceFile,
-        });
-        return { injections, duplicates, valueErrors };
+        };
+        valueErrors.push(error);
+        rejected.push(error);
+        return { injections, duplicates, valueErrors, rejected, conflicts };
       }
     }
 
@@ -317,7 +396,8 @@ export class ConfigCollector implements IConfigCollector {
       if (info) {
         // Check if it's an AnalysisError (InjectionInfo has __kind: 'info')
         if (!('__kind' in info)) {
-          valueErrors.push(info as unknown as AnalysisError);
+          valueErrors.push(info);
+          rejected.push(info);
           continue;
         }
         if (info.warnings) valueErrors.push(...info.warnings);
@@ -330,6 +410,7 @@ export class ConfigCollector implements IConfigCollector {
             node: info.node,
             sourceFile,
           });
+          conflicts.push(info);
           continue;
         }
         if (!info.isMulti && multiInjections?.has(info.definition.tokenId)) {
@@ -339,6 +420,7 @@ export class ConfigCollector implements IConfigCollector {
             node: info.node,
             sourceFile,
           });
+          conflicts.push(info);
           continue;
         }
 
@@ -356,7 +438,7 @@ export class ConfigCollector implements IConfigCollector {
       }
     }
 
-    return { injections, duplicates, valueErrors, multiInjections };
+    return { injections, duplicates, valueErrors, rejected, conflicts, multiInjections };
   }
 
   private stampCollected(
@@ -590,39 +672,49 @@ export class ConfigCollector implements IConfigCollector {
   }
 
   /**
-   * Extracts tokens from a legacy parent container (declareContainerTokens).
-   * @param useContainerRef - Variable name of the parent container
-   * @param sourceFile - Source file containing the reference
-   * @returns Set of token IDs provided by the legacy container, or undefined if not a legacy container
+   * What `useContainer: parent` names. The identifier is resolved through its symbol and its
+   * aliases, so an imported or renamed parent is the config it points to, not the first
+   * identifier with the same text in the file.
    */
-  private extractLegacyParentTokens(
-    useContainerRef: string,
-    sourceFile: ts.SourceFile
-  ): Set<string> | undefined {
-    // Find the declaration of the parent container
-    const identifier = this.findIdentifierInFile(useContainerRef, sourceFile);
-    if (!identifier) return undefined;
-
-    const symbol = this.checker.getSymbolAtLocation(identifier);
+  private resolveUseContainer(
+    configObj: ts.ObjectLiteralExpression,
+  ): { kind: 'config'; key: string } | { kind: 'declared'; tokens: Set<string> | undefined } | undefined {
+    const useContainerProp = this.findProperty(configObj, 'useContainer');
+    if (!useContainerProp || !TSContext.ts.isIdentifier(useContainerProp.initializer)) return undefined;
+    const symbol = this.checker.getSymbolAtLocation(useContainerProp.initializer);
     if (!symbol) return undefined;
-
-    const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
-    if (!declaration) return undefined;
-
-    // Check if it's a declareContainerTokens call
+    const resolved = this.tokenResolverService.resolveSymbol(symbol);
+    const declaration = resolved.valueDeclaration ?? resolved.declarations?.[0];
     if (
-      TSContext.ts.isVariableDeclaration(declaration) &&
-      declaration.initializer &&
-      TSContext.ts.isCallExpression(declaration.initializer)
+      !declaration
+      || !TSContext.ts.isVariableDeclaration(declaration)
+      || !declaration.initializer
+      || !TSContext.ts.isCallExpression(declaration.initializer)
     ) {
-      const callExpr = declaration.initializer;
-
-      if (resolveNeoMarker(this.checker, callExpr) === 'declareContainerTokens') {
-        return this.extractDeclaredTokens(callExpr);
-      }
+      return undefined;
     }
-
+    const call = declaration.initializer;
+    const marker = resolveNeoMarker(this.checker, call);
+    if (marker === 'defineBuilderConfig' || marker === 'definePartialConfig') {
+      return { kind: 'config', key: containerKeyFor(call) };
+    }
+    if (marker === 'declareContainerTokens') {
+      return { kind: 'declared', tokens: this.extractDeclaredTokens(call) };
+    }
     return undefined;
+  }
+
+  /** The partials listed in `extends`, by identity. A first-class element that is not a partial is skipped. */
+  private extendsLinksOf(configObj: ts.ObjectLiteralExpression): ExtendsLink[] {
+    const links: ExtendsLink[] = [];
+    const extendsProp = this.findProperty(configObj, 'extends');
+    if (!extendsProp || !TSContext.ts.isArrayLiteralExpression(extendsProp.initializer)) return links;
+    for (const element of extendsProp.initializer.elements) {
+      const binding = extendsCaptureText(element);
+      const call = binding ? this.partialCallFor(element) : undefined;
+      if (binding && call) links.push({ key: containerKeyFor(call), binding });
+    }
+    return links;
   }
 
   /**
@@ -651,33 +743,6 @@ export class ConfigCollector implements IConfigCollector {
     }
 
     return tokens.size > 0 ? tokens : undefined;
-  }
-
-  /**
-   * Helper to find an identifier in a source file.
-   */
-  private buildIdentifierIndex(sourceFile: ts.SourceFile): Map<string, ts.Identifier> {
-    const index = new Map<string, ts.Identifier>();
-    const visit = (node: ts.Node) => {
-      if (TSContext.ts.isIdentifier(node) && !index.has(node.text)) {
-        index.set(node.text, node);
-      }
-      TSContext.ts.forEachChild(node, visit);
-    };
-    visit(sourceFile);
-    return index;
-  }
-
-  private findIdentifierInFile(
-    name: string,
-    sourceFile: ts.SourceFile
-  ): ts.Identifier | undefined {
-    let index = this.identifierIndexByFile.get(sourceFile.fileName);
-    if (!index) {
-      index = this.buildIdentifierIndex(sourceFile);
-      this.identifierIndexByFile.set(sourceFile.fileName, index);
-    }
-    return index.get(name);
   }
 
   private findProperty(

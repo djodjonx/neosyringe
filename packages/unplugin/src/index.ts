@@ -1,6 +1,6 @@
 import { createUnplugin, type UnpluginOptions } from 'unplugin';
 import * as ts from 'typescript';
-import { textCallsResolve, type ValidationMode } from '@djodjonx/neosyringe-core/analyzer';
+import { textCallsResolve, type AnalysisError, type ValidationMode } from '@djodjonx/neosyringe-core/analyzer';
 import { resolveDebugFlag, resolveTestOverridesFlag } from '@djodjonx/neosyringe-core/generator';
 import { releaseGraphCache } from './analysisCache';
 import { usageErrorsAtBuildEnd } from './buildEndUsages';
@@ -150,10 +150,12 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
     buildEnd() {
       let errors: string[] = [];
       let warnings: string[] = [];
+      let analysisErrors: AnalysisError[] = [];
       try {
         const report = usageErrorsAtBuildEnd(sourceTexts, state, options?.validation ?? 'strict');
         errors = report.errors;
         warnings = report.warnings;
+        analysisErrors = report.analysisErrors;
       } finally {
         releaseGraphCache(state);
         state.registeredTokens.clear();
@@ -169,13 +171,15 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       }
 
       if (errors.length > 0) {
-        throw new Error(
+        const failure = new Error(
           `\n${'='.repeat(60)}\n` +
           `NEO-SYRINGE: ${errors.length} unregistered token(s) found!\n` +
           `${'='.repeat(60)}\n\n` +
           errors.join('\n\n') +
           `\n\n${'='.repeat(60)}\n`
-        );
+        ) as Error & { analysisErrors?: AnalysisError[] };
+        failure.analysisErrors = analysisErrors.filter((error) => error.severity !== 'warning');
+        throw failure;
       }
     },
 

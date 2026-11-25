@@ -5,6 +5,8 @@ import type { SessionState } from './session';
 export interface BuildEndUsageReport {
   errors: string[];
   warnings: string[];
+  /** The analysis errors behind `errors` and `warnings`, as the other consumers see them. */
+  analysisErrors: AnalysisError[];
 }
 
 interface LocatedUsage {
@@ -25,10 +27,11 @@ export function usageErrorsAtBuildEnd(
   validation: ValidationMode,
 ): BuildEndUsageReport {
   const program = programFromSources(sourceTexts, state);
-  if (!program) return { errors: [], warnings: [] };
+  if (!program) return { errors: [], warnings: [], analysisErrors: [] };
   const analyzer = new Analyzer(program, { validation });
   const errors: LocatedUsage[] = [];
   const warnings: LocatedUsage[] = [];
+  const analysisErrors: AnalysisError[] = [];
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue;
     const normalized = sourceFile.fileName.replace(/\\/g, '/');
@@ -42,13 +45,18 @@ export function usageErrorsAtBuildEnd(
         character: position.character,
         text: `${error.message} at ${sourceFile.fileName}:${position.line + 1}:${position.character + 1}`,
       };
-      if (isResolutionUsageError(error)) errors.push(located);
-      else if (error.severity === 'warning' && error.code === 'NEO_UNKNOWN_CONTAINER') warnings.push(located);
+      if (isResolutionUsageError(error)) {
+        errors.push(located);
+        analysisErrors.push(error);
+      } else if (error.severity === 'warning' && error.code === 'NEO_UNKNOWN_CONTAINER') {
+        warnings.push(located);
+        analysisErrors.push(error);
+      }
     }
   }
   sortLocated(errors);
   sortLocated(warnings);
-  return { errors: errors.map((item) => item.text), warnings: warnings.map((item) => item.text) };
+  return { errors: errors.map((item) => item.text), warnings: warnings.map((item) => item.text), analysisErrors };
 }
 
 function sortLocated(items: LocatedUsage[]): void {
@@ -60,7 +68,8 @@ function sortLocated(items: LocatedUsage[]): void {
   );
 }
 
-function isResolutionUsageError(error: AnalysisError): boolean {
+/** A resolve / resolveAll call the checker refuses. These are reported once every file is known, not per file. */
+export function isResolutionUsageError(error: AnalysisError): boolean {
   if (error.severity === 'warning') return false;
   if (error.code === 'NEO_ROOT_NOT_EXPORTED') return true;
   if (error.code === 'NEO_UNKNOWN_CONTAINER' || error.code === 'NEO_MULTI_REQUIRES_RESOLVE_ALL') {

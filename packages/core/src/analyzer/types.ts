@@ -227,6 +227,58 @@ export interface ConfigGraph {
 
   /** Literal `runtime.profile`. Absent means full. ADR007 "Profils de génération". */
   runtimeProfile?: 'full' | 'minimal';
+
+  /**
+   * Partials listed in `extends`, as configuration identities, in array order.
+   * `key` is the `containerKey` of the partial, `binding` the text written in `extends`.
+   * An element that is not a partial has no link.
+   */
+  extendsLinks?: ExtendsLink[];
+
+  /** `containerKey` of the config named by `useContainer`, followed through aliases. */
+  useContainerKey?: string;
+
+  /** What `useContainer` names: a NeoSyringe config or a `declareContainerTokens` shim. */
+  useContainerKind?: 'config' | 'declared';
+
+  /**
+   * Errors of injections that never became a registration (parser errors, a partial spread),
+   * in source order. They are also listed in `valueErrors`.
+   */
+  rejectedInjections?: AnalysisError[];
+
+  /** Errors of the literal `optimization` and `runtime` blocks. They are also listed in `valueErrors`. */
+  optimizationErrors?: AnalysisError[];
+
+  /**
+   * Parsed injections dropped because the same token is registered with and without `multi: true`.
+   * They own no registration here, but a host that extends this config may still see them as one.
+   */
+  conflicts?: InjectionInfo[];
+}
+
+/** A partial named in `extends`: its configuration identity and the expression the consumer wrote. */
+export interface ExtendsLink {
+  key: string;
+  binding: string;
+}
+
+/**
+ * A `defineBuilderConfig` call the collector could not turn into a config.
+ * `shape`: not assigned to a variable or `export default`, so it cannot be located for replacement.
+ * `not-object-literal`: the argument is not an object literal.
+ */
+export interface RejectedBuilder {
+  node: CallExpression;
+  reason: 'shape' | 'not-object-literal';
+}
+
+/** Everything one collection found, in discovery order. */
+export interface ConfigCollection {
+  configs: Map<string, ConfigGraph>;
+  rejected: RejectedBuilder[];
+  /** Builders and partials as found, with rejected builders in place. */
+  discovery: ReadonlyArray<ConfigGraph | RejectedBuilder>;
 }
 
 /**
@@ -369,6 +421,12 @@ export interface DependencyGraph {
 
   /** Legacy container variable names to delegate to. */
   legacyContainers?: string[];
+
+  /**
+   * Tokens the partials folded into this container declare with `expects`, in fold order, without
+   * duplicates. The host has to provide them. Nothing generates code from it.
+   */
+  expectedExternalTokens?: Set<TokenId>;
 
   /** Tokens provided by the parent container (used for validation). */
   parentProvidedTokens?: Set<TokenId>;

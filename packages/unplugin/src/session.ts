@@ -1,9 +1,9 @@
 import * as path from 'node:path';
 import { TraceMap, decodedMappings, encodedMappings, originalPositionFor, type SourceMapSegment } from '@jridgewell/trace-mapping';
 import * as ts from 'typescript';
-import { Analyzer, CollisionRegistry, formatUnsupportedMarker, resolveNeoMarker, resolveProjectConfig, sourceFileUsesMarker } from '@djodjonx/neosyringe-core/analyzer';
-import type { DependencyGraph, DependencyNode } from '@djodjonx/neosyringe-core/analyzer';
-import { Generator, GraphValidator } from '@djodjonx/neosyringe-core/generator';
+import { Analyzer, CollisionRegistry, formatUnsupportedMarker, resolveNeoMarker, resolveProjectConfig, sourceFileUsesMarker, stableCodeOf, stableSeverityOf } from '@djodjonx/neosyringe-core/analyzer';
+import type { AnalysisError, DependencyGraph, DependencyNode } from '@djodjonx/neosyringe-core/analyzer';
+import { Generator, GraphValidator, type GraphValidationError } from '@djodjonx/neosyringe-core/generator';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { serializeGraph } from '@djodjonx/neosyringe-ui';
 import type { SerializableGraph } from '@djodjonx/neosyringe-ui';
@@ -16,6 +16,7 @@ import {
 } from './analysisCache';
 import { collectDefinePartialConfigPureEdits, collectUseSiteEdits, type SourceEdit, type UsedTokenEntry } from './useInterfaceTransform';
 import { callsCanReachNeoSyringe } from './markerUtils';
+import { isResolutionUsageError } from './buildEndUsages';
 
 const VLQ_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -500,6 +501,95 @@ function rememberSource(
   return created;
 }
 
+/** The errors that stop a transform. Warnings and resolve-call checks do not. */
+function blockingErrors(errors: readonly AnalysisError[]): AnalysisError[] {
+  return errors.filter((error) => stableSeverityOf(error) === 'error' && !isResolutionUsageError(error));
+}
+
+/** A failure the graphs of a file report, with the wording the build has always printed for it. */
+interface GraphFailure {
+  code: string;
+  node: ts.Node;
+  sourceFile: ts.SourceFile;
+  /** The dependency a missing provider names. */
+  dependency?: string;
+  message: string;
+}
+
+/**
+ * What the graphs of this file report: their own errors, then the ones of GraphValidator. The wording is
+ * pinned by tests/e2e/t08-child-all-open-parent.test.ts:257 and tests/e2e/t20-docs-examples.test.ts:1009:
+ * the token name ('Needs', GraphValidator.ts:83), a final dot.
+ */
+function graphFailures(sameFile: readonly DependencyGraph[], validated: readonly DependencyGraph[]): GraphFailure[] {
+  const found: GraphFailure[] = [];
+  for (const graph of sameFile) {
+    for (const error of graph.errors ?? []) {
+      found.push({
+        code: stableCodeOf(error) ?? error.type,
+        node: error.node,
+        sourceFile: error.sourceFile,
+        dependency: error.context?.tokenText,
+        message: error.message,
+      });
+    }
+  }
+  const validator = new GraphValidator();
+  for (const graph of validated) {
+    for (const error of validator.validateAll(graph).errors) {
+      found.push({
+        code: error.code ?? (error.type === 'duplicate' ? 'NEO_DUPLICATE_PROVIDER' : error.type),
+        node: error.node,
+        sourceFile: error.sourceFile,
+        dependency: error.dependencyId,
+        message: error.message,
+      });
+    }
+  }
+  return found;
+}
+
+/** The two nodes are one registration: one holds the other (the graph anchors the injection, the snapshot its token). */
+function nestedNodes(left: ts.Node, leftFile: ts.SourceFile, right: ts.Node, rightFile: ts.SourceFile): boolean {
+  const leftStart = left.getStart(leftFile);
+  const rightStart = right.getStart(rightFile);
+  return (leftStart >= rightStart && left.getEnd() <= right.getEnd())
+    || (rightStart >= leftStart && right.getEnd() <= left.getEnd());
+}
+
+/**
+ * One line per blocking snapshot error. The text of the graph is kept for an error the graph reports too:
+ * same code, same file, same registration, same dependency. Each graph failure words one error at most.
+ * An error the graph does not report keeps the text of the snapshot, so none is hidden.
+ */
+function blockingMessages(errors: readonly AnalysisError[], failures: readonly GraphFailure[]): string[] {
+  const unused = [...failures];
+  return errors.map((error) => {
+    const code = stableCodeOf(error) ?? error.type;
+    const wanted = error.context?.tokenText;
+    const at = unused.findIndex((failure) =>
+      failure.code === code
+      && failure.sourceFile.fileName === error.sourceFile.fileName
+      && (failure.dependency === undefined || wanted === undefined || failure.dependency === wanted)
+      && nestedNodes(failure.node, failure.sourceFile, error.node, error.sourceFile));
+    if (at < 0) return error.message;
+    const [match] = unused.splice(at, 1);
+    return match?.message ?? error.message;
+  });
+}
+
+/** What the GraphValidator throw carries as analysis errors: the same fields, the code of a missing provider and of a cycle. */
+function analysisErrorsOfValidation(errors: readonly GraphValidationError[]): AnalysisError[] {
+  return errors.map((error) => ({
+    type: error.type,
+    ...(error.code !== undefined ? { code: error.code } : {}),
+    message: error.message,
+    node: error.node,
+    sourceFile: error.sourceFile,
+    ...(error.dependencyId !== undefined ? { context: { tokenText: error.dependencyId } } : {}),
+  }));
+}
+
 function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | undefined): SessionOutput {
   const key = programFileName(input.id);
   if (!input.hostProgram && !callsCanReachNeoSyringe(input.code, key, resolved?.options ?? {})) {
@@ -568,14 +658,24 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
     );
   }
 
-  for (const graph of allGraphs) {
-    if (!graph.errors || graph.errors.length === 0) continue;
-    const graphFile = (graph.sourceFileName ?? key).replace(/\\/g, '/');
-    if (graphFile !== key) continue;
-    const messages = graph.errors.map((error) => `${input.errorPrefix} ${error.message}`).join('\n');
-    const buildError = new Error(messages) as Error & { file?: string };
-    buildError.name = graph.errors[0].type === 'duplicate' ? 'DuplicateRegistrationError' : 'TypeMismatchError';
-    buildError.file = graph.sourceFileName ?? input.id;
+  const sameFileGraphs = allGraphs.filter((graph) => (graph.sourceFileName ?? key).replace(/\\/g, '/') === key);
+  const thisFileGraphs = sameFileGraphs.filter((graph) =>
+    graph.defineBuilderConfigStart !== undefined &&
+    graph.defineBuilderConfigEnd !== undefined &&
+    graph.variableStatementStart !== undefined);
+
+  // The diagnostics of this file come from the same snapshot as the graphs, so the build reports
+  // what the CLI and the IDE report. A resolve call is checked once every file is known (buildEnd).
+  // The text keeps the wording the build has always printed when the graph says the same thing.
+  const fileErrors = sourceFile ? blockingErrors(new Analyzer(program).extractForFile(sourceFile.fileName).errors) : [];
+  if (fileErrors.length > 0) {
+    const messages = blockingMessages(fileErrors, graphFailures(sameFileGraphs, thisFileGraphs))
+      .map((message) => `${input.errorPrefix} ${message}`)
+      .join('\n');
+    const buildError = new Error(messages) as Error & { file?: string; analysisErrors?: AnalysisError[] };
+    buildError.name = fileErrors[0].type === 'duplicate' ? 'DuplicateRegistrationError' : 'TypeMismatchError';
+    buildError.file = input.id;
+    buildError.analysisErrors = fileErrors;
     throw buildError;
   }
 
@@ -589,22 +689,15 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
     }
   }
 
-  const thisFileGraphs = allGraphs.filter((graph) => {
-    const graphFile = (graph.sourceFileName ?? key).replace(/\\/g, '/');
-    return graphFile === key &&
-      graph.defineBuilderConfigStart !== undefined &&
-      graph.defineBuilderConfigEnd !== undefined &&
-      graph.variableStatementStart !== undefined;
-  });
-
   if (thisFileGraphs.length > 0) {
     const validator = new GraphValidator();
     for (const graph of thisFileGraphs) {
       const validationResult = validator.validateAll(graph);
       if (!validationResult.valid) {
         const messages = validationResult.errors.map((error) => error.message).join('\n  ');
-        const buildError = new Error(`${input.errorPrefix}\n  ${messages}`) as Error & { file?: string };
+        const buildError = new Error(`${input.errorPrefix}\n  ${messages}`) as Error & { file?: string; analysisErrors?: AnalysisError[] };
         buildError.file = input.id;
+        buildError.analysisErrors = analysisErrorsOfValidation(validationResult.errors);
         throw buildError;
       }
     }

@@ -240,6 +240,13 @@ export class MissingDependencyValidator implements IValidator {
       }
     }
 
+    // A multi token of a parent or of an extended partial is provided, read with `{ all }`.
+    if (config.type === 'builder' && context.inheritedMultiTokens) {
+      for (const tokenId of context.inheritedMultiTokens) {
+        available.add(tokenId);
+      }
+    }
+
     // For builders with legacy parent, add legacy parent tokens
     if (config.type === 'builder' && config.legacyParentTokens) {
       for (const tokenId of config.legacyParentTokens) {
@@ -266,15 +273,14 @@ export class MissingDependencyValidator implements IValidator {
     // declaration file in both the partial and the builder, their tokenIds are identical
     // (the hash is derived from the symbol's declaration location, not the call site).
     // Using strict comparison preserves the hash-based collision protection.
-    for (const extendRef of config.extendsRefs) {
-      const partial = this.findPartialConfigByName(extendRef, context.allConfigs);
-      if (!partial?.expectedExternalTokens) continue;
+    for (const { partial, label } of this.extendedPartials(config, context.allConfigs)) {
+      if (!partial.expectedExternalTokens) continue;
 
       for (const tokenId of partial.expectedExternalTokens) {
         if (!availableTokens.has(tokenId)) {
           errors.push({
             type: 'missing',
-            message: `Missing token: '${getSimpleName(tokenId)}' is declared in '${extendRef}.expects' but is not provided by this builder or its parent container.`,
+            message: `Missing token: '${getSimpleName(tokenId)}' is declared in '${label}.expects' but is not provided by this builder or its parent container.`,
             node: config.node,
             sourceFile: config.sourceFile,
             context: { tokenText: tokenId },
@@ -284,6 +290,29 @@ export class MissingDependencyValidator implements IValidator {
     }
 
     return errors;
+  }
+
+  /**
+   * The partials a builder extends, by configuration identity. The label is the text the user wrote in
+   * `extends` (`shared`, `B.basePart`), the one they can search for. A builder without links keeps the names it wrote.
+   */
+  private extendedPartials(
+    config: ConfigGraph,
+    allConfigs: Map<string, ConfigGraph>,
+  ): { partial: ConfigGraph; label: string }[] {
+    const found: { partial: ConfigGraph; label: string }[] = [];
+    if (config.extendsLinks) {
+      for (const link of config.extendsLinks) {
+        const partial = allConfigs.get(link.key);
+        if (partial) found.push({ partial, label: link.binding });
+      }
+      return found;
+    }
+    for (const name of config.extendsRefs) {
+      const partial = this.findPartialConfigByName(name, allConfigs);
+      if (partial) found.push({ partial, label: name });
+    }
+    return found;
   }
 
   /** Finds a partial ConfigGraph by its variable name across all collected configs. */

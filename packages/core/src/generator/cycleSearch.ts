@@ -44,12 +44,18 @@ interface Frame {
   dependencies: readonly string[];
 }
 
-/** Iterative depth-first search. Each path repeats its start at the end. */
-export function cyclePaths(graph: ReadonlyMap<string, readonly string[]>): string[][] {
+/**
+ * Iterative depth-first search. Calls `visit` once per back edge with the live
+ * stack and the index where the cycle starts. The cycle is `path.slice(start)`
+ * followed by `path[start]`. The array is reused: copy it to keep it.
+ */
+export function forEachCycle(
+  graph: ReadonlyMap<string, readonly string[]>,
+  visit: (path: readonly string[], start: number) => void,
+): void {
   const state = new Map<string, 1 | 2>();
   const path: string[] = [];
   const position = new Map<string, number>();
-  const cycles: string[][] = [];
   const frames: Frame[] = [];
   const enter = (id: string): void => {
     state.set(id, 1);
@@ -78,55 +84,79 @@ export function cyclePaths(graph: ReadonlyMap<string, readonly string[]>): strin
       else if (state.get(dependency) === 1) {
         const start = position.get(dependency);
         if (start === undefined) continue;
-        cycles.push(path.slice(start).concat(dependency));
+        visit(path, start);
       }
     }
   }
-  return cycles;
+}
+
+/** What one token-set group keeps: its first path and, for one multi token, the contributions seen. */
+export interface CycleGroup {
+  /** The first path of the group, copied once. It repeats its start at the end. */
+  readonly first: readonly string[];
+  /** Contribution ids of a group made of one multi token, in first-seen order. Empty otherwise. */
+  readonly contributions: readonly string[];
+}
+
+export interface CycleGrouping {
+  /** One report per token set. Several contributions of one multi token each get their own `[id, id]`. */
+  readonly reports: { ids: string[] }[];
+  /** The only data kept from the search: one path per group, plus the contributions of multi groups. */
+  readonly groups: readonly CycleGroup[];
+}
+
+interface OpenGroup {
+  tokens: string[];
+  first: string[];
+  contributions: string[] | undefined;
+  seen: Set<string> | undefined;
 }
 
 /**
- * One report per token set. Several contributions of one multi token each
- * get their own `[id, id]` path so the count stays one error per contribution.
+ * One report per token set, from a single streaming search.
+ * A group keeps its first path only. A group made of one multi token also keeps the
+ * ids of the contributions that appear in its cycles, so the count stays one error per contribution.
  */
-export function groupCycles(
-  paths: readonly (readonly string[])[],
+export function cycleGroups(
+  graph: ReadonlyMap<string, readonly string[]>,
   tokenOf: (id: string) => string,
   multiTokens: ReadonlySet<string>,
-): { ids: string[] }[] {
-  const groups = new Map<string, string[][]>();
-  for (const path of paths) {
-    const body = path.slice(0, -1);
-    if (body.length === 0) continue;
-    const tokens = [...new Set(body.map((id) => tokenOf(id)))].sort();
-    const key = tokens.join('\0');
-    const list = groups.get(key);
-    const copy = [...path];
-    if (list) list.push(copy);
-    else groups.set(key, [copy]);
-  }
-  const reports: { ids: string[] }[] = [];
-  for (const [key, list] of groups) {
-    const first = list[0];
-    if (!first) continue;
-    const tokens = key.length === 0 ? [] : key.split('\0');
-    const token = tokens[0];
-    if (tokens.length === 1 && token !== undefined && multiTokens.has(token)) {
-      const seen = new Set<string>();
-      const contributions: string[] = [];
-      for (const cycle of list) {
-        for (const id of cycle.slice(0, -1)) {
-          if (seen.has(id)) continue;
-          seen.add(id);
-          contributions.push(id);
-        }
-      }
-      if (contributions.length > 1) {
-        for (const id of contributions) reports.push({ ids: [id, id] });
-        continue;
+): CycleGrouping {
+  const groups = new Map<string, OpenGroup>();
+  forEachCycle(graph, (path, start) => {
+    const tokens = new Set<string>();
+    for (let index = start; index < path.length; index += 1) tokens.add(tokenOf(path[index] as string));
+    const sorted = [...tokens].sort();
+    const key = sorted.join('\0');
+    let group = groups.get(key);
+    if (!group) {
+      const single = sorted.length === 1 && multiTokens.has(sorted[0] as string);
+      group = {
+        tokens: sorted,
+        first: path.slice(start).concat(path[start] as string),
+        contributions: single ? [] : undefined,
+        seen: single ? new Set<string>() : undefined,
+      };
+      groups.set(key, group);
+    }
+    if (group.seen && group.contributions) {
+      for (let index = start; index < path.length; index += 1) {
+        const id = path[index] as string;
+        if (group.seen.has(id)) continue;
+        group.seen.add(id);
+        group.contributions.push(id);
       }
     }
-    reports.push({ ids: first });
+  });
+  const reports: { ids: string[] }[] = [];
+  const kept: CycleGroup[] = [];
+  for (const group of groups.values()) {
+    kept.push({ first: group.first, contributions: group.contributions ?? [] });
+    if (group.contributions && group.contributions.length > 1) {
+      for (const id of group.contributions) reports.push({ ids: [id, id] });
+      continue;
+    }
+    reports.push({ ids: [...group.first] });
   }
-  return reports;
+  return { reports, groups: kept };
 }

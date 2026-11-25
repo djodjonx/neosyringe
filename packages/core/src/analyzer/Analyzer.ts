@@ -1,171 +1,36 @@
 import type * as ts from 'typescript';
-import { TSContext } from '../TSContext';
-import {
-  DependencyGraph,
-  AnalysisResult,
-  ConfigGraph,
-  AnalysisError,
-  ValidationMode,
-} from './types';
-import { ConfigCollector, type IConfigCollector } from './collectors';
-import { TokenResolver, type ITokenResolver } from './resolvers';
-import { DependencyResolver } from './resolvers/DependencyResolver';
-import { ParentContainerResolver } from './resolvers/ParentContainerResolver';
-import { assignRetention, ConfigParser, sealOpenParent } from './parsers/ConfigParser';
-import {
-  CompositeValidator,
-  DuplicateValidator,
-  TypeValidator,
-  MissingDependencyValidator,
-  DependencyAnalyzer,
-  CycleValidator,
-  DisposableTransientCaptureValidator,
-  rememberCaptureSites,
-  type IValidator,
-  type ValidationContext
-} from './validators';
-import { ErrorFormatter, CycleError, type IErrorFormatter } from './errors';
-import { TokenResolverService } from './shared';
-import { CallExpressionUtils } from './utils';
-import { ASTVisitor } from './visitors';
+import type { DependencyGraph, AnalysisResult, AnalysisError, ValidationMode } from './types';
+import { snapshotFor, type ProjectSnapshot } from './snapshot';
 
-/**
- * Error thrown when a duplicate registration is detected.
- * Includes the position of the duplicate registration node.
- */
-export class DuplicateRegistrationError extends Error {
-  public readonly fileName: string;
-  public readonly line: number;
-  public readonly character: number;
-  /** Byte offset of the end of the offending node (for diagnostic span width). */
-  public readonly endOffset: number;
-
-  constructor(
-    message: string,
-    node: ts.Node,
-    sourceFile: ts.SourceFile
-  ) {
-    super(message);
-    this.name = 'DuplicateRegistrationError';
-    this.fileName = sourceFile.fileName;
-    const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-    this.line = pos.line;
-    this.character = pos.character;
-    this.endOffset = node.getEnd();
-  }
-}
-
-/**
- * Error thrown when a provider type is incompatible with the token type.
- * Includes the position of the registration node.
- */
-export class TypeMismatchError extends Error {
-  public readonly fileName: string;
-  public readonly line: number;
-  public readonly character: number;
-  /** Byte offset of the end of the offending node (for diagnostic span width). */
-  public readonly endOffset: number;
-
-  constructor(
-    message: string,
-    node: ts.Node,
-    sourceFile: ts.SourceFile
-  ) {
-    super(message);
-    this.name = 'TypeMismatchError';
-    this.fileName = sourceFile.fileName;
-    const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-    this.line = pos.line;
-    this.character = pos.character;
-    this.endOffset = node.getEnd();
-  }
-}
-
-/**
- * Error thrown when a `defineBuilderConfig(...)` call site has a shape the
- * plugin cannot statically position for replacement — e.g. a bare
- * `return defineBuilderConfig({...})` with no intermediate variable.
- *
- * Without this check, such a call is silently left untransformed: no error,
- * no generated container, just the literal `defineBuilderConfig(...)` call
- * shipped as-is, which throws (or behaves incorrectly) at runtime with no
- * indication the build plugin ever saw it.
- */
-export class UnsupportedContainerShapeError extends Error {
-  public readonly fileName: string;
-  public readonly line: number;
-  public readonly character: number;
-  /** Byte offset of the end of the offending node (for diagnostic span width). */
-  public readonly endOffset: number;
-
-  constructor(
-    message: string,
-    node: ts.Node,
-    sourceFile: ts.SourceFile
-  ) {
-    super(message);
-    this.name = 'UnsupportedContainerShapeError';
-    this.fileName = sourceFile.fileName;
-    const pos = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-    this.line = pos.line;
-    this.character = pos.character;
-    this.endOffset = node.getEnd();
-  }
-}
-
-const UNSUPPORTED_SHAPE_MESSAGE =
-  "defineBuilderConfig() must be assigned to a variable — 'const container = defineBuilderConfig({...})' " +
-  "(then `return container;` separately if inside a function) — or used as 'export default defineBuilderConfig({...})'. " +
-  "A bare 'return defineBuilderConfig({...})' (or any other shape) cannot be located for replacement and would " +
-  "silently ship the untransformed call, which is unsafe at runtime.";
+export {
+  DuplicateRegistrationError,
+  TypeMismatchError,
+  UnsupportedContainerShapeError,
+} from './errors/registrationErrors';
 
 /**
  * Analyzes TypeScript source code to extract the dependency injection graph.
  *
- * This class orchestrates the analysis process by coordinating specialized services:
- * - TokenResolverService: Resolves token IDs from expressions
- * - DependencyResolver: Analyzes constructor dependencies
- * - ConfigCollector: Collects container configurations
- * - Validators: Validates the dependency graph
- * - ASTVisitor: Efficiently traverses the AST
+ * One analysis serves every question about a program. `ConfigCollector.collect` is the only
+ * discovery of builders and partials; graphs, diagnostics and resolve-call checks are all read
+ * from that one collection, held in a snapshot that every `Analyzer` on the same immutable
+ * `ts.Program` (with the same validation mode and project root) shares.
  *
- * The analyzer uses the TypeScript Compiler API to:
- * 1. Locate `defineBuilderConfig` and `definePartialConfig` calls
- * 2. Parse injection configurations
- * 3. Resolve symbols and types for services and their dependencies
- * 4. Validate the complete dependency graph
- * 5. Build a `DependencyGraph` representing the system
+ * - `extractAll()` and `extract()` build `DependencyGraph`s from the collection (see graphAdapter.ts).
+ * - `extractAllErrors()` and `extractForFile()` return the diagnostics of the same snapshot; a file is
+ *   validated at most once, whichever way it is asked for.
  *
- * ## Analysis Paths
- *
- * The analyzer exposes two APIs that serve different consumers:
- *
- * ### Legacy path — `extract()` → `DependencyGraph`
- * Used by the CLI (`@djodjonx/neosyringe-cli`) and build plugins (Vite/Webpack).
- * Scans all source files in the program, builds a full dependency graph, and
- * applies basic structural checks (cycle detection via topological sort in Generator).
- * Returns a `DependencyGraph` ready for code generation.
- *
- * ### Modular path — `extractForFile()` / `extractAllErrors()` → `AnalysisResult`
- * Used by the LSP plugin (`@djodjonx/neosyringe-lsp`).
- * Collects all configs once (cached), then validates one file at a time using
- * `CompositeValidator` (duplicate, type, missing-dependency, cycle checks).
- * Returns structured `AnalysisError[]` suitable for IDE diagnostics.
- *
- * Both paths share the TypeScript `TypeChecker` for symbol resolution, but use
- * entirely separate config-discovery pipelines (each with its own `TokenResolverService`):
- * - Legacy path uses `ASTVisitor` + `ConfigParser` directly
- * - Modular path uses `ConfigCollector` (with caching across calls to `extractForFile`)
+ * A new `ts.Program` has a new snapshot: nothing of an older AST is reused.
  *
  * @example
  * ```typescript
  * const program = TSContext.ts.createProgram(['src/container.ts'], compilerOptions);
  * const analyzer = new Analyzer(program);
  *
- * // Legacy path: Extract the complete dependency graph for CLI/build
- * const graph = analyzer.extract();
+ * // One graph per container, for CLI/build
+ * const graphs = analyzer.extractAll();
  *
- * // Modular path: Analyze a specific file for LSP diagnostics
+ * // Diagnostics of one file, for the IDE
  * const result = analyzer.extractForFile('src/container.ts');
  * if (!result.errors.length) {
  *   console.log('No errors found!');
@@ -174,151 +39,31 @@ const UNSUPPORTED_SHAPE_MESSAGE =
  */
 export class Analyzer {
   private program: ts.Program;
-  private checker: ts.TypeChecker;
   private validation: ValidationMode;
-
-  // === SHARED SERVICES ===
-  private tokenResolverService: TokenResolverService;
 
   constructor(program: ts.Program, options?: { validation?: ValidationMode }) {
     this.program = program;
-    this.checker = program.getTypeChecker();
-    this.tokenResolverService = new TokenResolverService(this.checker);
     this.validation = options?.validation ?? 'strict';
   }
 
-  // === LEGACY PATH ===
-  // Services initialized lazily — only used by extract()
-
-  private _legacyServices: {
-    dependencyResolver: DependencyResolver;
-    configParser: ConfigParser;
-    parentContainerResolver: ParentContainerResolver;
-    parentContainerNames: Set<string>;
-  } | undefined;
-
-  // Populated from ASTVisitor results during extract() — separate from service construction.
-  private _extendsReferences: ReadonlySet<string> = new Set<string>();
-
-  private getLegacyServices() {
-    if (!this._legacyServices) {
-      const configParser = new ConfigParser(this.checker, this.tokenResolverService, this.validation);
-      this._legacyServices = {
-        dependencyResolver: new DependencyResolver(this.checker, this.tokenResolverService),
-        configParser,
-        parentContainerResolver: new ParentContainerResolver(
-          this.checker,
-          this.tokenResolverService,
-          (node, graph) => this.parseBuilderConfig(node, graph),
-          (graph) => this.resolveAllDependencies(graph, false),
-        ),
-        parentContainerNames: new Set<string>(),
-      };
-    }
-    return this._legacyServices;
-  }
-
-  // === MODULAR PATH ===
-  // Services initialized lazily — only used by extractForFile() / extractAllErrors()
-
-  private _modularServices: {
-    configCollector: IConfigCollector;
-    tokenResolver: ITokenResolver;
-    validator: IValidator;
-    missingDeps: MissingDependencyValidator;
-    collectedConfigs: Map<string, ConfigGraph> | undefined;
-    collectionError: Error | undefined;
-  } | undefined;
-
-  private getModularServices() {
-    if (!this._modularServices) {
-      const errorFormatter: IErrorFormatter = new ErrorFormatter();
-      const dependencyAnalyzer = new DependencyAnalyzer(this.checker, this.tokenResolverService);
-      const missingDeps = new MissingDependencyValidator(
-        errorFormatter,
-        dependencyAnalyzer,
-        this.checker,
-        this.validation,
-      );
-      this._modularServices = {
-        configCollector: new ConfigCollector(this.program, this.checker, this.tokenResolverService, this.validation),
-        tokenResolver: new TokenResolver(),
-        validator: new CompositeValidator([
-          new DuplicateValidator(errorFormatter),
-          new TypeValidator(this.checker, errorFormatter),
-          missingDeps,
-          new CycleValidator(dependencyAnalyzer),
-          new DisposableTransientCaptureValidator(this.validation),
-        ]),
-        missingDeps,
-        collectedConfigs: undefined,
-        collectionError: undefined,
-      };
-    }
-    return this._modularServices;
-  }
-
-  private getCollectedConfigs(): Map<string, ConfigGraph> {
-    const svc = this.getModularServices();
-    if (svc.collectionError) throw svc.collectionError;
-    if (!svc.collectedConfigs) {
-      try {
-        svc.collectedConfigs = svc.configCollector.collect();
-      } catch (e) {
-        if (e instanceof Error) svc.collectionError = e;
-        throw e;
-      }
-    }
-    return svc.collectedConfigs;
+  /** The analysis of this program, shared with every other analyzer on it. */
+  private snapshot(): ProjectSnapshot {
+    return snapshotFor(this.program, this.validation);
   }
 
   /**
-   * Extracts the dependency graph from the program's source files.
+   * Extracts one merged dependency graph from the program's source files.
    *
-   * **Legacy path** used by CLI and build plugins.
-   *
-   * Scans all non-declaration source files for container configurations.
-   * Each defineBuilderConfig gets its own isolated graph to avoid false positives.
-   * Basic validation errors (duplicates, type mismatches) are collected in `graph.errors`.
-   * Cycle detection is deferred to the `Generator`'s topological sort.
-   * Missing dependencies are not caught until container runtime (via `NeoServiceNotFoundError`
-   * in the generated code).
+   * Every builder that is not used as a parent gets folded into the one graph; a partial that no
+   * config extends keeps its own errors, listed in `graph.errors`. Parents and extended partials
+   * are skipped by configuration identity, never by variable name.
    *
    * @returns A `DependencyGraph` containing all registered services and their dependencies.
-   * @see {@link extractForFile} for the modular/LSP alternative
+   * @see {@link extractAll} for one graph per builder
    * @see {@link extractAllErrors} for batch error extraction
    */
   public extract(): DependencyGraph {
-    const graph: DependencyGraph = {
-      containerId: 'DefaultContainer', // Will be set by parseBuilderConfig
-      nodes: new Map(),
-      roots: [],
-      errors: [], // Initialize error collection
-    };
-
-    const { parentContainerNames } = this.getLegacyServices();
-
-    // Single pass: collect parent container names, extends refs, and config call sites
-    // This replaces three separate AST traversals with one.
-    const visitor = new ASTVisitor(this.checker);
-    for (const sourceFile of this.program.getSourceFiles()) {
-      if (sourceFile.isDeclarationFile) continue;
-      visitor.visit(sourceFile);
-    }
-    const visitorResults = visitor.getResults();
-    for (const name of visitorResults.parentContainers) {
-      parentContainerNames.add(name);
-    }
-    this._extendsReferences = visitorResults.extendsReferences;
-
-    // Second pass: parse and build the dependency graph
-    for (const sourceFile of this.program.getSourceFiles()) {
-      if (sourceFile.isDeclarationFile) continue;
-      this.visitNode(sourceFile, graph);
-    }
-
-    this.resolveAllDependencies(graph);
-    return graph;
+    return this.snapshot().merged();
   }
 
   /**
@@ -334,328 +79,41 @@ export class Analyzer {
    * allowing the plugin to generate only the graphs for the file being processed
    * while still registering tokens from all graphs (including imported containers).
    *
+   * The graphs belong to the program's shared snapshot: two analyzers on one program return the
+   * same objects. A caller that writes into a graph copies it first.
+   *
    * @returns One DependencyGraph per defineBuilderConfig in the program.
    */
   public extractAll(): DependencyGraph[] {
-    const { parentContainerNames } = this.getLegacyServices();
-
-    // Pass 1: collect metadata — parent names, extends refs, all call sites
-    const visitor = new ASTVisitor(this.checker);
-    for (const sourceFile of this.program.getSourceFiles()) {
-      if (sourceFile.isDeclarationFile) continue;
-      visitor.visit(sourceFile);
-    }
-    const visitorResults = visitor.getResults();
-    for (const name of visitorResults.parentContainers) {
-      parentContainerNames.add(name);
-    }
-    this._extendsReferences = visitorResults.extendsReferences;
-
-    const graphs: DependencyGraph[] = [];
-
-    // Pass 2: build one graph per builder config (parents included — no skip)
-    for (const configCall of visitorResults.builderConfigs) {
-      const graph: DependencyGraph = {
-        containerId: 'DefaultContainer',
-        nodes: new Map(),
-        roots: [],
-        errors: [],
-      };
-
-      const positioned = this.setGraphPositions(configCall, graph);
-      if (!positioned) {
-        throw new UnsupportedContainerShapeError(UNSUPPORTED_SHAPE_MESSAGE, configCall, configCall.getSourceFile());
-      }
-
-      graph.defineBuilderConfigStart = configCall.getStart();
-      graph.defineBuilderConfigEnd = configCall.getEnd();
-      graph.sourceFileName = configCall.getSourceFile().fileName.replace(/\\/g, '/');
-
-      this.parseBuilderConfig(configCall, graph);
-      this.resolveAllDependencies(graph);
-
-      graphs.push(graph);
-    }
-
-    return graphs;
+    return [...this.snapshot().graphs()];
   }
 
-
   /**
-   * Analyzes all files in the program and returns all errors.
+   * Returns the diagnostics of every file of the program, resolve calls included.
    *
-   * **Modular path** used for batch validation.
-   *
-   * Uses the modular architecture (same as LSP) so every container
-   * configuration in the program is validated with full semantic checks
-   * (duplicates, type mismatches, missing dependencies, cycles).
+   * Reads the same snapshot as the graphs and the IDE: every container configuration is validated
+   * with full semantic checks (duplicates, type mismatches, missing dependencies, cycles), and a
+   * file with no container still has its resolve calls checked.
    *
    * @returns All analysis errors found across the entire program
    * @see {@link extractForFile} for single-file analysis
-   * @see {@link extract} for the legacy graph-building path
    */
   public extractAllErrors(): AnalysisError[] {
-    const allConfigs = this.getCollectedConfigs();
-    const errors: AnalysisError[] = [];
-    const processedFiles = new Set<string>();
-
-    for (const config of allConfigs.values()) {
-      const fileName = config.sourceFile.fileName;
-      if (!processedFiles.has(fileName)) {
-        processedFiles.add(fileName);
-        const result = this.extractForFile(fileName);
-        errors.push(...result.errors);
-      }
-    }
-
-    return listedCaptures(errors);
+    return [...this.snapshot().diagnostics()];
   }
 
   /**
-   * Entry point for LSP - analyzes a specific file.
+   * Entry point for LSP - the diagnostics of a specific file, from the shared snapshot.
    *
-   * **Modular path** used by the LSP plugin.
-   *
-   * Uses the modular architecture for isolated validation. Collects all configs
-   * (cached across calls), then validates only those defined in the specified file.
+   * The snapshot is built once (collection), then validates each file at most once.
    * Runs full `CompositeValidator` (duplicates, types, missing deps, cycles).
    *
    * @param fileName - The file to analyze
    * @returns Analysis result with errors for this file only
    * @see {@link extractAllErrors} for batch analysis
-   * @see {@link extract} for the legacy graph-building path
    */
   public extractForFile(fileName: string): AnalysisResult {
-    const { tokenResolver, validator, missingDeps } = this.getModularServices();
-    const allConfigs = this.getCollectedConfigs();
-    const errors: AnalysisError[] = [];
-
-    // Find configs defined in this file
-    const configsInFile = [...allConfigs.values()]
-      .filter(c => c.sourceFile.fileName === fileName);
-
-    // Validate each config
-    for (const config of configsInFile) {
-      const context: ValidationContext = { allConfigs };
-
-      // For builders, resolve inherited tokens
-      if (config.type === 'builder') {
-        try {
-          context.inheritedTokens = tokenResolver.resolveInheritedTokens(
-            config,
-            allConfigs
-          );
-        } catch (e) {
-          if (e instanceof CycleError) {
-            errors.push({
-              type: 'cycle',
-              message: e.message,
-              node: config.node,
-              sourceFile: config.sourceFile,
-              context: { chain: e.chain },
-            });
-            continue;
-          }
-          throw e;
-        }
-      }
-
-      // valueErrors holds type-mismatch errors produced during collection
-      // (useValue+primitive, async+transient, mixed multi/non-multi)
-      if (config.valueErrors) {
-        errors.push(...config.valueErrors);
-      }
-
-      errors.push(...validator.validate(config, context));
-    }
-
-    const sourceFile = this.program.getSourceFile(fileName);
-    if (sourceFile && !sourceFile.isDeclarationFile) {
-      errors.push(...missingDeps.validateResolutionUsages(sourceFile, allConfigs));
-    }
-
-    return { configs: allConfigs, errors: listedCaptures(errors) };
+    const snapshot = this.snapshot();
+    return { configs: snapshot.configs(), errors: [...snapshot.diagnosticsOfFile(fileName)] };
   }
-
-  /**
-   * Reads the VariableStatement wrapping a defineBuilderConfig call and
-   * populates the graph's position fields and export modifier.
-   * Returns false if the positions could not be determined.
-   */
-  private setGraphPositions(node: ts.CallExpression, graph: DependencyGraph): boolean {
-    const parent = node.parent;
-
-    // Case 1: const varName = defineBuilderConfig(...)
-    if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
-      graph.exportedVariableName = parent.name.text;
-
-      let current: ts.Node = parent;
-      while (current && !TSContext.ts.isVariableStatement(current)) {
-        current = current.parent;
-      }
-      if (!current || !TSContext.ts.isVariableStatement(current)) return false;
-
-      graph.variableStatementStart = current.getStart();
-
-      const modifiers = TSContext.ts.canHaveModifiers(current)
-        ? TSContext.ts.getModifiers(current)
-        : undefined;
-
-      if (modifiers) {
-        const hasExport = modifiers.some(m => m.kind === TSContext.ts.SyntaxKind.ExportKeyword);
-        const hasDefault = modifiers.some(m => m.kind === TSContext.ts.SyntaxKind.DefaultKeyword);
-        graph.variableExportModifier = hasExport && hasDefault ? 'export default' : hasExport ? 'export' : 'none';
-      } else {
-        graph.variableExportModifier = 'none';
-      }
-      return true;
-    }
-
-    // Case 2: export default defineBuilderConfig(...)
-    // NOTE: for `export default expr`, TypeScript's `isExportEquals` is `undefined`,
-    // not `false` — only `export = expr` (CommonJS-style) sets it to `true`. A strict
-    // `=== false` check here silently never matches real `export default` syntax.
-    if (TSContext.ts.isExportAssignment(parent) && parent.isExportEquals !== true) {
-      graph.variableExportModifier = 'export default';
-      graph.variableStatementStart = parent.getStart();
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Visits an AST node to find container calls.
-   * @param node - The AST node to visit.
-   * @param graph - The graph to populate.
-   */
-  private visitNode(node: ts.Node, graph: DependencyGraph): void {
-    const { parentContainerNames } = this.getLegacyServices();
-    const extendsReferences = this._extendsReferences;
-
-    if (TSContext.ts.isCallExpression(node)) {
-      if (CallExpressionUtils.isDefineBuilderConfig(node, this.checker)) {
-        const parent = node.parent;
-
-        if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
-          if (parentContainerNames.has(parent.name.text)) {
-            // Skip - this container is used as a parent, handled by extract()'s parent resolver
-            return;
-          }
-        }
-
-        // Populate positions using shared helper
-        const positioned = this.setGraphPositions(node, graph);
-        if (!positioned) {
-          throw new UnsupportedContainerShapeError(UNSUPPORTED_SHAPE_MESSAGE, node, node.getSourceFile());
-        }
-
-        // Store the position of defineBuilderConfig call for replacement
-        graph.defineBuilderConfigStart = node.getStart();
-        graph.defineBuilderConfigEnd = node.getEnd();
-        this.parseBuilderConfig(node, graph);
-
-      } else if (CallExpressionUtils.isDefinePartialConfig(node, this.checker)) {
-        const parent = node.parent;
-        if (TSContext.ts.isVariableDeclaration(parent) && TSContext.ts.isIdentifier(parent.name)) {
-          const partialName = parent.name.text;
-          if (!extendsReferences.has(partialName)) {
-            const partialGraph: DependencyGraph = {
-              containerId: partialName,
-              nodes: new Map(),
-              roots: [],
-              errors: []
-            };
-            this.parseBuilderConfig(node, partialGraph);
-            if (partialGraph.errors && partialGraph.errors.length > 0) {
-              if (!graph.errors) graph.errors = [];
-              graph.errors.push(...partialGraph.errors);
-            }
-          }
-        }
-      }
-    }
-
-    TSContext.ts.forEachChild(node, (child) => this.visitNode(child, graph));
-  }
-
-  /**
-   * Parses a defineBuilderConfig or definePartialConfig call.
-   * Delegates to ConfigParser service.
-   */
-  private parseBuilderConfig(node: ts.CallExpression, graph: DependencyGraph): void {
-    const { configParser, parentContainerResolver, parentContainerNames } = this.getLegacyServices();
-
-    configParser.parseBuilderConfig(node, graph, parentContainerNames);
-
-    // Handle parent container token extraction
-    const args = node.arguments;
-    if (args.length >= 1 && TSContext.ts.isObjectLiteralExpression(args[0])) {
-      const useContainerProp = args[0].properties.find(p =>
-        p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'useContainer'
-      );
-
-      if (useContainerProp && TSContext.ts.isPropertyAssignment(useContainerProp) && TSContext.ts.isIdentifier(useContainerProp.initializer)) {
-        parentContainerResolver.extractParentContainerTokens(
-          useContainerProp.initializer,
-          graph,
-          parentContainerNames
-        );
-      }
-    }
-    rememberCaptureSites(graph);
-  }
-
-  /**
-   * Resolves dependencies for all nodes in the graph.
-   *
-   * Delegates to the DependencyResolver service which analyzes
-   * constructor parameters and maps them to token IDs.
-   *
-   * @param graph - The dependency graph to process
-   */
-  private resolveAllDependencies(graph: DependencyGraph, capture = true): void {
-    const { dependencyResolver } = this.getLegacyServices();
-    dependencyResolver.resolveAll(graph);
-    // Factory and constructor edges exist. ADR006 lines 21-24. Do not drop nodes here.
-
-    // Resolve dependencies for multi-nodes
-    if (graph.multiNodes) {
-      for (const nodes of graph.multiNodes.values()) {
-        for (const node of nodes) {
-          dependencyResolver.resolve(node, graph);
-        }
-      }
-    }
-    assignRetention(graph);
-    sealOpenParent(graph);
-    if (capture) this.pushCapture(graph);
-  }
-
-  private pushCapture(graph: DependencyGraph): void {
-    const validator = new DisposableTransientCaptureValidator(this.validation);
-    const captured = validator.validateGraph(graph, () =>
-      this.getLegacyServices().parentContainerResolver.ancestorNodes(graph),
-    );
-    if (captured.length === 0) return;
-    if (!graph.errors) graph.errors = [];
-    graph.errors.push(...captured);
-  }
-}
-
-/** One diagnostic per file, registration and captured token, when errors are listed together. */
-function listedCaptures(errors: readonly AnalysisError[]): AnalysisError[] {
-  const seen = new Set<string>();
-  const kept: AnalysisError[] = [];
-  for (const error of errors) {
-    if (error.code !== 'NEO_DISPOSABLE_TRANSIENT_CAPTURED') {
-      kept.push(error);
-      continue;
-    }
-    const key = `${error.sourceFile.fileName}:${error.node.getStart()}\0${error.context?.tokenText ?? ''}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    kept.push(error);
-  }
-  return kept;
 }

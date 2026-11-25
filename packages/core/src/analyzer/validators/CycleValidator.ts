@@ -2,7 +2,7 @@ import type { AnalysisError, ConfigGraph, ServiceDefinition, TokenId } from '../
 import type { IValidator, ValidationContext } from './Validator';
 import type { DependencyAnalyzer } from './DependencyAnalyzer';
 import { getSimpleName } from '../utils/TokenUtils';
-import { cyclePaths } from '../../generator/cycleSearch';
+import { forEachCycle } from '../../generator/cycleSearch';
 
 /**
  * Validates a ConfigGraph for circular dependencies using DFS.
@@ -26,14 +26,16 @@ export class CycleValidator implements IValidator {
     const depMap = this.buildDependencyMap(config);
     const reportedCycles = new Set<string>();
 
-    for (const path of cyclePaths(depMap)) {
-      const cycleKey = [...path].sort().join('\0');
-      if (reportedCycles.has(cycleKey)) continue;
-      reportedCycles.add(cycleKey);
+    forEachCycle(depMap, (stack, start) => {
+      // One key per set of ids; the path is copied only for a cycle that is reported.
+      const key = stack.slice(start).concat(stack[start] as string).sort().join('\0');
+      if (reportedCycles.has(key)) return;
+      reportedCycles.add(key);
+      const path = stack.slice(start).concat(stack[start] as string);
 
       // The anchor is the back-edge source: the last token before the repeated start.
       const source = path[path.length - 2];
-      if (source === undefined) continue;
+      if (source === undefined) return;
       const readableCycle = path.map(id => getSimpleName(id));
       const localInfo = config.localInjections.get(source);
       if (localInfo) {
@@ -61,7 +63,7 @@ export class CycleValidator implements IValidator {
           }
         }
       }
-    }
+    });
 
     return errors;
   }

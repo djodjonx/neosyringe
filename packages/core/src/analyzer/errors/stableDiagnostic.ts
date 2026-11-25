@@ -136,6 +136,28 @@ export function stableSeverityOf(error: AnalysisError): 'error' | 'warning' {
 }
 
 /**
+ * What every consumer must agree on for one diagnostic: its stable code (or its type when it has none),
+ * its severity, its file and where it starts. Display (message, line, column, span) may differ.
+ */
+export interface NormalizedDiagnostic {
+  code: string;
+  severity: 'error' | 'warning';
+  file: string;
+  /** Offset of the first character of the node in `file`. */
+  start: number;
+}
+
+/** The comparable core of a diagnostic. CLI, IDE, build and transformer report the same set of these. */
+export function normalizeDiagnostic(error: AnalysisError): NormalizedDiagnostic {
+  return {
+    code: stableCodeOf(error) ?? error.type,
+    severity: stableSeverityOf(error),
+    file: error.sourceFile.fileName.replace(/\\/g, '/'),
+    start: error.node.getStart(error.sourceFile),
+  };
+}
+
+/**
  * Turns an analysis error into the diagnostic CLI JSON, LSP and devtools share.
  * The message is copied, never parsed: code and severity come from the fields.
  * With a `lookup`, the owning container is named, its source file given, and `containerId`
