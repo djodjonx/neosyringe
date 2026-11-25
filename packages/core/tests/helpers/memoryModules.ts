@@ -8,6 +8,8 @@ const STUB_TEXT = [
   'export function defineBuilderConfig(config: object): object { return config; }',
   'export function definePartialConfig(config: object): object { return config; }',
   'export function useInterface<T>(): string { return "token"; }',
+  'export function useProperty<T>(owner: unknown, name: string): string { return "token"; }',
+  'export function declareContainerTokens<T extends object>(container?: unknown): T { return {} as T; }',
   '',
 ].join('\n');
 
@@ -25,7 +27,7 @@ const OPTIONS: ts.CompilerOptions = {
 };
 
 /** In-memory modules. `@djodjonx/neosyringe` resolves to a marker stub. */
-export function memoryProgram(files: ReadonlyMap<string, string>): ts.Program {
+export function memoryProgram(files: ReadonlyMap<string, string>, oldProgram?: ts.Program): ts.Program {
   const texts = new Map<string, string>([[STUB, STUB_TEXT], ...files]);
   const host = ts.createCompilerHost(OPTIONS);
   const readSource = host.getSourceFile.bind(host);
@@ -54,7 +56,7 @@ export function memoryProgram(files: ReadonlyMap<string, string>): ts.Program {
   host.resolveModuleNameLiterals = (literals, containingFile) => literals.map((literal) => ({
     resolvedModule: resolve(literal.text, containingFile),
   }));
-  return ts.createProgram([...files.keys()], OPTIONS, host);
+  return ts.createProgram([...files.keys()], OPTIONS, host, oldProgram);
 }
 
 export function captureRoot(name: string): string {

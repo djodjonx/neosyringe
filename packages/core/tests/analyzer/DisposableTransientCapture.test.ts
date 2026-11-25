@@ -860,11 +860,12 @@ describe('DisposableTransientCapture', () => {
     expect(captured(named(graphs, 'ShadowDispChild').errors)).toHaveLength(0);
   });
 
-  it('W3 extractAll does not call ConfigCollector.collect', () => {
-    const collect = vi.spyOn(ConfigCollector.prototype, 'collect');
+  it('W3 extractAll reads one ConfigCollector collection', () => {
+    const collect = vi.spyOn(ConfigCollector.prototype, 'collectAll');
     try {
-      const graphs = new Analyzer(program).extractAll();
-      expect(collect).not.toHaveBeenCalled();
+      // A fresh Program: the shared program above already has its snapshot.
+      const graphs = new Analyzer(programFrom(SOURCE)).extractAll();
+      expect(collect).toHaveBeenCalledTimes(1);
       expect(captured(named(graphs, 'LeakChild').errors)).toHaveLength(1);
     } finally {
       collect.mockRestore();

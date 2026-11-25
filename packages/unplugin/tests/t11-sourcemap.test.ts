@@ -350,7 +350,7 @@ describe('T11 source maps', () => {
       },
     }));
     const twin = '() => 2';
-    const unique = "() => { return 'UNIQUE_FACTORY_BODY_T11'; }";
+    const unique = "() => { return { tag: 'UNIQUE_FACTORY_BODY_T11' }; }";
     const source = [
       "import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';",
       'interface Num1 { n: number }',
@@ -410,7 +410,8 @@ describe('T11 source maps', () => {
         }
       }
     }
-    expect(checked).toBe(34);
+    // 34 before the unique factory returned `{ tag: ... }` so that the build and the IDE agree it fits `Unique`; the extra word is one more segment.
+    expect(checked).toBe(35);
 
     const uniqueAt = source.indexOf(unique);
     const uniquePos = positionOf(source, uniqueAt);
@@ -468,7 +469,7 @@ describe('T11 source maps', () => {
     });
     expect((exportsObject.read as () => { value: number; unique: string })()).toEqual({
       value: 1,
-      unique: 'UNIQUE_FACTORY_BODY_T11',
+      unique: { tag: 'UNIQUE_FACTORY_BODY_T11' },
     });
   });
 

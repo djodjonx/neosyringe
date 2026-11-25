@@ -74,6 +74,7 @@ describe('neoSyringeTransformer', () => {
       return {
         extract: vi.fn().mockReturnValue({ nodes: new Map(), errors: [] }),
         extractAll: vi.fn().mockReturnValue([]),
+        extractForFile: vi.fn().mockReturnValue({ configs: new Map(), errors: [] }),
       };
     } as any);
 
@@ -117,6 +118,7 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(Analyzer).mockImplementation(function () {
       return {
+        extractForFile: vi.fn().mockReturnValue({ configs: new Map(), errors: [] }),
         extractAll: vi.fn().mockReturnValue([{
           nodes: new Map([['MyService_abc', {}]]),
           errors: [],
@@ -142,6 +144,7 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(Analyzer).mockImplementation(function () {
       return {
+        extractForFile: vi.fn().mockReturnValue({ configs: new Map(), errors: [] }),
         extractAll: vi.fn().mockReturnValue([{
           nodes: new Map([['MyService_abc', {}]]),
           errors: [],
@@ -175,6 +178,7 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(Analyzer).mockImplementation(function () {
       return {
+        extractForFile: vi.fn().mockReturnValue({ configs: new Map(), errors: [] }),
         extractAll: vi.fn().mockReturnValue([{
           nodes: new Map([['MyService_abc', {}]]),
           errors: [],

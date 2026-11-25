@@ -2,7 +2,7 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
 import { Analyzer } from '../../src/analyzer/Analyzer';
-import { ASTVisitor } from '../../src/analyzer/visitors/ASTVisitor';
+import { ConfigCollector } from '../../src/analyzer/collectors/ConfigCollector';
 
 const MISSING_A = "missing: Missing injection: 'A' required by 'Svc' is not registered in this builder nor its parents/extends";
 
@@ -182,15 +182,17 @@ function collect(program: ts.Program, fileName: string): {
 } {
   const app = program.getSourceFile(fileName);
   if (!app) throw new Error(`fichier absent: ${fileName}`);
-  const visitor = new ASTVisitor(program.getTypeChecker());
-  for (const sourceFile of program.getSourceFiles()) {
-    if (!sourceFile.isDeclarationFile) visitor.visit(sourceFile);
+  // The names a builder lists in `extends`, as the collector (the only discovery) reads them.
+  const extendsReferences = new Set<string>();
+  const { configs } = new ConfigCollector(program, program.getTypeChecker()).collectAll();
+  for (const config of configs.values()) {
+    for (const name of config.extendsRefs) extendsReferences.add(name);
   }
   const analyzer = new Analyzer(program);
   return {
     errors: analyzer.extractAllErrors(),
     fileErrors: analyzer.extractForFile(app.fileName).errors,
-    extendsReferences: visitor.getResults().extendsReferences,
+    extendsReferences,
   };
 }
 
