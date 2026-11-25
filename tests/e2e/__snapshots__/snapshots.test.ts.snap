@@ -5,50 +5,56 @@ exports[`Generated Code Snapshots > should match snapshot for complex real-world
 import * as Import_0 from 'snapshot-test.ts';
 
 
+interface NeoLegacyParent {
+  resolve?(token: unknown): unknown;
+  resolveAll?(token: unknown): unknown;
+  initialize?(): unknown;
+}
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class NeoContainer {
-  private instances = new Map<any, any>();
-  private overrides = new Map<any, () => any>();
-  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  private instances = new Map<unknown, unknown>();
+  private overrides = new Map<unknown, () => unknown>();
+  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();
   private _reconfiguring = false;
   private _failure?: unknown;
   private _closed = false;
-  private _borrowed = new Set<any>([]);
+  private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
   private _syncInit = 0;
 
   // -- Factories --
   
-  private create_ILogger_40a89407(): any {
+  private create_ILogger_40a89407(): unknown {
     return new Import_0.ConsoleLogger();
   }
   
-  private create_IDatabase_5d4f4cb7(): any {
+  private create_IDatabase_5d4f4cb7(): unknown {
     return new Import_0.PostgresDB(this.resolve("ILogger_40a89407"));
   }
   
-  private create_ICache_d95eb76f(): any {
+  private create_ICache_d95eb76f(): unknown {
     return new Import_0.RedisCache(this.resolve("ILogger_40a89407"));
   }
   
-  private create_UserRepository_ccb9cdae(): any {
+  private create_UserRepository_ccb9cdae(): unknown {
     return new Import_0.UserRepository(this.resolve("IDatabase_5d4f4cb7"), this.resolve("ICache_d95eb76f"));
   }
   
-  private create_UserService_883381ff(): any {
+  private create_UserService_883381ff(): unknown {
     return new Import_0.UserService(this.resolve(Import_0.UserRepository), this.resolve("ILogger_40a89407"));
   }
   
-  private create_AuthService_2d28d7a2(): any {
+  private create_AuthService_2d28d7a2(): unknown {
     return new Import_0.AuthService(this.resolve(Import_0.UserService), this.resolve("ILogger_40a89407"));
   }
 
   constructor(
-    private legacy?: any[],
+    private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
   ) {}
 
@@ -60,8 +66,8 @@ class NeoContainer {
   private _assertParents(): void {
     if (!this.legacy) return;
     for (const legacyContainer of this.legacy) {
-      if (legacyContainer && legacyContainer._closed) {
-        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      if (legacyContainer && (legacyContainer as { _closed?: boolean; name?: string })._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + (legacyContainer as { _closed?: boolean; name?: string }).name);
       }
     }
   }
@@ -79,7 +85,7 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public createScope(): this {
+  public createScope(): NeoContainer {
     if (this._reconfiguring) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }
@@ -92,7 +98,7 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: any, factory: () => any): Promise<void> {
+  public override(token: unknown, factory: () => unknown): Promise<void> {
     if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
     if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
@@ -112,13 +118,13 @@ class NeoContainer {
   }
 
   private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks = [];
+    const __neoMocks: unknown[] = [];
     for (const __neoToken of this.overrides.keys()) {
       if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
     }
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
       for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
       if (__neoErrors.length > 0) {
@@ -144,12 +150,13 @@ class NeoContainer {
    * caught and ignored — a bug in an observability hook must never break the
    * actual resolution it's observing.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
+  public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -159,7 +166,8 @@ class NeoContainer {
     }
   }
 
-  public resolve<T>(token: any): T {
+  public resolve<T>(token: unknown): T;
+  public resolve(token: unknown): unknown {
     
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
@@ -197,7 +205,7 @@ class NeoContainer {
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
@@ -211,7 +219,7 @@ class NeoContainer {
    * name (not its entire stringified source), and a string token has its
    * trailing content-hash suffix stripped (not the raw hashed id).
    */
-  private static formatToken(token: any): string {
+  private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
     const parts = token.split('_');
@@ -229,7 +237,7 @@ class NeoContainer {
     this._touchClosed(true);
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
@@ -240,7 +248,8 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] {
+  public resolveAll<T>(token: unknown): T[];
+  public resolveAll(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
@@ -256,7 +265,7 @@ class NeoContainer {
     return [];
   }
 
-  private resolveLocal(token: any): any {
+  private resolveLocal(token: unknown): unknown {
     if (token === "ILogger_40a89407") { 
             if (!this.instances.has("ILogger_40a89407")) {
                 const instance = this.create_ILogger_40a89407();
@@ -333,30 +342,36 @@ exports[`Generated Code Snapshots > should match snapshot for interface tokens 1
 import * as Import_0 from 'snapshot-test.ts';
 
 
+interface NeoLegacyParent {
+  resolve?(token: unknown): unknown;
+  resolveAll?(token: unknown): unknown;
+  initialize?(): unknown;
+}
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class NeoContainer {
-  private instances = new Map<any, any>();
-  private overrides = new Map<any, () => any>();
-  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  private instances = new Map<unknown, unknown>();
+  private overrides = new Map<unknown, () => unknown>();
+  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();
   private _reconfiguring = false;
   private _failure?: unknown;
   private _closed = false;
-  private _borrowed = new Set<any>([]);
+  private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
   private _syncInit = 0;
 
   // -- Factories --
   
-  private create_ILogger_40a89407(): any {
+  private create_ILogger_40a89407(): unknown {
     return new Import_0.ConsoleLogger();
   }
 
   constructor(
-    private legacy?: any[],
+    private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
   ) {}
 
@@ -368,8 +383,8 @@ class NeoContainer {
   private _assertParents(): void {
     if (!this.legacy) return;
     for (const legacyContainer of this.legacy) {
-      if (legacyContainer && legacyContainer._closed) {
-        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      if (legacyContainer && (legacyContainer as { _closed?: boolean; name?: string })._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + (legacyContainer as { _closed?: boolean; name?: string }).name);
       }
     }
   }
@@ -387,7 +402,7 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public createScope(): this {
+  public createScope(): NeoContainer {
     if (this._reconfiguring) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }
@@ -400,7 +415,7 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: any, factory: () => any): Promise<void> {
+  public override(token: unknown, factory: () => unknown): Promise<void> {
     if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
     if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
@@ -420,13 +435,13 @@ class NeoContainer {
   }
 
   private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks = [];
+    const __neoMocks: unknown[] = [];
     for (const __neoToken of this.overrides.keys()) {
       if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
     }
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
       for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
       if (__neoErrors.length > 0) {
@@ -452,12 +467,13 @@ class NeoContainer {
    * caught and ignored — a bug in an observability hook must never break the
    * actual resolution it's observing.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
+  public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -467,7 +483,8 @@ class NeoContainer {
     }
   }
 
-  public resolve<T>(token: any): T {
+  public resolve<T>(token: unknown): T;
+  public resolve(token: unknown): unknown {
     
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
@@ -505,7 +522,7 @@ class NeoContainer {
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
@@ -519,7 +536,7 @@ class NeoContainer {
    * name (not its entire stringified source), and a string token has its
    * trailing content-hash suffix stripped (not the raw hashed id).
    */
-  private static formatToken(token: any): string {
+  private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
     const parts = token.split('_');
@@ -537,7 +554,7 @@ class NeoContainer {
     this._touchClosed(true);
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
@@ -548,7 +565,8 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] {
+  public resolveAll<T>(token: unknown): T[];
+  public resolveAll(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
@@ -564,7 +582,7 @@ class NeoContainer {
     return [];
   }
 
-  private resolveLocal(token: any): any {
+  private resolveLocal(token: unknown): unknown {
     if (token === "ILogger_40a89407") { 
             if (!this.instances.has("ILogger_40a89407")) {
                 const instance = this.create_ILogger_40a89407();
@@ -601,30 +619,36 @@ exports[`Generated Code Snapshots > should match snapshot for legacy container 1
 import * as Import_0 from 'snapshot-test.ts';
 
 
+interface NeoLegacyParent {
+  resolve?(token: unknown): unknown;
+  resolveAll?(token: unknown): unknown;
+  initialize?(): unknown;
+}
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class NeoContainer {
-  private instances = new Map<any, any>();
-  private overrides = new Map<any, () => any>();
-  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  private instances = new Map<unknown, unknown>();
+  private overrides = new Map<unknown, () => unknown>();
+  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();
   private _reconfiguring = false;
   private _failure?: unknown;
   private _closed = false;
-  private _borrowed = new Set<any>([]);
+  private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
   private _syncInit = 0;
 
   // -- Factories --
   
-  private create_NewService_4f96ffdd(): any {
+  private create_NewService_4f96ffdd(): unknown {
     return new Import_0.NewService(this.resolve("LegacyService_46f42bdb"));
   }
 
   constructor(
-    private legacy?: any[],
+    private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
   ) {}
 
@@ -636,8 +660,8 @@ class NeoContainer {
   private _assertParents(): void {
     if (!this.legacy) return;
     for (const legacyContainer of this.legacy) {
-      if (legacyContainer && legacyContainer._closed) {
-        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      if (legacyContainer && (legacyContainer as { _closed?: boolean; name?: string })._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + (legacyContainer as { _closed?: boolean; name?: string }).name);
       }
     }
   }
@@ -655,7 +679,7 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public createScope(): this {
+  public createScope(): NeoContainer {
     if (this._reconfiguring) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }
@@ -668,7 +692,7 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: any, factory: () => any): Promise<void> {
+  public override(token: unknown, factory: () => unknown): Promise<void> {
     if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
     if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
@@ -688,13 +712,13 @@ class NeoContainer {
   }
 
   private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks = [];
+    const __neoMocks: unknown[] = [];
     for (const __neoToken of this.overrides.keys()) {
       if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
     }
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
       for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
       if (__neoErrors.length > 0) {
@@ -720,12 +744,13 @@ class NeoContainer {
    * caught and ignored — a bug in an observability hook must never break the
    * actual resolution it's observing.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
+  public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -735,7 +760,8 @@ class NeoContainer {
     }
   }
 
-  public resolve<T>(token: any): T {
+  public resolve<T>(token: unknown): T;
+  public resolve(token: unknown): unknown {
     
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
@@ -773,7 +799,7 @@ class NeoContainer {
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
@@ -787,7 +813,7 @@ class NeoContainer {
    * name (not its entire stringified source), and a string token has its
    * trailing content-hash suffix stripped (not the raw hashed id).
    */
-  private static formatToken(token: any): string {
+  private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
     const parts = token.split('_');
@@ -805,7 +831,7 @@ class NeoContainer {
     this._touchClosed(true);
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
@@ -816,7 +842,8 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] {
+  public resolveAll<T>(token: unknown): T[];
+  public resolveAll(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
@@ -832,7 +859,7 @@ class NeoContainer {
     return [];
   }
 
-  private resolveLocal(token: any): any {
+  private resolveLocal(token: unknown): unknown {
     if (token === Import_0.NewService) { 
             if (!this.instances.has(Import_0.NewService)) {
                 const instance = this.create_NewService_4f96ffdd();
@@ -869,34 +896,40 @@ exports[`Generated Code Snapshots > should match snapshot for mixed scopes 1`] =
 import * as Import_0 from 'snapshot-test.ts';
 
 
+interface NeoLegacyParent {
+  resolve?(token: unknown): unknown;
+  resolveAll?(token: unknown): unknown;
+  initialize?(): unknown;
+}
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class NeoContainer {
-  private instances = new Map<any, any>();
-  private overrides = new Map<any, () => any>();
-  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  private instances = new Map<unknown, unknown>();
+  private overrides = new Map<unknown, () => unknown>();
+  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();
   private _reconfiguring = false;
   private _failure?: unknown;
   private _closed = false;
-  private _borrowed = new Set<any>([]);
+  private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
   private _syncInit = 0;
 
   // -- Factories --
   
-  private create_SingletonService_ef57b246(): any {
+  private create_SingletonService_ef57b246(): unknown {
     return new Import_0.SingletonService();
   }
   
-  private create_TransientService_035fe2c5(): any {
+  private create_TransientService_035fe2c5(): unknown {
     return new Import_0.TransientService();
   }
 
   constructor(
-    private legacy?: any[],
+    private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
   ) {}
 
@@ -908,8 +941,8 @@ class NeoContainer {
   private _assertParents(): void {
     if (!this.legacy) return;
     for (const legacyContainer of this.legacy) {
-      if (legacyContainer && legacyContainer._closed) {
-        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      if (legacyContainer && (legacyContainer as { _closed?: boolean; name?: string })._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + (legacyContainer as { _closed?: boolean; name?: string }).name);
       }
     }
   }
@@ -927,7 +960,7 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public createScope(): this {
+  public createScope(): NeoContainer {
     if (this._reconfiguring) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }
@@ -940,7 +973,7 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: any, factory: () => any): Promise<void> {
+  public override(token: unknown, factory: () => unknown): Promise<void> {
     if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
     if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
@@ -960,13 +993,13 @@ class NeoContainer {
   }
 
   private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks = [];
+    const __neoMocks: unknown[] = [];
     for (const __neoToken of this.overrides.keys()) {
       if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
     }
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
       for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
       if (__neoErrors.length > 0) {
@@ -992,12 +1025,13 @@ class NeoContainer {
    * caught and ignored — a bug in an observability hook must never break the
    * actual resolution it's observing.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
+  public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -1007,7 +1041,8 @@ class NeoContainer {
     }
   }
 
-  public resolve<T>(token: any): T {
+  public resolve<T>(token: unknown): T;
+  public resolve(token: unknown): unknown {
     
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
@@ -1045,7 +1080,7 @@ class NeoContainer {
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
@@ -1059,7 +1094,7 @@ class NeoContainer {
    * name (not its entire stringified source), and a string token has its
    * trailing content-hash suffix stripped (not the raw hashed id).
    */
-  private static formatToken(token: any): string {
+  private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
     const parts = token.split('_');
@@ -1077,7 +1112,7 @@ class NeoContainer {
     this._touchClosed(true);
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
@@ -1088,7 +1123,8 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] {
+  public resolveAll<T>(token: unknown): T[];
+  public resolveAll(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
@@ -1104,7 +1140,7 @@ class NeoContainer {
     return [];
   }
 
-  private resolveLocal(token: any): any {
+  private resolveLocal(token: unknown): unknown {
     if (token === Import_0.SingletonService) { 
             if (!this.instances.has(Import_0.SingletonService)) {
                 const instance = this.create_SingletonService_ef57b246();
@@ -1142,30 +1178,36 @@ exports[`Generated Code Snapshots > should match snapshot for parent container 1
 import * as Import_0 from 'snapshot-test.ts';
 
 
+interface NeoLegacyParent {
+  resolve?(token: unknown): unknown;
+  resolveAll?(token: unknown): unknown;
+  initialize?(): unknown;
+}
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class NeoContainer {
-  private instances = new Map<any, any>();
-  private overrides = new Map<any, () => any>();
-  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  private instances = new Map<unknown, unknown>();
+  private overrides = new Map<unknown, () => unknown>();
+  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();
   private _reconfiguring = false;
   private _failure?: unknown;
   private _closed = false;
-  private _borrowed = new Set<any>([]);
+  private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
   private _syncInit = 0;
 
   // -- Factories --
   
-  private create_AppService_f5397b19(): any {
+  private create_AppService_f5397b19(): unknown {
     return new Import_0.AppService();
   }
 
   constructor(
-    private legacy?: any[],
+    private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
   ) {}
 
@@ -1177,8 +1219,8 @@ class NeoContainer {
   private _assertParents(): void {
     if (!this.legacy) return;
     for (const legacyContainer of this.legacy) {
-      if (legacyContainer && legacyContainer._closed) {
-        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      if (legacyContainer && (legacyContainer as { _closed?: boolean; name?: string })._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + (legacyContainer as { _closed?: boolean; name?: string }).name);
       }
     }
   }
@@ -1196,7 +1238,7 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public createScope(): this {
+  public createScope(): NeoContainer {
     if (this._reconfiguring) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }
@@ -1209,7 +1251,7 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: any, factory: () => any): Promise<void> {
+  public override(token: unknown, factory: () => unknown): Promise<void> {
     if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
     if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
@@ -1229,13 +1271,13 @@ class NeoContainer {
   }
 
   private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks = [];
+    const __neoMocks: unknown[] = [];
     for (const __neoToken of this.overrides.keys()) {
       if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
     }
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
       for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
       if (__neoErrors.length > 0) {
@@ -1261,12 +1303,13 @@ class NeoContainer {
    * caught and ignored — a bug in an observability hook must never break the
    * actual resolution it's observing.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
+  public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -1276,7 +1319,8 @@ class NeoContainer {
     }
   }
 
-  public resolve<T>(token: any): T {
+  public resolve<T>(token: unknown): T;
+  public resolve(token: unknown): unknown {
     
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
@@ -1314,7 +1358,7 @@ class NeoContainer {
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
@@ -1328,7 +1372,7 @@ class NeoContainer {
    * name (not its entire stringified source), and a string token has its
    * trailing content-hash suffix stripped (not the raw hashed id).
    */
-  private static formatToken(token: any): string {
+  private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
     const parts = token.split('_');
@@ -1346,7 +1390,7 @@ class NeoContainer {
     this._touchClosed(true);
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
@@ -1357,7 +1401,8 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] {
+  public resolveAll<T>(token: unknown): T[];
+  public resolveAll(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
@@ -1373,7 +1418,7 @@ class NeoContainer {
     return [];
   }
 
-  private resolveLocal(token: any): any {
+  private resolveLocal(token: unknown): unknown {
     if (token === Import_0.AppService) { 
             if (!this.instances.has(Import_0.AppService)) {
                 const instance = this.create_AppService_f5397b19();
@@ -1410,52 +1455,58 @@ exports[`Generated Code Snapshots > should match snapshot for property tokens 1`
 import * as Import_0 from 'snapshot-test.ts';
 
 
+interface NeoLegacyParent {
+  resolve?(token: unknown): unknown;
+  resolveAll?(token: unknown): unknown;
+  initialize?(): unknown;
+}
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class NeoContainer {
-  private instances = new Map<any, any>();
-  private overrides = new Map<any, () => any>();
-  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  private instances = new Map<unknown, unknown>();
+  private overrides = new Map<unknown, () => unknown>();
+  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();
   private _reconfiguring = false;
   private _failure?: unknown;
   private _closed = false;
-  private _borrowed = new Set<any>([]);
+  private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
   private _syncInit = 0;
 
   // -- Factories --
   
-  private create_PropertyToken_ApiService_apiUrl_8db03951(): any {
-    const userFactory = () => 'http://localhost';
-    const __neoAllowed = new Map([]);
+  private create_PropertyToken_ApiService_apiUrl_8db03951(): unknown {
+    const userFactory: (context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[] }) => unknown = () => 'http://localhost';
+    const __neoAllowed = new Map<unknown, 'simple' | 'all'>([]);
     let __neoExpired = false;
     const __neoExpire = () => { __neoExpired = true; };
-    const __neoFail = (code, detail) => {
-      const error = new Error(code + ': factory ' + "PropertyToken:ApiService.apiUrl" + ' ' + detail);
+    const __neoFail = (code: string, detail: string): never => {
+      const error = new Error(code + ': factory ' + "PropertyToken:ApiService.apiUrl" + ' ' + detail) as Error & { code: string };
       error.code = code;
       throw error;
     };
     const __neoContext = {
-      resolve: (token) => {
+      resolve: <T,>(token: unknown): T => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         const mode = __neoAllowed.get(token);
         if (mode !== 'simple' && mode !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
-        return this.resolve(token);
+        return this.resolve<T>(token);
       },
-      resolveAll: (token) => {
+      resolveAll: <T,>(token: unknown): T[] => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         if (__neoAllowed.get(token) !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
-        return this.resolveAll(token);
+        return this.resolveAll<T>(token);
       },
     };
     
     try {
     
     const __neoResult = userFactory(__neoContext);
-      if (__neoResult && typeof __neoResult.then === 'function') {
+      if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') {
         return Promise.resolve(__neoResult).then(
           (value) => { __neoExpire();  return value; },
           (err) => { __neoExpire();  throw err; },
@@ -1467,12 +1518,12 @@ class NeoContainer {
   } catch (__neoThrown) { __neoExpire();  throw __neoThrown; }
   }
   
-  private create_ApiService_75972c9e(): any {
+  private create_ApiService_75972c9e(): unknown {
     return new Import_0.ApiService(this.resolve("PropertyToken:ApiService.apiUrl_8db03951"));
   }
 
   constructor(
-    private legacy?: any[],
+    private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
   ) {}
 
@@ -1484,8 +1535,8 @@ class NeoContainer {
   private _assertParents(): void {
     if (!this.legacy) return;
     for (const legacyContainer of this.legacy) {
-      if (legacyContainer && legacyContainer._closed) {
-        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      if (legacyContainer && (legacyContainer as { _closed?: boolean; name?: string })._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + (legacyContainer as { _closed?: boolean; name?: string }).name);
       }
     }
   }
@@ -1503,7 +1554,7 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public createScope(): this {
+  public createScope(): NeoContainer {
     if (this._reconfiguring) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }
@@ -1516,7 +1567,7 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: any, factory: () => any): Promise<void> {
+  public override(token: unknown, factory: () => unknown): Promise<void> {
     if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
     if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
@@ -1536,15 +1587,15 @@ class NeoContainer {
   }
 
   private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks = [];
+    const __neoMocks: unknown[] = [];
     for (const __neoToken of this.overrides.keys()) {
       if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
     }
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
-    const __neoPending = [];
-    if (this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) { const __neoInst = this.instances.get("PropertyToken:ApiService.apiUrl_8db03951"); if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { if (typeof __neoInst?.dispose === 'function') { const __neoResult = __neoInst.dispose(); if (__neoResult && typeof __neoResult.then === 'function') __neoPending.push(__neoResult); } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }
+    const __neoErrors: unknown[] = [];
+    const __neoPending: unknown[] = [];
+    if (this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) { const __neoInst = this.instances.get("PropertyToken:ApiService.apiUrl_8db03951") as { dispose?: () => unknown } | null | undefined; if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { if (typeof __neoInst?.dispose === 'function') { const __neoResult = __neoInst.dispose(); if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult); } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }
     for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }
     this.instances.clear();
       for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
@@ -1571,12 +1622,13 @@ class NeoContainer {
    * caught and ignored — a bug in an observability hook must never break the
    * actual resolution it's observing.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
+  public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -1586,7 +1638,8 @@ class NeoContainer {
     }
   }
 
-  public resolve<T>(token: any): T {
+  public resolve<T>(token: unknown): T;
+  public resolve(token: unknown): unknown {
     
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
@@ -1624,7 +1677,7 @@ class NeoContainer {
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
@@ -1638,7 +1691,7 @@ class NeoContainer {
    * name (not its entire stringified source), and a string token has its
    * trailing content-hash suffix stripped (not the raw hashed id).
    */
-  private static formatToken(token: any): string {
+  private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
     const parts = token.split('_');
@@ -1665,9 +1718,9 @@ class NeoContainer {
 
   private async _runDestroy(): Promise<void> {
     const __neoSeen = new Set();
-    const __neoErrors = [];
-    const __neoPending = [];
-    if (this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) { const __neoInst = this.instances.get("PropertyToken:ApiService.apiUrl_8db03951"); if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { if (typeof __neoInst?.dispose === 'function') { const __neoResult = __neoInst.dispose(); if (__neoResult && typeof __neoResult.then === 'function') __neoPending.push(__neoResult); } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }
+    const __neoErrors: unknown[] = [];
+    const __neoPending: unknown[] = [];
+    if (this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) { const __neoInst = this.instances.get("PropertyToken:ApiService.apiUrl_8db03951") as { dispose?: () => unknown } | null | undefined; if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { if (typeof __neoInst?.dispose === 'function') { const __neoResult = __neoInst.dispose(); if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult); } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }
     for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }
     this.instances.clear();
     this.overrides.clear();
@@ -1675,7 +1728,8 @@ class NeoContainer {
     if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
   }
 
-  public resolveAll<T>(token: any): T[] {
+  public resolveAll<T>(token: unknown): T[];
+  public resolveAll(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
@@ -1691,7 +1745,7 @@ class NeoContainer {
     return [];
   }
 
-  private resolveLocal(token: any): any {
+  private resolveLocal(token: unknown): unknown {
     if (token === "PropertyToken:ApiService.apiUrl_8db03951") { 
             if (!this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) {
                 const instance = this.create_PropertyToken_ApiService_apiUrl_8db03951();
@@ -1736,34 +1790,40 @@ exports[`Generated Code Snapshots > should match snapshot for service with depen
 import * as Import_0 from 'snapshot-test.ts';
 
 
+interface NeoLegacyParent {
+  resolve?(token: unknown): unknown;
+  resolveAll?(token: unknown): unknown;
+  initialize?(): unknown;
+}
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class NeoContainer {
-  private instances = new Map<any, any>();
-  private overrides = new Map<any, () => any>();
-  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  private instances = new Map<unknown, unknown>();
+  private overrides = new Map<unknown, () => unknown>();
+  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();
   private _reconfiguring = false;
   private _failure?: unknown;
   private _closed = false;
-  private _borrowed = new Set<any>([]);
+  private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
   private _syncInit = 0;
 
   // -- Factories --
   
-  private create_Logger_8b5cbb1b(): any {
+  private create_Logger_8b5cbb1b(): unknown {
     return new Import_0.Logger();
   }
   
-  private create_UserService_883381ff(): any {
+  private create_UserService_883381ff(): unknown {
     return new Import_0.UserService(this.resolve(Import_0.Logger));
   }
 
   constructor(
-    private legacy?: any[],
+    private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
   ) {}
 
@@ -1775,8 +1835,8 @@ class NeoContainer {
   private _assertParents(): void {
     if (!this.legacy) return;
     for (const legacyContainer of this.legacy) {
-      if (legacyContainer && legacyContainer._closed) {
-        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      if (legacyContainer && (legacyContainer as { _closed?: boolean; name?: string })._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + (legacyContainer as { _closed?: boolean; name?: string }).name);
       }
     }
   }
@@ -1794,7 +1854,7 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public createScope(): this {
+  public createScope(): NeoContainer {
     if (this._reconfiguring) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }
@@ -1807,7 +1867,7 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: any, factory: () => any): Promise<void> {
+  public override(token: unknown, factory: () => unknown): Promise<void> {
     if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
     if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
@@ -1827,13 +1887,13 @@ class NeoContainer {
   }
 
   private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks = [];
+    const __neoMocks: unknown[] = [];
     for (const __neoToken of this.overrides.keys()) {
       if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
     }
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
       for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
       if (__neoErrors.length > 0) {
@@ -1859,12 +1919,13 @@ class NeoContainer {
    * caught and ignored — a bug in an observability hook must never break the
    * actual resolution it's observing.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
+  public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -1874,7 +1935,8 @@ class NeoContainer {
     }
   }
 
-  public resolve<T>(token: any): T {
+  public resolve<T>(token: unknown): T;
+  public resolve(token: unknown): unknown {
     
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
@@ -1912,7 +1974,7 @@ class NeoContainer {
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
@@ -1926,7 +1988,7 @@ class NeoContainer {
    * name (not its entire stringified source), and a string token has its
    * trailing content-hash suffix stripped (not the raw hashed id).
    */
-  private static formatToken(token: any): string {
+  private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
     const parts = token.split('_');
@@ -1944,7 +2006,7 @@ class NeoContainer {
     this._touchClosed(true);
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
@@ -1955,7 +2017,8 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] {
+  public resolveAll<T>(token: unknown): T[];
+  public resolveAll(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
@@ -1971,7 +2034,7 @@ class NeoContainer {
     return [];
   }
 
-  private resolveLocal(token: any): any {
+  private resolveLocal(token: unknown): unknown {
     if (token === Import_0.Logger) { 
             if (!this.instances.has(Import_0.Logger)) {
                 const instance = this.create_Logger_8b5cbb1b();
@@ -2016,30 +2079,36 @@ exports[`Generated Code Snapshots > should match snapshot for simple service 1`]
 import * as Import_0 from 'snapshot-test.ts';
 
 
+interface NeoLegacyParent {
+  resolve?(token: unknown): unknown;
+  resolveAll?(token: unknown): unknown;
+  initialize?(): unknown;
+}
+
 class NeoServiceNotFoundError extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class NeoContainer {
-  private instances = new Map<any, any>();
-  private overrides = new Map<any, () => any>();
-  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  private instances = new Map<unknown, unknown>();
+  private overrides = new Map<unknown, () => unknown>();
+  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();
   private _reconfiguring = false;
   private _failure?: unknown;
   private _closed = false;
-  private _borrowed = new Set<any>([]);
+  private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
   private _syncInit = 0;
 
   // -- Factories --
   
-  private create_SimpleService_0c8fd872(): any {
+  private create_SimpleService_0c8fd872(): unknown {
     return new Import_0.SimpleService();
   }
 
   constructor(
-    private legacy?: any[],
+    private legacy?: NeoLegacyParent[],
     private name: string = 'NeoContainer'
   ) {}
 
@@ -2051,8 +2120,8 @@ class NeoContainer {
   private _assertParents(): void {
     if (!this.legacy) return;
     for (const legacyContainer of this.legacy) {
-      if (legacyContainer && legacyContainer._closed) {
-        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + legacyContainer.name);
+      if (legacyContainer && (legacyContainer as { _closed?: boolean; name?: string })._closed) {
+        throw this._neoFail('NEO_SCOPE_PARENT_DESTROYED', 'parent is destroyed: ' + (legacyContainer as { _closed?: boolean; name?: string }).name);
       }
     }
   }
@@ -2070,7 +2139,7 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public createScope(): this {
+  public createScope(): NeoContainer {
     if (this._reconfiguring) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }
@@ -2083,7 +2152,7 @@ class NeoContainer {
     return new NeoContainer(this.legacy, this.name);
   }
 
-  public override(token: any, factory: () => any): Promise<void> {
+  public override(token: unknown, factory: () => unknown): Promise<void> {
     if (!false) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
     if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
@@ -2103,13 +2172,13 @@ class NeoContainer {
   }
 
   private async _reconfigure(apply: () => void): Promise<void> {
-    const __neoMocks = [];
+    const __neoMocks: unknown[] = [];
     for (const __neoToken of this.overrides.keys()) {
       if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));
     }
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
       for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
       if (__neoErrors.length > 0) {
@@ -2135,12 +2204,13 @@ class NeoContainer {
    * caught and ignored — a bug in an observability hook must never break the
    * actual resolution it's observing.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  public on<K>(event: 'resolve', listener: (token: K, instance: unknown) => void): () => void;
+  public on(event: 'resolve', listener: (token: unknown, instance: unknown) => void): () => void {
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -2150,7 +2220,8 @@ class NeoContainer {
     }
   }
 
-  public resolve<T>(token: any): T {
+  public resolve<T>(token: unknown): T;
+  public resolve(token: unknown): unknown {
     
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
@@ -2188,7 +2259,7 @@ class NeoContainer {
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
@@ -2202,7 +2273,7 @@ class NeoContainer {
    * name (not its entire stringified source), and a string token has its
    * trailing content-hash suffix stripped (not the raw hashed id).
    */
-  private static formatToken(token: any): string {
+  private static formatToken(token: unknown): string {
     if (typeof token === 'function') return token.name || String(token);
     if (typeof token !== 'string') return String(token);
     const parts = token.split('_');
@@ -2220,7 +2291,7 @@ class NeoContainer {
     this._touchClosed(true);
     try {
       const __neoSeen = new Set();
-    const __neoErrors = [];
+    const __neoErrors: unknown[] = [];
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
@@ -2231,7 +2302,8 @@ class NeoContainer {
     return Promise.resolve();
   }
 
-  public resolveAll<T>(token: any): T[] {
+  public resolveAll<T>(token: unknown): T[];
+  public resolveAll(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
     if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
     if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
@@ -2247,7 +2319,7 @@ class NeoContainer {
     return [];
   }
 
-  private resolveLocal(token: any): any {
+  private resolveLocal(token: unknown): unknown {
     if (token === Import_0.SimpleService) { 
             if (!this.instances.has(Import_0.SimpleService)) {
                 const instance = this.create_SimpleService_0c8fd872();
