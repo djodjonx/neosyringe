@@ -36,6 +36,46 @@ export interface SourceRewrite {
 }
 
 /**
+ * A named type a generated file can refer to. Plain data, read where the type was written.
+ * The generator names it with an `import type` (no runtime dependency), or by its own name where
+ * the type sits in the file the output is written into.
+ */
+export interface TypeReference {
+  /** The declared name of the type. */
+  name: string;
+  /** The file that declares it. */
+  file: string;
+  /** The name `file` exports it under (`default` for a default export). Absent: `file` does not export it. */
+  exportName?: string;
+  /** True for a type declared in a script file or in a lib: in scope in every file. */
+  global?: true;
+}
+
+/**
+ * A name a copied expression reads that is bound in its own file and is not part of the expression:
+ * an import, or a top-level declaration the file exports. Plain data. The expression is copied into
+ * another file, where the name means nothing until the generator imports the module and rewrites each read.
+ */
+export interface CopiedBinding {
+  /**
+   * Each read of the name inside the copied expression: absolute UTF-16 offsets in the origin file.
+   * `shorthand` is the name when the read is an object shorthand (`{ Remote }`), which also writes the key.
+   * `type` marks a read in a type position (a type reference, a `typeof` query, an `implements` clause): it is erased,
+   * so it needs no runtime import.
+   */
+  ranges: ReadonlyArray<{ start: number; end: number; shorthand?: string; type?: true }>;
+  /** The module that exports what the name stands for. */
+  file: string;
+  /** The name that module exports it under (`default` included). Absent: the name is the whole module (`import * as ns`). */
+  exportName?: string;
+  /**
+   * The name `file` itself gives the declaration (`class Tag` exported as `Label` is `Tag`). Absent for a whole
+   * module or an anonymous declaration. Where the copy lands in `file`, this is the name to read.
+   */
+  localName?: string;
+}
+
+/**
  * Represents a single service definition in the dependency graph.
  */
 export interface ServiceDefinition {
@@ -77,6 +117,13 @@ export interface ServiceDefinition {
 
   /** Changes to apply inside `factoryOrigin` when the factory is copied. `factorySource` stays the original text. */
   factoryRewrites?: readonly SourceRewrite[];
+
+  /**
+   * The names the factory text reads that its own file binds (an import, an exported top-level class).
+   * Where the factory is copied into another file, the generator imports their module and rewrites each read.
+   * A name its file does not export has no entry: nothing can import it.
+   */
+  factoryBindings?: readonly CopiedBinding[];
 
   /** The raw source text of the value expression (for 'value' type). */
   valueSource?: string;
@@ -127,6 +174,22 @@ export interface ServiceDefinition {
    * Same rationale as implementationLocalName — needed for correct `this.resolve(token)` generation.
    */
   tokenLocalName?: string;
+
+  /**
+   * The identifier the registration's own file uses for the provider class, when the provider is
+   * written as a plain identifier (`provider: Renamed`, `{ token: Renamed }`). It is the local binding of
+   * an import, so it can differ from the class name (`import { Logger as Renamed }`).
+   */
+  implementationBinding?: string;
+
+  /** Same as `implementationBinding`, for a class token. */
+  tokenBinding?: string;
+
+  /**
+   * The type an interface token stands for (`useInterface<ILogger>()`), when it is a plain named type
+   * the output can name. Absent: the token is a class, or its type is anonymous, generic or not nameable.
+   */
+  tokenType?: TypeReference;
 
   /** Stable id of this registration, distinct from the token id. */
   registrationId?: string;

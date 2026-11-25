@@ -11,6 +11,7 @@ import {
   type Piece,
   type UserCopy,
 } from './fragments';
+import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 import {
   generateFactories,
   generateMultiFactories,
@@ -67,10 +68,17 @@ export interface OptimizedContainerInput {
   copy?: UserCopy;
   /** Name of the generated interface that types the `useContainer` parents. Absent: `NeoLegacyParent`. */
   legacyParentName?: string;
+  /** The type of each getter, from the provider. Absent: every getter answers `unknown`. */
+  providerTypes?: GetProviderTypes;
 }
 
+/**
+ * An override is a test double that stands for the registered type, so a typed accessor reads it as that type:
+ * `_mock<T>` is an overload over an `unknown` body, the same contract as `resolve<T>`.
+ */
 function mockMethod(): string {
-  return `private _mock(token: unknown): unknown {
+  return `private _mock<T>(token: unknown): T;
+  private _mock(token: unknown): unknown {
     if (!this.instances.has(token)) {
       const __neoMock = this.overrides.get(token)!();
       this.instances.set(token, __neoMock);
@@ -216,14 +224,15 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const { graph, sorted, getImport, getForeignImport, hasAsync, closed, minimal } = input;
   const copy = input.copy ?? generatedCopy;
   const parentName = input.legacyParentName ?? 'NeoLegacyParent';
+  const providerTypes = input.providerTypes ?? noProviderTypes;
   const direct: DirectReads = { notify: !minimal };
   const honourOverrides = !minimal && input.testOverrides;
   const creators = [
-    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy),
-    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy),
+    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes),
+    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes),
   ];
   const accessors = [
-    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides }, `${input.className}.formatToken`),
+    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides }, `${input.className}.formatToken`, providerTypes),
     ...generateDirectContributions(graph, hasAsync),
   ];
   const needs = factoryContextNeeds(graph);

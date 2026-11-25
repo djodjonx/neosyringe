@@ -13,6 +13,7 @@ import {
   type Piece,
   type UserCopy,
 } from './fragments';
+import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 
 /**
  * Resolves a TypeScript symbol to a string reference usable in generated code.
@@ -103,8 +104,9 @@ export function resolveConstructorArgs(
   closed = false,
   direct?: DirectReads,
   className?: string,
+  providerTypes: GetProviderTypes = noProviderTypes,
 ): { text: string; needs: HelperId[] } {
-  return constructorArguments(dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct, className);
+  return constructorArguments(dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct, className, providerTypes);
 }
 
 function constructorArguments(
@@ -116,6 +118,7 @@ function constructorArguments(
   closed: boolean,
   direct: DirectReads | undefined,
   className?: string,
+  providerTypes: GetProviderTypes = noProviderTypes,
 ): { text: string; needs: HelperId[] } {
   const calls = resolutionCalls(hasAsync, closed || direct !== undefined);
   let reads = false;
@@ -126,16 +129,21 @@ function constructorArguments(
   const text = dependencies.map((depId, position) => {
     const depNode = graph.nodes.get(depId);
     if (direct && isLocalRegistration(graph, depId)) {
-      // An accessor answers `unknown`. The argument is read where the class declares its parameter, so the
-      // one assertion names that parameter and nothing else. It is safe because of an analyzer invariant, not
-      // because of this text: the edge's token id is the id of the constructor parameter's type
+      const read = directRead(depId, direct);
+      // The accessor has the type of its provider, so the compiler checks this argument against the parameter
+      // the class declares: a provider that does not fit its token is an error in the output.
+      if (depNode !== undefined && providerTypes(depNode).accessor !== undefined) return read;
+      // Fallback, for a provider whose type the output cannot name (a type declared in another file and not
+      // exported, an anonymous or generic type, a partial useValue read from `extends`, a hand-built graph):
+      // the accessor answers `unknown`, and the argument is narrowed where the class declares its parameter.
+      // That one assertion names the parameter and nothing else. It rests on an analyzer invariant, not on this
+      // text: the edge's token id is the id of the constructor parameter's type
       // (analyzer/shared/registrationGraph.ts, `pushSlot`: `tokens.getTypeId(tokenType)`), and the provider
       // registered under an interface token was checked assignable to that type
-      // (analyzer/validators/TypeValidator.ts, `checkTypeCompatibility`). A mismatch is an analysis error, so no
-      // output exists for it. Test: packages/core/tests/analyzer/TypeValidation.test.ts, 'should throw
-      // TypeMismatchError when provider does not implement token interface'. S3b removes this assertion
-      // (concrete accessor types, topic 23 P8).
-      const read = directRead(depId, direct);
+      // (analyzer/validators/TypeValidator.ts, `checkTypeCompatibility`; test: packages/core/tests/analyzer/
+      // TypeValidation.test.ts, 'should throw TypeMismatchError when provider does not implement token
+      // interface'). A class token is not checked there: the public `Injection` type is its only check.
+      // Tested: packages/core/tests/generator/t23-getter-types.test.ts, 'keeps `unknown` and narrows at the read'.
       return className === undefined ? read : `${read} as ConstructorParameters<typeof ${className}>[${position}]`;
     }
     if (!depNode) {
@@ -414,10 +422,10 @@ function capturedValue(node: DependencyNode, copy: UserCopy): Piece {
   return 'undefined';
 }
 
-/** One `private create_X(): unknown { ... }` method. */
-function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = []): Fragment {
+/** One `private create_X(): <type> { ... }` method. A creator with no type of its own answers `unknown`. */
+function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = [], returns = 'unknown'): Fragment {
   return withNeeds(fragment`
-  private ${factoryId}(): unknown {
+  private ${factoryId}(): ${returns} {
     ${body}
   }`, needs);
 }
@@ -432,8 +440,9 @@ function construction(
   closed: boolean,
   direct: DirectReads | undefined,
   className: string,
+  providerTypes: GetProviderTypes,
 ): { body: string; needs: HelperId[] } {
-  const args = constructorArguments(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct, className);
+  const args = constructorArguments(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct, className, providerTypes);
   return { body: `return new ${className}(${args.text});`, needs: args.needs };
 }
 
@@ -447,6 +456,7 @@ export function generateFactories(
   closed = false,
   direct?: DirectReads,
   copy: UserCopy = generatedCopy,
+  providerTypes: GetProviderTypes = noProviderTypes,
 ): Fragment[] {
   const factories: Fragment[] = [];
 
@@ -458,7 +468,7 @@ export function generateFactories(
     const factoryId = getFactoryName(tokenId);
 
     if (node.service.type === 'value' && node.service.valueSource !== undefined) {
-      factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`));
+      factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`, [], providerTypes(node).creator));
       continue;
     }
 
@@ -473,8 +483,8 @@ export function generateFactories(
         );
       }
       const className = getImport(node.service.implementationSymbol);
-      const built = construction(node, graph, getImport, getForeignImport, hasAsync, closed, direct, className);
-      factories.push(creator(factoryId, built.body, built.needs));
+      const built = construction(node, graph, getImport, getForeignImport, hasAsync, closed, direct, className, providerTypes);
+      factories.push(creator(factoryId, built.body, built.needs, providerTypes(node).creator));
     }
   }
 
@@ -490,6 +500,7 @@ export function generateMultiFactories(
   closed = false,
   direct?: DirectReads,
   copy: UserCopy = generatedCopy,
+  providerTypes: GetProviderTypes = noProviderTypes,
 ): Fragment[] {
   const factories: Fragment[] = [];
   if (!graph.multiNodes) return factories;
@@ -502,12 +513,12 @@ export function generateMultiFactories(
         const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy);
         factories.push(creator(factoryId, body, body.needs));
       } else if (node.service.type === 'value' && node.service.valueSource !== undefined) {
-        factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`));
+        factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`, [], providerTypes(node).creator));
       } else {
         if (!node.service.implementationSymbol) return;
         const className = getImport(node.service.implementationSymbol);
-        const built = construction(node, graph, getImport, getForeignImport, hasAsync, closed, direct, className);
-        factories.push(creator(factoryId, built.body, built.needs));
+        const built = construction(node, graph, getImport, getForeignImport, hasAsync, closed, direct, className, providerTypes);
+        factories.push(creator(factoryId, built.body, built.needs, providerTypes(node).creator));
       }
     });
   }

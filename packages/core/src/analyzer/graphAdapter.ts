@@ -376,6 +376,7 @@ export class GraphAdapter {
         isInterfaceToken: collected.isInterfaceToken === true,
         valueSource: collected.valueSource,
         valueOrigin: collected.valueOrigin,
+        tokenType: collected.tokenType,
         // A direct useValue is hoisted once. A partial reads the property from the expression written in `extends`.
         valueCapture: !binding && merge ? undefined : valueCaptureFor(graph.containerKey, index, binding),
         valueCaptureRead: binding ? true : undefined,
@@ -392,6 +393,9 @@ export class GraphAdapter {
       const definition: ServiceDefinition = {
         tokenId,
         tokenSymbol: collected.tokenSymbol,
+        tokenLocalName: collected.tokenLocalName,
+        tokenBinding: collected.tokenBinding,
+        tokenType: collected.tokenType,
         registrationNode: obj,
         type: 'factory',
         lifecycle: collected.lifecycle,
@@ -399,6 +403,7 @@ export class GraphAdapter {
         isValueToken: collected.isValueToken === true,
         factorySource: collected.factorySource,
         factoryOrigin: collected.factoryOrigin,
+        factoryBindings: collected.factoryBindings,
         isScoped,
         isAsync: collected.isAsync,
         isDisposable: collected.isDisposable,
@@ -436,6 +441,8 @@ export class GraphAdapter {
       isAsyncDisposable: collected.isAsyncDisposable,
       implementationLocalName: collected.implementationLocalName,
       tokenLocalName: collected.tokenLocalName,
+      implementationBinding: collected.implementationBinding,
+      tokenBinding: collected.tokenBinding,
     };
     this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
   }

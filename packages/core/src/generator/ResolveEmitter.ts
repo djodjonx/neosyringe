@@ -1,5 +1,6 @@
 import type { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getDirectName, getFactoryName, getReadName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
+import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 
 /**
  * `name<T>(token): T` as an overload over an `unknown` implementation. The body hands out `unknown`
@@ -298,6 +299,15 @@ export interface DirectProfile {
  * The cache flag is the presence of the key in `instances`, never the value, so a
  * factory that returns undefined or null runs once. Full profile adds a `_get_` twin
  * that fires the resolve event on every read, cache hit included.
+ *
+ * An accessor answers the type of its provider (`providerTypes`), `unknown` where the output cannot name it.
+ * Its body is checked against that type. Three reads need one `as <type>` each, and only those:
+ * - a cache hit: `instances` is a `Map<unknown, unknown>`, and the only writers of a key are this accessor
+ *   (it stores what its own creator returned) and `_mock` (an override: a test double stands for the type);
+ * - the creator of a factory, which answers `unknown` (a user's factory text, a promise for an async one);
+ * - an override read through `_mock`, which is generic over its answer (an overload over an `unknown` body).
+ * Class providers and hoisted values need none for the value they build: their creator has the type.
+ * Test: packages/core/tests/generator/t23-getter-types.test.ts.
  */
 export function generateDirectAccessors(
   graph: DependencyGraph,
@@ -306,6 +316,7 @@ export function generateDirectAccessors(
   hasAsync: boolean,
   profile: DirectProfile,
   formatToken: string,
+  providerTypes: GetProviderTypes = noProviderTypes,
 ): string[] {
   const accessors: string[] = [];
   for (const tokenId of sorted) {
@@ -316,23 +327,29 @@ export function generateDirectAccessors(
     const transient = node.service.lifecycle === 'transient';
     const asyncSingleton = hasAsync && !!node.service.isAsync && !transient;
     const stored = afterStore('instance', tokenKey, hasAsync, isBorrowedInstance(node.service));
-    const mock = profile.honourOverrides ? `if (this.overrides.has(${tokenKey})) return this._mock(${tokenKey});\n    ` : '';
+    const types = providerTypes(node);
+    const returns = types.accessor ?? 'unknown';
+    // `unknown` needs no assertion. A typed accessor asserts a cache read, and a creator that answers another type.
+    const asType = types.accessor === undefined ? '' : ` as ${types.accessor}`;
+    const asCreated = types.creator === types.accessor ? '' : asType;
+    const mockType = types.accessor === undefined ? '' : `<${types.accessor}>`;
+    const mock = profile.honourOverrides ? `if (this.overrides.has(${tokenKey})) return this._mock${mockType}(${tokenKey});\n    ` : '';
     const body = transient
-      ? `return this.${factoryId}();`
+      ? `return this.${factoryId}()${asCreated};`
       : asyncSingleton
         ? `if (!this.instances.has(${tokenKey})) throw new Error('async singleton is not prepared: ' + ${formatToken}(${tokenKey}));
-    return this.instances.get(${tokenKey});`
-        : `if (this.instances.has(${tokenKey})) return this.instances.get(${tokenKey});
-    const instance = this.${factoryId}();
+    return this.instances.get(${tokenKey})${asType};`
+        : `if (this.instances.has(${tokenKey})) return this.instances.get(${tokenKey})${asType};
+    const instance = this.${factoryId}()${asCreated};
     ${stored}
     return instance;`;
     accessors.push(`
-  private ${getDirectName(tokenId)}(): unknown {
+  private ${getDirectName(tokenId)}(): ${returns} {
     ${mock}${body}
   }`);
     if (profile.minimal) continue;
     accessors.push(`
-  private ${getReadName(tokenId)}(): unknown {
+  private ${getReadName(tokenId)}(): ${returns} {
     const __neoValue = this.${getDirectName(tokenId)}();
     this.notifyResolve(${tokenKey}, __neoValue);
     return __neoValue;

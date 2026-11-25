@@ -1,6 +1,6 @@
 import type * as ts from 'typescript';
 import { relative, isAbsolute, dirname } from 'node:path';
-import { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
+import { DependencyGraph, DependencyNode, SourceRewrite, TokenId, TypeReference } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
@@ -8,6 +8,7 @@ import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGua
 import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
+import { providerTypesOf, type GetProviderTypes } from './providerTypes';
 import {
   NamePool,
   concat,
@@ -69,6 +70,21 @@ function resolveDefaultExportName(symbol: ts.Symbol, localName?: string): string
   }
 
   return name;
+}
+
+/** A file name as one spelling, so two names of one file compare equal. `undefined` stays `undefined`. */
+function normalizeFile(fileName: string | undefined): string | undefined {
+  return fileName?.replace(/\\/g, '/');
+}
+
+/**
+ * One `import type { <exportName> as <alias> } from '<file>'` the output asks for, or, with no `exportName`,
+ * `import type * as <alias> from '<file>'`. Erased: the output gains no runtime dependency.
+ */
+interface TypeImport {
+  file: string;
+  exportName?: string;
+  alias: string;
 }
 
 /**
@@ -215,7 +231,11 @@ export class Generator {
    * Import lines for the symbols registered in `imports`. Must run after every emitter
    * has called getImport: that call is what registers an import.
    */
-  private renderImportLines(imports: Map<string, string>, sourceGraph: DependencyGraph): string[] {
+  private renderImportLines(
+    imports: Map<string, string>,
+    sourceGraph: DependencyGraph,
+    typeImports: ReadonlyMap<string, TypeImport>,
+  ): string[] {
     const importLines: string[] = [];
     // Base directory for relative import paths:
     // - useDirectSymbolNames=true: relative to the container source file (so the injected
@@ -245,6 +265,12 @@ export class Generator {
       for (const [filePath, alias] of imports) {
         importLines.push(`import * as ${alias} from '${specifierFor(filePath)}';`);
       }
+    }
+    // Types the getters name. `import type` is erased: the output gains no runtime dependency.
+    for (const { file, exportName, alias } of typeImports.values()) {
+      importLines.push(exportName === undefined
+        ? `import type * as ${alias} from '${specifierFor(file)}';`
+        : `import type { ${exportName} as ${alias} } from '${specifierFor(file)}';`);
     }
     // A pruned provider's module still runs when it has a top-level effect. ADR006 lines 35-38.
     for (const filePath of loadEffectFiles(sourceGraph)) {
@@ -319,8 +345,8 @@ export class Generator {
 
   private build(copy: UserCopy): Fragment {
     const sourceGraph = this.withPooledCaptures(this.graph);
-    const emitted = dropUnreachable(sourceGraph);
-    const sorted = topologicalSort(emitted.nodes);
+    const retained = dropUnreachable(sourceGraph);
+    const sorted = topologicalSort(retained.nodes);
     const imports = new Map<string, string>(); // filePath -> importAliasPrefix
 
     // Build a map from resolved symbol → local identifier name for default exports.
@@ -332,9 +358,9 @@ export class Generator {
       if (implementationSymbol && implementationLocalName) localNameBySymbol.set(implementationSymbol, implementationLocalName);
       if (tokenSymbol && tokenLocalName) localNameBySymbol.set(tokenSymbol, tokenLocalName);
     };
-    for (const node of emitted.nodes.values()) indexLocalNames(node);
-    if (emitted.multiNodes) {
-      for (const nodes of emitted.multiNodes.values()) nodes.forEach(indexLocalNames);
+    for (const node of retained.nodes.values()) indexLocalNames(node);
+    if (retained.multiNodes) {
+      for (const nodes of retained.multiNodes.values()) nodes.forEach(indexLocalNames);
     }
 
     // For default exports in useDirectSymbolNames=true mode, pre-register their source file
@@ -363,6 +389,36 @@ export class Generator {
       }
     }
 
+    // The container's own file, and what it binds. The generated code is written into this file, so a bare
+    // identifier is right only for a name this file owns: the local binding the registration wrote
+    // (`import { Logger as Renamed }` is `Renamed`, never `Logger`). A class that a partial of another file
+    // registers, or that a registration reaches through a namespace import (`deps.Logger`), has no binding
+    // here: the output imports its file and reads the export from the namespace.
+    const containerFile = normalizeFile(sourceGraph.sourceFileName);
+    const bindingBySymbol = new Map<ts.Symbol, string>();
+    const unboundSymbols = new Set<ts.Symbol>();
+    const indexBindings = (node: DependencyNode) => {
+      const { implementationSymbol, implementationBinding, tokenSymbol, tokenBinding } = node.service;
+      const registeredIn = normalizeFile(node.service.registrationNode?.getSourceFile?.()?.fileName);
+      // A hand-built graph has no tree to read: its names are taken as written.
+      const readable = registeredIn !== undefined;
+      const here = !readable || containerFile === undefined || registeredIn === containerFile;
+      const note = (symbol: ts.Symbol | undefined, binding: string | undefined) => {
+        if (!symbol) return;
+        if (here && binding !== undefined) {
+          if (!bindingBySymbol.has(symbol)) bindingBySymbol.set(symbol, binding);
+        } else if (readable) {
+          unboundSymbols.add(symbol);
+        }
+      };
+      note(implementationSymbol, implementationBinding);
+      note(tokenSymbol, tokenBinding);
+    };
+    for (const node of retained.nodes.values()) indexBindings(node);
+    if (retained.multiNodes) {
+      for (const nodes of retained.multiNodes.values()) nodes.forEach(indexBindings);
+    }
+
     const getImport: GetImport = (symbol: ts.Symbol): string => {
       if (this.useDirectSymbolNames) {
         // Default exports: use Import_N.default (explicit namespace import, bundler-safe).
@@ -374,7 +430,13 @@ export class Generator {
             if (alias) return `${alias}.default`;
           }
         }
-        // Named exports: direct identifier is stable — bundlers correctly rename all references.
+        // Named exports: the local binding of the registration is stable — bundlers correctly rename all references.
+        const bound = bindingBySymbol.get(symbol);
+        if (bound !== undefined) return bound;
+        const declared = normalizeFile(symbol.declarations?.[0]?.getSourceFile().fileName);
+        if (unboundSymbols.has(symbol) && declared !== undefined && declared !== containerFile) {
+          return getForeignImport(symbol);
+        }
         return resolveDefaultExportName(symbol);
       }
       const decl = symbol.declarations?.[0];
@@ -389,6 +451,16 @@ export class Generator {
         imports.set(filePath, this.importAlias(filePath, `Import_${imports.size}`));
       }
       return `${imports.get(filePath)}.${symbol.getName()}`;
+    };
+
+    /** The namespace alias of an import of `filePath`, registered on first use. */
+    const namespaceOf = (filePath: string): string => {
+      const existing = imports.get(filePath);
+      if (existing !== undefined) return existing;
+      const prefix = this.useDirectSymbolNames ? '__neo_Import_' : 'Import_';
+      const alias = this.importAlias(filePath, `${prefix}${imports.size}`);
+      imports.set(filePath, alias);
+      return alias;
     };
 
     // Like getImport, but always emits an explicit namespace import — used only
@@ -406,13 +478,53 @@ export class Generator {
           `no declaration found.`
         );
       }
-      const filePath = decl.getSourceFile().fileName;
-      const prefix = this.useDirectSymbolNames ? '__neo_Import_' : 'Import_';
-      if (!imports.has(filePath)) {
-        imports.set(filePath, this.importAlias(filePath, `${prefix}${imports.size}`));
-      }
-      return `${imports.get(filePath)}.${symbol.getName()}`;
+      return `${namespaceOf(decl.getSourceFile().fileName)}.${symbol.getName()}`;
     };
+
+    // A type in another file is named through an `import type`, kept in `typeImports` until the import lines
+    // are written (after every emitter ran). `exportName` undefined is the whole module (`import type * as`).
+    const typeImports = new Map<string, TypeImport>();
+    const typeAliasOf = (file: string, exportName: string | undefined, preferred: string): string => {
+      const key = `${file}\0${exportName ?? ''}`;
+      let entry = typeImports.get(key);
+      if (!entry) {
+        const alias = this.names.forKey(`type:${this.artifactKey}:${key}`, `__neo_Type_${preferred}`);
+        entry = { file, exportName, alias };
+        typeImports.set(key, entry);
+      }
+      return entry.alias;
+    };
+
+    // A factory of another file is copied into this one: the names its text reads are bound there, not here.
+    // Each read becomes a member of a namespace import of the module that exports it (inline layout only: a
+    // separate output file binds none of the user's names). A name read only in type positions is imported
+    // with `import type`, so the copy adds no runtime dependency the user did not write.
+    const emitted = this.useDirectSymbolNames
+      ? withBindingRewrites(retained, containerFile, namespaceOf, typeAliasOf)
+      : retained;
+
+    // The type of each getter. A type the output cannot name has no text: that getter answers `unknown`
+    // (providerTypes.ts).
+    const nameType = (reference: TypeReference): string | undefined => {
+      if (reference.global) return reference.name;
+      // Inline, the output is written into the file that declares the type: its own name is in scope.
+      if (this.useDirectSymbolNames && normalizeFile(reference.file) === containerFile) return reference.name;
+      // A declaration file has no module specifier this output can write.
+      if (reference.exportName === undefined || /\.d\.[cm]?ts$/.test(reference.file)) return undefined;
+      return typeAliasOf(reference.file, reference.exportName, reference.name);
+    };
+    const providerTypes: GetProviderTypes = (node) => providerTypesOf(node.service, getImport, nameType);
+
+    // A hoisted useValue constant carries the type its registration is declared under: the user's own
+    // `Injection` typed the expression with it, and a bare `const` would widen its literals. Resolved here,
+    // before the import lines are written, because naming a type may add an `import type`.
+    const hoistTypes = new Map<string, string>();
+    visitServices(sourceGraph, (node) => {
+      const capture = node.service.valueCapture;
+      if (!capture || node.service.valueCaptureRead) return;
+      const type = providerTypes(node).creator;
+      if (type !== undefined) hoistTypes.set(capture, type);
+    });
 
     // A container with no async factories of its own still needs initialize()
     // (and the guard below) if its useContainer parent/legacy chain has them —
@@ -439,6 +551,7 @@ export class Generator {
         notFoundErrorClassName: this.notFoundErrorClassName,
         legacyParentName: this.legacyParentName,
         eagerLines,
+        providerTypes,
         stateFields: `${state.stateFields}${state.eagerField}`,
         ...rootMembers(emitted, closed, getImport),
         runtimeHelpers: runtimeHelpers(hasAsync),
@@ -447,14 +560,14 @@ export class Generator {
       });
       // Imports are read after the class: emitting it is what registers them.
       return fragment`${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
-${this.renderImportLines(imports, sourceGraph).join('\n')}
-${concat([...captureHoists(sourceGraph, copy), ...residualValueReads(sourceGraph)], '\n')}
+${this.renderImportLines(imports, sourceGraph, typeImports).join('\n')}
+${concat([...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)], '\n')}
 
 ${containerClass}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     }
 
-    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy);
+    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes);
     const resolveCases = generateResolveCases(
       emitted,
       sorted,
@@ -462,7 +575,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
       hasAsync,
       `${this.containerClassName}.formatToken`,
     );
-    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy);
+    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes);
     const resolveAllMethod = generateResolveAllMethod(emitted, getImport, hasAsync, closed);
     const initializeMethod = hasAsync
       ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines)
@@ -473,7 +586,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     const destroyMethod = generateDestroyMethod(emitted, sorted, getImport, hasAsync);
     const overrideMethods = generateOverrideMethods(emitted, sorted, getImport, hasAsync, this.testOverrides);
 
-    const importLines = this.renderImportLines(imports, sourceGraph);
+    const importLines = this.renderImportLines(imports, sourceGraph, typeImports);
 
     // A successful legacy resolve borrows that instance. A throw must not mark the caller's own result.
     const borrowReset = '';
@@ -482,7 +595,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     const borrowNotify = '';
     const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines);
     const runtimeHelpersText = runtimeHelpers(hasAsync);
-    const captureLines: Piece[] = [...captureHoists(sourceGraph, copy), ...residualValueReads(sourceGraph)];
+    const captureLines: Piece[] = [...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)];
     const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
     const assertOne = closed ? 'this._assertRoot(token, false);' : '';
     const resolveInterior = `
@@ -801,14 +914,81 @@ function visitServices(graph: DependencyGraph, visit: (node: DependencyNode) => 
   for (const nodes of graph.multiNodes.values()) nodes.forEach(visit);
 }
 
-/** Direct useValue consts. Partial captures are property reads and stay at `new`. */
-function captureHoists(graph: DependencyGraph, copy: UserCopy): Fragment[] {
+/**
+ * The graph with the reads of a copied factory bound. A factory written in another file (a partial reached
+ * through `extends`) is copied into the container's file, where the names its text reads mean nothing: each
+ * read of a name its own file binds becomes a member of a namespace import of the module that exports it
+ * (`new Remote()` is `new __neo_Import_0.Remote()`). A rewrite the plugin already made keeps its range:
+ * the two never edit the same text. An import is registered only for a read that is kept.
+ *
+ * - A name the container's own file exports is read by the name that file gives it (`Tag`): the file never
+ *   imports itself.
+ * - A name read only in type positions is imported with `import type`: the copy adds no runtime dependency.
+ */
+function withBindingRewrites(
+  graph: DependencyGraph,
+  containerFile: string | undefined,
+  namespaceOf: (filePath: string) => string,
+  typeAliasOf: (file: string, exportName: string | undefined, preferred: string) => string,
+): DependencyGraph {
+  let changed = false;
+  const bound = (node: DependencyNode): DependencyNode => {
+    const { factoryBindings, factoryOrigin, factoryRewrites } = node.service;
+    if (!factoryBindings || !factoryOrigin || normalizeFile(factoryOrigin.file) === containerFile) return node;
+    const plugin = factoryRewrites ?? [];
+    const free: SourceRewrite[] = [];
+    for (const binding of factoryBindings) {
+      const kept = binding.ranges.filter((range) =>
+        range.start >= factoryOrigin.start
+        && range.end <= factoryOrigin.start + factoryOrigin.length
+        && !plugin.some((other) => range.start < other.end && other.start < range.end));
+      if (kept.length === 0) continue;
+      // What stands where the name was read.
+      const own = containerFile !== undefined && normalizeFile(binding.file) === containerFile ? binding.localName : undefined;
+      let member: string;
+      if (own !== undefined) {
+        member = own;
+      } else if (kept.every((range) => range.type === true)) {
+        member = typeAliasOf(binding.file, binding.exportName, binding.exportName ?? 'Module');
+      } else {
+        const reads = namespaceOf(binding.file);
+        member = binding.exportName === undefined ? reads : `${reads}.${binding.exportName}`;
+      }
+      for (const range of kept) {
+        // `{ Remote }` is `{ Remote: ns.Remote }`: a member access cannot stand where a shorthand name stands.
+        const text = range.shorthand === undefined ? member : `${range.shorthand}: ${member}`;
+        free.push({ start: range.start, end: range.end, text });
+      }
+    }
+    if (free.length === 0) return node;
+    changed = true;
+    const rewrites = [...plugin, ...free].sort((left, right) => left.start - right.start || left.end - right.end);
+    return { ...node, service: { ...node.service, factoryRewrites: rewrites } };
+  };
+  const nodes = new Map<TokenId, DependencyNode>();
+  for (const [tokenId, node] of graph.nodes) nodes.set(tokenId, bound(node));
+  let multiNodes = graph.multiNodes;
+  if (graph.multiNodes) {
+    multiNodes = new Map();
+    for (const [tokenId, list] of graph.multiNodes) multiNodes.set(tokenId, list.map(bound));
+  }
+  return changed ? { ...graph, nodes, multiNodes } : graph;
+}
+
+/**
+ * Direct useValue consts. Partial captures are property reads and stay at `new`. A const the registration's
+ * declared type is known for is annotated with it, so the expression keeps the contextual type it had in the
+ * user's file (`{ kind: 'a' }` stays assignable to `{ kind: 'a' | 'b' }`).
+ */
+function captureHoists(graph: DependencyGraph, copy: UserCopy, types: ReadonlyMap<string, string>): Fragment[] {
   const lines: Fragment[] = [];
   visitServices(graph, (node) => {
     const name = node.service.valueCapture;
     const expr = node.service.valueSource;
     if (!name || !expr || node.service.valueCaptureRead) return;
-    lines.push(fragment`const ${name} = ${concat(copy(expr, node.service.valueOrigin, node.service.valueRewrites))};`);
+    const type = types.get(name);
+    const annotation = type === undefined ? '' : `: ${type}`;
+    lines.push(fragment`const ${name}${annotation} = ${concat(copy(expr, node.service.valueOrigin, node.service.valueRewrites))};`);
   });
   return lines;
 }

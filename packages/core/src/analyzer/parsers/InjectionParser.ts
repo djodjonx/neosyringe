@@ -1,6 +1,6 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { TokenId, AnalysisError, FactoryDependency, SourceOrigin, ValidationMode } from '../types';
+import type { TokenId, AnalysisError, CopiedBinding, FactoryDependency, SourceOrigin, TypeReference, ValidationMode } from '../types';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { containerKeyFor } from '../shared/registrationGraph';
 import { resolveNeoMarker } from '../shared/markerProvenance';
@@ -11,6 +11,11 @@ export type ParsedRegistrationType = 'explicit' | 'autowire' | 'factory' | 'valu
 function originOf(node: ts.Node, sourceFile: ts.SourceFile): SourceOrigin {
   const start = node.getStart(sourceFile);
   return { file: sourceFile.fileName, start, length: node.getEnd() - start };
+}
+
+/** The text of a plain identifier expression: the name the file binds. Anything else has no single binding. */
+function identifierText(node: ts.Expression | undefined): string | undefined {
+  return node !== undefined && TSContext.ts.isIdentifier(node) ? node.text : undefined;
 }
 
 export interface ParsedInjection {
@@ -31,6 +36,7 @@ export interface ParsedInjection {
   useFactory: boolean;
   factorySource?: string;
   factoryOrigin?: SourceOrigin;
+  factoryBindings?: readonly CopiedBinding[];
   isAsync: boolean;
   implementationSymbol?: ts.Symbol;
   registrationType: ParsedRegistrationType;
@@ -38,6 +44,9 @@ export interface ParsedInjection {
   isAsyncDisposable: boolean;
   implementationLocalName?: string;
   tokenLocalName?: string;
+  implementationBinding?: string;
+  tokenBinding?: string;
+  tokenType?: TypeReference;
   factoryDependencies?: FactoryDependency[];
   opaque?: boolean;
   dependenciesWarning?: AnalysisError;
@@ -209,6 +218,7 @@ export class InjectionParser {
         lifecycle: 'singleton',
         valueSource: valueNode.getText(sourceFile),
         valueOrigin: originOf(valueNode, sourceFile),
+        tokenType: this.interfaceTokenType(resolvedTokenNode),
         useFactory: false,
         isAsync: false,
         registrationType: 'value',
@@ -306,6 +316,7 @@ export class InjectionParser {
       useFactory,
       factorySource,
       factoryOrigin,
+      factoryBindings: registrationType === 'factory' && providerNode ? this.copiedBindings(providerNode) : undefined,
       isAsync,
       implementationSymbol,
       registrationType,
@@ -313,6 +324,9 @@ export class InjectionParser {
       isAsyncDisposable,
       implementationLocalName,
       tokenLocalName,
+      implementationBinding: identifierText(providerNode ?? tokenNode),
+      tokenBinding: tokenSymbol ? identifierText(tokenNode) : undefined,
+      tokenType: isInterfaceToken ? this.interfaceTokenType(resolvedTokenNode) : undefined,
       factoryDependencies,
       opaque,
       dependenciesWarning,
@@ -747,6 +761,142 @@ export class InjectionParser {
    * local binding name (e.g. "Auth" from `import Auth from './Foo'`) is replaced by "default".
    * This method captures the local name while the original AST node is still available.
    */
+  /**
+   * The names `expression` reads that its own file binds and that it does not declare itself, with the module
+   * that exports each one. A module-less name (a global, a lib type), a package or declaration file (no
+   * specifier can be written from here), and a top-level declaration the file keeps to itself are left out:
+   * nothing in another file could import them.
+   */
+  private copiedBindings(expression: ts.Expression): CopiedBinding[] | undefined {
+    const api = TSContext.ts;
+    const sourceFile = expression.getSourceFile();
+    const start = expression.getStart(sourceFile);
+    const end = expression.getEnd();
+    const found = new Map<string, {
+      file: string;
+      exportName?: string;
+      localName?: string;
+      ranges: Array<{ start: number; end: number; shorthand?: string; type?: true }>;
+    }>();
+    /** A read in a position TypeScript erases: a type reference, a `typeof` query, an `implements` or interface `extends` clause. */
+    const inTypePosition = (node: ts.Identifier): boolean => {
+      let current: ts.Node = node;
+      while (api.isQualifiedName(current.parent) && current.parent.left === current) current = current.parent;
+      const parent = current.parent;
+      if (api.isTypeReferenceNode(parent)) return parent.typeName === current;
+      if (api.isTypeQueryNode(parent)) return parent.exprName === current;
+      if (api.isExpressionWithTypeArguments(parent)) {
+        const clause = parent.parent;
+        return api.isHeritageClause(clause)
+          && (clause.token === api.SyntaxKind.ImplementsKeyword || api.isInterfaceDeclaration(clause.parent));
+      }
+      return false;
+    };
+    const isNameOnly = (node: ts.Identifier): boolean => {
+      const parent = node.parent;
+      if (api.isPropertyAccessExpression(parent)) return parent.name === node;
+      if (api.isQualifiedName(parent)) return parent.right === node;
+      if (api.isBindingElement(parent)) return parent.propertyName === node;
+      if (api.isPropertyAssignment(parent) || api.isMethodDeclaration(parent) || api.isPropertyDeclaration(parent)
+        || api.isPropertySignature(parent) || api.isMethodSignature(parent) || api.isGetAccessorDeclaration(parent)
+        || api.isSetAccessorDeclaration(parent) || api.isEnumMember(parent) || api.isNamedTupleMember(parent)) {
+        return parent.name === node;
+      }
+      return api.isLabeledStatement(parent) || api.isBreakOrContinueStatement(parent) || api.isJsxAttribute(parent);
+    };
+    const topLevel = (declaration: ts.Declaration): boolean => {
+      const parent = declaration.parent;
+      if (parent === declaration.getSourceFile()) return true;
+      return api.isVariableDeclaration(declaration)
+        && api.isVariableDeclarationList(parent)
+        && parent.parent.parent === declaration.getSourceFile();
+    };
+    const exportNameOf = (file: ts.SourceFile, target: ts.Symbol): string | undefined => {
+      const moduleSymbol = this.checker.getSymbolAtLocation(file);
+      if (!moduleSymbol) return undefined;
+      for (const exported of this.checker.getExportsOfModule(moduleSymbol)) {
+        const resolved = (exported.flags & api.SymbolFlags.Alias) !== 0 ? this.checker.getAliasedSymbol(exported) : exported;
+        if (resolved === target) return exported.getName();
+      }
+      return undefined;
+    };
+    const visit = (node: ts.Node): void => {
+      if (api.isIdentifier(node) && !isNameOnly(node)) {
+        const shorthand = api.isShorthandPropertyAssignment(node.parent) && node.parent.name === node;
+        const symbol = shorthand
+          ? this.checker.getShorthandAssignmentValueSymbol(node.parent)
+          : this.checker.getSymbolAtLocation(node);
+        const declaredInside = symbol?.declarations?.some((declaration) =>
+          declaration.getSourceFile() === sourceFile && declaration.getStart(sourceFile) >= start && declaration.getEnd() <= end);
+        if (symbol && !declaredInside) {
+          const alias = (symbol.flags & api.SymbolFlags.Alias) !== 0;
+          const target = alias ? this.checker.getAliasedSymbol(symbol) : symbol;
+          const declaration = target.declarations?.[0];
+          const declaringFile = declaration && api.isSourceFile(declaration) ? declaration : declaration?.getSourceFile();
+          const usable = declaration !== undefined && declaringFile !== undefined
+            && !declaringFile.isDeclarationFile
+            && !declaringFile.fileName.includes('/node_modules/')
+            && api.isExternalModule(declaringFile);
+          if (usable && declaration && declaringFile) {
+            const wholeModule = api.isSourceFile(declaration);
+            const exportName = wholeModule ? undefined : (topLevel(declaration) ? exportNameOf(declaringFile, target) : undefined);
+            if (wholeModule || exportName !== undefined) {
+              const key = `${declaringFile.fileName}\0${exportName ?? ''}`;
+              const declared = wholeModule ? undefined : api.getNameOfDeclaration(declaration);
+              const localName = declared !== undefined && api.isIdentifier(declared) ? declared.text : undefined;
+              const entry = found.get(key) ?? { file: declaringFile.fileName, exportName, ...(localName === undefined ? {} : { localName }), ranges: [] };
+              const range: { start: number; end: number; shorthand?: string; type?: true } = {
+                start: node.getStart(sourceFile),
+                end: node.getEnd(),
+              };
+              if (shorthand) range.shorthand = node.text;
+              if (inTypePosition(node)) range.type = true;
+              entry.ranges.push(range);
+              found.set(key, entry);
+            }
+          }
+        }
+      }
+      api.forEachChild(node, visit);
+    };
+    visit(expression);
+    return found.size === 0 ? undefined : [...found.values()];
+  }
+
+  /**
+   * The type behind `useInterface<T>()`, when a generated file can name it: a type argument that is a plain
+   * reference to an interface, type alias, class or enum, with no type argument of its own, declared at the
+   * top level of a file. A file-less, generic, anonymous or nested type has no reference: the generator then
+   * keeps `unknown` for that provider and narrows where the value is read.
+   */
+  private interfaceTokenType(tokenNode: ts.Expression): TypeReference | undefined {
+    const ts = TSContext.ts;
+    if (!ts.isCallExpression(tokenNode)) return undefined;
+    const typeNode = tokenNode.typeArguments?.[0];
+    if (!typeNode || !ts.isTypeReferenceNode(typeNode)) return undefined;
+    if ((typeNode.typeArguments?.length ?? 0) > 0 || !ts.isIdentifier(typeNode.typeName)) return undefined;
+    let symbol = this.checker.getSymbolAtLocation(typeNode.typeName);
+    if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0) symbol = this.checker.getAliasedSymbol(symbol);
+    const declaration = symbol?.declarations?.[0];
+    if (!symbol || !declaration) return undefined;
+    const named = ts.isInterfaceDeclaration(declaration)
+      || ts.isTypeAliasDeclaration(declaration)
+      || ts.isClassDeclaration(declaration)
+      || ts.isEnumDeclaration(declaration);
+    if (!named || declaration.parent !== declaration.getSourceFile()) return undefined;
+    if (!ts.isEnumDeclaration(declaration) && (declaration.typeParameters?.length ?? 0) > 0) return undefined;
+    const file = declaration.getSourceFile();
+    const name = symbol.getName();
+    if (!ts.isExternalModule(file)) return { name, file: file.fileName, global: true };
+    const moduleSymbol = this.checker.getSymbolAtLocation(file);
+    if (!moduleSymbol) return { name, file: file.fileName };
+    for (const exported of this.checker.getExportsOfModule(moduleSymbol)) {
+      const target = (exported.flags & ts.SymbolFlags.Alias) !== 0 ? this.checker.getAliasedSymbol(exported) : exported;
+      if (target === symbol) return { name, file: file.fileName, exportName: exported.getName() };
+    }
+    return { name, file: file.fileName };
+  }
+
   private resolveDefaultLocalName(
     symbol: ts.Symbol | undefined,
     identifierNode: ts.Expression | undefined
