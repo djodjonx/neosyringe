@@ -539,7 +539,13 @@ function disposeSlot(slot: DisposalSlot, immediateAwait: boolean): string {
   return `if (this.instances.has(${slot.tokenKey})) { const __neoInst = this.instances.get(${slot.tokenKey}) as ${read}; if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { ${call} } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }`;
 }
 
+/**
+ * The failures of a disposal are gathered and thrown as one `AggregateError` (lib es2021, docs/release/compatibility.md,
+ * "Floor of the emitted code"). A graph with no disposal slot has nothing to gather: no collector, no throw, no name
+ * the output's lib must provide.
+ */
 function sharedDisposalLines(slots: DisposalSlot[], awaitClose: boolean): string[] {
+  if (slots.length === 0) return ['this.instances.clear();'];
   const lines = ['const __neoSeen = new Set();', 'const __neoErrors: unknown[] = [];'];
   const early = slots.filter((slot) => !slot.late);
   const late = slots.filter((slot) => slot.late);
@@ -558,7 +564,7 @@ function disposalLines(slots: DisposalSlot[], awaitClose: boolean, minimal = fal
   return [
     ...sharedDisposalLines(slots, awaitClose),
     ...(minimal ? [] : ['this.overrides.clear();', 'this.resolveListeners.clear();']),
-    'if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }',
+    ...(slots.length === 0 ? [] : ['if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }']),
   ];
 }
 
@@ -574,10 +580,19 @@ export function generateOverrideMethods(
   hasAsync: boolean,
   testOverrides: boolean,
 ): string {
+  const refused = `return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));`;
+  // Disabled: the two methods refuse and nothing else is emitted. No reconfiguration, no disposal of the cache, no AggregateError.
+  if (!testOverrides) {
+    return `public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    ${refused}
+  }
+
+  public clearOverrides(): Promise<void> {
+    ${refused}
+  }`;
+  }
   const collected = combinedDisposals(graph, sorted, getImport);
   const disposalBody = sharedDisposalLines(collected.slots, collected.awaitClose).join('\n    ');
-  const enabled = testOverrides ? 'true' : 'false';
-  const testApiGate = `if (!${enabled}) return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));`;
   const busyCheck = hasAsync
     ? `if (this._state === 'initializing' || this._state === 'reconfiguring' || this._state === 'destroying') return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`
     : `if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`;
@@ -599,9 +614,15 @@ export function generateOverrideMethods(
     ? `this._failure = __neoReconfigureError; this._state = 'failed';`
     : `this._failure = __neoReconfigureError; this._reconfiguring = false;`;
   const multiGuard = generateOverrideMultiGuard(graph, getImport);
+  const failureBlock = collected.slots.length === 0
+    ? ''
+    : `if (__neoErrors.length > 0) {
+        const __neoDisposeFailure = new AggregateError(__neoErrors);
+        ${onFailure}
+        throw __neoDisposeFailure;
+      }`;
 
   return `public override(token: unknown, factory: () => unknown): Promise<void> {
-    ${testApiGate}
     ${busyCheck}
     ${destroyedCheck}
     ${failedCheck}
@@ -611,7 +632,6 @@ export function generateOverrideMethods(
   }
 
   public clearOverrides(): Promise<void> {
-    ${testApiGate}
     ${busyCheck}
     ${destroyedCheck}
     ${failedCheck}
@@ -627,11 +647,7 @@ export function generateOverrideMethods(
     try {
       ${disposalBody}
       for (const __neoMock of __neoMocks) this._borrowed.delete(__neoMock);
-      if (__neoErrors.length > 0) {
-        const __neoDisposeFailure = new AggregateError(__neoErrors);
-        ${onFailure}
-        throw __neoDisposeFailure;
-      }
+      ${failureBlock}
       apply();
       ${onSuccess}
     } catch (__neoReconfigureError) {

@@ -463,8 +463,9 @@ export class Generator {
       return alias;
     };
 
-    // Like getImport, but always emits an explicit namespace import — used only
+    // Like getImport, but emits an explicit namespace import — used only
     // for a parent-provided class token (see FactoryEmitter.resolveConstructorArgs).
+    // The one exception is a class the container's own file declares: it is read by its own name.
     // Unlike the container's own local dependencies (necessarily already imported
     // into this file, since the user wrote `{ token: X }` here themselves), a
     // class living in a useContainer parent's file is not guaranteed to be in
@@ -477,6 +478,10 @@ export class Generator {
           `[Generator] Cannot resolve import for parent-provided class token '${symbol.getName()}': ` +
           `no declaration found.`
         );
+      }
+      // Inline, a class the container file itself declares is in scope under its own name: the file never imports itself.
+      if (this.useDirectSymbolNames && containerFile !== undefined && normalizeFile(decl.getSourceFile().fileName) === containerFile) {
+        return resolveDefaultExportName(symbol);
       }
       return `${namespaceOf(decl.getSourceFile().fileName)}.${symbol.getName()}`;
     };
@@ -522,6 +527,8 @@ export class Generator {
     visitServices(sourceGraph, (node) => {
       const capture = node.service.valueCapture;
       if (!capture || node.service.valueCaptureRead) return;
+      // A pruned value is evaluated once for its effect (ADR006): nothing reads it, so its type is not named, and no `import type` is written for it.
+      if (isUnreachable(sourceGraph, node)) return;
       const type = providerTypes(node).creator;
       if (type !== undefined) hoistTypes.set(capture, type);
     });
@@ -862,8 +869,7 @@ function containerState(
   const borrowedList = borrowedSeeds(graph).join(', ');
   const scopeFields = `private _closed = false;
   private _borrowed = new Set<unknown>([${borrowedList}]);
-  private _destroyWork?: Promise<void>;
-  private _syncInit = 0;`;
+  private _destroyWork?: Promise<void>;`;
   const eagerField = !hasAsync && eagerLines.length > 0 ? '\n  private _eagerOnce = false;' : '';
   const stateFields = hasAsync
     ? `private _state: 'created' | 'initializing' ${minimal ? '' : "| 'reconfiguring' "}| 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
@@ -871,7 +877,8 @@ function containerState(
   private _failure: unknown;
   private _initRunning = false;
   private _initJournal: unknown[] = [];
-  ${scopeFields}`
+  ${scopeFields}
+  private _syncInit = 0;`
     : `${minimal ? '' : 'private _reconfiguring = false;\n  '}private _failure?: unknown;
   ${scopeFields}`;
   return { stateFields, eagerField };
