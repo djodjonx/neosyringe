@@ -359,10 +359,16 @@ export function generateDirectAccessors(
   return accessors;
 }
 
-/** Indexed accessors for multi contributions. The cache key is the same as {@link contributionCall}. */
+/**
+ * Indexed accessors for multi contributions. The cache key is the same as {@link contributionCall}.
+ * An accessor answers the type of its provider where the output can name it (`providerTypes`), like the single
+ * accessors: a cache hit and the creator of a factory (which answers `unknown`) carry the one `as <type>` they need,
+ * a class provider and a hoisted value need none. `unknown` where the output has no name for the type.
+ */
 export function generateDirectContributions(
   graph: DependencyGraph,
   hasAsync: boolean,
+  providerTypes: GetProviderTypes = noProviderTypes,
 ): string[] {
   const accessors: string[] = [];
   if (!graph.multiNodes) return accessors;
@@ -370,26 +376,30 @@ export function generateDirectContributions(
     nodes.forEach((node, index) => {
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
       const key = multiRegistrationKey(node, tokenId, index);
+      const types = providerTypes(node);
+      const returns = types.accessor ?? 'unknown';
+      const asType = types.accessor === undefined ? '' : ` as ${types.accessor}`;
+      const asCreated = types.creator === types.accessor ? '' : asType;
       if (node.service.lifecycle === 'transient') {
         accessors.push(`
-  private ${getDirectName(tokenId, index)}(): unknown {
-    return this.${factoryId}();
+  private ${getDirectName(tokenId, index)}(): ${returns} {
+    return this.${factoryId}()${asCreated};
   }`);
         return;
       }
       if (hasAsync && node.service.isAsync) {
         accessors.push(`
-  private ${getDirectName(tokenId, index)}(): unknown {
-    return this.instances.get(${key});
+  private ${getDirectName(tokenId, index)}(): ${returns} {
+    return this.instances.get(${key})${asType};
   }`);
         return;
       }
       const stored = afterStore('inst', 'k', hasAsync, isBorrowedInstance(node.service));
       accessors.push(`
-  private ${getDirectName(tokenId, index)}(): unknown {
+  private ${getDirectName(tokenId, index)}(): ${returns} {
     const k = ${key};
-    if (this.instances.has(k)) return this.instances.get(k);
-    const inst = this.${factoryId}();
+    if (this.instances.has(k)) return this.instances.get(k)${asType};
+    const inst = this.${factoryId}()${asCreated};
     ${stored}
     return inst;
   }`);

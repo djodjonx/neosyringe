@@ -7,10 +7,10 @@
  * file (an imported class, a class declared further down), and reading it while the class is defined would be a
  * temporal dead zone for a class that comes later in the module.
  *
- * The table keeps the token values it read on that first call, for the life of the class. With CommonJS output and
- * an import cycle, the first dynamic read can run while an imported token (`Import_N.X`, see `GetImport` in
- * FactoryEmitter.ts) is still `undefined`: its row is then stored under `undefined` and never rebuilt. With ESM
- * output the same read throws at once, a binding not yet initialized.
+ * A token that reads `undefined` is no token. With CommonJS output and an import cycle, the first dynamic read can run
+ * while an imported token (`Import_N.X`, see `GetImport` in FactoryEmitter.ts) is still `undefined`. A table with such a
+ * key is used for that read only and is not stored: the next dynamic read builds it again, so a binding that arrives
+ * later is never missed. With ESM output the same read throws at once, a binding not yet initialized.
  */
 
 /** `single` answers one value (`resolve`), `list` answers the contributions of a multi token (`resolveAll`). */
@@ -50,13 +50,15 @@ export function emitDispatchField(
     if (!IDENTIFIER.test(entry.accessor)) throw new Error('invalid generated accessor');
     return `[${entry.keyExpression}, ${className}.prototype.${entry.accessor}]`;
   });
-  const table = `Map<unknown, ${memberType(className, kind)}>`;
+  const member = memberType(className, kind);
+  const table = `Map<unknown, ${member}>`;
   return `private static ${field}: ${table} | undefined;
   private static ${field}Table(): ${table} {
     let __neoTable = ${className}.${field};
     if (__neoTable === undefined) {
-      __neoTable = new ${table}([${rows.join(', ')}]);
-      ${className}.${field} = __neoTable;
+      const __neoRows: Array<readonly [unknown, ${member}]> = [${rows.join(', ')}];
+      __neoTable = new ${table}(__neoRows);
+      if (__neoRows.every((__neoRow) => __neoRow[0] !== undefined)) ${className}.${field} = __neoTable;
     }
     return __neoTable;
   }`;

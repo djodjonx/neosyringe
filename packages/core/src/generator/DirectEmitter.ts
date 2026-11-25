@@ -12,6 +12,7 @@ import {
   type UserCopy,
 } from './fragments';
 import { emitDispatchField, emitDispatchRead, type DispatchEntry } from './dispatchEmitter';
+import { factoryLeaseHelpers } from './factoryLeaseEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 import {
   generateFactories,
@@ -281,12 +282,12 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const direct: DirectReads = { notify: !minimal };
   const honourOverrides = !minimal && input.testOverrides;
   const creators = [
-    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes),
-    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes),
+    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className),
+    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className),
   ];
   const accessors = [
     ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides }, `${input.className}.formatToken`, providerTypes),
-    ...generateDirectContributions(graph, hasAsync),
+    ...generateDirectContributions(graph, hasAsync, providerTypes),
   ];
   const needs = factoryContextNeeds(graph);
   const listLocals = !closed || needs.opaque;
@@ -308,6 +309,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const catalog: Helper[] = [
     { id: 'resolveSingle', parts: [generatedText(joined([resolve.internalMethod, resolve.internalTable]))], needs: [] },
     { id: 'resolveAll', parts: [generatedText(resolveAll.internalMethod)], needs: [] },
+    ...factoryLeaseHelpers(input.className),
   ];
   // Deviation from the spec's `linkHelpers`: the helpers are kept in their slots (after `resolve`,
   // after `resolveAll`) and not put before every root, because moving them would change the
@@ -330,6 +332,11 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
     initialize,
     generateCreateScopeMethod(input.className, hasAsync, minimal),
   ];
+  // The policy and the lease of the declared factories: only the helpers a creator asks for.
+  for (const id of ['factoryPolicy', 'factoryLease'] as const) {
+    const factoryHelper = linked.get(id);
+    if (factoryHelper) members.push(factoryHelper);
+  }
   if (!minimal) {
     members.push(generateOverrideMethods(graph, sorted, getImport, hasAsync, input.testOverrides));
     members.push(eventMembers());

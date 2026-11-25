@@ -8,6 +8,7 @@ import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGua
 import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
+import { linkedFactoryLeaseHelpers } from './factoryLeaseEmitter';
 import { providerTypesOf, type GetProviderTypes } from './providerTypes';
 import {
   NamePool,
@@ -566,7 +567,7 @@ ${containerClass}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     }
 
-    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes);
+    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName);
     const resolveCases = generateResolveCases(
       emitted,
       sorted,
@@ -574,7 +575,9 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
       hasAsync,
       `${this.containerClassName}.formatToken`,
     );
-    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes);
+    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName);
+    // The policy and the lease of the declared factories: only the helpers a creator asks for.
+    const factoryHelpers = linkedFactoryLeaseHelpers(this.containerClassName, [...factories, ...multiFactories]);
     const resolveAllMethod = generateResolveAllMethod(emitted, getImport, hasAsync, closed);
     const initializeMethod = hasAsync
       ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines)
@@ -678,7 +681,7 @@ class ${this.containerClassName} {
   ${stateFields}${eagerField}${rootFields}
 
   // -- Factories --
-  ${concat([...factories, ...multiFactories], '\n  ')}
+  ${concat([...factories, ...multiFactories], '\n  ')}${factoryHelpers.length > 0 ? fragment`\n\n  ${concat(factoryHelpers, '\n\n  ')}` : ''}
 
   constructor(
     private legacy?: ${this.legacyParentName}[],

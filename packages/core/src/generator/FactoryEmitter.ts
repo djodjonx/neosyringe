@@ -14,6 +14,13 @@ import {
   type UserCopy,
 } from './fragments';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
+import {
+  FACTORY_CONTEXT,
+  emitFactoryPolicy,
+  emitFactoryRead,
+  emitLeaseOpen,
+  type PolicyEntry,
+} from './factoryLeaseEmitter';
 
 /**
  * Resolves a TypeScript symbol to a string reference usable in generated code.
@@ -63,8 +70,8 @@ export interface DirectReads {
   notify: boolean;
 }
 
-function directRead(tokenId: TokenId, direct: DirectReads): string {
-  return direct.notify ? `this.${getReadName(tokenId)}()` : `this.${getDirectName(tokenId)}()`;
+function directRead(tokenId: TokenId, direct: DirectReads, receiver = 'this'): string {
+  return direct.notify ? `${receiver}.${getReadName(tokenId)}()` : `${receiver}.${getDirectName(tokenId)}()`;
 }
 
 function isLocalRegistration(graph: DependencyGraph, tokenId: TokenId): boolean {
@@ -82,13 +89,13 @@ function isLocalRegistration(graph: DependencyGraph, tokenId: TokenId): boolean 
  *   `{ token: X }` there themselves), a class living in the parent's file is
  *   not guaranteed to be in scope in the child's file at all.
  */
-function resolutionCalls(hasAsync: boolean, closed = false): { one: string; all: string; internal: boolean } {
+function resolutionCalls(hasAsync: boolean, closed = false, receiver = 'this'): { one: string; all: string; internal: boolean } {
   // Closed sync factories must not call the public resolve. ADR006 lines 29-33.
   // `internal` is the one answer to "do the calls go through the private helpers": the emitters
   // take their helper needs from it, so the text of the call and the need cannot drift apart.
   return hasAsync || closed
-    ? { one: 'this._resolveInternal', all: 'this._resolveAllInternal', internal: true }
-    : { one: 'this.resolve', all: 'this.resolveAll', internal: false };
+    ? { one: `${receiver}._resolveInternal`, all: `${receiver}._resolveAllInternal`, internal: true }
+    : { one: `${receiver}.resolve`, all: `${receiver}.resolveAll`, internal: false };
 }
 
 /**
@@ -236,6 +243,8 @@ function factoryAllowList(
  * Optimized emitter only. `ctx.resolve` reaches a declared local provider through its own
  * accessor. The generic resolver is called only for a declared token that is not a local
  * single registration (a parent token, a multi token). A factory with no such token has none.
+ * The lines are the body of the read member of the declaration: they read from `host`, answer `unknown`, and the
+ * lease asserts the type the user's factory text asks for (`as T`), the same contract as the public `resolve<T>(token)`.
  */
 function directContextResolve(
   listed: ReturnType<typeof factoryAllowList>,
@@ -244,17 +253,14 @@ function directContextResolve(
 ): string {
   const locals = [...listed.locals.entries()];
   const hasOther = listed.entries.some(([key]) => !listed.locals.has(key));
-  // `T` is the type the user's factory text asks for. The accessors answer `unknown`, and no accessor type can be
-  // assigned to a type the caller picks, so each direct read carries the one assertion `as T`: the same
-  // contract as the public `resolve<T>(token)`. Concrete accessor types (S3b) narrow the accessor, not this
-  // assertion. The empty case is unreachable (the allow-list guard above it always throws).
-  if (locals.length === 0 && !hasOther) return 'return undefined as T;';
+  // The empty case is unreachable (the allow-list guard of the lease always throws).
+  if (locals.length === 0 && !hasOther) return 'return undefined;';
   const lines = locals.map(([key, tokenId], index) => {
-    const read = `return ${directRead(tokenId, direct)} as T;`;
+    const read = `return ${directRead(tokenId, direct, 'host')};`;
     return !hasOther && index === locals.length - 1 ? read : `if (token === ${key}) ${read}`;
   });
-  if (hasOther) lines.push(`return ${fallback()}<T>(token);`);
-  return lines.join('\n        ');
+  if (hasOther) lines.push(`return ${fallback()}(token);`);
+  return lines.join('\n    ');
 }
 
 /**
@@ -275,16 +281,6 @@ export function factoryContextNeeds(graph: DependencyGraph): { opaque: boolean; 
   for (const nodes of graph.multiNodes?.values() ?? []) nodes.forEach((node) => visit(node.service));
   return needs;
 }
-
-/**
- * What a factory body reads of its context. The calls are generic: the factory text is the user's and states
- * the type it expects (`new UserService(ctx.resolve(loggerToken))` asks for an `ILogger`), the context only
- * forwards a token. A context that answered `unknown` would refuse that text (TS2345) in the Program the
- * transformer builds from the transformed source, and would refuse a parameter annotated with the public
- * `FactoryContext`. The closures below are `<T,>(token: unknown): T`: the trailing comma keeps the arrow
- * generic when the output lands in a `.tsx` file.
- */
-const FACTORY_CONTEXT = '{ resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[] }';
 
 /** A sync throw from warmup or from the factory must expire the context before it escapes. */
 function emitInvocation(warmup: string, release: string, hasAsync: boolean): string {
@@ -314,6 +310,26 @@ function emitInvocation(warmup: string, release: string, hasAsync: boolean): str
   } catch (__neoThrown) { __neoExpire(); ${release} throw __neoThrown; }`;
 }
 
+/** What a factory emits: the body of its creator, and the static members that belong to its declaration. */
+interface FactoryBody {
+  body: Fragment;
+  /** Static members of the generated class (the policy and the read of a declared factory). Empty for an opaque factory. */
+  members: string;
+}
+
+/**
+ * The type the copied user factory is written against: the public `Factory<T>` return, `T | PromiseLike<T>`
+ * (packages/neosyringe/src/types.ts:154), for every factory. The analyzer flags `isAsync` only for an `async` function
+ * or a return type named `Promise`/`PromiseLike` (packages/core/src/analyzer/parsers/InjectionParser.ts:542-560), so a union
+ * with a promise or a thenable class is a valid factory that the flag does not tell apart. A provider type the output
+ * can name types the factory, so a factory that does not fit its registration is an error in the output.
+ * `unknown` where the type has no name.
+ */
+function factoryType(declared: string | undefined): string {
+  const answer = declared === undefined ? 'unknown' : `${declared} | PromiseLike<${declared}>`;
+  return `(context: ${FACTORY_CONTEXT}) => ${answer}`;
+}
+
 function emitFactoryBody(
   service: DependencyNode['service'],
   graph: DependencyGraph,
@@ -322,7 +338,10 @@ function emitFactoryBody(
   closed: boolean,
   direct: DirectReads | undefined,
   copy: UserCopy,
-): Fragment {
+  className: string,
+  factoryId: string,
+  declared: string | undefined,
+): FactoryBody {
   const userFactory = concat(
     service.factorySource === undefined
       ? [generatedText('undefined')]
@@ -332,17 +351,18 @@ function emitFactoryBody(
   const opaqueFactory = service.opaque === true;
   const listed = factoryAllowList(service, graph, getImport);
   const allowed = listed.entries;
-  const entries = allowed.map(([key, all]) => `[${key}, ${all ? '"all"' : '"simple"'}]`).join(', ');
-  const calls = resolutionCalls(hasAsync, closed || direct !== undefined);
+  const callsOn = (receiver: string): ReturnType<typeof resolutionCalls> =>
+    resolutionCalls(hasAsync, closed || direct !== undefined, receiver);
   // A helper is a need only where its call is written into the text below.
   const needs = new Set<HelperId>();
-  const internal = calls.internal;
-  const one = (): string => {
-    if (internal) needs.add('resolveSingle');
+  const one = (receiver = 'this'): string => {
+    const calls = callsOn(receiver);
+    if (calls.internal) needs.add('resolveSingle');
     return calls.one;
   };
-  const all = (): string => {
-    if (internal) needs.add('resolveAll');
+  const all = (receiver = 'this'): string => {
+    const calls = callsOn(receiver);
+    if (calls.internal) needs.add('resolveAll');
     return calls.all;
   };
   const warmupLines: string[] = [];
@@ -361,14 +381,14 @@ function emitFactoryBody(
   const warmup = warmupLines.join('\n    ');
   const holdStart = '';
   const release = '';
-  const expireStmt = 'const __neoExpire = () => { __neoExpired = true; };';
-  const failStmt = `const __neoFail = (code: string, detail: string): never => {
+  const typedFactory = `const userFactory: ${factoryType(declared)} =`;
+  if (opaqueFactory) {
+    const expireStmt = 'const __neoExpire = () => { __neoExpired = true; };';
+    const failStmt = `const __neoFail = (code: string, detail: string): never => {
       const error = new Error(code + ': factory ' + ${label} + ' ' + detail) as Error & { code: string };
       error.code = code;
       throw error;
     };`;
-  const typedFactory = `const userFactory: (context: ${FACTORY_CONTEXT}) => unknown =`;
-  if (opaqueFactory) {
     const opaqueBody = fragment`${typedFactory} ${userFactory};
     let __neoExpired = false;
     ${expireStmt}
@@ -385,33 +405,21 @@ function emitFactoryBody(
     };
     ${holdStart}
     ${emitInvocation('', release, hasAsync)}`;
-    return withNeeds(opaqueBody, [...needs]);
+    return { body: withNeeds(opaqueBody, [...needs]), members: '' };
   }
-  const resolveTail = direct ? directContextResolve(listed, direct, one) : `return ${one()}<T>(token);`;
-  // No declared `all` dependency: the guard above always throws, this line is never reached. It still has to be a
-  // list: `undefined` is not assignable to `T[]`, and no assertion turns it into one without a double assertion.
-  const resolveAllTail = direct && !allowed.some(([, isAll]) => isAll) ? 'return [];' : `return ${all()}<T>(token);`;
+  // The read member answers `unknown` for the token of the call, from the `host` it is given.
+  const resolveTail = direct
+    ? directContextResolve(listed, direct, () => one('host'))
+    : `return ${one('host')}(token);`;
+  // No declared `all` dependency: the lease refuses every resolveAll, this line is never reached. It still has to be a list.
+  const resolveAllTail = direct && !allowed.some(([, isAll]) => isAll) ? 'return [];' : `return ${all('host')}(token);`;
+  const entries: PolicyEntry[] = allowed.map(([key, isAll]) => ({ keyExpression: key, mode: isAll ? 'all' : 'simple' }));
+  const members = `\n  ${emitFactoryPolicy(className, factoryId, entries)}\n  ${emitFactoryRead(className, factoryId, `if (all) ${resolveAllTail}\n    ${resolveTail}`)}`;
   const declaredBody = fragment`${typedFactory} ${userFactory};
-    const __neoAllowed = new Map<unknown, 'simple' | 'all'>([${entries}]);
-    let __neoExpired = false;
-    ${expireStmt}
-    ${failStmt}
-    const __neoContext = {
-      resolve: <T,>(token: unknown): T => {
-        if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-        const mode = __neoAllowed.get(token);
-        if (mode !== 'simple' && mode !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
-        ${resolveTail}
-      },
-      resolveAll: <T,>(token: unknown): T[] => {
-        if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-        if (__neoAllowed.get(token) !== 'all') __neoFail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
-        ${resolveAllTail}
-      },
-    };
+    ${emitLeaseOpen(className, factoryId, label)}
     ${holdStart}
     ${emitInvocation(warmup, release, hasAsync)}`;
-  return withNeeds(declaredBody, [...needs]);
+  return { body: withNeeds(declaredBody, [...needs, 'factoryPolicy', 'factoryLease']), members };
 }
 
 /** A captured useValue is read once. Hand-built graphs keep the original expression. */
@@ -422,12 +430,15 @@ function capturedValue(node: DependencyNode, copy: UserCopy): Piece {
   return 'undefined';
 }
 
-/** One `private create_X(): <type> { ... }` method. A creator with no type of its own answers `unknown`. */
-function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = [], returns = 'unknown'): Fragment {
+/**
+ * One `private create_X(): <type> { ... }` method, then the static members of its declaration. A creator with no type
+ * of its own answers `unknown`: that is every factory's, because the thenable branch of the invocation may return a promise.
+ */
+function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = [], returns = 'unknown', members = ''): Fragment {
   return withNeeds(fragment`
   private ${factoryId}(): ${returns} {
     ${body}
-  }`, needs);
+  }${members}`, needs);
 }
 
 /** `return new Class(args);`, with the need of the generic resolver its arguments call. */
@@ -446,6 +457,12 @@ function construction(
   return { body: `return new ${className}(${args.text});`, needs: args.needs };
 }
 
+/**
+ * The class a hand-built caller declares its factories in, when it does not say: the statics of a declared factory
+ * are members of that class. The two emitters of the generator always pass the name of the class they write.
+ */
+const DEFAULT_CLASS_NAME = 'NeoContainer';
+
 /** Generates a factory method for each service in topological order. */
 export function generateFactories(
   graph: DependencyGraph,
@@ -457,6 +474,7 @@ export function generateFactories(
   direct?: DirectReads,
   copy: UserCopy = generatedCopy,
   providerTypes: GetProviderTypes = noProviderTypes,
+  className = DEFAULT_CLASS_NAME,
 ): Fragment[] {
   const factories: Fragment[] = [];
 
@@ -473,8 +491,8 @@ export function generateFactories(
     }
 
     if (node.service.type === 'factory' && node.service.factorySource) {
-      const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy);
-      factories.push(creator(factoryId, body, body.needs));
+      const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor);
+      factories.push(creator(factoryId, emitted.body, emitted.body.needs, 'unknown', emitted.members));
     } else {
       if (!node.service.implementationSymbol) {
         throw new Error(
@@ -501,6 +519,7 @@ export function generateMultiFactories(
   direct?: DirectReads,
   copy: UserCopy = generatedCopy,
   providerTypes: GetProviderTypes = noProviderTypes,
+  className = DEFAULT_CLASS_NAME,
 ): Fragment[] {
   const factories: Fragment[] = [];
   if (!graph.multiNodes) return factories;
@@ -510,8 +529,8 @@ export function generateMultiFactories(
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
 
       if (node.service.type === 'factory' && node.service.factorySource) {
-        const body = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy);
-        factories.push(creator(factoryId, body, body.needs));
+        const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor);
+        factories.push(creator(factoryId, emitted.body, emitted.body.needs, 'unknown', emitted.members));
       } else if (node.service.type === 'value' && node.service.valueSource !== undefined) {
         factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`, [], providerTypes(node).creator));
       } else {

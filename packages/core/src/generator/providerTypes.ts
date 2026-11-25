@@ -23,7 +23,7 @@ export interface ProviderTypes {
 
 export type GetProviderTypes = (node: DependencyNode) => ProviderTypes;
 
-/** Hand-built callers and the multi contributions: every getter is `unknown`. */
+/** Hand-built callers: every getter is `unknown`. */
 export const noProviderTypes: GetProviderTypes = () => ({});
 
 /** Names a type the output can refer to, or `undefined` when no import or name reaches it. */
