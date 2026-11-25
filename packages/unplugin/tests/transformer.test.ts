@@ -18,17 +18,25 @@ vi.mock('@djodjonx/neosyringe-core/analyzer', async () => {
   };
 });
 
-vi.mock('@djodjonx/neosyringe-core/generator', () => ({
-  Generator: vi.fn().mockImplementation(() => ({
-    generate: vi.fn().mockReturnValue('class __CatsContainer__ {}'),
-    generateInstantiation: vi.fn().mockReturnValue('new __CatsContainer__()'),
-  })),
-  GraphValidator: vi.fn().mockImplementation(() => ({
-    validateAll: vi.fn().mockReturnValue({ valid: true, errors: [] }),
-  })),
-  resolveDebugFlag: vi.fn().mockReturnValue(true),
-  resolveTestOverridesFlag: vi.fn().mockReturnValue(false),
-}));
+vi.mock('@djodjonx/neosyringe-core/generator', async () => {
+  // The name pool is plain data the session builds for every file: it is not what this test replaces.
+  const actual = await vi.importActual<typeof import('@djodjonx/neosyringe-core/generator')>(
+    '@djodjonx/neosyringe-core/generator',
+  );
+  return {
+    NamePool: actual.NamePool,
+    reservedNamesOf: actual.reservedNamesOf,
+    Generator: vi.fn().mockImplementation(() => ({
+      generate: vi.fn().mockReturnValue('class __CatsContainer__ {}'),
+      generateInstantiation: vi.fn().mockReturnValue('new __CatsContainer__()'),
+    })),
+    GraphValidator: vi.fn().mockImplementation(() => ({
+      validateAll: vi.fn().mockReturnValue({ valid: true, errors: [] }),
+    })),
+    resolveDebugFlag: vi.fn().mockReturnValue(true),
+    resolveTestOverridesFlag: vi.fn().mockReturnValue(false),
+  };
+});
 
 vi.mock('typescript', async (importOriginal) => {
   const actual = await importOriginal<typeof import('typescript')>();
@@ -42,11 +50,17 @@ function makeSourceFile(text: string, fileName = '/test/container.ts'): ts.Sourc
   return ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2021, true, ts.ScriptKind.TS);
 }
 
+/**
+ * The session reads the bindings of a file from `getSymbolsInScope`; the only thing these tests
+ * need from it is that it exists. The real checker path is proven through the real plugin in t23-names.test.ts.
+ */
+const checkerDouble = { getSymbolsInScope: () => [] } as Partial<ts.TypeChecker> as ts.TypeChecker;
+
 function makeProgram(sourceFiles: ts.SourceFile[] = []): ts.Program {
   return {
     getCompilerOptions: () => ({ target: ts.ScriptTarget.ES2021 }),
     getSourceFiles: () => sourceFiles,
-    getTypeChecker: () => ({} as ts.TypeChecker),
+    getTypeChecker: () => checkerDouble,
     getRootFileNames: () => sourceFiles.map(sf => sf.fileName),
     emit: vi.fn(),
   } as unknown as ts.Program;
@@ -159,7 +173,7 @@ describe('neoSyringeTransformer', () => {
     const program = {
       getCompilerOptions: () => ({ target: ts.ScriptTarget.ES2021 }),
       getSourceFiles: () => [sf, sf],
-      getTypeChecker: () => ({} as ts.TypeChecker),
+      getTypeChecker: () => checkerDouble,
       getRootFileNames: () => [sf.fileName],
       emit: vi.fn(),
     } as unknown as ts.Program;
