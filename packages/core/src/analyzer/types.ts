@@ -12,8 +12,16 @@ export type TokenId = string;
  * - `parent`: Inherited from parent container.
  * - `factory`: Provider is a factory function.
  * - `value`: A pre-built value registered directly.
+ * - `alias`: `useExisting`, a token that answers what another token answers. It owns nothing.
  */
-export type RegistrationType = 'explicit' | 'autowire' | 'parent' | 'factory' | 'value';
+export type RegistrationType = 'explicit' | 'autowire' | 'parent' | 'factory' | 'value' | 'alias';
+
+/** The token an alias stands for, as the registration names it. A chain is not followed here: the target may be an alias too. */
+export interface AliasTarget {
+  tokenId: TokenId;
+  /** True when the target is `useInterface<T>()`: its runtime key is its id. */
+  isInterfaceToken?: boolean;
+}
 
 /**
  * Where a copied expression sits in its source file. Plain data: `start` and `length` are
@@ -124,6 +132,12 @@ export interface ServiceDefinition {
    * A name its file does not export has no entry: nothing can import it.
    */
   factoryBindings?: readonly CopiedBinding[];
+
+  /**
+   * Only an `alias` registration has one. Its `lifecycle` is a filler nobody reads: an alias is a singleton of nothing,
+   * the lifecycle and the owner are the target's.
+   */
+  aliasTarget?: AliasTarget;
 
   /** The raw source text of the value expression (for 'value' type). */
   valueSource?: string;

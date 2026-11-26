@@ -21,6 +21,7 @@ import {
   type PolicyEntry,
 } from './factoryLeaseEmitter';
 import { inputRead } from './inputEmitter';
+import { aliasPlanOf } from '../analyzer/shared/aliasLinks';
 import { DEFAULT_MANY_NAMES, factoryContextType, manyContextFunction, type ManyNames } from './manyEmitter';
 
 /**
@@ -194,6 +195,53 @@ function constructorArguments(
 }
 
 /**
+ * Optimized emitter. What each alias reads, as an expression of the generated class: its canonical target, reached
+ * directly (`_direct_<target>()`, no resolve event: the event is the alias token's, fired by the alias accessor), or,
+ * when the target is a token a parent provides, through `_neoParent`. The chain is flattened once by
+ * `aliasPlanOf`, so every alias names the end of its chain. `as <declared type>` is written only where the target's
+ * accessor answers `unknown` and the alias token has a type the output can name: that read is the one place the
+ * compiler cannot check, and the analyzer checked it (`aliasTypeMismatch`). A target a parent provides has no accessor
+ * of its own to check an override, so the read asks `overrides` first when the profile honours them.
+ */
+export function aliasReadExpressions(
+  graph: DependencyGraph,
+  getImport: GetImport,
+  getForeignImport: GetImport,
+  providerTypes: GetProviderTypes,
+  honourOverrides: boolean,
+): Map<TokenId, string> {
+  const reads = new Map<TokenId, string>();
+  const plan = aliasPlanOf(graph);
+  if (plan === undefined) return reads;
+  for (const [tokenId, node] of graph.nodes) {
+    if (!plan.isAlias(tokenId)) continue;
+    const target = plan.canonicalOf(tokenId);
+    const declared = providerTypes(node).accessor;
+    if (plan.isLocal(tokenId)) {
+      const targetNode = graph.nodes.get(target);
+      const known = targetNode !== undefined && providerTypes(targetNode).accessor !== undefined;
+      reads.set(tokenId, `this.${getDirectName(target)}()${declared !== undefined && !known ? ` as ${declared}` : ''}`);
+      continue;
+    }
+    const key = parentTokenKey(graph, target, getForeignImport);
+    const fromParent = `this._neoParent(${key})${declared !== undefined ? ` as ${declared}` : ''}`;
+    reads.set(tokenId, honourOverrides ? `(this.overrides.has(${key}) ? this._mock${declared !== undefined ? `<${declared}>` : ''}(${key}) : ${fromParent})` : fromParent);
+  }
+  return reads;
+}
+
+/** The runtime key of a token a parent provides, the way a dependency on it is written (see `constructorArguments`). */
+export function parentTokenKey(graph: DependencyGraph, tokenId: TokenId, getForeignImport: GetImport): string {
+  if (graph.parentResolvableTokens?.has(tokenId)) return JSON.stringify(tokenId);
+  const symbol = graph.parentClassTokenSymbols?.get(tokenId);
+  if (symbol) return getForeignImport(symbol);
+  throw new Error(
+    `[Generator] Cannot read '${getSimpleName(tokenId)}' from a parent/legacy container for an alias: ` +
+    `no registration provides it, and no symbol could be captured to reference it. Register it in this container or in the parent.`,
+  );
+}
+
+/**
  * Resolves a service's runtime token key expression for use in generated code.
  * This is the value used as both the Map key (for instance caching) and the
  * token argument to `resolve()`.
@@ -212,7 +260,9 @@ function dependencyKeyExpression(dep: FactoryDependency, graph: DependencyGraph,
 }
 
 function isTransientDependency(dep: FactoryDependency, graph: DependencyGraph): boolean {
-  const node = graph.nodes.get(dep.tokenId);
+  // An alias has no lifecycle of its own: it is the one of the registration its chain ends at.
+  const plan = aliasPlanOf(graph);
+  const node = graph.nodes.get(plan?.isAlias(dep.tokenId) ? plan.canonicalOf(dep.tokenId) : dep.tokenId);
   if (node) return node.service.lifecycle === 'transient';
   const multi = graph.multiNodes?.get(dep.tokenId);
   if (!multi || multi.length === 0) return false;
@@ -320,8 +370,8 @@ interface FactoryBody {
 
 /**
  * The type the copied user factory is written against: the public `Factory<T>` return, `T | PromiseLike<T>`
- * (packages/neosyringe/src/types.ts:154), for every factory. The analyzer flags `isAsync` only for an `async` function
- * or a return type named `Promise`/`PromiseLike` (packages/core/src/analyzer/parsers/InjectionParser.ts:542-560), so a union
+ * (packages/neosyringe/src/types.ts:189), for every factory. The analyzer flags `isAsync` only for an `async` function
+ * or a return type named `Promise`/`PromiseLike` (packages/core/src/analyzer/parsers/InjectionParser.ts:647-665), so a union
  * with a promise or a thenable class is a valid factory that the flag does not tell apart. A provider type the output
  * can name types the factory, so a factory that does not fit its registration is an error in the output.
  * `unknown` where the type has no name.
@@ -454,10 +504,10 @@ function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = []
 
 /**
  * The `new Class(args)` of a class provider, for an accessor that builds it in place. The caller holds the class
- * symbol, which only a class registration has (packages/core/src/analyzer/graphAdapter.ts:421 drops one without it, and
- * the value and factory nodes at :374 and :400 set none). It does not declare the generic resolver its arguments call
- * (only `resolveSingle`, :192 of this file): the open public `resolve` already asks for it
- * (packages/core/src/generator/DirectEmitter.ts:254), and an accessor is inlined in open mode only.
+ * symbol, which only a class registration has (packages/core/src/analyzer/graphAdapter.ts:453 drops one without it, and
+ * the value and factory nodes at :406 and :432 set none). It does not declare the generic resolver its arguments call
+ * (only `resolveSingle`, :194 of this file): the open public `resolve` already asks for it
+ * (packages/core/src/generator/DirectEmitter.ts:258), and an accessor is inlined in open mode only.
  */
 export function constructionExpression(
   node: DependencyNode,
@@ -518,6 +568,8 @@ export function generateFactories(
     const node = graph.nodes.get(tokenId);
     if (!node) continue;
     if (node.service.type === 'parent') continue;
+    // An alias builds nothing and keeps nothing: its accessor reads its target, there is no creator.
+    if (node.service.type === 'alias') continue;
     // A creator the accessor writes in its own body has no method of its own.
     if (inlined.has(tokenId)) continue;
 

@@ -1,8 +1,10 @@
 import type { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../analyzer/types';
-import { getDirectName, getFactoryName, getReadName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
+import { getDirectName, getFactoryName, getReadName, multiRegistrationKey, parentTokenKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
 import { dispatchIsLinear, emitDispatchRead, emitLinearRead, type DispatchEntry } from './dispatchEmitter';
 import { boundGuard } from './inputEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
+import { aliasPlanOf } from '../analyzer/shared/aliasLinks';
+import { getSimpleName } from '../analyzer/utils/TokenUtils';
 
 /**
  * `name<T>(token): T` as an overload over an `unknown` implementation. The body hands out `unknown`
@@ -90,12 +92,21 @@ export function manyEntryGuard(hasAsync: boolean, minimal: boolean): string {
  * the batch loop throws (`throw`): its try block turns a throw into the rejection, so no `return` leaves the loop.
  */
 export function overrideTokenChecks(graph: DependencyGraph, getImport: GetImport, form: 'reject' | 'throw'): string {
-  if (!graph.multiNodes || graph.multiNodes.size === 0) return '';
+  const refuse = (failure: string): string => (form === 'reject' ? `return Promise.reject(${failure})` : `throw ${failure}`);
   const checks: string[] = [];
-  for (const nodes of graph.multiNodes.values()) {
+  for (const nodes of graph.multiNodes?.values() ?? []) {
     const tokenKey = resolveTokenKey(nodes[0].service, getImport);
-    const failure = `this._neoFail('NEO_OVERRIDE_MULTI_UNSUPPORTED', 'cannot override a multi token')`;
-    checks.push(`if (token === ${tokenKey}) ${form === 'reject' ? `return Promise.reject(${failure})` : `throw ${failure}`};`);
+    checks.push(`if (token === ${tokenKey}) ${refuse(`this._neoFail('NEO_OVERRIDE_MULTI_UNSUPPORTED', 'cannot override a multi token')`)};`);
+  }
+  // An alias answers what its target answers and keeps nothing: the override is the target's. The message names the
+  // end of the chain, the registration a test replaces.
+  const plan = aliasPlanOf(graph);
+  if (plan !== undefined) {
+    for (const [tokenId, node] of graph.nodes) {
+      if (!plan.isAlias(tokenId)) continue;
+      const message = JSON.stringify(`cannot override an alias: override its target '${getSimpleName(plan.canonicalOf(tokenId))}'`);
+      checks.push(`if (token === ${resolveTokenKey(node.service, getImport)}) ${refuse(`this._neoFail('NEO_OVERRIDE_ALIAS_UNSUPPORTED', ${message})`)};`);
+    }
   }
   return checks.join(form === 'reject' ? '\n    ' : '\n        ');
 }
@@ -142,7 +153,7 @@ export function generateResolveCases(
   for (const tokenId of sorted) {
     const node = graph.nodes.get(tokenId);
     if (!node) continue;
-    if (node.service.type === 'parent') continue;
+    if (node.service.type === 'parent' || node.service.type === 'alias') continue;
 
     const factoryId = getFactoryName(tokenId);
     const isTransient = node.service.lifecycle === 'transient';
@@ -389,13 +400,43 @@ export function generateDirectAccessors(
   formatToken: string,
   providerTypes: GetProviderTypes = noProviderTypes,
   inlined: ReadonlyMap<TokenId, string> = new Map(),
+  aliasReads: ReadonlyMap<TokenId, string> = new Map(),
 ): string[] {
   const accessors: string[] = [];
+  const plan = aliasPlanOf(graph);
   for (const tokenId of sorted) {
     const node = graph.nodes.get(tokenId);
     if (!node || node.service.type === 'parent') continue;
     const factoryId = getFactoryName(tokenId);
     const tokenKey = resolveTokenKey(node.service, getImport);
+    // An alias has no state, no creator and no disposal: its accessor reads the target and, in the full profile, fires
+    // the event of the alias token. The target is read through its `_direct_` accessor, which fires none.
+    const aliased = aliasReads.get(tokenId);
+    if (node.service.type === 'alias' && aliased !== undefined) {
+      const returns = providerTypes(node).accessor ?? 'unknown';
+      if (profile.single) {
+        accessors.push(singleAccessor({
+          name: getReadName(tokenId), returns, tokenKey, created: aliased, asType: '', mockType: '',
+          transient: true, asyncSingleton: false, honourOverrides: false, stored: '', formatToken,
+        }));
+        continue;
+      }
+      accessors.push(`
+  private ${getDirectName(tokenId)}(): ${returns} {
+    return ${aliased};
+  }`);
+      if (!profile.minimal) {
+        accessors.push(`
+  private ${getReadName(tokenId)}(): ${returns} {
+    const __neoValue = this.${getDirectName(tokenId)}();
+    this.notifyResolve(${tokenKey}, __neoValue);
+    return __neoValue;
+  }`);
+      }
+      continue;
+    }
+    // The target of an alias keeps the two accessors an alias reads: `_direct_` (no event) and `_get_` (the event).
+    const single = profile.single && !(plan?.localTargets.has(tokenId) ?? false);
     const transient = node.service.lifecycle === 'transient';
     const asyncSingleton = hasAsync && !!node.service.isAsync && !transient;
     const stored = afterStore('instance', tokenKey, hasAsync, isBorrowedInstance(node.service));
@@ -405,7 +446,7 @@ export function generateDirectAccessors(
     const asType = types.accessor === undefined ? '' : ` as ${types.accessor}`;
     const asCreated = types.creator === types.accessor ? '' : asType;
     const mockType = types.accessor === undefined ? '' : `<${types.accessor}>`;
-    if (profile.single) {
+    if (single) {
       const created = inlined.get(tokenId) ?? `this.${factoryId}()`;
       accessors.push(singleAccessor({
         name: getReadName(tokenId), returns, tokenKey, created: `${created}${asCreated}`, asType, mockType,
@@ -597,4 +638,96 @@ export function generateDirectResolveAll(
     publicLists,
     internalLists,
   };
+}
+
+/**
+ * `_neoParent(token)`: the read of a token a `useContainer` parent provides, for an alias whose target the parent owns.
+ * It is the delegation loop of the generic resolver without its resolve event: the event of the read is the alias
+ * token's, the caller fires it. The parent answers a token it does not know with `NeoServiceNotFoundError`, which is
+ * the one error the loop skips.
+ */
+export function parentReadMethod(notFoundErrorClassName: string, className: string): string {
+  return `private _neoParent(token: unknown): unknown {
+    if (this.legacy) {
+        for (const legacyContainer of this.legacy) {
+            try {
+                if (legacyContainer.resolve) {
+                    const legacyResult = legacyContainer.resolve(token);
+                    if (legacyResult != null) this._borrowed.add(legacyResult);
+                    return legacyResult;
+                }
+            } catch (e) {
+                if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
+            }
+        }
+    }
+
+    throw new ${notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${className}.formatToken(token)}\`);
+  }`;
+}
+
+/** True when an alias of the graph ends at a token a parent provides: the class then needs `_neoParent`. */
+export function readsParentForAlias(graph: DependencyGraph): boolean {
+  const plan = aliasPlanOf(graph);
+  if (plan === undefined) return false;
+  for (const tokenId of graph.nodes.keys()) {
+    if (plan.isAlias(tokenId) && !plan.isLocal(tokenId)) return true;
+  }
+  return false;
+}
+
+/**
+ * Reference emitter. One table from each alias to its canonical target, and one reader of the canonical targets that
+ * honours an override of the target first, whether the target is local or a parent's (an alias is never overridden itself). The generic resolver looks a token up
+ * in the table before it reads its own cases, so a chain of any length is one lookup.
+ */
+export function generateAliasMembers(
+  graph: DependencyGraph,
+  getImport: GetImport,
+  getForeignImport: GetImport,
+  className: string,
+  notFoundErrorClassName: string,
+): { members: string; step: string } | undefined {
+  const plan = aliasPlanOf(graph);
+  if (plan === undefined) return undefined;
+  const rows: string[] = [];
+  const reads: string[] = [];
+  const read = new Set<TokenId>();
+  for (const [tokenId, node] of graph.nodes) {
+    if (!plan.isAlias(tokenId)) continue;
+    const target = plan.canonicalOf(tokenId);
+    const targetNode = graph.nodes.get(target);
+    const local = plan.isLocal(tokenId);
+    const targetKey = local && targetNode ? resolveTokenKey(targetNode.service, getImport) : parentTokenKey(graph, target, getForeignImport);
+    rows.push(`[${resolveTokenKey(node.service, getImport)}, ${targetKey}]`);
+    if (!local || read.has(target)) continue;
+    read.add(target);
+    reads.push(`if (target === ${targetKey}) return this.resolveLocal(${targetKey});`);
+  }
+  const parent = readsParentForAlias(graph);
+  const members = `private static readonly __neoAliases = new Map<unknown, unknown>([
+    ${rows.join(',\n    ')}
+  ]);
+
+  private _neoAliasRead(target: unknown): unknown {
+    if (this.overrides.has(target)) {
+      if (!this.instances.has(target)) {
+        const __neoMock = this.overrides.get(target)!();
+        this.instances.set(target, __neoMock);
+        if (__neoMock != null) this._borrowed.add(__neoMock);
+      }
+      return this.instances.get(target);
+    }
+    ${reads.join('\n    ')}
+    ${parent ? 'return this._neoParent(target);' : 'return undefined;'}
+  }${parent ? `\n\n  ${parentReadMethod(notFoundErrorClassName, className)}` : ''}`;
+  const step = `// 0b. An alias answers what its target answers. The event is the alias token's, never the target's.
+    const __neoCanonical = ${className}.__neoAliases.get(token);
+    if (__neoCanonical !== undefined) {
+      const __neoAliased = this._neoAliasRead(__neoCanonical);
+      this.notifyResolve(token, __neoAliased);
+      return __neoAliased;
+    }
+`;
+  return { members, step };
 }

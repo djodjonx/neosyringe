@@ -166,6 +166,20 @@ export class MissingDependencyValidator implements IValidator {
         info.definition,
         availableTokens,
       );
+      if (info.definition.type === 'alias') {
+        const multi = info.definition.dependencyEdges?.some((edge) => edge.multi) === true;
+        if (multi) {
+          errors.push({
+            type: 'unsupported',
+            code: 'NEO_MULTI_REQUIRES_RESOLVE_ALL',
+            message: `NEO_MULTI_REQUIRES_RESOLVE_ALL: alias '${info.tokenText}' targets the multi token '${getSimpleName(requiredDeps[0] ?? '')}'; an alias answers one object, use resolveAll on the target.`,
+            node: findTokenAssignment(info.node) ?? info.node,
+            sourceFile: config.sourceFile,
+            context: { tokenText: requiredDeps[0] },
+          });
+          return;
+        }
+      }
       for (const depTokenId of requiredDeps) {
         if (!availableTokens.has(depTokenId) && !optionalDeps.has(depTokenId)) {
           const tokenNode = findTokenAssignment(info.node);

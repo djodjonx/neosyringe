@@ -4,6 +4,8 @@ import type { AnalysisError, ConfigGraph, InjectionInfo } from '../types';
 import type { IValidator, ValidationContext } from './Validator';
 import type { IErrorFormatter } from '../errors/ErrorFormatter';
 import { findProperty, findTokenAssignment } from '../utils/PropertyFinder';
+import { aliasTargetNode, aliasTypeMismatch } from '../shared/aliasLinks';
+import type { TokenResolverService } from '../shared/TokenResolverService';
 
 /**
  * Validates type compatibility between tokens and providers.
@@ -14,7 +16,8 @@ export class TypeValidator implements IValidator {
 
   constructor(
     private checker: ts.TypeChecker,
-    private errorFormatter: IErrorFormatter
+    private errorFormatter: IErrorFormatter,
+    private tokens?: TokenResolverService,
   ) {}
 
   validate(config: ConfigGraph, _context: ValidationContext): AnalysisError[] {
@@ -41,6 +44,7 @@ export class TypeValidator implements IValidator {
     const { definition } = info;
 
     if (definition.type === 'factory') return this.checkFactoryReturn(info);
+    if (definition.type === 'alias') return this.checkAlias(info);
     if (!definition.implementationSymbol) return null;
     if (!definition.isInterfaceToken) return null;
     if (definition.type === 'value') return null; // no class to type-check
@@ -87,6 +91,16 @@ export class TypeValidator implements IValidator {
     // whereas getTypeOfSymbolAtLocation returns the constructor type (typeof ConsoleLogger)
     // which is not structurally assignable to an interface.
     return this.checker.getDeclaredTypeOfSymbol(definition.implementationSymbol);
+  }
+
+  /** The value of the target of an alias must be the value of its token: an instance of the class, the `T` of the interface. */
+  private checkAlias(info: InjectionInfo): AnalysisError | null {
+    if (!this.tokens || !TSContext.ts.isObjectLiteralExpression(info.node)) return null;
+    const token = findTokenAssignment(info.node);
+    const target = aliasTargetNode(info.node);
+    if (!token || !target) return null;
+    const mismatch = aliasTypeMismatch(this.checker, this.tokens, token.initializer, target);
+    return mismatch ? this.errorFormatter.formatTypeMismatchError(info, mismatch.expected, mismatch.actual) : null;
   }
 
   private checkFactoryReturn(info: InjectionInfo): AnalysisError | null {

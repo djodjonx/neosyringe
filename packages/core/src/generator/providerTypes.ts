@@ -94,7 +94,8 @@ export function providerTypesOf(service: ServiceDefinition, getImport: GetImport
     const hoisted = service.valueCapture !== undefined && service.valueCaptureRead !== true && service.valueSource !== undefined;
     return hoisted ? { creator: declared, accessor: declared } : { accessor: declared };
   }
-  if (service.type === 'factory') {
+  if (service.type === 'factory' || service.type === 'alias') {
+    // An alias has no creator: its accessor answers the type its token is declared under.
     const declared = declaredType(service, getImport, nameType);
     return declared === undefined ? {} : { accessor: declared };
   }

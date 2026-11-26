@@ -2,11 +2,12 @@ import path from 'node:path';
 import type * as ts from 'typescript';
 import type { AnalysisError, DependencyGraph, DependencyNode, TokenId } from './types';
 import { stableCodeOf, stableSeverityOf } from './errors/stableDiagnostic';
+import { aliasPlanOf } from './shared/aliasLinks';
 
 /**
  * The compiler-free shape of one analyzed container (topic 03). It holds no `ts.Node`, `ts.Symbol`
- * or `ts.Type`: every position is a file, an offset and a length. Alias and scope-entry fields are
- * added by topics 18 and 20; nothing here anticipates them.
+ * or `ts.Type`: every position is a file, an offset and a length. An alias is a registration of provider kind `alias`:
+ * one reference to its direct target, the lifecycle and the owner of its canonical local target.
  */
 export interface SourceSpan {
   readonly file: string;
@@ -26,7 +27,7 @@ export interface RegistrationIR {
   readonly token: string;
   readonly order: number;
   readonly provider: {
-    readonly kind: 'class' | 'factory' | 'value' | 'input';
+    readonly kind: 'class' | 'factory' | 'value' | 'input' | 'alias';
     readonly expressionRef: string;
   };
   readonly lifecycle: 'singleton' | 'transient';
@@ -72,6 +73,15 @@ export function assertLocalReferences(graph: ContainerIR): void {
   }
 }
 
+/** The IR also describes a graph that has errors: a cycle of aliases has no plan, and its diagnostics say why. */
+function aliasPlanOrUndefined(graph: DependencyGraph): ReturnType<typeof aliasPlanOf> {
+  try {
+    return aliasPlanOf(graph);
+  } catch {
+    return undefined;
+  }
+}
+
 function spanOf(node: ts.Node, root: string): SourceSpan {
   const file = node.getSourceFile();
   const start = node.getStart(file);
@@ -108,6 +118,7 @@ function registrationId(located: Located): string {
 
 function providerOf(node: DependencyNode, id: string): RegistrationIR['provider'] {
   const { service } = node;
+  if (service.type === 'alias') return { kind: 'alias', expressionRef: `alias:${id}` };
   if (service.type === 'factory') return { kind: 'factory', expressionRef: `factory:${id}` };
   if (service.inputSlot !== undefined) return { kind: 'input', expressionRef: `input:${id}` };
   if (service.type === 'value') return { kind: 'value', expressionRef: `value:${id}` };
@@ -159,9 +170,17 @@ export function containerIROf(graph: DependencyGraph, root: string): ContainerIR
     return undefined;
   };
 
+  const aliases = aliasPlanOrUndefined(graph);
   const registrations: RegistrationIR[] = located.map((entry, position) => {
     const id = ids[position] as string;
+    // An alias owns nothing: it shows the lifecycle and the owner of the registration it ends at, here or `singleton`
+    // and `borrowed` when that is a token a parent provides.
+    const canonical = !entry.multi && aliases?.isAlias(entry.tokenId) && aliases.isLocal(entry.tokenId)
+      ? graph.nodes.get(aliases.canonicalOf(entry.tokenId))
+      : undefined;
     const { service } = entry.node;
+    const owner = canonical?.service ?? service;
+    const aliasOfParent = !entry.multi && aliases?.isAlias(entry.tokenId) === true && canonical === undefined;
     const dependencies: DependencyRef[] = [];
     for (const token of entry.node.dependencies) {
       const ref = refFor(token, false);
@@ -172,8 +191,10 @@ export function containerIROf(graph: DependencyGraph, root: string): ContainerIR
       token: entry.tokenId,
       order: position,
       provider: providerOf(entry.node, id),
-      lifecycle: service.lifecycle,
-      ownership: service.ownership === 'borrowed' ? 'borrowed' : service.lifecycle === 'transient' ? 'caller' : 'owned',
+      lifecycle: aliasOfParent ? 'singleton' : owner.lifecycle,
+      ownership: aliasOfParent || owner.ownership === 'borrowed'
+        ? 'borrowed'
+        : owner.lifecycle === 'transient' ? 'caller' : 'owned',
       async: service.isAsync === true,
       multi: entry.multi,
       dependencies,

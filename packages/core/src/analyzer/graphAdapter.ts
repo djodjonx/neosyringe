@@ -23,8 +23,10 @@ import {
 } from './parsers/ConfigParser';
 import { DisposableTransientCaptureValidator, rememberCaptureSites } from './validators';
 import { HashUtils } from './shared/HashUtils';
+import { getSimpleName } from './utils/TokenUtils';
 import type { TokenResolverService } from './shared/TokenResolverService';
 import { declaredFactoryEdges, stampRegistration, valueCaptureFor } from './shared/registrationGraph';
+import { aliasMismatchMessage, aliasTypeMismatch } from './shared/aliasLinks';
 import { UNSUPPORTED_SHAPE_MESSAGE, UnsupportedContainerShapeError } from './errors/registrationErrors';
 
 /** What the adapter needs from the analyzer: the checker, the shared token service and the validation mode. */
@@ -391,6 +393,11 @@ export class GraphAdapter {
     const { tokenId } = collected;
     const { isMulti, isScoped, tokenText } = info;
 
+    if (collected.type === 'alias') {
+      this.replayAlias(info, obj, graph);
+      return;
+    }
+
     if (collected.type === 'value') {
       if (this.emitMixedMultiError(isMulti, tokenId, tokenText, obj, graph)) return;
       const definition: ServiceDefinition = {
@@ -470,6 +477,65 @@ export class GraphAdapter {
       tokenBinding: collected.tokenBinding,
     };
     this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
+  }
+
+  /**
+   * An alias is a node of its own, with no provider and no state: it reads its target. The value of the target must be
+   * the value of the token (the same refusal as the diagnostics, with the same text). Its only dependency is added once
+   * every registration is known, when the dependencies are resolved.
+   */
+  private replayAlias(info: InjectionInfo, obj: ts.ObjectLiteralExpression, graph: DependencyGraph): void {
+    const collected = info.definition;
+    const { tokenText, isScoped } = info;
+    const { tokenId } = collected;
+    if (this.emitMixedMultiError(false, tokenId, tokenText, obj, graph)) return;
+    if (this.emitDuplicate(graph, tokenId, tokenText, isScoped, obj, obj.getSourceFile())) return;
+    const tokenProperty = propertyAssignment(obj, 'token');
+    const targetProperty = propertyAssignment(obj, 'useExisting');
+    if (tokenProperty && targetProperty) {
+      const mismatch = aliasTypeMismatch(this.env.checker, this.env.tokens, tokenProperty.initializer, targetProperty.initializer);
+      if (mismatch) {
+        this.pushError(graph, {
+          type: 'type-mismatch',
+          message: aliasMismatchMessage(mismatch),
+          node: obj,
+          sourceFile: obj.getSourceFile(),
+        });
+      }
+    }
+    const definition: ServiceDefinition = {
+      tokenId,
+      tokenSymbol: collected.tokenSymbol,
+      tokenLocalName: collected.tokenLocalName,
+      tokenBinding: collected.tokenBinding,
+      tokenType: collected.tokenType,
+      registrationNode: obj,
+      type: 'alias',
+      // A filler nobody reads: an alias is a singleton of nothing.
+      lifecycle: 'singleton',
+      isInterfaceToken: collected.isInterfaceToken === true,
+      aliasTarget: collected.aliasTarget,
+      isScoped,
+    };
+    this.addToGraph(false, tokenId, { service: definition, dependencies: [] }, graph);
+  }
+
+  /** An alias of a multi token is refused: a multi token is read with resolveAll, and an alias answers one object. */
+  private refuseMultiAliases(graph: DependencyGraph): void {
+    if (!graph.multiNodes) return;
+    for (const node of graph.nodes.values()) {
+      const target = node.service.aliasTarget;
+      if (node.service.type !== 'alias' || !target || !graph.multiNodes.has(target.tokenId)) continue;
+      const registration = node.service.registrationNode;
+      const anchor = TSContext.ts.isObjectLiteralExpression(registration) ? propertyAssignment(registration, 'token') : undefined;
+      this.pushError(graph, {
+        type: 'unsupported',
+        code: 'NEO_MULTI_REQUIRES_RESOLVE_ALL',
+        message: `NEO_MULTI_REQUIRES_RESOLVE_ALL: alias '${getSimpleName(node.service.tokenId)}' targets the multi token '${getSimpleName(target.tokenId)}'; an alias answers one object, use resolveAll on the target.`,
+        node: anchor ?? registration,
+        sourceFile: registration.getSourceFile(),
+      });
+    }
   }
 
   private emitDuplicate(
@@ -570,6 +636,7 @@ export class GraphAdapter {
         for (const node of nodes) this.dependencyResolver.resolve(node, graph);
       }
     }
+    this.refuseMultiAliases(graph);
     assignRetention(graph);
     sealOpenParent(graph);
     if (!capture) return;

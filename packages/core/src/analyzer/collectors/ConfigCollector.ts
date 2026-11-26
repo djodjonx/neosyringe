@@ -114,7 +114,7 @@ export class ConfigCollector implements IConfigCollector {
       const opaque: OpaqueNames = { single: [], multi: [] };
       this.addKnownTokens(config, configs, known, new Set(), opaque);
       const optimization: OptimizationTarget = {};
-      readOptimization(configArg, optimization, known, (expr) => this.tokenResolverService.resolveTokenId(expr));
+      readOptimization(configArg, optimization, known, (expr) => this.tokenResolverService.resolveTokenId(expr), this.aliasTokensOf(config, configs));
       this.readRuntimeAndInputs(config, configArg, optimization, configs);
       // Same order as the built graph: every single registration (partials first), then the multi ones.
       const opaqueNames = [...opaque.single, ...opaque.multi];
@@ -556,6 +556,7 @@ export class ConfigCollector implements IConfigCollector {
       implementationBinding: parsed.implementationBinding,
       tokenBinding: parsed.tokenBinding,
       tokenType: parsed.tokenType,
+      aliasTarget: parsed.aliasTarget,
       factoryDependencies: parsed.factoryDependencies,
       opaque: parsed.opaque,
       ownership: parsed.registrationType === 'value' || parsed.registrationType === 'factory'
@@ -574,6 +575,28 @@ export class ConfigCollector implements IConfigCollector {
       isMulti: parsed.isMulti,
       warnings: parsed.dependenciesWarning ? [parsed.dependenciesWarning] : undefined,
     };
+  }
+
+  /**
+   * The tokens of the alias registrations of a builder and of the partials folded into it. An alias builds nothing, so
+   * it cannot be an `eager` root: `readOptimization` refuses it and says to list its target.
+   */
+  private aliasTokensOf(config: ConfigGraph, configs: Map<string, ConfigGraph>): Set<TokenId> {
+    const aliases = new Set<TokenId>();
+    const seen = new Set<string>();
+    const visit = (current: ConfigGraph): void => {
+      for (const link of current.extendsLinks ?? []) {
+        if (seen.has(link.key)) continue;
+        seen.add(link.key);
+        const partial = configs.get(link.key);
+        if (partial) visit(partial);
+      }
+      for (const [id, info] of current.localInjections) {
+        if (info.definition.type === 'alias') aliases.add(id);
+      }
+    };
+    visit(config);
+    return aliases;
   }
 
   /** A partial useValue reads the expression written in `extends`, once per host. The capture string is metadata on this shared partial, not a per-host copy. */

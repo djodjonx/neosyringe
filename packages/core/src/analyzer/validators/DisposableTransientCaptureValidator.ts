@@ -14,6 +14,8 @@ interface View {
   tokenId: TokenId;
   name: string;
   lifecycle: 'singleton' | 'transient';
+  /** An alias owns nothing and has no lifecycle: it is transparent, the walk goes through it to its target. */
+  isAlias: boolean;
   isScoped: boolean;
   isDisposable: boolean;
   isAsyncDisposable: boolean;
@@ -70,7 +72,7 @@ export function captureEdgesOf(service: ServiceDefinition): Edge[] {
 }
 
 function isCaptor(view: View): boolean {
-  if (view.fromParent) return false;
+  if (view.fromParent || view.isAlias) return false;
   return view.lifecycle === 'singleton';
 }
 
@@ -163,6 +165,7 @@ export class DisposableTransientCaptureValidator implements IValidator {
       tokenId: service.tokenId,
       name: getSimpleName(service.tokenId),
       lifecycle: service.lifecycle,
+      isAlias: service.type === 'alias',
       isScoped: service.isScoped === true,
       isDisposable: service.isDisposable === true,
       isAsyncDisposable: service.isAsyncDisposable === true,
@@ -266,7 +269,7 @@ export class DisposableTransientCaptureValidator implements IValidator {
     if (!targets || targets.length === 0) return;
     for (const target of targets) {
       if (seen.has(target.tokenId)) continue;
-      if (target.lifecycle === 'singleton') continue;
+      if (target.lifecycle === 'singleton' && !target.isAlias) continue;
       const chain = [...names, target.name];
       if (isCapturedTransient(target)) {
         this.report(captor, target, chain, errors, reported);

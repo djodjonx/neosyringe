@@ -16,7 +16,9 @@ import { factoryLeaseHelpers } from './factoryLeaseEmitter';
 import { boundGuard, boundInitializeGuard, hasScopeInputs, inputConstructor, inputMembers } from './inputEmitter';
 import { DEFAULT_MANY_NAMES, emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
+import { aliasPlanOf } from '../analyzer/shared/aliasLinks';
 import {
+  aliasReadExpressions,
   constructionExpression,
   generateFactories,
   generateMultiFactories,
@@ -36,6 +38,8 @@ import {
   type ListReader,
   manyEntryGuard,
   parentOpenCheck,
+  parentReadMethod,
+  readsParentForAlias,
   resolveListenerOverload,
   singleOverload,
 } from './ResolveEmitter';
@@ -328,12 +332,15 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   // one) and its `_direct_` accessors; the minimal profile has no `_get_`.
   const unified = !minimal && !closed;
   const inlined = new Map<TokenId, string>();
+  // The target of an alias is read by `_direct_`, which the unified form does not have: it keeps its creator and its two accessors.
+  const aliases = aliasPlanOf(graph);
   if (unified) {
     for (const tokenId of sorted) {
       const node = graph.nodes.get(tokenId);
-      // Only a class registration has an implementation symbol (packages/core/src/analyzer/graphAdapter.ts:374-419).
+      // Only a class registration has an implementation symbol (packages/core/src/analyzer/graphAdapter.ts:401-453).
       const symbol = node?.service.implementationSymbol;
       if (!node || !symbol) continue;
+      if (aliases?.localTargets.has(tokenId)) continue;
       inlined.set(tokenId, constructionExpression(node, symbol, graph, getImport, getForeignImport, hasAsync, closed, direct, providerTypes));
     }
   }
@@ -342,7 +349,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
     ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, manyNames),
   ];
   const accessors = [
-    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides, single: unified }, `${input.className}.formatToken`, providerTypes, inlined),
+    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides, single: unified }, `${input.className}.formatToken`, providerTypes, inlined, aliasReadExpressions(graph, getImport, getForeignImport, providerTypes, honourOverrides)),
     ...generateDirectContributions(graph, hasAsync, providerTypes),
   ];
   const needs = factoryContextNeeds(graph);
@@ -402,6 +409,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const single = linked.get('resolveSingle');
   if (single) members.push(single);
   members.push(formatTokenMember(), destroy, resolveAllPublic);
+  if (readsParentForAlias(graph)) members.push(parentReadMethod(input.notFoundErrorClassName, input.className));
   // A public member: it loops over the public `resolve`, so a token has the guard, the closed-root check and the events of a single call.
   members.push(emitResolveMany(`${boundGuard(graph, 'resolveMany()')}${manyEntryGuard(hasAsync, minimal)}`, manyNames));
   const many = linked.get('resolveAll');

@@ -63,6 +63,7 @@ export function readOptimization(
   target: OptimizationTarget,
   known: ReadonlySet<TokenId>,
   resolve: (expr: ts.Expression) => TokenId | null,
+  aliases: ReadonlySet<TokenId> = new Set(),
 ): void {
   const optimization = namedInitializer(configObj, 'optimization');
   if (!optimization) return;
@@ -119,7 +120,7 @@ export function readOptimization(
     return;
   }
   const roots = readRootList(rootsNode, known, resolve, sourceFile, target);
-  const eager = readRootList(eagerNode, known, resolve, sourceFile, target);
+  const eager = readRootList(eagerNode, known, resolve, sourceFile, target, aliases);
   if (!roots) return;
   target.optimizationMode = 'closed';
   target.publicRoots = roots.filter((item) => !item.all).map((item) => item.id);
@@ -284,6 +285,7 @@ function readRootList(
   resolve: (expr: ts.Expression) => TokenId | null,
   sourceFile: ts.SourceFile,
   target: OptimizationTarget,
+  aliases: ReadonlySet<TokenId> = new Set(),
 ): Array<{ id: TokenId; all: boolean }> | undefined {
   if (!node) return undefined;
   const list = unwrapExpression(node);
@@ -325,6 +327,17 @@ function readRootList(
         type: 'missing',
         code: 'NEO_MISSING_PROVIDER',
         message: `NEO_MISSING_PROVIDER: root '${getSimpleName(ref.id)}' is not registered.`,
+        node: element,
+        sourceFile,
+      });
+      continue;
+    }
+    // An alias is not built by the container: it has no provider an eager root could construct. List its target.
+    if (!ref.all && aliases.has(ref.id)) {
+      pushConfigError(target, {
+        type: 'unsupported',
+        code: 'NEO_CONFIG_UNSUPPORTED',
+        message: `NEO_CONFIG_UNSUPPORTED: eager root '${getSimpleName(ref.id)}' is an alias (useExisting): an alias builds nothing, so list the target in eager instead.`,
         node: element,
         sourceFile,
       });

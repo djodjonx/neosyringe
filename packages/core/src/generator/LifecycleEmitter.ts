@@ -4,6 +4,7 @@ import { emitOverrideMany, type ManyNames } from './manyEmitter';
 import { boundInitializeGuard, hasScopeInputs, inputCreateScopeMethod, inputDestroyMethod } from './inputEmitter';
 import { MinIndexQueue } from './minHeap';
 import { afterStore, isBorrowedInstance, overrideTokenChecks } from './ResolveEmitter';
+import { aliasPlanOf, orderingDependencies } from '../analyzer/shared/aliasLinks';
 
 /**
  * What a cached singleton is read as when it is disposed. The cache holds `unknown`; one assertion
@@ -161,10 +162,11 @@ function linkNodeOrder(
   graph: DependencyGraph,
   needs: (id: string, pred: string) => void,
 ): void {
+  const plan = aliasPlanOf(graph);
   for (const tokenId of sorted) {
     const node = graph.nodes.get(tokenId);
     if (!node) continue;
-    for (const dep of node.dependencies) needs(`node:${tokenId}`, `node:${dep}`);
+    for (const dep of orderingDependencies(plan, node.dependencies)) needs(`node:${tokenId}`, `node:${dep}`);
   }
 }
 
@@ -202,7 +204,7 @@ function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport:
     for (const [tokenId, nodes] of graph.multiNodes) {
       nodes.forEach((node, index) => {
         const id = `multi:${tokenId}:${index}`;
-        for (const dep of node.dependencies) {
+        for (const dep of orderingDependencies(aliasPlanOf(graph), node.dependencies)) {
           needs(id, `node:${dep}`);
           for (const pred of multiIds.get(dep) ?? []) needs(id, pred);
         }
@@ -443,7 +445,7 @@ function linkContributionDependencies(
   for (const [tokenId, nodes] of graph.multiNodes) {
     nodes.forEach((node, index) => {
       const id = `multi:${tokenId}:${index}`;
-      for (const dep of node.dependencies) edge(id, `node:${dep}`);
+      for (const dep of orderingDependencies(aliasPlanOf(graph), node.dependencies)) edge(id, `node:${dep}`);
     });
   }
 }
@@ -453,10 +455,11 @@ function linkNodeDisposal(
   sorted: TokenId[],
   edge: (first: string, later: string) => void,
 ): void {
+  const plan = aliasPlanOf(graph);
   for (const tokenId of sorted) {
     const node = graph.nodes.get(tokenId);
     if (!node) continue;
-    for (const dep of node.dependencies) edge(`node:${tokenId}`, `node:${dep}`);
+    for (const dep of orderingDependencies(plan, node.dependencies)) edge(`node:${tokenId}`, `node:${dep}`);
   }
 }
 

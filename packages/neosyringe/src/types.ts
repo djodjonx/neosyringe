@@ -326,28 +326,52 @@ type EnsureFactory<E> =
       : never
     : unknown;
 
-type InvalidFactoryIndices<I extends readonly unknown[]> = {
-  [K in keyof I]: EnsureFactory<I[K]> extends never ? K : never
+/**
+ * An alias keeps no registration option of its own, and the value of its target must be the value of its token. The
+ * target is a token, so the check reads the values the two tokens carry: a class instance, the `T` of
+ * `useInterface<T>()`. `provider`, `useFactory`, `useValue`, `lifecycle`, `ownership`, `multi` and `dependencies` are
+ * refused here too: a union of injections would otherwise accept an alias that is also another variant.
+ */
+type EnsureAlias<E> =
+  E extends { useExisting: infer U extends Token<unknown>; token: infer T extends Token<unknown> }
+    ? E extends
+      | { provider: unknown }
+      | { useFactory: unknown }
+      | { useValue: unknown }
+      | { lifecycle: unknown }
+      | { ownership: unknown }
+      | { multi: unknown }
+      | { dependencies: unknown }
+      ? never
+      : [ValueOf<U>] extends [ValueOf<T>]
+        ? unknown
+        : never
+    : unknown;
+
+type EnsureInjection<E> = [EnsureFactory<E>] extends [never] ? never : EnsureAlias<E>;
+
+type InvalidInjectionIndices<I extends readonly unknown[]> = {
+  [K in keyof I]: [EnsureInjection<I[K]>] extends [never] ? K : never
 }[number];
 
 type InjectionsOk<I> = I extends readonly unknown[]
-  ? [InvalidFactoryIndices<I>] extends [never] ? unknown : never
+  ? [InvalidInjectionIndices<I>] extends [never] ? unknown : never
   : unknown;
 
-type FactorySites<I> = {
-  [K in keyof I]: EnsureFactory<I[K]> extends never ? never : I[K]
+type InjectionSites<I> = {
+  [K in keyof I]: [EnsureInjection<I[K]>] extends [never] ? never : I[K]
 };
 
 type InjectionGuard<C> =
   C extends { injections: infer I extends readonly unknown[] }
-    ? [InvalidFactoryIndices<I>] extends [never]
+    ? [InvalidInjectionIndices<I>] extends [never]
       ? InjectionsOk<I>
-      : { readonly injections: FactorySites<I> }
+      : { readonly injections: InjectionSites<I> }
     : unknown;
 
 /**
  * Definition of a single injection.
- * The four shapes are disjoint: autowire, class for a token, factory, or useValue.
+ * The five shapes are disjoint: autowire, class for a token, factory, useValue, or an alias (`useExisting`).
  * Optional `never` keys reject the other shape's fields on a widened value too.
  */
 export type Injection<T = unknown> =
@@ -386,7 +410,47 @@ export type Injection<T = unknown> =
       ownership?: 'borrowed';
       provider?: never;
       useFactory?: never;
+    }
+  | {
+      token: Token<T>;
+      useExisting: Token<T>;
+      scoped?: boolean;
+      provider?: never;
+      useFactory?: never;
+      useValue?: never;
+      lifecycle?: never;
+      ownership?: never;
+      multi?: never;
+      dependencies?: never;
     };
+
+/**
+ * An alias: `token` answers what `useExisting` answers. It is the object a registration `{ token, useExisting }`
+ * is checked against, and it names the shape in your own code. The pair is valid when the value of the target is
+ * assignable to the value of the token (a class instance, the `T` of `useInterface<T>()`): a subtype is accepted.
+ * An alias has no provider, factory, value, lifecycle, ownership, dependency list or `multi`: it owns nothing, the
+ * target keeps its lifecycle and its owner. `scoped` is allowed.
+ *
+ * @example
+ * ```typescript
+ * const logger: Alias<typeof loggerToken, typeof ConsoleLogger> = {
+ *   token: loggerToken,
+ *   useExisting: ConsoleLogger,
+ * };
+ * ```
+ */
+export type Alias<T extends Token<unknown>, U extends Token<unknown>> = {
+  readonly token: T;
+  readonly useExisting: U;
+  readonly scoped?: boolean;
+  readonly provider?: never;
+  readonly useFactory?: never;
+  readonly useValue?: never;
+  readonly lifecycle?: never;
+  readonly ownership?: never;
+  readonly multi?: never;
+  readonly dependencies?: never;
+} & ([ValueOf<U>] extends [ValueOf<T>] ? unknown : never);
 
 /**
  * `useValue` is only valid for an interface or property token. A class token

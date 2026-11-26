@@ -142,7 +142,7 @@ function createSnapshot(program: ts.Program, validation: ValidationMode): Projec
   const tokenResolver = new TokenResolver();
   const validator = new CompositeValidator([
     new DuplicateValidator(errorFormatter),
-    new TypeValidator(checker, errorFormatter),
+    new TypeValidator(checker, errorFormatter, tokens),
     missingDeps,
     new CycleValidator(dependencyAnalyzer),
     new DisposableTransientCaptureValidator(validation),

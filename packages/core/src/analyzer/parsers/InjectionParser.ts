@@ -1,11 +1,18 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { TokenId, AnalysisError, CopiedBinding, FactoryDependency, SourceOrigin, TypeReference, ValidationMode } from '../types';
+import type { AliasTarget, TokenId, AnalysisError, CopiedBinding, FactoryDependency, SourceOrigin, TypeReference, ValidationMode } from '../types';
+import { NeoTokenError } from '../errors/NeoTokenError';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { containerKeyFor } from '../shared/registrationGraph';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 
-export type ParsedRegistrationType = 'explicit' | 'autowire' | 'factory' | 'value';
+export type ParsedRegistrationType = 'explicit' | 'autowire' | 'factory' | 'value' | 'alias';
+
+/**
+ * The properties an alias cannot carry, in the order the message lists them. An alias owns nothing: the target keeps
+ * its provider, its lifecycle, its owner and its dependencies.
+ */
+const ALIAS_FORBIDDEN = ['provider', 'useFactory', 'useValue', 'lifecycle', 'ownership', 'multi', 'dependencies'] as const;
 
 /** File, start and length of the exact text `node.getText(sourceFile)` returns. */
 function originOf(node: ts.Node, sourceFile: ts.SourceFile): SourceOrigin {
@@ -51,6 +58,8 @@ export interface ParsedInjection {
   opaque?: boolean;
   dependenciesWarning?: AnalysisError;
   ownership?: 'owned' | 'borrowed';
+  /** Only an alias has one: the token it stands for. */
+  aliasTarget?: AliasTarget;
 }
 
 interface FactoryContract {
@@ -58,6 +67,19 @@ interface FactoryContract {
   factoryDependencies: FactoryDependency[];
   opaque?: boolean;
   dependenciesWarning?: AnalysisError;
+}
+
+/**
+ * The id of a token expression, or `null` when it names none (a literal, an object: `NEO_TOKEN_UNSUPPORTED`). An alias
+ * reports that at its registration; a boundary error is not an alias matter and goes on.
+ */
+function namedToken(resolve: () => TokenId | null): TokenId | null {
+  try {
+    return resolve();
+  } catch (error) {
+    if (error instanceof NeoTokenError && error.code === 'NEO_TOKEN_UNSUPPORTED') return null;
+    throw error;
+  }
 }
 
 /**
@@ -86,11 +108,15 @@ export class InjectionParser {
     let isMulti = false;
     let ownershipSeen = false;
     let ownershipText: string | undefined;
+    let aliasNode: ts.Expression | undefined;
+    const declared = new Set<string>();
 
     for (const prop of obj.properties) {
       if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
+      declared.add(prop.name.text);
 
       switch (prop.name.text) {
+        case 'useExisting': aliasNode = prop.initializer; break;
         case 'token': tokenNode = prop.initializer; break;
         case 'provider': providerNode = prop.initializer; break;
         case 'lifecycle':
@@ -117,6 +143,9 @@ export class InjectionParser {
     }
 
     if (!tokenNode) return null;
+
+    // An alias is read before anything else: a property token or `ownership` would otherwise be judged as a registration.
+    if (aliasNode) return this.parseAlias(obj, sourceFile, tokenNode, aliasNode, isScoped, declared);
 
     if (ownershipSeen && ownershipText !== 'owned' && ownershipText !== 'borrowed') {
       return {
@@ -331,6 +360,82 @@ export class InjectionParser {
       opaque,
       dependenciesWarning,
       ownership: ownershipText === 'owned' || ownershipText === 'borrowed' ? ownershipText : undefined,
+    };
+  }
+
+  /**
+   * `{ token, useExisting }`: the token answers what the target answers. The registration carries none of the options of
+   * the other shapes (`ALIAS_FORBIDDEN`), and its token is a class or an interface token: a property token is read
+   * from a factory, which an alias is not. The target is any token: the checks that it is provided, that it is not
+   * multi and that its value fits are the validators', so the same registration is judged the same way everywhere.
+   */
+  private parseAlias(
+    obj: ts.ObjectLiteralExpression,
+    sourceFile: ts.SourceFile,
+    tokenNode: ts.Expression,
+    aliasNode: ts.Expression,
+    isScoped: boolean,
+    declared: ReadonlySet<string>,
+  ): ParsedInjection | AnalysisError {
+    const unsupported = (message: string): AnalysisError => ({
+      type: 'unsupported',
+      code: 'NEO_CONFIG_UNSUPPORTED',
+      message: `NEO_CONFIG_UNSUPPORTED: ${message}`,
+      node: obj,
+      sourceFile,
+    });
+    const forbidden = ALIAS_FORBIDDEN.find((name) => declared.has(name));
+    if (forbidden === 'multi') {
+      return unsupported("an alias cannot be multi: a multi token is read with resolveAll, and an alias answers one object. Remove 'multi'.");
+    }
+    if (forbidden !== undefined) {
+      return unsupported(`an alias (useExisting) cannot declare '${forbidden}': it owns nothing, and its target keeps the provider, the lifecycle and the owner. Remove '${forbidden}'.`);
+    }
+    const resolvedTokenNode = this.tokenResolverService.resolveToInitializer(tokenNode) ?? tokenNode;
+    if (this.tokenResolverService.isUsePropertyCall(resolvedTokenNode)) {
+      return unsupported('an alias cannot be a property token (useProperty): a property token is provided by a factory. Register a factory for it, or alias a class or interface token.');
+    }
+    let tokenId: TokenId | null;
+    let tokenSymbol: ts.Symbol | undefined;
+    let isInterfaceToken = false;
+    if (this.tokenResolverService.isUseInterfaceCall(resolvedTokenNode)) {
+      tokenId = this.tokenResolverService.extractInterfaceTokenId(resolvedTokenNode);
+      isInterfaceToken = true;
+    } else {
+      tokenId = namedToken(() => this.tokenResolverService.getTypeIdFromConstructor(this.checker.getTypeAtLocation(tokenNode)));
+      if (TSContext.ts.isIdentifier(tokenNode)) tokenSymbol = this.checker.getSymbolAtLocation(tokenNode) ?? undefined;
+    }
+    const targetId = namedToken(() => this.tokenResolverService.resolveTokenId(aliasNode));
+    if (!tokenId || !targetId) {
+      return unsupported('useExisting must name a token: a class, useInterface<T>() or a variable that holds one.');
+    }
+    const resolvedTarget = this.tokenResolverService.resolveToInitializer(aliasNode) ?? aliasNode;
+    const tokenText = tokenNode.getText(sourceFile);
+    return {
+      __kind: 'parsed',
+      tokenNode,
+      resolvedTokenNode,
+      tokenId,
+      tokenText,
+      tokenSymbol,
+      isInterfaceToken,
+      isValueToken: false,
+      isMulti: false,
+      isScoped,
+      // A filler nobody reads: the lifecycle and the owner of an alias are its target's.
+      lifecycle: 'singleton',
+      useFactory: false,
+      isAsync: false,
+      registrationType: 'alias',
+      isDisposable: false,
+      isAsyncDisposable: false,
+      tokenLocalName: this.resolveDefaultLocalName(tokenSymbol, TSContext.ts.isIdentifier(tokenNode) ? tokenNode : undefined),
+      tokenBinding: tokenSymbol ? identifierText(tokenNode) : undefined,
+      tokenType: isInterfaceToken ? this.interfaceTokenType(resolvedTokenNode) : undefined,
+      aliasTarget: {
+        tokenId: targetId,
+        ...(this.tokenResolverService.isUseInterfaceCall(resolvedTarget) ? { isInterfaceToken: true } : {}),
+      },
     };
   }
 

@@ -4,7 +4,7 @@ import { DependencyGraph, DependencyNode, SourceRewrite, TokenId, TypeReference 
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
-import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, legacyParentInterface, manyEntryGuard, parentOpenCheck, resolveListenerOverload, singleOverload, isBorrowedInstance, afterStore } from './ResolveEmitter';
+import { generateAliasMembers, generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, legacyParentInterface, manyEntryGuard, parentOpenCheck, resolveListenerOverload, singleOverload, isBorrowedInstance, afterStore } from './ResolveEmitter';
 import { emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
 import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
@@ -627,6 +627,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     const captureLines: Piece[] = [...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)];
     const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
     const assertOne = closed ? 'this._assertRoot(token, false);' : '';
+    const aliases = generateAliasMembers(emitted, getImport, getForeignImport, this.containerClassName, this.notFoundErrorClassName);
     const resolveInterior = `
     ${borrowReset}${parentOpenCheck(hasAsync)}
     ${multiGuard}${multiGuard ? '\n    ' : ''}// 0. An overridden token always wins, even over a cached real instance.
@@ -640,7 +641,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
       this.notifyResolve(token, overridden);
       return overridden;
     }
-
+${aliases ? `\n    ${aliases.step}` : ''}
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
     // A stored undefined is a value. A missing token still falls through.
@@ -779,7 +780,7 @@ class ${this.containerClassName} {
     ${resolveCases.join('\n    ')}
     return undefined;
   }
-
+${aliases ? `\n  ${aliases.members}\n` : ''}
   ${this.emitDebugGetter(emitted)}
 }
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
@@ -1093,7 +1094,8 @@ function eagerSyncLines(graph: DependencyGraph, getImport: GetImport, hasAsync: 
   if (graph.optimizationMode !== 'closed') return [];
   const lines: string[] = [];
   const pushNode = (node: DependencyNode, factoryId: string) => {
-    if (node.service.isAsync) return;
+    // An alias builds nothing (the analyzer refuses it as an eager root): its target is what an eager list names.
+    if (node.service.isAsync || node.service.type === 'alias') return;
     const tokenKey = resolveTokenKey(node.service, getImport);
     if (node.service.lifecycle === 'transient') {
       lines.push(`{ this.${factoryId}(); }`);
