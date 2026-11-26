@@ -73,7 +73,8 @@ function childEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-function resolveChain(depth: number, emitter: 'reference' | 'optimized'): { hops: number; value: number } {
+/** `default` builds the Generator without naming an emitter: what a user gets. */
+function resolveChain(depth: number, emitter: 'reference' | 'optimized' | 'default'): { hops: number; value: number } {
   warmLibCache();
   const fileName = `/virtual/t13-depth-${emitter}.ts`;
   const source = chainSource(depth);
@@ -82,7 +83,7 @@ function resolveChain(depth: number, emitter: 'reference' | 'optimized'): { hops
   if (!graph) throw new Error('missing graph');
   const cycles = new GraphValidator().validateAll(graph).errors.filter((error) => error.code === 'NEO_CYCLE');
   if (cycles.length > 0) throw new Error(cycles[0]?.message ?? 'cycle');
-  const generator = new Generator(graph, true, undefined, false, false, emitter);
+  const generator = new Generator(graph, true, undefined, false, false, emitter === 'default' ? undefined : emitter);
   const code = generator.generate()
     .replace(/import \* as __neo_Import_\d+ from '[^']+';\s*/g, '')
     .replace(/__neo_Import_\d+\./g, '');
@@ -131,5 +132,11 @@ describe('t13 runtime depth', () => {
     const optimized = resolveChain(OPTIMIZED_DEPTH, 'optimized');
     expect(optimized.hops).toBe(OPTIMIZED_DEPTH);
     expect(optimized.value).toBe(OPTIMIZED_DEPTH - 1);
+  }, 180_000);
+
+  it('P31b the default emitter resolves the pinned optimized depth', () => {
+    const resolved = resolveChain(OPTIMIZED_DEPTH, 'default');
+    expect(resolved.hops).toBe(OPTIMIZED_DEPTH);
+    expect(resolved.value).toBe(OPTIMIZED_DEPTH - 1);
   }, 180_000);
 });
