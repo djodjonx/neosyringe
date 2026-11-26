@@ -121,6 +121,40 @@ const OVERRIDE_BATCH = [
   'export const coherent = box.overrideMany([[Mail, () => new Mail()] as const, [clock, () => ({ now: () => 4 })] as const]);',
 ];
 
+/**
+ * E18 on the transformed Program: the interface and property tokens of a scope value are string ids there. A scope
+ * created with both kinds of token must compile with no cast, in an open and a closed container, and a call with no
+ * options is refused (the model needs its values).
+ */
+function scopeInputsFile(name: string, options: string, scopes: readonly string[]): string {
+  return [
+    "import { defineBuilderConfig, useInterface, useProperty } from '@djodjonx/neosyringe';",
+    'export interface Req { id: string; }',
+    'export class Svc { retries = 0; }',
+    'const request = useInterface<Req>();',
+    "const retries = useProperty<number>(Svc, 'retries');",
+    'export const box = defineBuilderConfig({',
+    `  name: '${name}',`,
+    `  ${options}`,
+    '  scopeInputs: [request, retries],',
+    '  injections: [{ token: Svc }],',
+    '});',
+    ...scopes,
+    '',
+  ].join('\n');
+}
+
+const SCOPES = [
+  'export const scope = box.createScope({',
+  '  values: [',
+  "    { token: useInterface<Req>(), useValue: { id: 'r1' } },",
+  "    { token: useProperty<number>(Svc, 'retries'), useValue: 3 },",
+  '  ],',
+  '});',
+  'export const byVariable = box.createScope({ values: [{ token: retries, useValue: 4 }, { token: request, useValue: { id: "r2" } }] });',
+  'export const empty = box.createScope({ values: [] });',
+];
+
 const FILES: Record<string, string> = {
   'open.ts': containerFile('InlineOpen', ''),
   'closed.ts': containerFile('InlineClosed', "optimization: { mode: 'closed', roots: [UserService, Later] },"),
@@ -146,6 +180,15 @@ const FILES: Record<string, string> = {
   'many.ts': MANY_FILE,
   'override-many-open.ts': overrideManyFile('InlineOverrideOpen', '', OVERRIDE_BATCH),
   'override-many-closed.ts': overrideManyFile('InlineOverrideClosed', "optimization: { mode: 'closed', roots: [Mail] },", OVERRIDE_BATCH),
+  'scope-inputs-open.ts': scopeInputsFile('InlineScopeOpen', '', SCOPES),
+  'scope-inputs-closed.ts': scopeInputsFile('InlineScopeClosed', "optimization: { mode: 'closed', roots: [Svc] },", SCOPES),
+  'scope-inputs-minimal-open.ts': scopeInputsFile('InlineScopeMinimalOpen', "runtime: { profile: 'minimal' },", SCOPES),
+  'scope-inputs-minimal-closed.ts': scopeInputsFile(
+    'InlineScopeMinimalClosed',
+    "runtime: { profile: 'minimal' }, optimization: { mode: 'closed', roots: [Svc] },",
+    SCOPES,
+  ),
+  'scope-inputs-wrong.ts': scopeInputsFile('InlineScopeWrong', '', ['export const none = box.createScope();']),
   'override-many-wrong.ts': overrideManyFile('InlineOverrideWrong', '', [
     'export const wrongClass = box.overrideMany([[Mail, () => 42]]);',
     'export const wrongBesideInterface = box.overrideMany([[useInterface<Clock>(), () => ({ now: () => 2 })], [Mail, () => 42]]);',
@@ -241,6 +284,21 @@ describe('T23 B5 the transformed program type-checks with the consumer options (
   it('E16-P18 a class entry whose factory returns another type is still refused on the transformed program, alone and beside an interface entry', () => {
     const found = diagnosticsOf(['override-many-wrong.ts'], { testOverrides: true });
     expect(found.map((line) => line.replace(/:\d+:\d+.*$/, ''))).toEqual(['TS2769 override-many-wrong.ts', 'TS2769 override-many-wrong.ts']);
+  });
+
+  it('E18-P16 createScope takes the values of an interface and a property token on the transformed program, open and closed', () => {
+    expect(diagnosticsOf(['scope-inputs-open.ts'])).toEqual([]);
+    expect(diagnosticsOf(['scope-inputs-closed.ts'])).toEqual([]);
+  });
+
+  it('E18-P16 createScope takes the same values on a minimal container, open and closed', () => {
+    expect(diagnosticsOf(['scope-inputs-minimal-open.ts'])).toEqual([]);
+    expect(diagnosticsOf(['scope-inputs-minimal-closed.ts'])).toEqual([]);
+  });
+
+  it('E18-P16 createScope with no options is refused on the transformed program', () => {
+    const found = diagnosticsOf(['scope-inputs-wrong.ts']);
+    expect(found.map((line) => line.replace(/:\d+:\d+.*$/, ''))).toEqual(['TS2554 scope-inputs-wrong.ts']);
   });
 
   it('T23-R2 the inline program is really transformed: the container class is in the user file', () => {
