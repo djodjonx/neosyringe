@@ -12,10 +12,21 @@ export type Constructor<T = unknown> = new (...args: never[]) => T;
 export type Lifecycle = 'singleton' | 'transient';
 
 /**
+ * `[Symbol.asyncDispose]` of a container and of a scope, which makes them `await using` resources. The member is typed
+ * only when the consumer's lib declares `Symbol.asyncDispose` (`lib: ["ESNext.Disposable"]`, TypeScript 5.2): the key is
+ * read from `SymbolConstructor`, so a consumer without that lib sees no new member and no missing global type, and the
+ * minimum TypeScript version of the package does not move. It delegates to `destroy()`. A runtime without
+ * `Symbol.asyncDispose` has no such protocol; `destroy()` works everywhere.
+ */
+export type AsyncDisposalMembers = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol }
+  ? { [P in K]: () => Promise<void> }
+  : Record<never, never>;
+
+/**
  * Capabilities shared by every generated container, including the minimal profile.
  * `Token` is declared below; the methods only mention it.
  */
-export interface CoreContainer {
+export interface CoreContainer extends AsyncDisposalMembers {
   /**
    * Resolves a service by its token.
    *
@@ -58,7 +69,9 @@ export interface CoreContainer {
   /**
    * Ends this container. Terminal and idempotent: a later resolve() or initialize()
    * throws NEO_CONTAINER_DESTROYED, and a second destroy() does nothing.
-   * Disposes owned singleton instances. Borrowed factory results, useValue values,
+   * Disposes owned singleton instances, once each, with one method: `dispose()` when it is callable, otherwise
+   * `[Symbol.asyncDispose]()`, otherwise `[Symbol.dispose]()`. A promise the method returns is awaited, and every
+   * failure is reported together in one `AggregateError`. Borrowed factory results, useValue values,
    * override mocks and parent references are not disposed.
    */
   destroy(): Promise<void>;
@@ -244,7 +257,7 @@ export type BoundContainer<I extends readonly InputToken[] = readonly [], P exte
  * nothing else. Its `resolve` and `initialize` are not typed: called from untyped code, they throw
  * `NEO_SCOPE_INPUTS_UNBOUND`, which names the missing inputs, and the model stays usable.
  */
-export interface ContainerTemplate<I extends readonly InputToken[], P extends Profile> {
+export interface ContainerTemplate<I extends readonly InputToken[], P extends Profile> extends AsyncDisposalMembers {
   createScope<const E extends readonly InputEntry[]>(...args: ScopeArguments<I, E>): BoundContainer<I, P>;
   destroy(): Promise<void>;
 }

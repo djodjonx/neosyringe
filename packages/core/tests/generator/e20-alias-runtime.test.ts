@@ -336,7 +336,7 @@ export const box = defineBuilderConfig({
         }
         await call(env.box, 'destroy');
         expect(env.count('disposeEngine'), `${name}: disposed exactly once`).toBe(1);
-        const destroy = slice(containerText(env.built), 'public destroy(', ['public resolveAll']);
+        const destroy = slice(containerText(env.built), 'destroy(): Promise<void>', ['public resolveAll']);
         for (const id of [env.logger, env.audit, env.sink]) {
           expect(destroy, `${name}: no slot for ${shown(id)}`).not.toContain(JSON.stringify(id));
         }

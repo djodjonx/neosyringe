@@ -42,8 +42,8 @@ describe('Generator - disposable', () => {
     expect(code).toContain('destroy()');
     expect(code).toContain('.dispose()');
     expect(code).toContain('instances.has(');
-    // Should NOT be async
-    expect(code).not.toContain('async destroy()');
+    // T21 D-A: a `dispose(): void` may still return a promise at run time and destroy() awaits it, so the class closes asynchronously.
+    expect(code).toContain('async destroy()');
   });
 
   it('should emit async destroy() when any singleton has isAsyncDisposable', () => {

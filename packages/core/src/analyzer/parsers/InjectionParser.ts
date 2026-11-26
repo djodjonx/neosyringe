@@ -25,6 +25,26 @@ function identifierText(node: ts.Expression | undefined): string | undefined {
   return node !== undefined && TSContext.ts.isIdentifier(node) ? node.text : undefined;
 }
 
+/**
+ * How a type releases itself. `symbolDisposer`: the disposer is the method keyed by `Symbol.asyncDispose` (async) or
+ * `Symbol.dispose` (sync) and not a method named `dispose`, so the generated code must look it up at run time.
+ */
+export interface DisposableFlags {
+  isDisposable: boolean;
+  isAsyncDisposable: boolean;
+  symbolDisposer?: boolean;
+}
+
+const NOT_DISPOSABLE: DisposableFlags = { isDisposable: false, isAsyncDisposable: false };
+
+/** The key types of the protocols, as the program's own lib declares them. A lib without them has none. */
+interface DisposalKeys {
+  sync?: ts.Type;
+  async?: ts.Type;
+}
+
+const DISPOSAL_KEYS = new WeakMap<ts.TypeChecker, DisposalKeys | null>();
+
 export interface ParsedInjection {
   readonly __kind: 'parsed';
   tokenNode: ts.Expression;
@@ -49,6 +69,8 @@ export interface ParsedInjection {
   registrationType: ParsedRegistrationType;
   isDisposable: boolean;
   isAsyncDisposable: boolean;
+  /** The disposer is a method keyed by `Symbol.dispose` or `Symbol.asyncDispose` (see {@link DisposableFlags}). */
+  symbolDisposer?: boolean;
   implementationLocalName?: string;
   tokenLocalName?: string;
   implementationBinding?: string;
@@ -301,7 +323,7 @@ export class InjectionParser {
     }
 
     // 8. Detect disposable interface. Singleton factories stay unset.
-    const { isDisposable, isAsyncDisposable } = this.disposableFlagsFor(
+    const { isDisposable, isAsyncDisposable, symbolDisposer } = this.disposableFlagsFor(
       registrationType,
       lifecycle,
       implementationSymbol,
@@ -351,6 +373,7 @@ export class InjectionParser {
       registrationType,
       isDisposable,
       isAsyncDisposable,
+      symbolDisposer,
       implementationLocalName,
       tokenLocalName,
       implementationBinding: identifierText(providerNode ?? tokenNode),
@@ -495,29 +518,29 @@ export class InjectionParser {
     implementationSymbol: ts.Symbol | undefined,
     providerNode: ts.Expression | undefined,
     tokenNode: ts.Expression,
-  ): { isDisposable: boolean; isAsyncDisposable: boolean } {
+  ): DisposableFlags {
     if (registrationType === 'factory') {
-      if (lifecycle !== 'transient') return { isDisposable: false, isAsyncDisposable: false };
+      if (lifecycle !== 'transient') return NOT_DISPOSABLE;
       return this.detectTransientFactoryDisposable(providerNode, tokenNode);
     }
-    if (!implementationSymbol) return { isDisposable: false, isAsyncDisposable: false };
-    return this.detectDisposable(implementationSymbol);
+    if (!implementationSymbol) return NOT_DISPOSABLE;
+    return this.detectDisposable(implementationSymbol, tokenNode);
   }
 
   /** `dispose` on the factory's return type, otherwise on the token's service type. */
   private detectTransientFactoryDisposable(
     providerNode: ts.Expression | undefined,
     tokenNode: ts.Expression,
-  ): { isDisposable: boolean; isAsyncDisposable: boolean } {
+  ): DisposableFlags {
     if (providerNode) {
       const providerType = this.checker.getTypeAtLocation(providerNode);
       const signature = providerType.getCallSignatures()[0];
       if (signature) {
-        const flags = this.disposableFlags(this.checker.getReturnTypeOfSignature(signature));
+        const flags = this.disposableFlags(this.checker.getReturnTypeOfSignature(signature), tokenNode);
         if (flags.isDisposable || flags.isAsyncDisposable) return flags;
       }
     }
-    return this.disposableFlags(this.tokenServiceType(tokenNode));
+    return this.disposableFlags(this.tokenServiceType(tokenNode), tokenNode);
   }
 
   /**
@@ -557,30 +580,85 @@ export class InjectionParser {
     return undefined;
   }
 
-  /** Detects whether a class symbol implements dispose(): void or dispose(): Promise<void>. */
-  private detectDisposable(symbol: ts.Symbol): { isDisposable: boolean; isAsyncDisposable: boolean } {
+  /** Detects how a class symbol releases itself: `dispose()`, `[Symbol.asyncDispose]()` or `[Symbol.dispose]()`. */
+  private detectDisposable(symbol: ts.Symbol, location: ts.Node): DisposableFlags {
     if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
       symbol = this.checker.getAliasedSymbol(symbol);
     }
-    return this.disposableFlags(this.checker.getDeclaredTypeOfSymbol(symbol));
+    return this.disposableFlags(this.checker.getDeclaredTypeOfSymbol(symbol), location);
   }
 
-  private disposableFlags(type: ts.Type): { isDisposable: boolean; isAsyncDisposable: boolean } {
-    if (type.flags & TSContext.ts.TypeFlags.Any || type.flags & TSContext.ts.TypeFlags.Unknown) {
-      return { isDisposable: false, isAsyncDisposable: false };
-    }
+  /**
+   * One protocol per type, in the order the generated code tries them at run time: a callable `dispose` first, then
+   * `[Symbol.asyncDispose]`, then `[Symbol.dispose]`. A `dispose` that is not callable gives way to the symbols.
+   * `location` is any node of the program: it is where the lib's symbols are looked up.
+   */
+  private disposableFlags(type: ts.Type, location: ts.Node): DisposableFlags {
+    if (type.flags & TSContext.ts.TypeFlags.Any || type.flags & TSContext.ts.TypeFlags.Unknown) return NOT_DISPOSABLE;
+    return this.legacyDisposeFlags(type) ?? this.symbolDisposeFlags(type, location) ?? NOT_DISPOSABLE;
+  }
+
+  /** `dispose(): void` or `dispose(): Promise<...>`, or `undefined` when the type has no callable `dispose`. */
+  private legacyDisposeFlags(type: ts.Type): DisposableFlags | undefined {
     const disposeMember = type.getProperty('dispose');
-    if (!disposeMember) return { isDisposable: false, isAsyncDisposable: false };
-
-    const disposeType = this.checker.getTypeOfSymbol(disposeMember);
-    const signatures = disposeType.getCallSignatures();
-    const signature = signatures[0];
-    if (!signature) return { isDisposable: false, isAsyncDisposable: false };
-
+    if (!disposeMember) return undefined;
+    const signature = this.checker.getTypeOfSymbol(disposeMember).getCallSignatures()[0];
+    if (!signature) return undefined;
     const returnType = this.checker.getReturnTypeOfSignature(signature);
     const isAsync = this.checker.typeToString(returnType).startsWith('Promise');
-
     return { isDisposable: !isAsync, isAsyncDisposable: isAsync };
+  }
+
+  /**
+   * A member whose key is the very symbol `Symbol.asyncDispose` or `Symbol.dispose` of the lib. The key is compared as a
+   * type, by identity: the text of a name, a string `'Symbol.dispose'` or another unique symbol never matches. Without
+   * the disposable lib the symbols do not exist for the checker and nothing is found.
+   */
+  private symbolDisposeFlags(type: ts.Type, location: ts.Node): DisposableFlags | undefined {
+    const keys = this.disposalKeys(location);
+    if (!keys) return undefined;
+    const callable = new Map<ts.Type, boolean>();
+    for (const property of this.checker.getPropertiesOfType(type)) {
+      const key = this.symbolKeyOf(property);
+      if (!key || (key !== keys.async && key !== keys.sync)) continue;
+      const member = this.checker.getNonNullableType(this.checker.getTypeOfSymbol(property));
+      if (member.getCallSignatures().length > 0) callable.set(key, true);
+    }
+    if (keys.async && callable.get(keys.async)) return { isDisposable: false, isAsyncDisposable: true, symbolDisposer: true };
+    if (keys.sync && callable.get(keys.sync)) return { isDisposable: true, isAsyncDisposable: false, symbolDisposer: true };
+    return undefined;
+  }
+
+  /** The type of the computed key of a member (`[Symbol.dispose]`), `undefined` for a member with a plain name. */
+  private symbolKeyOf(property: ts.Symbol): ts.Type | undefined {
+    for (const declaration of property.declarations ?? []) {
+      const name = TSContext.ts.getNameOfDeclaration(declaration);
+      if (name && TSContext.ts.isComputedPropertyName(name)) return this.checker.getTypeAtLocation(name.expression);
+    }
+    return undefined;
+  }
+
+  /** The unique-symbol types of `Symbol.dispose` and `Symbol.asyncDispose` the program's lib declares, read once per checker. */
+  private disposalKeys(location: ts.Node): DisposalKeys | null {
+    const cached = DISPOSAL_KEYS.get(this.checker);
+    if (cached !== undefined) return cached;
+    const keys = this.readDisposalKeys(location);
+    DISPOSAL_KEYS.set(this.checker, keys);
+    return keys;
+  }
+
+  private readDisposalKeys(location: ts.Node): DisposalKeys | null {
+    const constructor = this.checker
+      .getSymbolsInScope(location, TSContext.ts.SymbolFlags.Value)
+      .find((candidate) => candidate.name === 'Symbol' && (candidate.declarations ?? []).some((declaration) => declaration.getSourceFile().hasNoDefaultLib));
+    if (!constructor) return null;
+    const type = this.checker.getTypeOfSymbolAtLocation(constructor, location);
+    const read = (name: string): ts.Type | undefined => {
+      const member = type.getProperty(name);
+      return member ? this.checker.getTypeOfSymbol(member) : undefined;
+    };
+    const keys: DisposalKeys = { sync: read('dispose'), async: read('asyncDispose') };
+    return keys.sync || keys.async ? keys : null;
   }
 
   /**

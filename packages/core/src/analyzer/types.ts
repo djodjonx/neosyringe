@@ -168,11 +168,18 @@ export interface ServiceDefinition {
   /** True if the factory function is async (requires initialize() before resolve()). */
   isAsync?: boolean;
 
-  /** True if the implementation class has dispose(): void */
+  /** True if the implementation class has dispose(): void, or `[Symbol.dispose]()` when `symbolDisposer` is set */
   isDisposable?: boolean;
 
-  /** True if the implementation class has dispose(): Promise<void> */
+  /** True if the implementation class has dispose(): Promise<void>, or `[Symbol.asyncDispose]()` when `symbolDisposer` is set */
   isAsyncDisposable?: boolean;
+
+  /**
+   * True if the disposer is a method keyed by `Symbol.dispose` (`isDisposable`) or `Symbol.asyncDispose`
+   * (`isAsyncDisposable`) and not one named `dispose`: the generated code finds it at run time. The key is the
+   * checker's symbol of the lib, never the text of a name.
+   */
+  symbolDisposer?: boolean;
 
   /**
    * Local identifier name for the implementation symbol when it is a default export.

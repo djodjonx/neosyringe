@@ -232,7 +232,7 @@ const MEMBER_CATEGORIES = [
   ['resolve', /^(resolve|resolveAll|resolveMany|_resolveInternal|_resolveAllInternal)$/],
   ['lifecycle', /^(initialize|_runInitialize|createScope|destroy|_runDestroy|_close|override|overrideMany|clearOverrides|_reconfigure)$/],
   ['events', /^(on|notifyResolve)$/],
-  ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock)$/],
+  ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock|_neoDisposer)$/],
   ['debug-metadata', /^(_graph|_dependencyGraph)$/],
 ];
 const CATEGORY_IDS = [...MEMBER_CATEGORIES.map(([id]) => id), 'user-code', 'state', 'other-members', 'class-shell', 'imports', 'glue'];
@@ -254,6 +254,8 @@ const BREAKDOWN_CONFIGS = [
 function memberCategory(member) {
   if (ts.isConstructorDeclaration(member)) return 'state';
   const name = member.name !== undefined && (ts.isIdentifier(member.name) || ts.isStringLiteral(member.name)) ? member.name.text : '';
+  // The `[Symbol.asyncDispose]` delegate of the container (packages/core/src/generator/LifecycleEmitter.ts, asyncDisposalMember): the one computed key that is named.
+  if (member.name !== undefined && ts.isComputedPropertyName(member.name) && /^\(*Symbol\)*\.asyncDispose$/.test(member.name.expression.getText())) return 'lifecycle';
   for (const [id, pattern] of MEMBER_CATEGORIES) {
     if (pattern.test(name)) return id;
   }

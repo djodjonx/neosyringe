@@ -370,8 +370,8 @@ interface FactoryBody {
 
 /**
  * The type the copied user factory is written against: the public `Factory<T>` return, `T | PromiseLike<T>`
- * (packages/neosyringe/src/types.ts:189), for every factory. The analyzer flags `isAsync` only for an `async` function
- * or a return type named `Promise`/`PromiseLike` (packages/core/src/analyzer/parsers/InjectionParser.ts:647-665), so a union
+ * (packages/neosyringe/src/types.ts:202), for every factory. The analyzer flags `isAsync` only for an `async` function
+ * or a return type named `Promise`/`PromiseLike` (packages/core/src/analyzer/parsers/InjectionParser.ts:725-743), so a union
  * with a promise or a thenable class is a valid factory that the flag does not tell apart. A provider type the output
  * can name types the factory, so a factory that does not fit its registration is an error in the output.
  * `unknown` where the type has no name.
@@ -504,7 +504,7 @@ function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = []
 
 /**
  * The `new Class(args)` of a class provider, for an accessor that builds it in place. The caller holds the class
- * symbol, which only a class registration has (packages/core/src/analyzer/graphAdapter.ts:453 drops one without it, and
+ * symbol, which only a class registration has (packages/core/src/analyzer/graphAdapter.ts:454 drops one without it, and
  * the value and factory nodes at :406 and :432 set none). It does not declare the generic resolver its arguments call
  * (only `resolveSingle`, :194 of this file): the open public `resolve` already asks for it
  * (packages/core/src/generator/DirectEmitter.ts:258), and an accessor is inlined in open mode only.

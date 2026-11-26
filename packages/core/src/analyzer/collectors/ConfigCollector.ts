@@ -551,6 +551,7 @@ export class ConfigCollector implements IConfigCollector {
       isAsync: parsed.isAsync || undefined,
       isDisposable: parsed.isDisposable || undefined,
       isAsyncDisposable: parsed.isAsyncDisposable || undefined,
+      symbolDisposer: parsed.symbolDisposer || undefined,
       implementationLocalName: parsed.implementationLocalName,
       tokenLocalName: parsed.tokenLocalName,
       implementationBinding: parsed.implementationBinding,

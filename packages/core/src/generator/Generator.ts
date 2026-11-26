@@ -6,7 +6,7 @@ import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
 import { generateAliasMembers, generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, legacyParentInterface, manyEntryGuard, parentOpenCheck, resolveListenerOverload, singleOverload, isBorrowedInstance, afterStore } from './ResolveEmitter';
 import { emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
-import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
+import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod, disposerMember, needsDisposer, asyncDisposalTypes } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
 import { DISPATCH_LINEAR_MAX } from './dispatchEmitter';
@@ -581,7 +581,7 @@ export class Generator {
         dispatchLinearMax: this.dispatch?.linearMax ?? DISPATCH_LINEAR_MAX,
         stateFields: `${state.stateFields}${state.eagerField}`,
         ...rootMembers(emitted, closed, getImport),
-        runtimeHelpers: runtimeHelpers(hasAsync),
+        runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync)),
         debugGetters: this.emitDebugGetter(emitted),
         copy,
       });
@@ -591,6 +591,7 @@ ${this.renderImportLines(imports, sourceGraph, typeImports).join('\n')}
 ${concat([...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)], '\n')}
 
 ${containerClass}
+${asyncDisposalTypes(this.containerClassName)}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     }
 
@@ -623,7 +624,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
                     if (legacyResult != null) this._borrowed.add(legacyResult);`;
     const borrowNotify = '';
     const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines);
-    const runtimeHelpersText = runtimeHelpers(hasAsync);
+    const runtimeHelpersText = runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync));
     const captureLines: Piece[] = [...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)];
     const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
     const assertOne = closed ? 'this._assertRoot(token, false);' : '';
@@ -783,6 +784,7 @@ class ${this.containerClassName} {
 ${aliases ? `\n  ${aliases.members}\n` : ''}
   ${this.emitDebugGetter(emitted)}
 }
+${asyncDisposalTypes(this.containerClassName)}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   }
 
@@ -917,11 +919,11 @@ function generatedContainerHeader(): string {
   return '';
 }
 
-function runtimeHelpers(hasAsync: boolean): string {
+function runtimeHelpers(hasAsync: boolean, disposer: boolean): string {
   return `${touchClosedMethod()}
 
   ${assertParentsMethod()}
-  ${hasAsync ? '' : syncNeoFailMethod()}`;
+  ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}`;
 }
 
 /** Exported root sets and their guard. Closed mode only. ADR006 lines 29-33. */

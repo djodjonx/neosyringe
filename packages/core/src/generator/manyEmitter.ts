@@ -45,7 +45,7 @@ export const DEFAULT_MANY_NAMES: ManyNames = {
 
 /**
  * The two aliases, as top-level declarations. `values` maps a tuple or an array of tokens to the same shape of values.
- * A token that is a union (`Mail | Clock`) answers the union of the values, as `ValueOf` does (packages/neosyringe/src/types.ts:112):
+ * A token that is a union (`Mail | Clock`) answers the union of the values, as `ValueOf` does (packages/neosyringe/src/types.ts:134):
  * the covariant `infer V` collects every member, so no distributive wrapper is needed.
  */
 export function emitManyAliases(names: ManyNames): string {

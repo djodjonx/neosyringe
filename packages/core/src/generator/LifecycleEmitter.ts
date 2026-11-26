@@ -10,7 +10,7 @@ import { aliasPlanOf, orderingDependencies } from '../analyzer/shared/aliasLinks
  * What a cached singleton is read as when it is disposed. The cache holds `unknown`; one assertion
  * per read states what the slot guarantees. `unguarded`: the analyzer found a `dispose` method, so the
  * call is made as is (a missing one throws the same TypeError as before). `guarded`: the factory may
- * return anything, so `dispose` is looked up first.
+ * return anything, or the disposer is keyed by a symbol, so `_neoDisposer` looks it up first.
  */
 const DISPOSABLE = '{ dispose(): unknown }';
 
@@ -22,6 +22,75 @@ const DISPOSABLE = '{ dispose(): unknown }';
  */
 const LEGACY_STATE = '{ _closed?: boolean; name?: string }';
 const MAYBE_DISPOSABLE = '{ dispose?: () => unknown } | null | undefined';
+
+/**
+ * The disposer of a value, found when the container is disposed: a callable `dispose` first, then `[Symbol.asyncDispose]`,
+ * then `[Symbol.dispose]`. One method is chosen and it is called once, on the value itself. A value with none gets
+ * `undefined`; a protocol that is neither callable nor null is refused with a TypeError, which the disposal collects
+ * like any other failure. The symbols are read from `Symbol` when a value is disposed, never when the module loads, and
+ * through an intersection type so that the output type-checks without the disposable lib (lib es2021, docs/release/compatibility.md,
+ * "Floor of the emitted code"). Nothing is installed on `Symbol`.
+ */
+export function disposerMember(): string {
+  return `private _neoDisposer(value: unknown): (() => unknown) | undefined {
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
+    const target: object = value;
+    const legacy: unknown = Reflect.get(target, 'dispose');
+    if (typeof legacy === 'function') return () => Reflect.apply(legacy, target, []);
+    const symbols = Symbol as SymbolConstructor & { dispose?: symbol; asyncDispose?: symbol };
+    for (const key of [symbols.asyncDispose, symbols.dispose]) {
+      if (key === undefined) continue;
+      const method: unknown = Reflect.get(target, key);
+      if (method === undefined || method === null) continue;
+      if (typeof method !== 'function') throw new TypeError('disposal protocol must be callable');
+      return () => Reflect.apply(method, target, []);
+    }
+    return undefined;
+  }`;
+}
+
+/**
+ * True when the container calls `_neoDisposer`: an async container (the rollback of a failed initialization) or a
+ * graph with a slot that may hold a symbol disposer. A graph of `dispose()` classes names no symbol.
+ */
+export function needsDisposer(graph: DependencyGraph, hasAsync: boolean): boolean {
+  if (hasAsync) return true;
+  for (const node of graph.nodes.values()) {
+    if (slotKind(node.service) === 'guarded') return true;
+  }
+  if (graph.multiNodes) {
+    for (const nodes of graph.multiNodes.values()) {
+      if (nodes.some((node) => slotKind(node.service) === 'guarded')) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * `[Symbol.asyncDispose]` of a container and of a scope: it delegates to `destroy()`, so that both are `await using`
+ * resources. A member of the class, not a statement after it: an unread container stays a pure declaration (T14). The key
+ * reads `Symbol` through a cast, so the output type-checks without the disposable lib (es2021, docs/release/compatibility.md,
+ * "Floor of the emitted code"); with the lib the class also has the typed member. Nothing is installed on `Symbol`, no
+ * `Symbol.for` stands in. Known limit: `as symbol` asserts an invariant a runtime without `Symbol.asyncDispose` breaks. The key
+ * is `undefined` there and the delegate sits under the string key "undefined", not the protocol (T21 step 4 asks for no
+ * member). Accepted for T14: a conditional install is a statement a bundler keeps. T21-P11 pins that key.
+ */
+export function asyncDisposalMember(): string {
+  return `[(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }`;
+}
+
+/**
+ * The type of `[Symbol.asyncDispose]`, merged into the container class so that `createScope()` and the container itself are
+ * `await using` resources for a consumer whose lib declares the symbol (the conditional of `AsyncDisposalMembers` in
+ * packages/neosyringe/src/types.ts). For any other lib the conditional is an empty object type: no member, and no global
+ * type of the disposable lib is named. Types leave no code behind.
+ */
+export function asyncDisposalTypes(className: string): string {
+  return `type ${className}AsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface ${className} extends ${className}AsyncDisposal {}`;
+}
 
 /** Returns true if any node in the graph has an async factory. */
 export function hasAsyncFactories(graph: DependencyGraph): boolean {
@@ -281,8 +350,9 @@ export function generateInitializeMethod(
         if (__neoInst == null || this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)) continue;
         __neoSeen.add(__neoInst);
         try {
-          if (typeof __neoInst.dispose === 'function') {
-            const __neoResult = __neoInst.dispose();
+          const __neoRun = this._neoDisposer(__neoInst);
+          if (__neoRun) {
+            const __neoResult = __neoRun();
             if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') await __neoResult;
           }
         } catch (__neoDisposeError) {
@@ -466,6 +536,7 @@ function linkNodeDisposal(
 function slotKind(service: ServiceDefinition): 'skip' | 'unguarded' | 'guarded' {
   if (service.lifecycle === 'transient' || service.type === 'parent') return 'skip';
   if (isBorrowedInstance(service)) return 'skip';
+  if (service.symbolDisposer) return 'guarded';
   if (service.isDisposable || service.isAsyncDisposable) return 'unguarded';
   if (service.type === 'factory') return 'guarded';
   return 'skip';
@@ -535,21 +606,19 @@ function combinedDisposals(
     }
   }
   for (const slot of ordered) slot.late = blocking.has(slot.id);
-  const awaitClose = ordered.some((slot) => slot.guarded || slot.isAsync || slot.late);
+  // Whatever a disposer returns may be a promise (a `dispose(): void` can return one), so any slot closes asynchronously.
+  const awaitClose = ordered.length > 0;
   return { slots: ordered, awaitClose };
 }
 
 function disposeCall(slot: DisposalSlot, immediateAwait: boolean): string {
+  const follow = immediateAwait
+    ? `if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') await __neoResult;`
+    : `if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult);`;
   if (slot.guarded) {
-    const follow = immediateAwait
-      ? `if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') await __neoResult;`
-      : `if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult);`;
-    return `if (typeof __neoInst?.dispose === 'function') { const __neoResult = __neoInst.dispose(); ${follow} }`;
+    return `const __neoRun = this._neoDisposer(__neoInst); if (__neoRun) { const __neoResult = __neoRun(); ${follow} }`;
   }
-  if (immediateAwait) {
-    return `const __neoResult = __neoInst.dispose(); if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') await __neoResult;`;
-  }
-  return `__neoInst.dispose();`;
+  return `const __neoResult = __neoInst.dispose(); ${follow}`;
 }
 
 function disposeSlot(slot: DisposalSlot, immediateAwait: boolean): string {
@@ -568,7 +637,7 @@ function sharedDisposalLines(slots: DisposalSlot[], awaitClose: boolean): string
   const lines = ['const __neoSeen = new Set();', 'const __neoErrors: unknown[] = [];'];
   const early = slots.filter((slot) => !slot.late);
   const late = slots.filter((slot) => slot.late);
-  const defer = awaitClose && early.some((slot) => slot.guarded);
+  const defer = awaitClose && early.length > 0;
   if (defer) lines.push('const __neoPending: unknown[] = [];');
   for (const slot of early) lines.push(disposeSlot(slot, false));
   if (defer) {
@@ -731,9 +800,10 @@ export function generateOverrideMethods(
 }
 
 /**
- * Generates the destroy() method.
+ * Generates the destroy() method, and `[Symbol.asyncDispose]` that delegates to it.
  * Disposes cached singletons consumer-before-dependency.
- * A sync class stays a non-async method. Async work waits inside _close or _runDestroy.
+ * A graph with no disposal slot keeps a destroy that is not async. Any slot makes destroy close asynchronously inside
+ * `_close` or `_runDestroy`, because what a disposer returns, a `dispose(): void` included, may be a promise to await.
  */
 export function generateDestroyMethod(
   graph: DependencyGraph,
@@ -742,7 +812,7 @@ export function generateDestroyMethod(
   hasAsync = false,
   minimal = false,
 ): string {
-  const members = destroyMembers(graph, sorted, getImport, hasAsync, minimal);
+  const members = `${destroyMembers(graph, sorted, getImport, hasAsync, minimal)}\n\n  ${asyncDisposalMember()}`;
   return hasScopeInputs(graph) ? `${inputDestroyMethod()}\n\n  ${members}` : members;
 }
 

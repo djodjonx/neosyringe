@@ -337,7 +337,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   if (unified) {
     for (const tokenId of sorted) {
       const node = graph.nodes.get(tokenId);
-      // Only a class registration has an implementation symbol (packages/core/src/analyzer/graphAdapter.ts:401-453).
+      // Only a class registration has an implementation symbol (packages/core/src/analyzer/graphAdapter.ts:401-454).
       const symbol = node?.service.implementationSymbol;
       if (!node || !symbol) continue;
       if (aliases?.localTargets.has(tokenId)) continue;
