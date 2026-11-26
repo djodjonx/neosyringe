@@ -8,7 +8,7 @@ import { buildContainerTokenView } from './resolutionUsages';
 import { extendsCaptureText, extendsReferenceName } from '../shared/extendsReference';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 import { NeoTokenError } from '../errors/NeoTokenError';
-import { closedModeDiagnostics, readOptimization, readRuntimeProfile, type OptimizationTarget } from '../parsers/ConfigParser';
+import { PARTIAL_SCOPE_INPUTS_MESSAGE, closedModeDiagnostics, readOptimization, readRuntimeProfile, readScopeInputs, type OptimizationTarget } from '../parsers/ConfigParser';
 import { InjectionParser } from '../parsers/InjectionParser';
 import { DependencyAnalyzer } from '../validators/DependencyAnalyzer';
 
@@ -115,7 +115,7 @@ export class ConfigCollector implements IConfigCollector {
       this.addKnownTokens(config, configs, known, new Set(), opaque);
       const optimization: OptimizationTarget = {};
       readOptimization(configArg, optimization, known, (expr) => this.tokenResolverService.resolveTokenId(expr));
-      readRuntimeProfile(configArg, optimization);
+      this.readRuntimeAndInputs(config, configArg, optimization, configs);
       // Same order as the built graph: every single registration (partials first), then the multi ones.
       const opaqueNames = [...opaque.single, ...opaque.multi];
       const closedErrors = closedModeDiagnostics(
@@ -310,7 +310,7 @@ export class ConfigCollector implements IConfigCollector {
     // Get container name
     const containerName = this.getContainerName(configArg);
     // Optimization and runtime are read in finalizeOptimization, once every partial is known.
-    const mergedValueErrors = [...valueErrors, ...expectedErrors];
+    const mergedValueErrors = [...valueErrors, ...expectedErrors, ...this.partialInputErrors(configArg, type, sourceFile)];
 
     return {
       containerId,
@@ -852,6 +852,61 @@ export class ConfigCollector implements IConfigCollector {
       tokens: tokenIds.size > 0 ? tokenIds : undefined,
       errors,
     };
+  }
+
+  /**
+   * Reads the literal `runtime.profile` and `scopeInputs` of a builder. A token a registration of the builder, or of
+   * a partial folded into it, also provides cannot be an input: `readScopeInputs` reports it at that registration.
+   */
+  private readRuntimeAndInputs(
+    config: ConfigGraph,
+    configArg: ts.ObjectLiteralExpression,
+    optimization: OptimizationTarget,
+    configs: Map<string, ConfigGraph>,
+  ): void {
+    readRuntimeProfile(configArg, optimization);
+    readScopeInputs(configArg, optimization, (expr) => this.scopeInputTokenId(expr), this.registrationSites(config, configs, new Set()));
+    config.scopeInputs = optimization.scopeInputs;
+  }
+
+  /** The registration that provides each token of a builder: its own and those of the partials it extends, the first one wins. */
+  private registrationSites(config: ConfigGraph, configs: Map<string, ConfigGraph>, seen: Set<string>): Map<TokenId, ts.Node> {
+    const sites = new Map<TokenId, ts.Node>();
+    for (const link of config.extendsLinks ?? []) {
+      if (seen.has(link.key)) continue;
+      seen.add(link.key);
+      const partial = configs.get(link.key);
+      if (!partial) continue;
+      for (const [id, node] of this.registrationSites(partial, configs, seen)) {
+        if (!sites.has(id)) sites.set(id, node);
+      }
+    }
+    for (const [id, info] of config.localInjections) {
+      if (!sites.has(id)) sites.set(id, info.node);
+    }
+    for (const [id, infos] of config.multiInjections ?? []) {
+      if (!sites.has(id) && infos[0]) sites.set(id, infos[0].node);
+    }
+    return sites;
+  }
+
+  /** `scopeInputs` of a partial. The type refuses it too (`PartialConfig` has no such member). */
+  private partialInputErrors(configArg: ts.ObjectLiteralExpression, type: ConfigType, sourceFile: ts.SourceFile): AnalysisError[] {
+    const property = type === 'partial' ? this.findProperty(configArg, 'scopeInputs') : undefined;
+    if (!property) return [];
+    return [{ type: 'unsupported', code: 'NEO_CONFIG_UNSUPPORTED', message: PARTIAL_SCOPE_INPUTS_MESSAGE, node: property, sourceFile }];
+  }
+
+  /** The id of an interface or property token expression, `undefined` for anything else (a class, an object, a call). */
+  private scopeInputTokenId(expr: ts.Expression): TokenId | undefined {
+    try {
+      const resolved = this.tokenResolverService.resolveToInitializer(expr) ?? expr;
+      if (this.tokenResolverService.isUseInterfaceCall(resolved)) return this.tokenResolverService.extractInterfaceTokenId(resolved);
+      if (this.tokenResolverService.isUsePropertyCall(resolved)) return this.tokenResolverService.extractPropertyTokenId(resolved);
+    } catch (error) {
+      if (!(error instanceof NeoTokenError)) throw error;
+    }
+    return undefined;
   }
 
   /**

@@ -6,10 +6,11 @@ import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
 import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, legacyParentInterface, manyEntryGuard, parentOpenCheck, resolveListenerOverload, singleOverload, isBorrowedInstance, afterStore } from './ResolveEmitter';
 import { emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
-import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
+import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
 import { DISPATCH_LINEAR_MAX } from './dispatchEmitter';
+import { boundGuard, boundInitializeGuard, hasScopeInputs, inputConstructor, inputMembers } from './inputEmitter';
 import { linkedFactoryLeaseHelpers } from './factoryLeaseEmitter';
 import { providerTypesOf, type GetProviderTypes } from './providerTypes';
 import {
@@ -608,9 +609,9 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     const initializeMethod = hasAsync
       ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines)
       : eagerLines.length > 0
-        ? generateEagerSyncInitialize(eagerLines)
-        : generateSyncInitializeMethod();
-    const createScopeMethod = generateCreateScopeMethod(this.containerClassName, hasAsync);
+        ? generateEagerSyncInitialize(eagerLines, false, boundInitializeGuard(emitted))
+        : generateSyncInitializeMethod(false, boundInitializeGuard(emitted));
+    const createScopeMethod = generateScopeMethod(emitted, this.containerClassName, hasAsync);
     const destroyMethod = generateDestroyMethod(emitted, sorted, getImport, hasAsync);
     const overrideMethods = generateOverrideMethods(emitted, sorted, getImport, hasAsync, this.testOverrides, emitted.runtimeProfile === 'minimal' ? undefined : this.manyNames);
 
@@ -667,9 +668,10 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
 
     throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${this.containerClassName}.formatToken(token)}\`);`;
 
+    const bound = boundGuard(emitted, 'resolve()');
     const resolveMethod = hasAsync
       ? `${singleOverload('public', 'resolve')}
-    this._guardPublic();
+    ${bound}this._guardPublic();
     ${closed ? assertOne + '\n    ' : ''}return this._resolveInternal(token);
   }
 
@@ -677,14 +679,14 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   }`
       : closed
         ? `${singleOverload('public', 'resolve')}
-    ${assertOne}
+    ${bound}${assertOne}
     return this._resolveInternal(token);
   }
 
   ${singleOverload('private', '_resolveInternal')}${resolveInterior}
   }`
         : `${singleOverload('public', 'resolve')}
-    ${resolveGuard}${resolveInterior}
+    ${bound}${resolveGuard}${resolveInterior}
   }`;
 
     const { rootFields, assertRootMethod } = rootMembers(emitted, closed, getImport);
@@ -711,12 +713,14 @@ class ${this.containerClassName} {
   // -- Factories --
   ${concat([...factories, ...multiFactories], '\n  ')}${factoryHelpers.length > 0 ? fragment`\n\n  ${concat(factoryHelpers, '\n\n  ')}` : ''}
 
-  constructor(
+  ${hasScopeInputs(emitted)
+    ? inputConstructor(this.legacyParentName)
+    : `constructor(
     private legacy?: ${this.legacyParentName}[],
     private name: string = 'NeoContainer'
-  ) {}
+  ) {}`}
 
-  ${runtimeHelpersText}${assertRootMethod}
+  ${runtimeHelpersText}${assertRootMethod}${hasScopeInputs(emitted) ? `\n\n  ${inputMembers(emitted, this.containerClassName)}` : ''}
 
   ${initializeMethod}
 
@@ -769,7 +773,7 @@ class ${this.containerClassName} {
 
   ${resolveAllMethod}
 
-  ${emitResolveMany(manyEntryGuard(hasAsync, false), this.manyNames)}
+  ${emitResolveMany(`${boundGuard(emitted, 'resolveMany()')}${manyEntryGuard(hasAsync, false)}`, this.manyNames)}
 
   private resolveLocal(token: unknown): unknown {
     ${resolveCases.join('\n    ')}

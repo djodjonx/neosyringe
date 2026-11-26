@@ -208,6 +208,20 @@ export interface ServiceDefinition {
 
   /** Compatible mode: the factory has no dependencies list, so its subgraph cannot be shaken. */
   opaque?: boolean;
+
+  /**
+   * Position of a scope input in the list `scopeInputs` declares. Only a scope input has one: it is a `value`
+   * registration with no expression, borrowed, whose value the scope was given by `createScope({ values })`.
+   */
+  inputSlot?: number;
+}
+
+/** One scope input of a builder: its token, its position in `scopeInputs` and the expression that names it. */
+export interface ScopeInput {
+  tokenId: TokenId;
+  /** Index in the declared list. A scope stores its value under this number. */
+  slot: number;
+  node: Node;
 }
 
 /** One entry of a factory `dependencies` list. `containerId` is `containerKeyFor` of the config. */
@@ -329,6 +343,9 @@ export interface ConfigGraph {
 
   /** Literal `runtime.profile`. Absent means full. ADR007 "Profils de génération". */
   runtimeProfile?: 'full' | 'minimal';
+
+  /** The inputs of a literal `scopeInputs`, in declared order. A rejected entry is not listed. BUILDER ONLY. */
+  scopeInputs?: ScopeInput[];
 
   /**
    * Partials listed in `extends`, as configuration identities, in array order.
@@ -499,6 +516,12 @@ export interface DependencyGraph {
 
   /** Literal `runtime.profile`. Absent means full. ADR007 "Profils de génération". */
   runtimeProfile?: 'full' | 'minimal';
+
+  /**
+   * The scope inputs of the container, in declared order. Each one is also a node of `nodes`: a borrowed singleton `value` with an `inputSlot`.
+   * Absent: the container has no input and `createScope()` takes no argument.
+   */
+  scopeInputs?: ScopeInput[];
 
   /** One reason per registration id. ADR006 line 24. */
   retention?: Map<string, RetentionReason>;

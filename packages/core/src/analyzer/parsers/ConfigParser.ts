@@ -1,6 +1,6 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { AnalysisError, DependencyGraph, DependencyNode, RetentionReason, TokenId, ValidationMode } from '../types';
+import type { AnalysisError, DependencyGraph, DependencyNode, RetentionReason, ScopeInput, TokenId, ValidationMode } from '../types';
 import { getSimpleName } from '../utils/TokenUtils';
 
 /*
@@ -24,6 +24,7 @@ export interface OptimizationTarget {
   publicMultiRoots?: TokenId[];
   eagerRoots?: TokenId[];
   runtimeProfile?: 'full' | 'minimal';
+  scopeInputs?: ScopeInput[];
   errors?: AnalysisError[];
 }
 
@@ -194,6 +195,87 @@ export function readRuntimeProfile(
     return;
   }
   target.runtimeProfile = profile.text;
+}
+
+const SCOPE_INPUTS_MESSAGE =
+  'NEO_CONFIG_UNSUPPORTED: scopeInputs must be a literal list of useInterface<T>() or useProperty(...) tokens.';
+
+/** The message of an input that is an object: `{ token, multi }` is the form of a registration, not of an input. */
+const SCOPE_INPUT_OBJECT_MESSAGE =
+  'NEO_CONFIG_UNSUPPORTED: a scope input is a token, not an object: an input is never multi and has no option.';
+
+/** `scopeInputs` of a partial. The type refuses it too (`PartialConfig` has no such member). */
+export const PARTIAL_SCOPE_INPUTS_MESSAGE =
+  'NEO_CONFIG_UNSUPPORTED: scopeInputs is not supported in a partial config in this version: declare it on the builder.';
+
+/**
+ * Literal `scopeInputs` only: an array literal with no spread whose elements are `useInterface<T>()` or
+ * `useProperty(...)` tokens. A list that is not literal, a class token and an object element (`{ token, multi }`)
+ * are `NEO_CONFIG_UNSUPPORTED`, each at its own position. A token listed twice, and a token a local or a folded
+ * registration also provides, are duplicates: the second input, or the registration, is the position. The entries
+ * that are refused are not inputs. `classify` answers the token id of an interface or property token, `undefined`
+ * for anything else. `registered` maps each token a registration provides to the registration.
+ */
+export function readScopeInputs(
+  configObj: ts.ObjectLiteralExpression,
+  target: OptimizationTarget,
+  classify: (expr: ts.Expression) => TokenId | undefined,
+  registered: ReadonlyMap<TokenId, ts.Node>,
+): void {
+  const initializer = literalMember(configObj, 'scopeInputs').initializer;
+  if (!initializer) return;
+  const sourceFile = configObj.getSourceFile();
+  const list = unwrapExpression(initializer);
+  if (!TSContext.ts.isArrayLiteralExpression(list) || list.elements.some((element) => TSContext.ts.isSpreadElement(element))) {
+    pushConfigError(target, {
+      type: 'unsupported',
+      code: 'NEO_CONFIG_UNSUPPORTED',
+      message: SCOPE_INPUTS_MESSAGE,
+      node: initializer,
+      sourceFile,
+    });
+    return;
+  }
+  const inputs: ScopeInput[] = [];
+  const seen = new Set<TokenId>();
+  for (const element of list.elements) {
+    const expr = unwrapExpression(element);
+    const tokenId = classify(expr);
+    if (tokenId === undefined) {
+      pushConfigError(target, {
+        type: 'unsupported',
+        code: 'NEO_CONFIG_UNSUPPORTED',
+        message: TSContext.ts.isObjectLiteralExpression(expr) ? SCOPE_INPUT_OBJECT_MESSAGE : SCOPE_INPUTS_MESSAGE,
+        node: element,
+        sourceFile,
+      });
+      continue;
+    }
+    if (seen.has(tokenId)) {
+      pushConfigError(target, {
+        type: 'duplicate',
+        code: 'NEO_DUPLICATE_PROVIDER',
+        message: `Duplicate scope input: '${getSimpleName(tokenId)}' is already declared in scopeInputs.`,
+        node: element,
+        sourceFile,
+      });
+      continue;
+    }
+    seen.add(tokenId);
+    const registration = registered.get(tokenId);
+    if (registration) {
+      pushConfigError(target, {
+        type: 'duplicate',
+        code: 'NEO_DUPLICATE_PROVIDER',
+        message: `Duplicate registration: '${getSimpleName(tokenId)}' is a scope input, and this registration provides it too.`,
+        node: registration,
+        sourceFile: registration.getSourceFile(),
+      });
+      continue;
+    }
+    inputs.push({ tokenId, slot: inputs.length, node: element });
+  }
+  if (inputs.length > 0) target.scopeInputs = inputs;
 }
 
 function readRootList(

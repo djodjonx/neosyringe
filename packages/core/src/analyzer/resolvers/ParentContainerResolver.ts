@@ -91,6 +91,8 @@ export class ParentContainerResolver {
     // symbol needed to reference that class from the child's own generated code
     // is captured separately in parentClassTokenSymbols (see field doc).
     for (const [tokenId, node] of parentGraph.nodes) {
+      // A scope input is the value of one scope, never a service a child can read from its parent.
+      if (node.service.inputSlot !== undefined) continue;
       graph.parentProvidedTokens.add(tokenId);
       if (node.service.isInterfaceToken) {
         graph.parentResolvableTokens.add(tokenId);

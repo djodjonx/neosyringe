@@ -20,6 +20,7 @@ import {
   emitLeaseOpen,
   type PolicyEntry,
 } from './factoryLeaseEmitter';
+import { inputRead } from './inputEmitter';
 import { DEFAULT_MANY_NAMES, factoryContextType, manyContextFunction, type ManyNames } from './manyEmitter';
 
 /**
@@ -521,6 +522,12 @@ export function generateFactories(
     if (inlined.has(tokenId)) continue;
 
     const factoryId = getFactoryName(tokenId);
+
+    // A scope input has no provider: its creator reads the value the scope was given.
+    if (node.service.inputSlot !== undefined) {
+      factories.push(creator(factoryId, fragment`return ${inputRead(node.service.inputSlot)};`));
+      continue;
+    }
 
     if (node.service.type === 'value' && node.service.valueSource !== undefined) {
       factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`, [], providerTypes(node).creator));

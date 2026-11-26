@@ -1,6 +1,7 @@
 import type { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getDirectName, getFactoryName, getReadName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
 import { dispatchIsLinear, emitDispatchRead, emitLinearRead, type DispatchEntry } from './dispatchEmitter';
+import { boundGuard } from './inputEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 
 /**
@@ -224,16 +225,17 @@ export function generateResolveAllMethod(
 ): string {
   const tail = legacyResolveAll();
   const open = parentOpenCheck(hasAsync);
+  const bound = boundGuard(graph, 'resolveAll()');
   if (closed) return closedResolveAll(graph, getImport, hasAsync, open, tail);
   if (!graph.multiNodes || graph.multiNodes.size === 0) {
     if (!hasAsync) {
       return `${listOverload('public', 'resolveAll')}
-    ${open}
+    ${bound}${open}
     ${tail}
   }`;
     }
     return `${listOverload('public', 'resolveAll')}
-    this._guardPublic('resolveAll()');
+    ${bound}this._guardPublic('resolveAll()');
     return this._resolveAllInternal(token);
   }
 
@@ -256,14 +258,14 @@ export function generateResolveAllMethod(
 
   if (!hasAsync) {
     return `${listOverload('public', 'resolveAll')}
-    ${open}
+    ${bound}${open}
     ${cases.join('\n    ')}
     ${tail}
   }`;
   }
 
   return `${listOverload('public', 'resolveAll')}
-    this._guardPublic('resolveAll()');
+    ${bound}this._guardPublic('resolveAll()');
     return this._resolveAllInternal(token);
   }
 
@@ -293,7 +295,7 @@ function closedResolveAll(
     }
   }
   const body = cases.length === 0 ? `${open}\n    ${tail}` : `${open}\n    ${cases.join('\n    ')}\n    ${tail}`;
-  const guard = hasAsync ? `this._guardPublic('resolveAll()');\n    ` : '';
+  const guard = `${boundGuard(graph, 'resolveAll()')}${hasAsync ? `this._guardPublic('resolveAll()');\n    ` : ''}`;
   return `${listOverload('public', 'resolveAll')}
     ${guard}this._assertRoot(token, true);
     return this._resolveAllInternal(token);
@@ -553,7 +555,7 @@ export function generateDirectResolveAll(
 ): { publicMethod: string; internalMethod: string; publicLists: ListReader[]; internalLists: ListReader[] } {
   const tail = legacyResolveAll(!minimal);
   const open = parentOpenCheck(hasAsync, minimal);
-  const guard = hasAsync ? `this._guardPublic('resolveAll()');\n    ` : '';
+  const guard = `${boundGuard(graph, 'resolveAll()')}${hasAsync ? `this._guardPublic('resolveAll()');\n    ` : ''}`;
   const readersFor = (ids: Iterable<TokenId>): ListReader[] => {
     const readers: ListReader[] = [];
     for (const tokenId of ids) {

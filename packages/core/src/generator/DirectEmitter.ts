@@ -13,6 +13,7 @@ import {
 } from './fragments';
 import { dispatchIsLinear, emitDispatchField, emitDispatchRead, emitLinearRead, type DispatchEntry } from './dispatchEmitter';
 import { factoryLeaseHelpers } from './factoryLeaseEmitter';
+import { boundGuard, boundInitializeGuard, hasScopeInputs, inputConstructor, inputMembers } from './inputEmitter';
 import { DEFAULT_MANY_NAMES, emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 import {
@@ -39,7 +40,7 @@ import {
   singleOverload,
 } from './ResolveEmitter';
 import {
-  generateCreateScopeMethod,
+  generateScopeMethod,
   generateDestroyMethod,
   generateEagerSyncInitialize,
   generateInitializeMethod,
@@ -243,7 +244,7 @@ function resolveMethods(
   input: OptimizedContainerInput,
   listLocals: boolean,
 ): { publicMethod: Fragment; internalMethod: string; internalTable: string; rootsTable: string } {
-  const guard = input.hasAsync ? 'this._guardPublic();\n    ' : '';
+  const guard = `${boundGuard(input.graph, 'resolve()')}${input.hasAsync ? 'this._guardPublic();\n    ' : ''}`;
   const multiGuard = generateMultiResolveGuard(input.graph, input.getImport, input.hasAsync);
   const local = dispatchEntries(input, listLocals ? input.sorted : []);
   const internalMethod = `${singleOverload('private', '_resolveInternal')}
@@ -377,14 +378,14 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const initialize = hasAsync
     ? generateInitializeMethod(graph, sorted, getImport, hasAsync, input.eagerLines, minimal)
     : input.eagerLines.length > 0
-      ? generateEagerSyncInitialize(input.eagerLines, minimal)
-      : generateSyncInitializeMethod(minimal);
+      ? generateEagerSyncInitialize(input.eagerLines, minimal, boundInitializeGuard(graph))
+      : generateSyncInitializeMethod(minimal, boundInitializeGuard(graph));
   const destroy = generateDestroyMethod(graph, sorted, getImport, hasAsync, minimal);
   const tableFields = minimal ? '' : tableFieldsOf(input.className, unified, input.testOverrides);
   const members: Piece[] = [
     input.runtimeHelpers + input.assertRootMethod,
     initialize,
-    generateCreateScopeMethod(input.className, hasAsync, minimal),
+    generateScopeMethod(graph, input.className, hasAsync, minimal),
   ];
   // The policy and the lease of the declared factories: only the helpers a creator asks for.
   for (const id of ['factoryPolicy', 'factoryLease'] as const) {
@@ -402,7 +403,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   if (single) members.push(single);
   members.push(formatTokenMember(), destroy, resolveAllPublic);
   // A public member: it loops over the public `resolve`, so a token has the guard, the closed-root check and the events of a single call.
-  members.push(emitResolveMany(manyEntryGuard(hasAsync, minimal), manyNames));
+  members.push(emitResolveMany(`${boundGuard(graph, 'resolveMany()')}${manyEntryGuard(hasAsync, minimal)}`, manyNames));
   const many = linked.get('resolveAll');
   if (many) members.push(many);
   members.push(...listMembers(input, resolveAll.publicLists, many ? resolveAll.internalLists : []));
@@ -428,10 +429,12 @@ class ${input.className} {
   // -- Accessors --
   ${accessors.join('\n  ')}
 
-  constructor(
+  ${hasScopeInputs(graph)
+    ? `${inputConstructor(parentName)}\n\n  ${inputMembers(graph, input.className)}`
+    : `constructor(
     private legacy?: ${parentName}[],
     private name: string = 'NeoContainer'
-  ) {}
+  ) {}`}
 
   ${concat(members, '\n\n  ')}
 }`;

@@ -26,7 +26,7 @@ export interface RegistrationIR {
   readonly token: string;
   readonly order: number;
   readonly provider: {
-    readonly kind: 'class' | 'factory' | 'value';
+    readonly kind: 'class' | 'factory' | 'value' | 'input';
     readonly expressionRef: string;
   };
   readonly lifecycle: 'singleton' | 'transient';
@@ -54,6 +54,8 @@ export interface ContainerIR {
   readonly registrations: readonly RegistrationIR[];
   readonly publicRoots: readonly DependencyRef[];
   readonly eagerRoots: readonly DependencyRef[];
+  /** The scope inputs, in declared order. Absent when the container has none. Each one is also a registration. */
+  readonly inputs?: readonly { readonly token: string; readonly slot: number }[];
   readonly diagnostics: readonly DiagnosticIR[];
 }
 
@@ -107,6 +109,7 @@ function registrationId(located: Located): string {
 function providerOf(node: DependencyNode, id: string): RegistrationIR['provider'] {
   const { service } = node;
   if (service.type === 'factory') return { kind: 'factory', expressionRef: `factory:${id}` };
+  if (service.inputSlot !== undefined) return { kind: 'input', expressionRef: `input:${id}` };
   if (service.type === 'value') return { kind: 'value', expressionRef: `value:${id}` };
   return { kind: 'class', expressionRef: service.implementationSymbol?.getName() ?? service.tokenId };
 }
@@ -198,6 +201,9 @@ export function containerIROf(graph: DependencyGraph, root: string): ContainerIR
       const ref = refFor(token, multi.has(token));
       return ref ? [ref] : [];
     }),
+    ...(graph.scopeInputs && graph.scopeInputs.length > 0
+      ? { inputs: graph.scopeInputs.map((input) => ({ token: input.tokenId, slot: input.slot })) }
+      : {}),
     diagnostics: (graph.errors ?? []).map((error) => diagnosticIROf(error, root)),
   };
 }

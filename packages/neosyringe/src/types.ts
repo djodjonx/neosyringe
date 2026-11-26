@@ -160,7 +160,7 @@ type BadOverride<E extends readonly OverrideEntry[]> = {
 export type OverrideGuard<E extends readonly OverrideEntry[]> = [BadOverride<E>] extends [never] ? unknown : never;
 
 /**
- * Argument list of a future `createScope`. No method takes it in this stage.
+ * Argument list of the `createScope` of a container that declares `scopeInputs`.
  * An empty input list makes the values optional. Any other list requires them.
  */
 export type ScopeArguments<I extends readonly InputToken[], E extends readonly InputEntry[]> =
@@ -214,14 +214,60 @@ export type BuilderCapabilities = {
   runtime?: RuntimeProfile;
 };
 
+/** The two runtime profiles. */
+export type Profile = 'full' | 'minimal';
+
+/** What a scope of the profile `P` adds to {@link CoreContainer}: test overrides and resolve events on the full profile. */
+interface FullMembers extends Omit<Container, keyof CoreContainer> {}
+
 /**
- * Minimal profile when `runtime.profile` is the literal `'minimal'`.
- * Anything else, including a missing profile, is the full {@link Container}.
+ * The members both profiles share, for a scope bound to its inputs. `createScope` asks for new values: a scope never
+ * copies the values of the one it comes from.
  */
-export type ContainerFor<C> =
+interface BoundCore<I extends readonly InputToken[], P extends Profile> extends Omit<CoreContainer, 'createScope'> {
+  /**
+   * Returns a child bound to `values`. Every declared input is given once, in any order; an unknown or repeated
+   * token is refused at run time. The values are borrowed: the scope never disposes them.
+   */
+  createScope<const E extends readonly InputEntry[]>(...args: ScopeArguments<I, E>): BoundContainer<I, P>;
+}
+
+/**
+ * A scope bound to the values of its inputs. It has the API of its profile: {@link CoreContainer} for `'minimal'`,
+ * {@link Container} for `'full'`, except that `createScope` asks for values.
+ */
+export type BoundContainer<I extends readonly InputToken[] = readonly [], P extends Profile = 'full'> =
+  BoundCore<I, P> & (P extends 'full' ? FullMembers : unknown);
+
+/**
+ * What a builder that declares `scopeInputs` returns: the model of its scopes. It can create scopes and be destroyed,
+ * nothing else. Its `resolve` and `initialize` are not typed: called from untyped code, they throw
+ * `NEO_SCOPE_INPUTS_UNBOUND`, which names the missing inputs, and the model stays usable.
+ */
+export interface ContainerTemplate<I extends readonly InputToken[], P extends Profile> {
+  createScope<const E extends readonly InputEntry[]>(...args: ScopeArguments<I, E>): BoundContainer<I, P>;
+  destroy(): Promise<void>;
+}
+
+type ProfileOf<C> = C extends { runtime: { profile: 'minimal' } } ? 'minimal' : 'full';
+
+type WithoutInputs<C> =
   C extends { runtime: { profile: 'minimal' } }
     ? CoreContainer
     : Container;
+
+/**
+ * Minimal profile when `runtime.profile` is the literal `'minimal'`.
+ * Anything else, including a missing profile, is the full {@link Container}.
+ * A literal, non-empty `scopeInputs` makes it a {@link ContainerTemplate} of that profile instead: the builder
+ * is the model of its scopes, not a container that resolves. An empty list is no input.
+ */
+export type ContainerFor<C> =
+  C extends { scopeInputs: infer I extends readonly InputToken[] }
+    ? I extends readonly []
+      ? WithoutInputs<C>
+      : ContainerTemplate<I, ProfileOf<C>>
+    : WithoutInputs<C>;
 
 /**
  * A profile is decidable only as `'full'`, `'minimal'`, or the `undefined`
@@ -255,6 +301,22 @@ type DecideRuntime<R> =
 type LiteralProfile<C> =
   'runtime' extends keyof C
     ? DecideRuntime<C['runtime']>
+    : unknown;
+
+/**
+ * `scopeInputs` is decidable only as a tuple the checker can count (`[a, b]`, `[]`) or as absent. An optional member
+ * or a list of unknown length (`readonly InputToken[]`) is rejected: falling through to a plain container would hide
+ * that the builder has inputs.
+ */
+type LiteralInputs<C> =
+  'scopeInputs' extends keyof C
+    ? undefined extends C['scopeInputs']
+      ? UndecidableProfile
+      : C['scopeInputs'] extends readonly InputToken[]
+        ? number extends C['scopeInputs']['length']
+          ? UndecidableProfile
+          : unknown
+        : unknown
     : unknown;
 
 type EnsureFactory<E> =
@@ -374,6 +436,13 @@ export interface PartialConfig {
  */
 export interface BuilderConfig extends PartialConfig, BuilderCapabilities {
   name?: string;
+  /**
+   * The values each scope of this builder is given by `createScope({ values })`: a literal list of interface and
+   * property tokens (`useInterface<T>()`, `useProperty(...)`). Every input is required, the values are borrowed, and
+   * the builder becomes a {@link ContainerTemplate}: it creates scopes, it does not resolve. Not available in a
+   * partial in this version.
+   */
+  scopeInputs?: readonly InputToken[];
   extends?: readonly PartialConfig[];
   /**
    * Parent container instance to bridge with this container.
@@ -421,7 +490,7 @@ export function definePartialConfig(config: PartialConfig): PartialConfig {
  * The first overload is a trap (`never`). It never accepts a real argument.
  * A rejected call still types as {@link Container}, so `on` / `override` are
  * not a second diagnostic. The winning overload keeps `_config: C` intersected
- * only with {@link InjectionGuard}. `LiteralProfile<C>` stays on the constraint:
+ * only with {@link InjectionGuard}. `LiteralProfile<C>` and `LiteralInputs<C>` stay on the constraint:
  * putting that conditional on the parameter drops contextual typing of factory
  * callbacks (`provider: context => ...` would be implicit any).
  *
@@ -431,7 +500,7 @@ export function defineBuilderConfig(
   _config: never,
 ): Container;
 export function defineBuilderConfig<
-  const C extends BuilderConfig & LiteralProfile<C>,
+  const C extends BuilderConfig & LiteralProfile<C> & LiteralInputs<C>,
 >(
   _config: C & InjectionGuard<C>,
 ): ContainerFor<C>;

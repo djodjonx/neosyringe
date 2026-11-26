@@ -40,7 +40,7 @@ type ReceiverTarget =
   | { kind: 'unknown' }
   | { kind: 'ignore' };
 
-const NEO_CONTAINER_NAMES = new Set(['Container', 'CoreContainer', 'AsyncContainer', 'ContainerFor']);
+const NEO_CONTAINER_NAMES = new Set(['Container', 'CoreContainer', 'AsyncContainer', 'ContainerFor', 'ContainerTemplate', 'BoundContainer']);
 
 /** True when the text calls `resolve`, `resolveAll` or `resolveMany`, including `resolve<T>(`. */
 export function textCallsResolve(text: string): boolean {
@@ -93,6 +93,8 @@ export function buildContainerTokenView(
   const multi = new Set<TokenId>();
   const closedPrivate = new Set<TokenId>();
   addView(config, allConfigs, single, multi, closedPrivate, new Set(), checker);
+  // The inputs of this container only: a scope input is not something a child reads from its parent.
+  for (const input of config.scopeInputs ?? []) single.add(input.tokenId);
   return { single, multi, closedPrivate };
 }
 
@@ -168,9 +170,8 @@ function resolveConfigCall(
   const current = unwrap(expr);
   if (TSContext.ts.isCallExpression(current)) {
     // createScope() returns that defineBuilderConfig call, so the key stays the same
-    // (packages/core/src/analyzer/shared/registrationGraph.ts:31). The type takes no
-    // argument (packages/neosyringe/src/types.ts:47). createScope?.() is followed the
-    // same way when the receiver is a Neo container.
+    // (packages/core/src/analyzer/shared/registrationGraph.ts:31), with or without the values a builder with
+    // scopeInputs asks for. createScope?.() is followed the same way when the receiver is a Neo container.
     if (
       TSContext.ts.isPropertyAccessExpression(current.expression)
       && current.expression.name.text === 'createScope'
@@ -320,10 +321,13 @@ function isNeoContainerType(
     );
     return parts.length > 0 && parts.every((part) => isNeoContainerType(part, checker, seen));
   }
+  // `BoundContainer<I, P>` is an intersection alias: its own name decides, its parts (`BoundCore`, `FullMembers`) are not container names.
+  const aliasName = type.aliasSymbol?.getName();
+  if (aliasName !== undefined && NEO_CONTAINER_NAMES.has(aliasName) && typeDeclaredByNeoSyringe(type, checker)) return true;
   if (type.isIntersection()) {
     return type.types.some((part) => isNeoContainerType(part, checker, seen));
   }
-  const name = type.aliasSymbol?.getName() ?? type.getSymbol()?.getName();
+  const name = aliasName ?? type.getSymbol()?.getName();
   if (name === 'FactoryContext') return false;
   if (name && NEO_CONTAINER_NAMES.has(name)) return typeDeclaredByNeoSyringe(type, checker);
   const bases = type.getBaseTypes?.() ?? [];

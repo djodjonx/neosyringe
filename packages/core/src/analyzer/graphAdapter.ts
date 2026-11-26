@@ -277,6 +277,9 @@ export class GraphAdapter {
       graph.containerKey = config.containerKey;
     }
 
+    // The inputs of a host come first: a registration of its own or of a folded partial finds them, never the reverse.
+    if (!merge) this.addScopeInputs(graph, config);
+
     for (const link of config.extendsLinks ?? []) {
       const partial = this.collection.configs.get(link.key);
       if (!partial || active.has(link.key)) continue;
@@ -320,6 +323,28 @@ export class GraphAdapter {
     if (closed.length > 0) {
       if (!graph.errors) graph.errors = [];
       graph.errors.push(...closed);
+    }
+  }
+
+  /**
+   * One node per scope input: a `value` singleton the scope reads from its values (`inputSlot`), borrowed (never
+   * disposed), with no expression and no provider. A token a registration also provides never reaches here: the
+   * collector refused that input.
+   */
+  private addScopeInputs(graph: DependencyGraph, config: ConfigGraph): void {
+    if (!config.scopeInputs || config.scopeInputs.length === 0) return;
+    graph.scopeInputs = config.scopeInputs.map((input) => ({ ...input }));
+    for (const input of config.scopeInputs) {
+      const definition: ServiceDefinition = {
+        tokenId: input.tokenId,
+        registrationNode: input.node,
+        type: 'value',
+        lifecycle: 'singleton',
+        isInterfaceToken: true,
+        ownership: 'borrowed',
+        inputSlot: input.slot,
+      };
+      this.addToGraph(false, input.tokenId, { service: definition, dependencies: [] }, graph);
     }
   }
 

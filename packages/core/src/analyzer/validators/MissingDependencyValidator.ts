@@ -221,6 +221,11 @@ export class MissingDependencyValidator implements IValidator {
       available.add(tokenId);
     }
 
+    // A scope input is provided by every scope: a consumer of it is satisfied.
+    for (const input of config.scopeInputs ?? []) {
+      available.add(input.tokenId);
+    }
+
     // Add local multi-registration tokens — a consumer of a multi-registered
     // token is valid; the token IS provided, just via resolveAll().
     if (config.multiInjections) {

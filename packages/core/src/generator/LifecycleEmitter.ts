@@ -1,6 +1,7 @@
 import type { DependencyGraph, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getFactoryName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
 import { emitOverrideMany, type ManyNames } from './manyEmitter';
+import { boundInitializeGuard, hasScopeInputs, inputCreateScopeMethod, inputDestroyMethod } from './inputEmitter';
 import { MinIndexQueue } from './minHeap';
 import { afterStore, isBorrowedInstance, overrideTokenChecks } from './ResolveEmitter';
 
@@ -232,7 +233,7 @@ export function generateInitializeMethod(
   eagerLines: string[] = [],
   minimal = false,
 ): string {
-  if (!hasAsync) return generateSyncInitializeMethod(minimal);
+  if (!hasAsync) return generateSyncInitializeMethod(minimal, boundInitializeGuard(graph));
 
   const lines: string[] = [];
 
@@ -249,7 +250,7 @@ export function generateInitializeMethod(
 
   // Joining the in-flight promise from a sync factory still on the stack deadlocks. Only state 'initializing' refuses.
   const initializeOutput = `public async initialize(): Promise<void> {
-    if (this._state === 'initializing' && this._syncInit > 0) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
+    ${boundInitializeGuard(graph)}if (this._state === 'initializing' && this._syncInit > 0) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._state === 'initializing') return this._initWork;
     if (this._state === 'ready') return Promise.resolve();
     if (this._state === 'failed') return Promise.reject(this._failure);
@@ -329,9 +330,9 @@ export function generateInitializeMethod(
  * Sync containers still expose initialize(). It is not `async` and it does not
  * touch `_initialized`: those shapes belong to containers that have async work.
  */
-export function generateSyncInitializeMethod(minimal = false): string {
+export function generateSyncInitializeMethod(minimal = false, bound = ''): string {
   return `public initialize(): Promise<void> {
-    if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    ${bound}if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     ${minimal ? '' : "if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));"}
     if (this._failure !== undefined) return Promise.reject(this._failure);
     return Promise.resolve();
@@ -339,9 +340,9 @@ export function generateSyncInitializeMethod(minimal = false): string {
 }
 
 /** Sync eager roots run once. A second initialize() is a no-op. ADR006 line 12. */
-export function generateEagerSyncInitialize(lines: string[], minimal = false): string {
+export function generateEagerSyncInitialize(lines: string[], minimal = false, bound = ''): string {
   return `public initialize(): Promise<void> {
-    if (this._eagerOnce) return Promise.resolve();
+    ${bound}if (this._eagerOnce) return Promise.resolve();
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     ${minimal ? '' : "if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));"}
     if (this._failure !== undefined) return Promise.reject(this._failure);
@@ -351,9 +352,9 @@ export function generateEagerSyncInitialize(lines: string[], minimal = false): s
   }`;
 }
 
-/** A scope shares the parent list and the name. It does not copy caches or call initialize(). */
-export function generateCreateScopeMethod(className: string, hasAsync: boolean, minimal = false): string {
-  const guard = hasAsync
+/** The state checks every `createScope` makes before it builds a scope, whatever the scope is given. */
+function createScopeGuard(hasAsync: boolean, minimal: boolean): string {
+  return hasAsync
     ? `if (this._state === 'destroying' || this._state === 'destroyed' || this._touchClosed(false)) {
     throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
   }
@@ -372,10 +373,24 @@ export function generateCreateScopeMethod(className: string, hasAsync: boolean, 
   if (this._touchClosed(false)) {
     throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
   }`;
+}
+
+/** A scope shares the parent list and the name. It does not copy caches or call initialize(). */
+export function generateCreateScopeMethod(className: string, hasAsync: boolean, minimal = false): string {
   return `public createScope(): ${className} {
-    ${guard}
+    ${createScopeGuard(hasAsync, minimal)}
     return new ${className}(this.legacy, this.name);
   }`;
+}
+
+/**
+ * `createScope` of a container: the plain one, or the one that takes the values of its inputs when the graph
+ * declares some. The state checks are the same text.
+ */
+export function generateScopeMethod(graph: DependencyGraph, className: string, hasAsync: boolean, minimal = false): string {
+  return hasScopeInputs(graph)
+    ? inputCreateScopeMethod(className, createScopeGuard(hasAsync, minimal))
+    : generateCreateScopeMethod(className, hasAsync, minimal);
 }
 
 /** Destroy and resolve share this helper so one edit changes both sides. */
@@ -724,17 +739,31 @@ export function generateDestroyMethod(
   hasAsync = false,
   minimal = false,
 ): string {
+  const members = destroyMembers(graph, sorted, getImport, hasAsync, minimal);
+  return hasScopeInputs(graph) ? `${inputDestroyMethod()}\n\n  ${members}` : members;
+}
+
+function destroyMembers(
+  graph: DependencyGraph,
+  sorted: TokenId[],
+  getImport: GetImport,
+  hasAsync = false,
+  minimal = false,
+): string {
   const collected = combinedDisposals(graph, sorted, getImport);
   const lines = disposalLines(collected.slots, collected.awaitClose, minimal);
   const body = lines.join('\n    ');
   const join = destroyJoinPrefix();
+  // A container with inputs releases its values once its destroy is over: its own destroy has another name.
+  const inputs = hasScopeInputs(graph);
+  const destroyHead = (async: boolean): string => `${inputs ? 'private' : 'public'} ${async ? 'async ' : ''}${inputs ? '_destroyScope' : 'destroy'}(): Promise<void> {`;
   const reconfigBusy = minimal
     ? ''
     : `if (${hasAsync ? "this._state === 'reconfiguring'" : "this._reconfiguring"}) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`;
 
   if (!hasAsync) {
     if (collected.awaitClose) {
-      return `public async destroy(): Promise<void> {
+      return `${destroyHead(true)}
     ${join}
     ${reconfigBusy}
     this._touchClosed(true);
@@ -752,7 +781,7 @@ export function generateDestroyMethod(
   }`;
     }
 
-    return `public destroy(): Promise<void> {
+    return `${destroyHead(false)}
     ${join}
     ${reconfigBusy}
     this._touchClosed(true);
@@ -770,7 +799,7 @@ export function generateDestroyMethod(
     ? 'private async _close(): Promise<void> {'
     : 'private _close(): void {';
 
-  return `public destroy(): Promise<void> {
+  return `${destroyHead(false)}
     ${join}
     ${reconfigBusy}
     this._touchClosed(true);
