@@ -17,16 +17,31 @@
  * assigned to it.
  */
 
-/** The names of the two aliases a generated class and its factory contexts write. */
+/** The names of the aliases a generated class and its factory contexts write. */
 export interface ManyNames {
   /** `Token<T>`: a class constructor, an interface token or a property token. */
   readonly token: string;
   /** The tuple of the values of a list of tokens. */
   readonly values: string;
+  /**
+   * One `overrideMany` pair: a token (or its string id, see `emitOverrideMany`) and a factory. Written only by a full
+   * container with test overrides.
+   */
+  readonly overrideEntry: string;
+  /** The pair, or `never` when the factory returns another type than the value of its token. */
+  readonly overrideInvalid: string;
+  /** `unknown` when every pair of a batch matches, `never` otherwise. */
+  readonly overrideGuard: string;
 }
 
 /** The plain names, for a caller that has no pool (a hand-built test of an emitter). */
-export const DEFAULT_MANY_NAMES: ManyNames = { token: '__NeoToken', values: '__NeoValues' };
+export const DEFAULT_MANY_NAMES: ManyNames = {
+  token: '__NeoToken',
+  values: '__NeoValues',
+  overrideEntry: '__NeoOverrideEntry',
+  overrideInvalid: '__NeoOverrideInvalid',
+  overrideGuard: '__NeoOverrideGuard',
+};
 
 /**
  * The two aliases, as top-level declarations. `values` maps a tuple or an array of tokens to the same shape of values.
@@ -41,6 +56,25 @@ export function emitManyAliases(names: ManyNames): string {
 type ${names.values}<T extends readonly ${names.token}<unknown>[]> = {
   -readonly [K in keyof T]: T[K] extends ${names.token}<infer V> ? V : never;
 };`;
+}
+
+/**
+ * The three aliases of `overrideMany`, the same shapes as `OverrideEntry` and `OverrideGuard` of
+ * packages/neosyringe/src/types.ts, except that the token of a pair may also be a string: the form the Program
+ * transformer writes for an interface or a property token. A pair with a string token is valid (its value type is gone
+ * from the text, as for `resolveMany`); a pair with a real token keeps the check. The pair is checked as a unit:
+ * `invalid` distributes over a union of pairs before the result is compared, so a union that holds an incoherent pair is
+ * refused, and a union of coherent pairs is accepted. The value of a token is read inline (`infer V`), so the output
+ * needs no other alias.
+ */
+export function emitOverrideAliases(names: ManyNames): string {
+  return `type ${names.overrideEntry} = readonly [${names.token}<unknown> | string, () => unknown];
+type ${names.overrideInvalid}<E> = E extends ${names.overrideEntry}
+  ? E[0] extends string ? never
+  : [ReturnType<E[1]>] extends [E[0] extends ${names.token}<infer V> ? V : never] ? never : E
+  : E;
+type ${names.overrideGuard}<E extends readonly ${names.overrideEntry}[]> =
+  [{ [K in keyof E]: [${names.overrideInvalid}<E[K]>] extends [never] ? never : K }[number]] extends [never] ? unknown : never;`;
 }
 
 /**
@@ -73,6 +107,54 @@ export function emitResolveMany(entryGuard: string, names: ManyNames): string {
     const __neoValues: unknown[] = [];
     for (const __neoToken of __neoTokens) __neoValues.push(this.resolve(__neoToken));
     return __neoValues;
+  }`;
+}
+
+/** What `emitOverrideMany` writes around the loop. Every text is a statement list of the method body. */
+export interface OverrideManyInput {
+  /** The refusals of the container state, in the `throw` form: the try block makes them rejections. Run twice. */
+  readonly gates: string;
+  /** The refusals of one token (a multi token), in the `throw` form, inside the loop. Empty when the graph has none. */
+  readonly tokenChecks: string;
+  /** The first statement of a transition, exactly the one `override` runs before `_reconfigure`. */
+  readonly arm: string;
+}
+
+/**
+ * The public `overrideMany` of a full container with test overrides. The gates run before the entries are read, and
+ * again after: reading an entry runs user code (a getter, an iterator) that may close the container. Then the
+ * caller's pairs are copied, the whole batch is checked against a candidate table, and only a valid batch arms the
+ * transition. The candidate becomes the table once the cleanup has succeeded, so a refused batch invokes no factory,
+ * disposes nothing and changes nothing. An empty batch is checked and returns before the transition. Every refusal is
+ * a throw inside the try block: the method never throws synchronously and never returns from inside the loop.
+ *
+ * Two overloads, like `resolveMany`. The first takes the pairs of the source Program (a class, an interface or a property
+ * token) and checks each factory against its token. The second takes the string id the Program transformer writes in
+ * place of an interface or property token; it keeps the same check for the pairs whose token is real.
+ */
+export function emitOverrideMany(input: OverrideManyInput, names: ManyNames): string {
+  const checks = input.tokenChecks === '' ? '' : `\n        ${input.tokenChecks}`;
+  return `public overrideMany<const E extends readonly (readonly [${names.token}<unknown>, () => unknown])[]>(entries: E & ${names.overrideGuard}<E>): Promise<void>;
+  public overrideMany<const E extends readonly ${names.overrideEntry}[]>(entries: E & ${names.overrideGuard}<E>): Promise<void>;
+  public overrideMany(entries: readonly ${names.overrideEntry}[]): Promise<void> {
+    try {
+      ${input.gates}
+      const __neoEntries = entries.map(([token, factory]) => [token, factory] as const);
+      const __neoNext = new Map(this.overrides);
+      const __neoSeen = new Set<unknown>();
+      for (const [token, factory] of __neoEntries) {
+        if (__neoSeen.has(token)) throw this._neoFail('NEO_OVERRIDE_DUPLICATE', 'duplicate override in batch');
+        if (typeof factory !== 'function') throw this._neoFail('NEO_OVERRIDE_INVALID', 'override must be a factory');${checks}
+        __neoSeen.add(token);
+        __neoNext.set(token, factory);
+      }
+      ${input.gates}
+      if (__neoEntries.length === 0) return Promise.resolve();
+      ${input.arm}
+      return this._reconfigure(() => { this.overrides = __neoNext; });
+    } catch (__neoError) {
+      return Promise.reject(__neoError);
+    }
   }`;
 }
 

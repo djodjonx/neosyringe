@@ -5,7 +5,7 @@ import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analy
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
 import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, legacyParentInterface, manyEntryGuard, parentOpenCheck, resolveListenerOverload, singleOverload, isBorrowedInstance, afterStore } from './ResolveEmitter';
-import { emitManyAliases, emitResolveMany, type ManyNames } from './manyEmitter';
+import { emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
 import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
@@ -216,6 +216,9 @@ export class Generator {
     this.manyNames = {
       token: this.names.forKey(`many-token:${artifactKey}`, `__NeoToken${suffix}`),
       values: this.names.forKey(`many-values:${artifactKey}`, `__NeoValues${suffix}`),
+      overrideEntry: this.names.forKey(`many-override-entry:${artifactKey}`, `__NeoOverrideEntry${suffix}`),
+      overrideInvalid: this.names.forKey(`many-override-invalid:${artifactKey}`, `__NeoOverrideInvalid${suffix}`),
+      overrideGuard: this.names.forKey(`many-override-guard:${artifactKey}`, `__NeoOverrideGuard${suffix}`),
     };
   }
 
@@ -609,7 +612,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
         : generateSyncInitializeMethod();
     const createScopeMethod = generateCreateScopeMethod(this.containerClassName, hasAsync);
     const destroyMethod = generateDestroyMethod(emitted, sorted, getImport, hasAsync);
-    const overrideMethods = generateOverrideMethods(emitted, sorted, getImport, hasAsync, this.testOverrides);
+    const overrideMethods = generateOverrideMethods(emitted, sorted, getImport, hasAsync, this.testOverrides, emitted.runtimeProfile === 'minimal' ? undefined : this.manyNames);
 
     const importLines = this.renderImportLines(imports, sourceGraph, typeImports);
 
@@ -691,7 +694,7 @@ ${importLines.join('\n')}
 ${concat(captureLines, '\n')}
 
 ${emitManyAliases(this.manyNames)}
-
+${this.testOverrides && emitted.runtimeProfile !== 'minimal' ? `${emitOverrideAliases(this.manyNames)}\n` : ''}
 ${legacyParentInterface(this.legacyParentName)}
 
 class ${this.notFoundErrorClassName} extends Error {

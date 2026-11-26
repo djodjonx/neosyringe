@@ -83,15 +83,20 @@ export function manyEntryGuard(hasAsync: boolean, minimal: boolean): string {
     this._assertParents();`;
 }
 
-/** Same token keys as {@link generateMultiResolveGuard}. Checked before any state change. */
-export function generateOverrideMultiGuard(graph: DependencyGraph, getImport: GetImport): string {
+/**
+ * The refusals of a token that `override` and `overrideMany` share, one text per rule: the same token keys as
+ * {@link generateMultiResolveGuard}. Checked before any state change. `override` answers a rejected promise (`reject`),
+ * the batch loop throws (`throw`): its try block turns a throw into the rejection, so no `return` leaves the loop.
+ */
+export function overrideTokenChecks(graph: DependencyGraph, getImport: GetImport, form: 'reject' | 'throw'): string {
   if (!graph.multiNodes || graph.multiNodes.size === 0) return '';
   const checks: string[] = [];
   for (const nodes of graph.multiNodes.values()) {
     const tokenKey = resolveTokenKey(nodes[0].service, getImport);
-    checks.push(`if (token === ${tokenKey}) return Promise.reject(this._neoFail('NEO_OVERRIDE_MULTI_UNSUPPORTED', 'cannot override a multi token'));`);
+    const failure = `this._neoFail('NEO_OVERRIDE_MULTI_UNSUPPORTED', 'cannot override a multi token')`;
+    checks.push(`if (token === ${tokenKey}) ${form === 'reject' ? `return Promise.reject(${failure})` : `throw ${failure}`};`);
   }
-  return checks.join('\n    ');
+  return checks.join(form === 'reject' ? '\n    ' : '\n        ');
 }
 
 /**

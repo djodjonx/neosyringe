@@ -72,6 +72,15 @@ export interface CoreContainer {
  */
 export interface Container extends CoreContainer {
   override<T>(token: Token<T>, factory: () => T): Promise<void>;
+  /**
+   * Replaces several registrations in one transition. The whole batch is checked first, so a refused batch invokes no
+   * factory, disposes nothing and changes nothing. A valid batch runs one cleanup pass (each owned singleton is
+   * disposed once), then installs every mock together. The mocks are borrowed, not disposed by the container, and an
+   * async container needs `initialize()` again, exactly as after {@link Container.override}. An empty batch is checked
+   * and changes nothing. A token twice, a multi token, a factory that is not a function, a destroyed or failed
+   * container and a build without test overrides are refused with a stable error code.
+   */
+  overrideMany<const E extends readonly OverrideEntry[]>(entries: E & OverrideGuard<E>): Promise<void>;
   clearOverrides(): Promise<void>;
   on(
     event: 'resolve',

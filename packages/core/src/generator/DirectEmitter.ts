@@ -13,7 +13,7 @@ import {
 } from './fragments';
 import { dispatchIsLinear, emitDispatchField, emitDispatchRead, emitLinearRead, type DispatchEntry } from './dispatchEmitter';
 import { factoryLeaseHelpers } from './factoryLeaseEmitter';
-import { DEFAULT_MANY_NAMES, emitManyAliases, emitResolveMany, type ManyNames } from './manyEmitter';
+import { DEFAULT_MANY_NAMES, emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 import {
   constructionExpression,
@@ -392,7 +392,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
     if (factoryHelper) members.push(factoryHelper);
   }
   if (!minimal) {
-    members.push(generateOverrideMethods(graph, sorted, getImport, hasAsync, input.testOverrides));
+    members.push(generateOverrideMethods(graph, sorted, getImport, hasAsync, input.testOverrides, manyNames));
     members.push(eventMembers(input.className, unified));
   }
   if (honourOverrides) members.push(mockMethod());
@@ -408,7 +408,8 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   members.push(...listMembers(input, resolveAll.publicLists, many ? resolveAll.internalLists : []));
   members.push(input.debugGetters);
 
-  const container = fragment`${emitManyAliases(manyNames)}
+  const overrideAliases = !minimal && input.testOverrides ? `\n${emitOverrideAliases(manyNames)}` : '';
+  const container = fragment`${emitManyAliases(manyNames)}${overrideAliases}
 
 ${legacyParentInterface(parentName)}
 

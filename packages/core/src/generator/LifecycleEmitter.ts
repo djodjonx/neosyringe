@@ -1,7 +1,8 @@
 import type { DependencyGraph, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getFactoryName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
+import { emitOverrideMany, type ManyNames } from './manyEmitter';
 import { MinIndexQueue } from './minHeap';
-import { afterStore, generateOverrideMultiGuard, isBorrowedInstance } from './ResolveEmitter';
+import { afterStore, isBorrowedInstance, overrideTokenChecks } from './ResolveEmitter';
 
 /**
  * What a cached singleton is read as when it is disposed. The cache holds `unknown`; one assertion
@@ -568,10 +569,40 @@ function disposalLines(slots: DisposalSlot[], awaitClose: boolean, minimal = fal
   ];
 }
 
+/** One refusal of the state of a container: the condition, the error and what the error carries. */
+interface Gate {
+  /** The condition, over `state`: the expression the container's state is read through. */
+  when: (state: string) => string;
+  code: string;
+  detail: string;
+  /** The expression of the cause, when the error carries one. */
+  cause?: string;
+}
+
+/** The text of a gate whose refusal is a rejected promise: `override()` and `clearOverrides()` return it. */
+function asReject(gate: Gate): string {
+  const cause = gate.cause === undefined ? '' : `, ${gate.cause}`;
+  return `if (${gate.when('this._state')}) return Promise.reject(this._neoFail('${gate.code}', '${gate.detail}'${cause}));`;
+}
+
 /**
- * override() and clearOverrides(). The gate is synchronous.
+ * The same refusal as a throw: the batch runs inside a try block that turns it into the rejection, from any point of its body.
+ * The state is read once into a `string` that the checker cannot narrow. The batch tests its gates twice, and after the
+ * first group of throws the checker knows `this._state` is neither of the busy states, so the second group of
+ * comparisons would be a TS2367 error in the generated file.
+ */
+function asThrow(gate: Gate): string {
+  const cause = gate.cause === undefined ? '' : `, ${gate.cause}`;
+  return `if (${gate.when('__neoState')}) throw this._neoFail('${gate.code}', '${gate.detail}'${cause});`;
+}
+
+/**
+ * override(), overrideMany() and clearOverrides(). The gate is synchronous.
  * Cleanup finishes before the new override table is applied.
  * A borrowed mock is removed from `_borrowed` and never disposed.
+ * overrideMany runs the same gates, the same arm and the same `_reconfigure` as override: one transition for the batch.
+ * `names` is undefined for a minimal container (the reference emitter writes these members for every profile): the
+ * batch is a member of the full profile only, so nothing of it is emitted.
  */
 export function generateOverrideMethods(
   graph: DependencyGraph,
@@ -579,29 +610,51 @@ export function generateOverrideMethods(
   getImport: GetImport,
   hasAsync: boolean,
   testOverrides: boolean,
+  names: ManyNames | undefined,
 ): string {
   const refused = `return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));`;
-  // Disabled: the two methods refuse and nothing else is emitted. No reconfiguration, no disposal of the cache, no AggregateError.
+  // Disabled: the members refuse and nothing else is emitted. No reconfiguration, no disposal of the cache, no AggregateError.
   if (!testOverrides) {
     return `public override(_token: unknown, _factory: () => unknown): Promise<void> {
     ${refused}
   }
 
-  public clearOverrides(): Promise<void> {
+  ${names === undefined ? '' : `public overrideMany(_entries: unknown): Promise<void> {
+    ${refused}
+  }
+
+  `}public clearOverrides(): Promise<void> {
     ${refused}
   }`;
   }
   const collected = combinedDisposals(graph, sorted, getImport);
   const disposalBody = sharedDisposalLines(collected.slots, collected.awaitClose).join('\n    ');
-  const busyCheck = hasAsync
-    ? `if (this._state === 'initializing' || this._state === 'reconfiguring' || this._state === 'destroying') return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`
-    : `if (this._reconfiguring || this._destroyWork) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`;
-  const destroyedCheck = hasAsync
-    ? `if (this._state === 'destroyed' || this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));`
-    : `if (this._touchClosed(false) === true) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));`;
-  const failedCheck = hasAsync
-    ? `if (this._state === 'failed' || this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));`
-    : `if (this._failure !== undefined) return Promise.reject(this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure));`;
+  // The refusals of the state, in the order the three methods test them: busy, destroyed, failed.
+  const gates: Gate[] = [
+    {
+      when: (state) => hasAsync
+        ? `${state} === 'initializing' || ${state} === 'reconfiguring' || ${state} === 'destroying'`
+        : `this._reconfiguring || this._destroyWork`,
+      code: 'NEO_CONTAINER_BUSY',
+      detail: 'container is transitioning',
+    },
+    {
+      when: (state) => hasAsync ? `${state} === 'destroyed' || this._touchClosed(false)` : `this._touchClosed(false) === true`,
+      code: 'NEO_CONTAINER_DESTROYED',
+      detail: 'container is destroyed',
+    },
+    {
+      when: (state) => hasAsync ? `${state} === 'failed' || this._failure !== undefined` : `this._failure !== undefined`,
+      code: 'NEO_CONTAINER_FAILED',
+      detail: 'container initialization failed',
+      cause: 'this._failure',
+    },
+  ];
+  const rejectGates = gates.map(asReject).join('\n    ');
+  // The batch writes its gates at the indent of its try block (6 spaces); the async form wraps them in a block (8).
+  const throwGates = hasAsync
+    ? `{\n        const __neoState: string = this._state;\n        ${gates.map(asThrow).join('\n        ')}\n      }`
+    : gates.map(asThrow).join('\n      ');
   const arm = hasAsync ? `this._state = 'reconfiguring';` : `this._reconfiguring = true;`;
   const onFailure = hasAsync
     ? `if (this._state === 'reconfiguring') { this._failure = __neoDisposeFailure; this._state = 'failed'; }`
@@ -613,7 +666,7 @@ export function generateOverrideMethods(
   const park = hasAsync
     ? `this._failure = __neoReconfigureError; this._state = 'failed';`
     : `this._failure = __neoReconfigureError; this._reconfiguring = false;`;
-  const multiGuard = generateOverrideMultiGuard(graph, getImport);
+  const multiGuard = overrideTokenChecks(graph, getImport, 'reject');
   const failureBlock = collected.slots.length === 0
     ? ''
     : `if (__neoErrors.length > 0) {
@@ -622,24 +675,24 @@ export function generateOverrideMethods(
         throw __neoDisposeFailure;
       }`;
 
+  const overrideMany = names === undefined
+    ? ''
+    : `${emitOverrideMany({ gates: throwGates, tokenChecks: overrideTokenChecks(graph, getImport, 'throw'), arm }, names)}\n\n  `;
+
   return `public override(token: unknown, factory: () => unknown): Promise<void> {
-    ${busyCheck}
-    ${destroyedCheck}
-    ${failedCheck}
+    ${rejectGates}
     ${multiGuard}
     ${arm}
     return this._reconfigure(() => { this.overrides.set(token, factory); });
   }
 
   public clearOverrides(): Promise<void> {
-    ${busyCheck}
-    ${destroyedCheck}
-    ${failedCheck}
+    ${rejectGates}
     ${arm}
     return this._reconfigure(() => { this.overrides.clear(); });
   }
 
-  private async _reconfigure(apply: () => void): Promise<void> {
+  ${overrideMany}private async _reconfigure(apply: () => void): Promise<void> {
     const __neoMocks: unknown[] = [];
     for (const __neoToken of this.overrides.keys()) {
       if (this.instances.has(__neoToken)) __neoMocks.push(this.instances.get(__neoToken));

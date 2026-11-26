@@ -230,7 +230,7 @@ const MEMBER_CATEGORIES = [
   ['accessors', /^_direct_|^_get_|^_list_/],
   ['dispatch-tables', /^__neo(Dispatch|Roots|Lists|RootLists)/],
   ['resolve', /^(resolve|resolveAll|resolveMany|_resolveInternal|_resolveAllInternal)$/],
-  ['lifecycle', /^(initialize|_runInitialize|createScope|destroy|_runDestroy|_close|override|clearOverrides|_reconfigure)$/],
+  ['lifecycle', /^(initialize|_runInitialize|createScope|destroy|_runDestroy|_close|override|overrideMany|clearOverrides|_reconfigure)$/],
   ['events', /^(on|notifyResolve)$/],
   ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock)$/],
   ['debug-metadata', /^(_graph|_dependencyGraph)$/],
