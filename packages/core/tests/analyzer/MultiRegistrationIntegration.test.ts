@@ -82,7 +82,8 @@ describe('resolveAll — Analyzer to Generator integration', () => {
     expect(resolveLocalSection).not.toContain('IPlugin');
 
     // The default emitter has no resolveLocal: a multi token has no row in the dispatch table, only in the list table.
-    const dispatched = new Generator(graph, true).generate();
+    // The list table is read here, so it is forced: a graph this small is the linear cases by default.
+    const dispatched = new Generator(graph, true, undefined, true, false, undefined, undefined, undefined, { linearMax: 0 }).generate();
     expect(dispatched).not.toContain('private resolveLocal');
     expect(dispatched).toContain('private static __neoListsTable()');
     expect(dispatched).not.toMatch(/private static __neoDispatch\b/);

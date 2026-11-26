@@ -173,7 +173,9 @@ export class Generator {
     private provenance?: {
       snapshot?: Snapshot;
       names?: NamePool;
-    }
+    },
+    /** Red-commit stub: accepted, not read yet. */
+    private dispatch?: { linearMax?: number }
   ) {
     // Check for analysis errors and throw the first one for CLI compatibility
     if (graph.errors && graph.errors.length > 0) {

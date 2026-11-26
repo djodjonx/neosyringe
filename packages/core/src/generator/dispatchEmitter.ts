@@ -21,6 +21,8 @@ export interface DispatchEntry {
   /** Produced by `resolveTokenKey`, never by interpolating a raw user string. */
   readonly keyExpression: string;
   readonly accessor: string;
+  /** Red-commit stub. */
+  readonly inline?: string;
 }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -71,4 +73,12 @@ export function emitDispatchRead(className: string, field: string, kind: Dispatc
   const args = kind === 'list' ? ', token' : '';
   return `const __neoRead = ${className}.${field}Table().get(token);
     if (__neoRead !== undefined) return __neoRead.call(this${args});`;
+}
+
+/** Red-commit stub: no threshold yet. */
+export const DISPATCH_LINEAR_MAX: number = Number.NaN;
+
+/** Red-commit stub: emits nothing. */
+export function emitLinearRead(_entries: readonly DispatchEntry[], _kind: DispatchKind): string {
+  return '';
 }

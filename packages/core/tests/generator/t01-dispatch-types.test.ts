@@ -40,6 +40,24 @@ function source(options: string): string {
 `;
 }
 
+const FACTORY_ROOT = `
+  ${STUB}
+  interface T01Item { n: number }
+  const item = useInterface<T01Item>();
+  interface T01Report { total: number }
+  const report = useInterface<T01Report>();
+  export const parent = defineBuilderConfig({ name: 'T01Parent', injections: [] });
+  export const box = defineBuilderConfig({
+    name: 'T01Box',
+    optimization: { mode: 'closed', roots: [report, { all: item }] },
+    injections: [
+      { token: item, multi: true, useFactory: true, dependencies: [], provider: () => ({ n: 1 }) },
+      { token: item, multi: true, useValue: { n: 3 } },
+      { token: report, useFactory: true, dependencies: [{ all: item }], provider: () => ({ total: 2 }) },
+    ],
+  });
+`;
+
 const CONSUMER = [
   "import { box } from './box.out.ts';",
   'export async function consume(token: unknown): Promise<void> {',
@@ -76,13 +94,17 @@ const VARIANTS: readonly Variant[] = [
   },
 ];
 
-/** The default output of `text`: no unsafe type, the tables declared, and a strict Program that passes. */
-function expectStrict(name: string, text: string, tables: readonly string[]): void {
+/**
+ * The output of `text` written with `linearMax`: no unsafe type and a strict Program that passes. With the tables
+ * forced (`0`) it declares each of `tables`; with the linear cases forced (`Infinity`) it declares none.
+ */
+function expectStrict(name: string, text: string, tables: readonly string[], linearMax: number): void {
   const dir = '/virtual/t01-types';
   const userFile = `${name.replace(/ /g, '-')}.ts`;
   const userPath = `${dir}/${userFile}`;
   const graphs = new Analyzer(programOf(userPath, text)).extractAll();
-  const render = (graph: string): string => new Generator(named(graphs, graph), false, dirname(userPath), true, false).generate();
+  const render = (graph: string): string =>
+    new Generator(named(graphs, graph), false, dirname(userPath), true, false, undefined, undefined, undefined, { linearMax }).generate();
   const outputs: EmittedModule[] = [
     { file: 'box.out.ts', code: render('box') },
     { file: 'parent.out.ts', code: render('parent') },
@@ -91,6 +113,7 @@ function expectStrict(name: string, text: string, tables: readonly string[]): vo
   for (const table of tables) {
     expect(box, `${name} declares ${table}`).toMatch(new RegExp(`private static ${table}\\b`));
   }
+  if (linearMax === Infinity) expect(/private static __neo(Dispatch|Roots|Lists|RootLists)\b|__neo(Dispatch|Roots|Lists|RootLists)Table\(/.test(box), `${name} is linear`).toBe(false);
   for (const output of outputs) {
     expect(unsafeTypesMessage(output.code, output.file), `${name} ${output.file}`).toBe('');
   }
@@ -109,28 +132,16 @@ describe('T01 dispatch types', () => {
     warmLibCache();
   });
 
-  it('P16 the default output holds no unsafe type and passes a strict Program', () => {
-    for (const variant of VARIANTS) expectStrict(variant.name, source(variant.options), variant.tables);
+  it('P16 the table output holds no unsafe type and passes a strict Program', () => {
+    for (const variant of VARIANTS) expectStrict(variant.name, source(variant.options), variant.tables, 0);
+  }, 120_000);
+
+  it('P30 the linear output holds no unsafe type and passes a strict Program', () => {
+    for (const variant of VARIANTS) expectStrict(`${variant.name} linear`, source(variant.options), [], Infinity);
+    expectStrict('multi root and factory linear', FACTORY_ROOT, [], Infinity);
   }, 120_000);
 
   it('P19 a multi root also read by a factory passes a strict Program', () => {
-    const text = `
-  ${STUB}
-  interface T01Item { n: number }
-  const item = useInterface<T01Item>();
-  interface T01Report { total: number }
-  const report = useInterface<T01Report>();
-  export const parent = defineBuilderConfig({ name: 'T01Parent', injections: [] });
-  export const box = defineBuilderConfig({
-    name: 'T01Box',
-    optimization: { mode: 'closed', roots: [report, { all: item }] },
-    injections: [
-      { token: item, multi: true, useFactory: true, dependencies: [], provider: () => ({ n: 1 }) },
-      { token: item, multi: true, useValue: { n: 3 } },
-      { token: report, useFactory: true, dependencies: [{ all: item }], provider: () => ({ total: 2 }) },
-    ],
-  });
-`;
-    expectStrict('multi root and factory', text, ['__neoRoots', '__neoRootLists', '__neoLists']);
+    expectStrict('multi root and factory', FACTORY_ROOT, ['__neoRoots', '__neoRootLists', '__neoLists'], 0);
   }, 120_000);
 });

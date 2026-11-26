@@ -283,6 +283,8 @@ interface OpenOptions {
   suffix?: string;
   /** Trace shared with another container of the same run (a parent logs into its child's trace). */
   sink?: string[];
+  /** Rows up to which a table is the linear cases. Absent: the default of the Generator. */
+  linearMax?: number;
 }
 
 const closers: Array<() => Promise<void>> = [];
@@ -343,6 +345,9 @@ function open(graph: DependencyGraph, emitter: Emitter | undefined, options: Ope
     options.debug ?? false,
     options.testOverrides ?? false,
     emitter,
+    undefined,
+    undefined,
+    options.linearMax === undefined ? undefined : { linearMax: options.linearMax },
   ).generate();
   const code = `${generated}\n${options.suffix ?? ''}`;
   const js = ts.transpileModule(code, {
@@ -948,7 +953,7 @@ describe('T17 direct accessors and runtime profiles', () => {
     const { reference, optimized } = await differential(closedGraph(false), async ({ container, log }) => {
       const value = container.resolve('Consumer') as { p: unknown; l: unknown; items: unknown[] };
       log(`parent ${String(value.p)} local ${describeValue(value.l)} items ${value.items.map(describeValue).join(',')}`);
-    }, { parentGraph });
+    }, { parentGraph, linearMax: 0 });
     expect(optimized.trace).toEqual(reference.trace);
     expect(optimized.trace).toEqual(['parent from-parent local local items n1,n2']);
 
@@ -974,7 +979,7 @@ describe('T17 direct accessors and runtime profiles', () => {
     const opaqueRun = await differential(closedGraph(true), async ({ container, log }) => {
       const value = container.resolve('Consumer') as { l: unknown };
       log(`local ${describeValue(value.l)}`);
-    }, { parentGraph });
+    }, { parentGraph, linearMax: 0 });
     expect(opaqueRun.optimized.trace).toEqual(opaqueRun.reference.trace);
     expect(opaqueRun.optimized.trace).toEqual(['local local']);
     expect(methodText(opaqueRun.optimized.source, 'private _resolveInternal(token: unknown): unknown {')).toContain('__neoDispatchTable()');

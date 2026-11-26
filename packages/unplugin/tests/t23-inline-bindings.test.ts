@@ -202,8 +202,9 @@ describe('T23-G2 a renamed import keeps its local binding', () => {
   it('T23-G2 the container class reads the class by the local binding of the import, with no extra import', () => {
     const code = transformedApp(RENAMED);
     expect(code).toContain('return new Renamed();');
-    // The dispatch table keys the class by the local binding, `Renamed`, not by the exported name `Logger`.
-    expect(code).toMatch(/\[Renamed, NeoContainer_\w+\.prototype\._get_Logger_[a-f0-9]+\]/);
+    // One registration is the linear case of the dispatcher (packages/core/src/generator/dispatchEmitter.ts:37, DISPATCH_LINEAR_MAX).
+    // It keys the class by the local binding, `Renamed`, not by the exported name `Logger`.
+    expect(code).toMatch(/if \(token === Renamed\) return this\._get_Logger_[a-f0-9]+\(\);/);
     expect(code).toContain('this.instances.has(Renamed)');
     expect(code).not.toMatch(/new Logger\(/);
     expect(code).not.toContain('__neo_Import_');

@@ -118,12 +118,12 @@ describe('T17 size measure script', () => {
     expect(second).toBe(first);
   });
 
-  it('T17-SIZE-P5 --breakdown lists categories whose bytes sum to the class size, for three graph sizes and several small containers', () => {
+  it('T17-SIZE-P5 --breakdown lists categories whose bytes sum to the class size, for four graph sizes and several small containers', () => {
     expect(breakdown.categories).toEqual(expect.arrayContaining(['creators', 'user-code']));
     const graphs = breakdown.graphs;
-    expect(graphs.map((graph) => graph.label)).toEqual(['small', 'medium', 'large', 'many-small']);
-    expect(graphs.map((graph) => graph.providers)).toEqual([3, 12, 48, 3]);
-    expect(graphs.map((graph) => graph.containers)).toEqual([1, 1, 1, 6]);
+    expect(graphs.map((graph) => graph.label)).toEqual(['small', 'medium', 'large', 'many-small', 'above-threshold']);
+    expect(graphs.map((graph) => graph.providers)).toEqual([3, 12, 48, 3, 200]);
+    expect(graphs.map((graph) => graph.containers)).toEqual([1, 1, 1, 6, 1]);
     for (const graph of graphs) {
       for (const config of CONFIGS) {
         const row = graph.configs[config];
@@ -170,8 +170,9 @@ describe('T17 size measure script', () => {
 
   it('T17-SIZE-P6 --breakdown: debug metadata grows with the graph and only with debug on, closed drops the open dispatch tables', () => {
     expect(breakdown.categories).toEqual(expect.arrayContaining(['debug-metadata']));
-    const [small, medium, large] = breakdown.graphs;
-    for (const graph of [small, medium, large]) {
+    const [small, medium, large, , above] = breakdown.graphs;
+    expect(above?.label).toBe('above-threshold');
+    for (const graph of [small, medium, large, above]) {
       if (!graph) throw new Error('graph missing');
       for (const mode of ['open', 'closed'] as const) {
         const off = graph.configs[`${mode}-debug-off`];
@@ -181,8 +182,24 @@ describe('T17 size measure script', () => {
         // Debug adds the metadata and nothing else.
         expect(on.total - off.total, `${graph.label} ${mode}`).toBe((on.categories['debug-metadata'] ?? 0) - (off.categories['debug-metadata'] ?? 0));
       }
-      expect(graph.configs['closed-debug-off'].categories['dispatch-tables'], graph.label).toBeLessThan(graph.configs['open-debug-off'].categories['dispatch-tables'] ?? 0);
     }
+    // The graphs small, medium and large hold 3, 12 and 48 providers (scripts/measure-t17-size.mjs:240-242), at most DISPATCH_LINEAR_MAX
+    // (packages/core/src/generator/dispatchEmitter.ts:37): their open output has no table to drop, only the linear cases.
+    // Where it has one, the closed output holds strictly less; it is never more.
+    for (const graph of [small, medium, large]) {
+      if (!graph) throw new Error('graph missing');
+      const openTables = graph.configs['open-debug-off'].categories['dispatch-tables'] ?? 0;
+      const closedTables = graph.configs['closed-debug-off'].categories['dispatch-tables'] ?? 0;
+      expect(closedTables, graph.label).toBeLessThanOrEqual(openTables);
+      if (openTables > 0) expect(closedTables, graph.label).toBeLessThan(openTables);
+    }
+    // The graph above the threshold (200 providers, more than DISPATCH_LINEAR_MAX) is where the open output has its table: it must hold bytes,
+    // and the closed output, whose three roots are linear cases, must hold strictly less.
+    expect(above?.providers).toBe(200);
+    const aboveOpen = above?.configs['open-debug-off'].categories['dispatch-tables'] ?? 0;
+    const aboveClosed = above?.configs['closed-debug-off'].categories['dispatch-tables'] ?? 0;
+    expect(aboveOpen, 'above-threshold open').toBeGreaterThan(0);
+    expect(aboveClosed, 'above-threshold closed').toBeLessThan(aboveOpen);
     const bytes = (graph: Breakdown['graphs'][number] | undefined, id: string): number => graph?.configs['open-debug-on'].categories[id] ?? 0;
     for (const id of ['creators', 'accessors', 'factory-policy', 'debug-metadata']) {
       expect(bytes(small, id), id).toBeLessThan(bytes(medium, id));

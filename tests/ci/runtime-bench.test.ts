@@ -558,6 +558,45 @@ describe('runtime bench', () => {
     expect(typeof metricField(report, 'create', 'shortSamples')).toBe('number');
   }, 180_000);
 
+  it('P29 the dispatch threshold reaches the generated code and the report, and a bad value is refused', () => {
+    const dir = tempDir();
+    const written = (value: string | undefined): unknown => {
+      const reportPath = path.join(dir, `dispatch-${value ?? 'unset'}.json`);
+      const env = value === undefined ? tinyBench : { ...tinyBench, NEOSYRINGE_BENCH_DISPATCH_LINEAR_MAX: value };
+      const run = runBench(reportPath, env);
+      expect(run.status, run.stderr).toBe(0);
+      return readJson(reportPath);
+    };
+    const moduleBytes = (report: unknown): number => {
+      const module = isRecord(report) && Array.isArray(report.cases) && isRecord(report.cases[0]) ? report.cases[0].module : undefined;
+      if (!isRecord(module) || typeof module.raw !== 'number') throw new Error('missing module size');
+      return module.raw;
+    };
+    // scripts/ci/lib/performance-budget.mjs:34-38,51-58 compares `params` minus `k` and four fields of `environment`: nothing else.
+    const comparable = (report: unknown): string => {
+      if (!isRecord(report) || !isRecord(report.params)) throw new Error('missing params');
+      const rest = { ...report.params };
+      delete rest.k;
+      return JSON.stringify(rest);
+    };
+    const echoed = (report: unknown): unknown => (isRecord(report) ? report.config : undefined);
+    const always = written('0');
+    const never = written('Infinity');
+    const unset = written(undefined);
+    expect(echoed(always)).toEqual({ dispatchLinearMax: '0' });
+    expect(echoed(never)).toEqual({ dispatchLinearMax: 'Infinity' });
+    expect(echoed(unset)).toBeUndefined();
+    // Ten providers: the linear cases are a smaller module than the table.
+    expect(moduleBytes(never)).toBeLessThan(moduleBytes(always));
+    expect(comparable(always)).toBe(comparable(unset));
+    expect(comparable(never)).toBe(comparable(unset));
+    for (const bad of ['abc', '-1', '1.5']) {
+      const run = runBench(path.join(dir, `bad-${bad}.json`), { ...tinyBench, NEOSYRINGE_BENCH_DISPATCH_LINEAR_MAX: bad });
+      expect(run.status, bad).not.toBe(0);
+      expect(run.stderr, bad).toContain('NEOSYRINGE_BENCH_DISPATCH_LINEAR_MAX');
+    }
+  }, 180_000);
+
   it('compile failure is reported', () => {
     const dir = tempDir();
     const reportPath = path.join(dir, 'runtime-report.json');

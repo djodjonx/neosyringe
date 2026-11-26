@@ -106,6 +106,8 @@ interface BuildOptions {
   /** Modules the container file imports (path from the container's directory, then text) and the `require` that serves them. */
   modules?: ReadonlyMap<string, string>;
   require?: (id: string) => unknown;
+  /** Rows up to which a table is the linear cases. These tests read the shared tables, so it is 0 unless a test says otherwise. */
+  linearMax?: number;
 }
 
 interface Built {
@@ -190,7 +192,9 @@ function build(source: string, emitter: Emitter, options: BuildOptions = {}): Bu
     const end = graph.defineBuilderConfigEnd;
     if (name === undefined || start === undefined || end === undefined) throw new Error('missing container position');
     named(graphs, name);
-    const generator = new Generator(graph, true, undefined, false, options.testOverrides ?? false, emitter);
+    const generator = new Generator(graph, true, undefined, false, options.testOverrides ?? false, emitter, undefined, undefined, {
+      linearMax: options.linearMax ?? 0,
+    });
     code = `${code.slice(0, start)}${generator.generate()}\nexport const ${name} = ${generator.generateInstantiation()};${code.slice(end)}`;
   }
   const exports = execute(code, options.require ?? ((id) => {
@@ -298,7 +302,7 @@ export const box = defineBuilderConfig({ name: 'Box', injections: [{ token: Left
     const graphs = new Analyzer(programFor(files)).extractAll();
     const graph = named(graphs, 'box');
     const run = async (emitter: Emitter): Promise<{ code: string; seen: unknown }> => {
-      const code = new Generator(graph, false, '/virtual/t01h', false, false, emitter).generate();
+      const code = new Generator(graph, false, '/virtual/t01h', false, false, emitter, undefined, undefined, { linearMax: 0 }).generate();
       const modules: Record<string, unknown> = {
         './left.ts': { Service: LeftService },
         './right.ts': { Service: RightService },
@@ -650,7 +654,7 @@ export const box = defineBuilderConfig({ name: 'Box', injections: [{ token: Svc 
     fileCounter += 1;
     const graphs = new Analyzer(programFor(new Map([[`/virtual/t01/default-${fileCounter}.ts`, source]]))).extractAll();
     const graph = named(graphs, 'box');
-    const byDefault = new Generator(graph).generate();
+    const byDefault = new Generator(graph, false, undefined, true, false, undefined, undefined, undefined, { linearMax: 0 }).generate();
     expect(byDefault).toMatch(/private static __neoDispatch\b/);
     expect(byDefault).not.toContain('resolveLocal');
     const reference = new Generator(graph, false, undefined, true, false, 'reference').generate();
@@ -658,7 +662,8 @@ export const box = defineBuilderConfig({ name: 'Box', injections: [{ token: Svc 
     expect(reference).not.toMatch(/__neoDispatch\b/);
   });
 
-  it('P14 no per-registration comparison is left in a dynamic resolve', () => {
+  /** Four containers of 40 registrations and two multi tokens, written with the given threshold. The `if (token ===` rows of each, guards left out. */
+  const rowsOf = (linearMax: number): string[][] => {
     warmLibCache();
     const size = 40;
     const classes = Array.from({ length: size }, (_, index) => `export class P${index} { readonly slot = ${index}; }`);
@@ -684,14 +689,22 @@ export const box = defineBuilderConfig({
       body("runtime: { profile: 'minimal' }, optimization: { mode: 'closed', roots: [P0, P1, { all: one }] },"),
     ];
     const guards = ['NEO_MULTI_REQUIRES_RESOLVE_ALL', 'NEO_OVERRIDE_MULTI_UNSUPPORTED'];
-    for (const variant of variants) {
+    return variants.map((variant) => {
       fileCounter += 1;
       const graphs = new Analyzer(programFor(new Map([[`/virtual/t01/linear-${fileCounter}.ts`, variant]]))).extractAll();
-      const code = new Generator(named(graphs, 'box'), false, undefined, false, false, undefined).generate();
+      const code = new Generator(named(graphs, 'box'), false, undefined, false, false, undefined, undefined, undefined, { linearMax }).generate();
       const comparisons = code.split('\n').filter((line) => line.includes('if (token ==='));
-      const perRegistration = comparisons.filter((line) => !guards.some((guard) => line.includes(guard)));
-      expect(perRegistration).toEqual([]);
-    }
+      return comparisons.filter((line) => !guards.some((guard) => line.includes(guard)));
+    });
+  };
+
+  it('P14 no per-registration comparison is left in a dynamic resolve', () => {
+    for (const rows of rowsOf(0)) expect(rows).toEqual([]);
+  }, 120_000);
+
+  it('P14 twin: with the table off, every registration keeps its own comparison', () => {
+    // Open: 40 providers and 2 multi tokens. Closed: the 2 exported roots and the exported multi root.
+    expect(rowsOf(Infinity).map((rows) => rows.length)).toEqual([42, 42, 3, 3]);
   }, 120_000);
 
   it('P15 emitDispatchField refuses an invalid identifier', () => {
