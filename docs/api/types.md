@@ -95,13 +95,14 @@ The region is compiled and run by `tests/e2e/t20-docs-examples.test.ts`. The reg
 ## Injection
 
 ```typescript
-// Simplified. The real type is a union of four disjoint shapes:
-// autowire, class for a token, factory, useValue.
+// Simplified. The real type is a union of five disjoint shapes:
+// autowire, class for a token, factory, useValue, alias.
 interface Injection<T = any> {
   token: Token<T>;
   provider?: Provider<T>;
   useFactory?: boolean;
   useValue?: T;
+  useExisting?: Token<T>;
   dependencies?: readonly DependencyRef[];
   ownership?: 'owned' | 'borrowed';
   lifecycle?: Lifecycle;
@@ -110,7 +111,7 @@ interface Injection<T = any> {
 }
 ```
 
-A single injection definition (`packages/neosyringe/src/types.ts:353`):
+A single injection definition (`packages/neosyringe/src/types.ts:377`):
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -121,6 +122,20 @@ A single injection definition (`packages/neosyringe/src/types.ts:353`):
 | `scoped` | `boolean` | If `true`, resolve locally (override parent) |
 | `dependencies` | `readonly DependencyRef[]` | Tokens a factory resolves. Required in strict, even `[]` |
 | `ownership` | `'owned' \| 'borrowed'` | Who closes the result. `useValue` is borrowed |
+| `useExisting` | `Token<T>` | Makes the registration an alias of another token. Carries no `provider`, `useFactory`, `useValue`, `lifecycle`, `ownership`, `dependencies` or `multi`; `scoped` is allowed. See [aliases](../guide/aliases.md) |
+
+## Alias
+
+```typescript
+type Alias<T extends Token<unknown>, U extends Token<unknown>> = {
+  readonly token: T;
+  readonly useExisting: U;
+  readonly scoped?: boolean;
+  // provider, useFactory, useValue, lifecycle, ownership, multi and dependencies: never
+} & ([ValueOf<U>] extends [ValueOf<T>] ? unknown : never);
+```
+
+The shape of an alias registration, and the check the `injections` list applies to every `useExisting` (`packages/neosyringe/src/types.ts:335`, `packages/neosyringe/src/types.ts:442`). The pair is valid when the value of the target is assignable to the value of the token: a class instance, the `T` of `useInterface<T>()`. A subtype is accepted, a wrong type is a type error on the registration, and `Alias<typeof Service, typeof Other>` is `never` when `Other` has not the value of `Service`. The build checks the same relation with the checker, because the structure of two interfaces does not tell them apart at run time.
 
 ## PartialConfig
 
@@ -252,10 +267,10 @@ requests.resolve(requestToken); // does not compile: the template has no resolve
 - **Every input, once.** With a list written inline, a missing, an extra or a wrong-type value does not compile, and neither does a union of pairs one of which is incoherent (`InputGuard` checks each pair as a unit, `packages/neosyringe/src/types.ts:135` and `:144`). A widened `readonly` array is checked pair by pair only: a pair that names a token with the wrong value type does not compile, but the checker does not count the entries, so a missing or a repeated entry compiles and is refused at run time with `NEO_SCOPE_INPUT_MISSING` or `NEO_SCOPE_INPUT_DUPLICATE`.
 - **The checker cannot see identity.** Two interfaces with the same members have the same token type for the checker. Giving one for the other compiles; `createScope` refuses it at run time with `NEO_SCOPE_INPUT_MISSING` or `NEO_SCOPE_INPUT_UNKNOWN`. A token given twice is `NEO_SCOPE_INPUT_DUPLICATE` at run time too. See [errors](./errors.md#thrown-at-run-time-by-the-generated-container).
 - **The list is a literal.** A `scopeInputs` the checker cannot count (`readonly InputToken[]`, or an optional member) is rejected, like a profile that is not a literal (`packages/neosyringe/src/types.ts:311`). A class token is not an `InputToken`.
-- **No partial.** `scopeInputs` is not a member of `PartialConfig` (`packages/neosyringe/src/types.ts:400`): `definePartialConfig({ scopeInputs })` is a type error (TS2353), and the build says `NEO_CONFIG_UNSUPPORTED` if it is reached from untyped code. A builder that extends a partial declares the inputs itself, and a partial that needs one lists it in `expects`.
-- **Not a parent.** `useContainer` takes a `CoreContainer` or a plain record (`packages/neosyringe/src/types.ts:452`). A template or a bound scope is neither, so it is refused as a parent.
+- **No partial.** `scopeInputs` is not a member of `PartialConfig` (`packages/neosyringe/src/types.ts:464`): `definePartialConfig({ scopeInputs })` is a type error (TS2353), and the build says `NEO_CONFIG_UNSUPPORTED` if it is reached from untyped code. A builder that extends a partial declares the inputs itself, and a partial that needs one lists it in `expects`.
+- **Not a parent.** `useContainer` takes a `CoreContainer` or a plain record (`packages/neosyringe/src/types.ts:516`). A template or a bound scope is neither, so it is refused as a parent.
 - **The model, untyped.** Called from JavaScript, the model's `resolve`, `resolveAll`, `resolveMany` and `initialize` throw `NEO_SCOPE_INPUTS_UNBOUND`. On the program the plugin rewrites, the exported container is typed by the generated class, which does have those members: the typed contract holds on the source program, and the run-time refusal holds everywhere.
-- **Values are borrowed.** `destroy()` of a scope disposes the singletons the scope owns, never a value it was given: an input is a borrowed `value` (`packages/core/src/generator/ResolveEmitter.ts:52` to `:54`) and has no disposal slot (`packages/core/src/generator/LifecycleEmitter.ts:463` to `:469`). See [states and ownership](/guide/states-and-ownership#scope-inputs).
+- **Values are borrowed.** `destroy()` of a scope disposes the singletons the scope owns, never a value it was given: an input is a borrowed `value` (`packages/core/src/generator/ResolveEmitter.ts:54` to `:54`) and has no disposal slot (`packages/core/src/generator/LifecycleEmitter.ts:466` to `:469`). See [states and ownership](/guide/states-and-ownership#scope-inputs).
 
 ### resolve\<T\>(token: Token\<T\>): T
 

@@ -25,7 +25,7 @@ These changes are for the next major version. The destruction rule and the facto
 
 The rows about `destroy`, `override`, factories, profiles and `useValue` are exercised by the executed example below and by [states and ownership](./states-and-ownership.md). The token-descriptor row was executed by `pnpm migration:historical` (local, exit 0). A candidate consumer of a historical producer that depends on `@djodjonx/neosyringe` and ships no manifest printed `NEO_TOKEN_BOUNDARY_UNSUPPORTED: manifest-absent @acme/tokens User` (`packages/core/src/analyzer/shared/tokensManifest.ts:330-334`). The same run's candidate producer and candidate consumer, with a manifest, shared `User_4c3940c5`. Both producers were `@acme/tokens` with entry src/tokens.ts (`scripts/ci/historical-migration.mjs:842`). `historical key differs from candidate key: yes`. `same key across the rebuild: no`.
 
-A disposable transient captured by a singleton is a breaking change for strict builds (`packages/core/src/analyzer/validators/DisposableTransientCaptureValidator.ts:74`). A singleton with `scoped: true` is included. A transient consumer is not. The remediation is the row above. The plugin has no escape hatch: it builds with `new Analyzer(program).extractAll()` and no options (`packages/unplugin/src/session.ts:559`), and `validation` only reaches the usage check (`packages/unplugin/src/index.ts:32`). The target is the next major (`docs/guide/migration.md:6`), the ADR004 rule. `validation: 'compatible'` warns only if you call the core analyzer yourself (`packages/core/src/analyzer/validators/DisposableTransientCaptureValidator.ts:301`). The CLI stays strict (`packages/cli/src/index.ts:105`).
+A disposable transient captured by a singleton is a breaking change for strict builds (`packages/core/src/analyzer/validators/DisposableTransientCaptureValidator.ts:76`). A singleton with `scoped: true` is included. A transient consumer is not. The remediation is the row above. The plugin has no escape hatch: it builds with `new Analyzer(program).extractAll()` and no options (`packages/unplugin/src/session.ts:559`), and `validation` only reaches the usage check (`packages/unplugin/src/index.ts:32`). The target is the next major (`docs/guide/migration.md:6`), the ADR004 rule. `validation: 'compatible'` warns only if you call the core analyzer yourself (`packages/core/src/analyzer/validators/DisposableTransientCaptureValidator.ts:304`). The CLI stays strict (`packages/cli/src/index.ts:105`).
 
 ## Before and after, executed
 
@@ -57,7 +57,7 @@ With the default plugin options the legacy factory is refused:
 NEO_FACTORY_DEPENDENCIES_REQUIRED: factory 'Report' requires a dependencies list.
 ```
 
-Add the `dependencies` list first. That works with the old shape too, because the field is optional in the type (`packages/neosyringe/src/types.ts:374`), so it can ship before the upgrade.
+Add the `dependencies` list first. That works with the old shape too, because the field is optional in the type (`packages/neosyringe/src/types.ts:398`), so it can ship before the upgrade.
 
 ### `validation: 'compatible'` does not rescue it in the plugin
 

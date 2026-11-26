@@ -88,6 +88,7 @@ export default withMermaid(defineConfig({
           items: [
             { text: 'Basic Usage', link: '/guide/basic-usage' },
             { text: 'Injection Types', link: '/guide/injection-types' },
+            { text: 'Aliases (useExisting)', link: '/guide/aliases' },
             { text: 'Lifecycle', link: '/guide/lifecycle' },
             { text: 'Scoped Injections', link: '/guide/scoped-injections' },
             { text: 'States, Scopes and Ownership', link: '/guide/states-and-ownership' },

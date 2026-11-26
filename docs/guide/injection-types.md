@@ -13,6 +13,7 @@ All the ways to define and inject dependencies in NeoSyringe.
 | **Value** | `{ token: X, useValue: myValue }` | Pre-built objects |
 | **Property** | `{ token: useProperty(Class, 'param') }` | Primitives |
 | **Multi** | `{ token: X, provider: Y, multi: true }` | Plugin / strategy lists |
+| **Alias** | `{ token: X, useExisting: Y }` | A second token for a registered service, see [aliases](./aliases.md) |
 
 ## Class Token
 
