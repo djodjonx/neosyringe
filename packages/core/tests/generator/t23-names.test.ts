@@ -289,3 +289,65 @@ describe('T23 reserved names of a source file (B4)', () => {
     expect(pool.forKey('a', '__neo_Import_0')).toBe('__neo_Import_0_1');
   });
 });
+
+describe('E17-P16 the resolveMany type aliases come from the pool of the file', () => {
+  const EMITTERS: ReadonlyArray<'reference' | 'optimized'> = ['reference', 'optimized'];
+
+  function generator(graph: DependencyGraph, emitter: 'reference' | 'optimized', names: NamePool, inline: boolean): Generator {
+    return new Generator(graph, inline, inline ? undefined : '/out', false, false, emitter, undefined, { names });
+  }
+
+  /** Top-level `type` aliases of generated text, by name. */
+  function aliasNames(code: string): string[] {
+    const file = ts.createSourceFile('out.ts', code, ts.ScriptTarget.ES2022, true);
+    return file.statements.filter(ts.isTypeAliasDeclaration).map((statement) => statement.name.text);
+  }
+
+  it('E17-P16 two containers of one file declare four distinct aliases, and both run', () => {
+    for (const emitter of EMITTERS) {
+      const pool = new NamePool([]);
+      const generators = twoGraphs().map((graph) => ({
+        generator: generator(graph, emitter, pool, true),
+        variable: graph.exportedVariableName ?? 'container',
+      }));
+      const code = inlined(generators);
+      const aliases = aliasNames(code);
+      expect(aliases.filter((name) => name.startsWith('__NeoToken')), `${emitter}: token aliases`).toHaveLength(2);
+      expect(aliases.filter((name) => name.startsWith('__NeoValues')), `${emitter}: values aliases`).toHaveLength(2);
+      expect(new Set(aliases).size, `${emitter}: no alias declared twice`).toBe(aliases.length);
+      const { first, second } = run(code, ['first', 'second']);
+      expect(Reflect.get(first, 'resolveMany'), `${emitter}: first exposes resolveMany`).toBeTypeOf('function');
+      expect(Reflect.apply(Reflect.get(second, 'resolveMany'), second, [[Login]]), `${emitter}: second answers`).toHaveLength(1);
+    }
+  });
+
+  it('E17-P16 a user binding named like an alias keeps its name, the generated alias takes the next free one', () => {
+    for (const emitter of EMITTERS) {
+      const [graph] = twoGraphs();
+      const probe = generator(graph, emitter, new NamePool([]), true).generate();
+      const token = /^type (__NeoToken\w*)</m.exec(probe)?.[1];
+      const values = /^type (__NeoValues\w*)</m.exec(probe)?.[1];
+      expect(token, `${emitter}: token alias declared`).toBeDefined();
+      expect(values, `${emitter}: values alias declared`).toBeDefined();
+      if (token === undefined || values === undefined) continue;
+      const code = generator(graph, emitter, new NamePool([token, values]), true).generate();
+      expect(aliasNames(code), `${emitter}: renamed`).toEqual(expect.arrayContaining([`${token}_1`, `${values}_1`]));
+      expect(aliasNames(code), `${emitter}: the user's names are not redeclared`).not.toContain(token);
+      expect(aliasNames(code), `${emitter}: the user's names are not redeclared`).not.toContain(values);
+      expect(code, `${emitter}: the method names the renamed aliases`).toContain(
+        `resolveMany<const T extends readonly ${token}_1<unknown>[]>(tokens: T): ${values}_1<T>;`,
+      );
+    }
+  });
+
+  it('E17-P16 a file of its own keeps the plain names, and a user binding of that name moves them', () => {
+    for (const emitter of EMITTERS) {
+      const [graph] = twoGraphs();
+      const alone = generator(graph, emitter, new NamePool([]), false).generate();
+      expect(aliasNames(alone), `${emitter}: plain names`).toEqual(expect.arrayContaining(['__NeoToken', '__NeoValues']));
+      const moved = generator(graph, emitter, new NamePool(['__NeoToken', '__NeoValues']), false).generate();
+      expect(aliasNames(moved), `${emitter}: moved`).toEqual(expect.arrayContaining(['__NeoToken_1', '__NeoValues_1']));
+      expect(aliasNames(moved), `${emitter}: the user's names are free`).not.toContain('__NeoToken');
+    }
+  });
+});

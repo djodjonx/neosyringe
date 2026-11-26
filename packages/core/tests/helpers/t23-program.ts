@@ -216,7 +216,21 @@ const LIFECYCLE_ASYNC_SOURCE = LIFECYCLE_SOURCE.replace(
 const CTX_AMBIENT = `
 declare class T23Dep { n: number }
 interface T23Items { n: number }
+interface T23Base { n: number }
 declare const items: unknown;
+// A typed token, as a user's own source has it: resolveMany refuses a token typed \`unknown\`.
+declare const base: { __brand: 'InterfaceToken'; __type: T23Base };
+type T23Token<T = unknown> =
+  | (new (...args: never[]) => T)
+  | { __brand: 'InterfaceToken'; __type: T }
+  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };
+type T23Values<T extends readonly T23Token<unknown>[]> = { -readonly [K in keyof T]: T[K] extends T23Token<infer V> ? V : never };
+// The public FactoryContext (packages/neosyringe/src/types.ts): a factory may annotate its context with it.
+interface T23PublicContext {
+  resolve<T>(token: T23Token<T>): T;
+  resolveAll<T>(token: T23Token<T>): T[];
+  resolveMany<const T extends readonly T23Token<unknown>[]>(tokens: T): T23Values<T>;
+}
 `;
 
 const CTX_BODIES = `
@@ -230,6 +244,11 @@ const CTX_BODIES = `
       { token: defaulted, useFactory: true, dependencies: [T23Dep], provider: (ctx: { resolve<T>(token: unknown): T } = { resolve: () => { throw new Error('no context'); } }) => ((dep: T23Dep) => ({ n: dep.n }))(ctx.resolve(T23Dep)) },
       // resolveAll
       { token: listed, useFactory: true, dependencies: [{ all: items }], provider: (ctx) => ((all: T23Items[]) => ({ n: all.length }))(ctx.resolveAll(items)) },
+      { token: base, useValue: { n: 6 } },
+      // resolveMany: a tuple of a class and an interface token, handed to a parameter that has a type
+      { token: tupled, useFactory: true, dependencies: [T23Dep, base], provider: (ctx) => ((pair: [T23Dep, T23Base]) => ({ n: pair[0].n + pair[1].n }))(ctx.resolveMany([T23Dep, base])) },
+      // resolveMany on a context annotated with the public shape, and a list that is not a tuple
+      { token: annotatedMany, useFactory: true, dependencies: [T23Dep, base], provider: (ctx: T23PublicContext) => ((pair: [T23Dep, T23Base], none: []) => ({ n: pair[0].n + none.length }))(ctx.resolveMany([T23Dep, base]), ctx.resolveMany([])) },
 `;
 
 const CTX_ASYNC_BODY = `
@@ -243,11 +262,17 @@ function ctxSource(profile: 'full' | 'minimal', optionLines: string, withAsync: 
   export class T23Dep { n = 1; }
   interface T23Made { n: number }
   interface T23Items { n: number }
+  interface T23Base { n: number }
   interface T23Annotated { n: number }
   interface T23Defaulted { n: number }
   interface T23Listed { n: number }
   interface T23Later { n: number }
+  interface T23Tupled { n: number }
+  interface T23AnnotatedMany { n: number }
   const items = useInterface<T23Items>();
+  const base = useInterface<T23Base>();
+  const tupled = useInterface<T23Tupled>();
+  const annotatedMany = useInterface<T23AnnotatedMany>();
   const made = useInterface<T23Made>();
   const annotated = useInterface<T23Annotated>();
   const defaulted = useInterface<T23Defaulted>();
@@ -271,13 +296,16 @@ function opaqueSource(profile: 'full' | 'minimal'): string {
   ${STUB}
   export class T23Dep { n = 1; }
   interface T23Made { n: number }
+  interface T23Pair { n: number }
   const made = useInterface<T23Made>();
+  const pair = useInterface<T23Pair>();
   export const box = defineBuilderConfig({
     name: 'T23Opaque',
     runtime: { profile: '${profile}' },
     injections: [
       { token: T23Dep },
       { token: made, useFactory: true, provider: (ctx) => ((dep: T23Dep) => ({ n: dep.n }))(ctx.resolve(T23Dep)) },
+      { token: pair, useFactory: true, provider: (ctx) => ((both: [T23Dep, T23Dep]) => ({ n: both[0].n + both[1].n }))(ctx.resolveMany([T23Dep, T23Dep])) },
     ],
   });
 `;
@@ -285,7 +313,7 @@ function opaqueSource(profile: 'full' | 'minimal'): string {
 
 function ctxCases(profile: 'full' | 'minimal'): EmissionCase[] {
   const base = { profile, testOverrides: false, parent: false, ambient: CTX_AMBIENT };
-  const roots = 'T23Dep, made, annotated, defaulted, listed';
+  const roots = 'T23Dep, made, annotated, defaulted, listed, tupled, annotatedMany';
   const closed = `optimization: { mode: 'closed', roots: [${roots}] },`;
   const closedAsync = `optimization: { mode: 'closed', roots: [${roots}, later] },`;
   return [
@@ -357,20 +385,21 @@ function consumerSource(profile: 'full' | 'minimal'): string {
     "import { box } from './box.out.ts';",
     '',
     // Copy of `Token` in packages/neosyringe/src/types.ts (Constructor | InterfaceToken | PropertyToken).
-    ...(full
-      ? [
-          'type Token<T = unknown> =',
-          '  | (new (...args: never[]) => T)',
-          "  | { __brand: 'InterfaceToken'; __type: T }",
-          "  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };",
-          '',
-        ]
-      : []),
-    'export async function consume(token: unknown): Promise<void> {',
+    'type Token<T = unknown> =',
+    '  | (new (...args: never[]) => T)',
+    "  | { __brand: 'InterfaceToken'; __type: T }",
+    "  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };",
+    '',
+    'export async function consume(token: unknown, first: Token<string>, second: Token<number>, strings: readonly Token<string>[]): Promise<void> {',
     '  await box.initialize();',
     '  const value: string = box.resolve<string>(token);',
     '  const every: number[] = box.resolveAll<number>(token);',
+    // resolveMany answers a tuple of the values of its tokens, with no cast at the call site.
+    '  const pair: [string, number] = box.resolveMany([first, second]);',
+    '  const none: [] = box.resolveMany([]);',
+    '  const listed: string[] = box.resolveMany(strings);',
     '  const scope = box.createScope();',
+    '  const scoped: [number, string] = scope.resolveMany([second, first]);',
     '  await scope.destroy();',
     '  await box.destroy();',
     ...(full
@@ -392,6 +421,10 @@ function consumerSource(profile: 'full' | 'minimal'): string {
       : []),
     '  void value;',
     '  void every;',
+    '  void pair;',
+    '  void none;',
+    '  void listed;',
+    '  void scoped;',
     '}',
     '',
   ].join('\n');

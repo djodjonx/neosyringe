@@ -11,5 +11,5 @@
       "@djodjonx/neosyringe": ["../../../packages/neosyringe"]
     }
   },
-  "files": ["consumer.ts"]
+  "files": ["consumer.ts", "many.ts"]
 }

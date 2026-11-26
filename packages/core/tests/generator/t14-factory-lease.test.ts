@@ -6,6 +6,7 @@ import { Generator } from '../../src/generator/Generator';
 import { emitFactoryPolicy, factoryLeaseHelpers } from '../../src/generator/factoryLeaseEmitter';
 import { createFastProgram, warmLibCache } from '../fastProgram';
 import { named } from '../helpers/t00-contract';
+import { capability, many } from '../helpers/e17-build';
 
 /**
  * T14 factory policy and lease. A declared factory has one immutable permission policy per declaration, built once and
@@ -673,5 +674,120 @@ export const box = defineBuilderConfig({
     expect(() => emitFactoryPolicy('Bad Name', 'create_X', entries)).toThrow('invalid generated identifier');
     expect(() => emitFactoryPolicy('Container', 'create X', entries)).toThrow('invalid generated identifier');
     expect(factoryLeaseHelpers('Container').map((helper) => helper.id)).toEqual(['factoryPolicy', 'factoryLease']);
+  });
+});
+
+describe('E17-P7 factory context resolveMany', () => {
+  beforeAll(() => {
+    warmLibCache();
+  });
+
+  const declared = (profile: Profile, mode: Mode, useMany = true): string => `${HEAD}
+export class DepA { n = 1; constructor() { probe.order.push('A'); } }
+export class DepB { n = 2; constructor() { probe.order.push('B'); } }
+export class DepC { n = 3; }
+interface Made { sum: number }
+const made = useInterface<Made>();
+export const box = defineBuilderConfig({
+  name: 'Box',
+  runtime: { profile: '${profile}' },
+  ${mode === 'closed' ? 'optimization: { mode: \'closed\', roots: [made] },' : ''}
+  injections: [
+    { token: DepA },
+    { token: DepB },
+    { token: DepC },
+    { token: made, lifecycle: 'transient', useFactory: true, dependencies: [DepA, DepB],
+      provider: (ctx) => {
+        probe.saved.push(ctx);
+        probe.run?.(ctx);
+        ${useMany ? 'const [b, a] = ctx.resolveMany([DepB, DepA]);' : 'const b = ctx.resolve(DepB); const a = ctx.resolve(DepA);'}
+        return { sum: a.n + b.n };
+      } },
+  ],
+});
+`;
+
+  it('E17-P7 a declared factory resolves a tuple through its context, on every profile, mode and emitter', async () => {
+    for (const profile of ['full', 'minimal'] as const) {
+      for (const mode of ['open', 'closed'] as const) {
+        for (const emitter of EMITTERS) {
+          await withBuilt(declared(profile, mode), { emitter }, (built) => {
+            const where = `${profile} ${mode} ${label(emitter)}`;
+            const box = built.box();
+            const events: string[] = [];
+            const unsubscribe = box.on?.('resolve', (token) => {
+              events.push(nameOf(token));
+            });
+            const seen: unknown[] = [];
+            built.probe.run = (ctx) => {
+              capability(ctx);
+              const both = many(ctx, [built.exports.DepA, built.exports.DepB]);
+              seen.push(both);
+              seen.push(many(ctx, []));
+              seen.push(failureOf(() => many(ctx, [built.exports.DepA, built.exports.DepC])));
+              seen.push(failureOf(() => many(ctx, [built.exports.DepC, built.exports.DepA])));
+              seen.push(call(ctx, 'resolve', built.exports.DepA) === (Array.isArray(both) ? both[0] : undefined));
+            };
+            expect(box.resolve(built.id('Made')), where).toEqual({ sum: 3 });
+            const undeclared = { code: UNDECLARED, message: `${UNDECLARED}: factory Made cannot resolve an undeclared dependency` };
+            expect(seen.slice(1), where).toEqual([[], undeclared, undeclared, true]);
+            expect(Array.isArray(seen[0]) ? seen[0].map((value) => read(value, 'n')) : seen[0], `${where}: left to right`).toEqual([1, 2]);
+            // Every element is a read of the context, and the full profile and the reference emitter notify each read:
+            // the two warmup reads, [A, B], then A of [A, C] (C is refused before it is read), [] and [C, A] read
+            // nothing, one single resolve, and the [B, A] of the factory itself.
+            const notifies = profile === 'full' || emitter === 'reference';
+            const reads = events.filter((name) => name === 'DepA' || name === 'DepB');
+            expect(reads, `${where}: notified reads`).toEqual(notifies ? ['DepA', 'DepB', 'DepA', 'DepB', 'DepA', 'DepA', 'DepB', 'DepA'] : []);
+            unsubscribe?.();
+          });
+        }
+      }
+    }
+  });
+
+  it('E17-P7 a saved context refuses a batch, empty or not, once the factory returned', async () => {
+    const expired = { code: EXPIRED, message: `${EXPIRED}: factory Made context used after the factory returned` };
+    for (const emitter of EMITTERS) {
+      await withBuilt(declared('full', 'open', false), { emitter }, (built) => {
+        built.box().resolve(built.id('Made'));
+        const [ctx] = built.probe.saved;
+        capability(ctx);
+        expect(failureOf(() => many(ctx, [])), `${label(emitter)}: empty batch`).toEqual(expired);
+        expect(failureOf(() => many(ctx, [built.exports.DepA])), `${label(emitter)}: batch`).toEqual(expired);
+        // An undeclared token still reports the expiry first: the lease is read before the policy.
+        expect(failureOf(() => many(ctx, [built.exports.DepC])), `${label(emitter)}: undeclared`).toEqual(expired);
+      });
+    }
+  });
+
+  it('E17-P7 an opaque factory may ask for any tuple and its saved context expires', async () => {
+    const source = `${HEAD}
+export class Dep { n = 1; }
+export class Other { n = 2; }
+interface Made { sum: number }
+const made = useInterface<Made>();
+export const box = defineBuilderConfig({
+  name: 'Box',
+  injections: [
+    { token: Dep },
+    { token: Other },
+    { token: made, lifecycle: 'transient', useFactory: true,
+      provider: (ctx) => { probe.saved.push(ctx); const [dep, other] = ctx.resolveMany([Dep, Other]); return { sum: dep.n * 10 + other.n }; } },
+  ],
+});
+`;
+    const expired = { code: EXPIRED, message: `${EXPIRED}: factory Made context used after the factory returned` };
+    for (const emitter of EMITTERS) {
+      await withBuilt(source, { emitter, validation: 'compatible' }, (built) => {
+        const where = label(emitter);
+        // The factory itself asked for [Dep, Other] while it ran: the values come back in token order (1 * 10 + 2).
+        expect(built.box().resolve(built.id('Made')), where).toEqual({ sum: 12 });
+        const [ctx] = built.probe.saved;
+        capability(ctx);
+        expect(failureOf(() => many(ctx, [])), `${where}: empty batch`).toEqual(expired);
+        expect(failureOf(() => many(ctx, [built.exports.Dep])), `${where}: batch`).toEqual(expired);
+        expect(built.policies.size, `${where}: no policy`).toBe(0);
+      });
+    }
   });
 });

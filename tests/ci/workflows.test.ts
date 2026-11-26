@@ -161,6 +161,18 @@ describe('CI workflows', () => {
     expect(closedAt).toBeGreaterThan(ownershipAt);
   });
 
+  it('E17-P12 consumer-types job checks the positive and negative fixtures on the packed archive after the paths run', () => {
+    const commands = runs(loadJobs('.github/workflows/ci.yml')['consumer-types']!);
+    const positive = 'node scripts/ci/consumer-types.mjs tests/consumer-types/positive';
+    const negative = 'node scripts/ci/consumer-types.mjs tests/consumer-types/negative --expect-file expected-diagnostic.txt';
+    const positivePacked = `${positive} --pack`;
+    const negativePacked = `${negative} --pack`;
+    expect(commands.indexOf(positivePacked), 'positive on the archive').toBeGreaterThan(commands.indexOf(positive));
+    expect(commands.indexOf(negativePacked), 'negative on the archive').toBeGreaterThan(commands.indexOf(negative));
+    expect(commands.filter((command) => command === positivePacked)).toHaveLength(1);
+    expect(commands.filter((command) => command === negativePacked)).toHaveLength(1);
+  });
+
   it('T15 distribution runs consumer-dist after check-dist', () => {
     const commands = runs(loadJobs('.github/workflows/ci.yml').distribution!);
     const checkAt = commands.indexOf('node scripts/ci/check-dist.mjs');
