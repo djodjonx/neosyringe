@@ -1,0 +1,12 @@
+base {"shape":"flat","profile":"full","mode":"open","size":10,"raw":40079,"min":16277,"gzip":3662}
+base {"shape":"parent","profile":"full","mode":"open","size":10,"raw":62329,"min":25357,"gzip":4116}
+base {"shape":"chain","profile":"full","mode":"open","size":100,"raw":192030,"min":76714,"gzip":9614}
+base {"shape":"diamond","profile":"full","mode":"open","size":100,"raw":193708,"min":77941,"gzip":9804}
+D {"shape":"flat","profile":"full","mode":"open","size":10,"raw":32655,"min":15898,"gzip":3848}
+D {"shape":"parent","profile":"full","mode":"open","size":10,"raw":51542,"min":24960,"gzip":4365}
+D {"shape":"chain","profile":"full","mode":"open","size":100,"raw":149218,"min":74419,"gzip":10761}
+D {"shape":"diamond","profile":"full","mode":"open","size":100,"raw":150767,"min":75518,"gzip":10946}
+proto2 {"shape":"flat","profile":"full","mode":"open","size":10,"raw":31675,"min":14728,"gzip":3678}
+proto2 {"shape":"parent","profile":"full","mode":"open","size":10,"raw":50760,"min":23858,"gzip":4210}
+proto2 {"shape":"chain","profile":"full","mode":"open","size":100,"raw":137078,"min":61549,"gzip":9030}
+proto2 {"shape":"diamond","profile":"full","mode":"open","size":100,"raw":138711,"min":62732,"gzip":9153}

@@ -1,0 +1,9 @@
+base-chain100.mjs raw 192030 min 76714 gzip 9614
+D-chain100.mjs raw 149218 min 74419 gzip 10761
+M-merge-chain100.mjs raw 144538 min 67039 gzip 9814
+base-flat10.mjs raw 40079 min 16277 gzip 3662
+D-flat10.mjs raw 32655 min 15898 gzip 3848
+M-merge-flat10.mjs raw 32205 min 15178 gzip 3752
+base-parent10.mjs raw 62329 min 25357 gzip 4116
+D-parent10.mjs raw 51542 min 24960 gzip 4365
+M-merge-parent10.mjs raw 51092 min 24240 gzip 4275

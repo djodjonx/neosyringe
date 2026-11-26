@@ -1,0 +1,13 @@
+$ K=100000 node --expose-gc docs/benchmarks/data/stage-d-fix/perbox.mjs <scratch>/dump/<module>.mjs   (one process per module, 2 runs each, 2026-11-26, load 6.95)
+base-flat10.mjs bytes/box 1170
+base-flat10.mjs bytes/box 1170
+D-flat10.mjs bytes/box 1178
+D-flat10.mjs bytes/box 1178
+L3-shared-overrides.mjs bytes/box 994
+L3-shared-overrides.mjs bytes/box 994
+W2-overrides-and-listeners-shared.mjs bytes/box 842
+W2-overrides-and-listeners-shared.mjs bytes/box 842
+W3-all-collections-shared.mjs bytes/box 435
+W3-all-collections-shared.mjs bytes/box 435
+proto2-flat10.mjs bytes/box 842
+proto2-flat10.mjs bytes/box 842

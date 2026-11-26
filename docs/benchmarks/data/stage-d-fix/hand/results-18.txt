@@ -1,0 +1,6 @@
+{"file":"base-chain100.mjs","metric":"cold-resolve","median":10643.750000000126,"perProcess":[10643.8,11307.9,10511.3]}
+{"file":"D-chain100.mjs","metric":"cold-resolve","median":15162.909999999953,"perProcess":[15078.3,15162.9,15171.2]}
+{"file":"M-merge-chain100.mjs","metric":"cold-resolve","median":12197.50000000005,"perProcess":[12256.7,12197.5,12136.7]}
+{"file":"base-chain100.mjs","metric":"heapAfterGc","median":5747696,"perProcess":[5749096,5743384,5747696]}
+{"file":"D-chain100.mjs","metric":"heapAfterGc","median":6324704,"perProcess":[6324704,6325008,6318968]}
+{"file":"M-merge-chain100.mjs","metric":"heapAfterGc","median":5373424,"perProcess":[5340912,5373424,5400920]}

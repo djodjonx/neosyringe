@@ -1,0 +1,8 @@
+# Minimal profile, harness module flat10 (default emitter at ba192b4 already optimized for minimal). Modules <scratch>/dump/min-base-flat10.mjs (ba192b4) and <scratch>/dump/min-D-flat10.mjs (a3562b1); not copied (dumps).
+min-base-flat10.mjs: raw    27505 bytes; gzip -9 of the raw text     4433 bytes; lines with __neoPolicy: 0; lines with __neoLease: 0; lines with __neoRead_: 0
+min-D-flat10.mjs: raw    29401 bytes; gzip -9 of the raw text     4800 bytes; lines with __neoPolicy: 8; lines with __neoLease: 4; lines with __neoRead_: 2
+first lines of min-D-flat10.mjs that name a lease helper:
+108:        const __neoLease = NeoContainer_473c8405f08478cf20e56d75.__neoLease(NeoContainer_473c8405f08478cf20e56d75.__neoPolicy_create_BenchReady_63
+136:        const __neoPolicy = NeoContainer_473c8405f08478cf20e56d75.__neoPolicyOf(__neoRows);
+365:    static __neoPolicyOf(entries) {
+371:    static __neoLease(policy, label, host, read) {

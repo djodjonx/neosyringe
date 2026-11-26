@@ -1,0 +1,17 @@
+== campaign start 2026-11-26 13:16:55 load { 1.66 4.03 4.96 }
+== base-ba192b4-s10 start 13:16:55 load { 1.66 4.03 4.96 }
+== base-ba192b4-s10 exit 0 secs 187 end-load { 2.29 3.42 4.52 }
+== cand-fix-s10 start 13:20:02 load { 2.29 3.42 4.52 }
+== cand-fix-s10 exit 1 secs 170 end-load { 2.25 2.95 4.13 }
+== stageD-a3562b1-s10 start 13:22:52 load { 2.25 2.95 4.13 }
+== stageD-a3562b1-s10 exit 0 secs 188 end-load { 2.87 2.84 3.84 }
+== base-ba192b4-s100 start 13:26:00 load { 2.87 2.84 3.84 }
+== base-ba192b4-s100 exit 0 secs 212 end-load { 3.10 2.94 3.66 }
+== cand-fix-s100 start 13:29:32 load { 3.10 2.94 3.66 }
+== cand-fix-s100 exit 1 secs 190 end-load { 3.69 3.17 3.60 }
+== stageD-a3562b1-s100 start 13:32:42 load { 3.69 3.17 3.60 }
+== stageD-a3562b1-s100 exit 0 secs 209 end-load { 2.05 2.73 3.32 }
+== size base-ba192b4 exit 1 load { 2.05 2.73 3.32 }
+== size stageD-a3562b1 exit 0 load { 2.05 2.73 3.32 }
+== size cand-fix exit 0 load { 1.97 2.71 3.30 }
+== campaign done 2026-11-26 13:36:14 load { 1.97 2.71 3.30 }

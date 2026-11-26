@@ -1,0 +1,6 @@
+{"file":"base-flat10.mjs","metric":"cold-resolve","median":54.2025000000001,"perProcess":[54.2,53.4,56]}
+{"file":"D-flat10.mjs","metric":"cold-resolve","median":93.25665999999956,"perProcess":[93.3,91,93.4]}
+{"file":"G1-undefined-throw.mjs","metric":"cold-resolve","median":92.11375000000089,"perProcess":[91.7,92.1,94.1]}
+{"file":"G2-has-throw.mjs","metric":"cold-resolve","median":53.662500000000364,"perProcess":[53.8,53.7,52.8]}
+{"file":"G3-size-throw.mjs","metric":"cold-resolve","median":76.14250000000084,"perProcess":[74.8,76.1,84.7]}
+{"file":"G5-listeners-size-throw.mjs","metric":"cold-resolve","median":89.8924999999997,"perProcess":[89.8,89.9,91.6]}

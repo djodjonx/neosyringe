@@ -1,0 +1,4 @@
+339c339
+<     const generator = new Generator(graph, true, undefined, false, false, process.env.NEOSYRINGE_BENCH_EMITTER || undefined, undefined, undefined, dispatch);
+---
+>     const generator = new Generator(graph, true, undefined, false, false, undefined, undefined, undefined, dispatch);

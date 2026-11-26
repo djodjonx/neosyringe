@@ -1,0 +1,198 @@
+diff --git a/packages/core/src/generator/DirectEmitter.ts b/packages/core/src/generator/DirectEmitter.ts
+index b629520..e82cecb 100644
+--- a/packages/core/src/generator/DirectEmitter.ts
++++ b/packages/core/src/generator/DirectEmitter.ts
+@@ -15,6 +15,7 @@ import { dispatchIsLinear, emitDispatchField, emitDispatchRead, emitLinearRead,
+ import { factoryLeaseHelpers } from './factoryLeaseEmitter';
+ import { noProviderTypes, type GetProviderTypes } from './providerTypes';
+ import {
++  constructionExpression,
+   generateFactories,
+   generateMultiFactories,
+   getReadName,
+@@ -93,7 +94,7 @@ function mockMethod(): string {
+   }`;
+ }
+ 
+-function eventMembers(): string {
++function eventMembers(className: string): string {
+   return `/**
+    * Subscribes to container events — currently only 'resolve', fired with the
+    * token and the resolved instance every time resolve() succeeds (whether
+@@ -102,6 +103,7 @@ function eventMembers(): string {
+    * caught and ignored.
+    */
+   ${resolveListenerOverload()}
++    if (this.resolveListeners === ${className}.__neoNoListeners) this.resolveListeners = new Set();
+     this.resolveListeners.add(listener);
+     return () => { this.resolveListeners.delete(listener); };
+   }
+@@ -293,12 +295,25 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
+   const providerTypes = input.providerTypes ?? noProviderTypes;
+   const direct: DirectReads = { notify: !minimal };
+   const honourOverrides = !minimal && input.testOverrides;
++  // Full profile, open mode: a sync class provider has one reader, its accessor, so the accessor builds it in place
++  // and the creator is not emitted. Closed mode keeps its creators (eager roots call them); minimal has no `_get_`.
++  const inlined = new Set<TokenId>();
++  const inlineText = new Map<TokenId, string>();
++  if (!minimal && !closed) {
++    for (const tokenId of sorted) {
++      const node = graph.nodes.get(tokenId);
++      if (!node || node.service.type === 'parent' || node.service.type === 'value' || node.service.type === 'factory') continue;
++      if (node.service.isAsync || !node.service.implementationSymbol) continue;
++      inlined.add(tokenId);
++      inlineText.set(tokenId, constructionExpression(node, graph, getImport, getForeignImport, hasAsync, closed, direct, providerTypes).text);
++    }
++  }
+   const creators = [
+-    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className),
++    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, inlined),
+     ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className),
+   ];
+   const accessors = [
+-    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides }, `${input.className}.formatToken`, providerTypes),
++    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides }, `${input.className}.formatToken`, providerTypes, (id) => inlineText.get(id)),
+     ...generateDirectContributions(graph, hasAsync, providerTypes),
+   ];
+   const needs = factoryContextNeeds(graph);
+@@ -339,7 +354,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
+   const destroy = generateDestroyMethod(graph, sorted, getImport, hasAsync, minimal);
+   const tableFields = minimal
+     ? ''
+-    : `\n  private overrides = new Map<unknown, () => unknown>();\n  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();`;
++    : `\n  private static readonly __neoNoListeners = new Set<(token: unknown, instance: unknown) => void>();\n  private static readonly __neoNoOverrides = new Map<unknown, () => unknown>();\n  private overrides: Map<unknown, () => unknown> = ${input.testOverrides ? 'new Map<unknown, () => unknown>()' : `${input.className}.__neoNoOverrides`};\n  private resolveListeners: Set<(token: unknown, instance: unknown) => void> = ${input.className}.__neoNoListeners;`;
+   const members: Piece[] = [
+     input.runtimeHelpers + input.assertRootMethod,
+     initialize,
+@@ -352,7 +367,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
+   }
+   if (!minimal) {
+     members.push(generateOverrideMethods(graph, sorted, getImport, hasAsync, input.testOverrides));
+-    members.push(eventMembers());
++    members.push(eventMembers(input.className));
+   }
+   if (honourOverrides) members.push(mockMethod());
+   members.push(resolve.publicMethod);
+diff --git a/packages/core/src/generator/FactoryEmitter.ts b/packages/core/src/generator/FactoryEmitter.ts
+index 0dd1856..ce056f7 100644
+--- a/packages/core/src/generator/FactoryEmitter.ts
++++ b/packages/core/src/generator/FactoryEmitter.ts
+@@ -441,6 +441,23 @@ function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = []
+   }${members}`, needs);
+ }
+ 
++/** The `new Class(args)` expression of a class provider, with the need of the generic resolver its arguments call. */
++export function constructionExpression(
++  node: DependencyNode,
++  graph: DependencyGraph,
++  getImport: GetImport,
++  getForeignImport: GetImport,
++  hasAsync: boolean,
++  closed: boolean,
++  direct: DirectReads | undefined,
++  providerTypes: GetProviderTypes,
++): { text: string; needs: HelperId[] } {
++  if (!node.service.implementationSymbol) throw new Error(`[Generator] No implementation symbol for token '${node.service.tokenId}'.`);
++  const className = getImport(node.service.implementationSymbol);
++  const args = constructorArguments(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct, className, providerTypes);
++  return { text: `new ${className}(${args.text})`, needs: args.needs };
++}
++
+ /** `return new Class(args);`, with the need of the generic resolver its arguments call. */
+ function construction(
+   node: DependencyNode,
+@@ -475,6 +492,7 @@ export function generateFactories(
+   copy: UserCopy = generatedCopy,
+   providerTypes: GetProviderTypes = noProviderTypes,
+   className = DEFAULT_CLASS_NAME,
++  inlined: ReadonlySet<TokenId> = new Set(),
+ ): Fragment[] {
+   const factories: Fragment[] = [];
+ 
+@@ -482,6 +500,7 @@ export function generateFactories(
+     const node = graph.nodes.get(tokenId);
+     if (!node) continue;
+     if (node.service.type === 'parent') continue;
++    if (inlined.has(tokenId)) continue;
+ 
+     const factoryId = getFactoryName(tokenId);
+ 
+diff --git a/packages/core/src/generator/ResolveEmitter.ts b/packages/core/src/generator/ResolveEmitter.ts
+index 92eb411..a7aa56c 100644
+--- a/packages/core/src/generator/ResolveEmitter.ts
++++ b/packages/core/src/generator/ResolveEmitter.ts
+@@ -318,6 +318,7 @@ export function generateDirectAccessors(
+   profile: DirectProfile,
+   formatToken: string,
+   providerTypes: GetProviderTypes = noProviderTypes,
++  inlineCreation: (tokenId: TokenId) => string | undefined = () => undefined,
+ ): string[] {
+   const accessors: string[] = [];
+   for (const tokenId of sorted) {
+@@ -327,31 +328,54 @@ export function generateDirectAccessors(
+     const tokenKey = resolveTokenKey(node.service, getImport);
+     const transient = node.service.lifecycle === 'transient';
+     const asyncSingleton = hasAsync && !!node.service.isAsync && !transient;
+-    const stored = afterStore('instance', tokenKey, hasAsync, isBorrowedInstance(node.service));
+     const types = providerTypes(node);
+     const returns = types.accessor ?? 'unknown';
+     // `unknown` needs no assertion. A typed accessor asserts a cache read, and a creator that answers another type.
+     const asType = types.accessor === undefined ? '' : ` as ${types.accessor}`;
+     const asCreated = types.creator === types.accessor ? '' : asType;
+     const mockType = types.accessor === undefined ? '' : `<${types.accessor}>`;
+-    const mock = profile.honourOverrides ? `if (this.overrides.has(${tokenKey})) return this._mock${mockType}(${tokenKey});\n    ` : '';
+-    const body = transient
+-      ? `return this.${factoryId}()${asCreated};`
+-      : asyncSingleton
+-        ? `if (!this.instances.has(${tokenKey})) throw new Error('async singleton is not prepared: ' + ${formatToken}(${tokenKey}));
++    const created = inlineCreation(tokenId) ?? `this.${factoryId}()`;
++    if (profile.minimal) {
++      const stored = afterStore('instance', tokenKey, hasAsync, isBorrowedInstance(node.service));
++      const body = transient
++        ? `return ${created}${asCreated};`
++        : asyncSingleton
++          ? `if (!this.instances.has(${tokenKey})) throw new Error('async singleton is not prepared: ' + ${formatToken}(${tokenKey}));
+     return this.instances.get(${tokenKey})${asType};`
+-        : `if (this.instances.has(${tokenKey})) return this.instances.get(${tokenKey})${asType};
+-    const instance = this.${factoryId}()${asCreated};
++          : `if (this.instances.has(${tokenKey})) return this.instances.get(${tokenKey})${asType};
++    const instance = ${created}${asCreated};
+     ${stored}
+     return instance;`;
+-    accessors.push(`
++      accessors.push(`
+   private ${getDirectName(tokenId)}(): ${returns} {
+-    ${mock}${body}
++    ${body}
+   }`);
+-    if (profile.minimal) continue;
++      continue;
++    }
++    // Full profile: one accessor per registration. It reads, creates and fires the resolve event; no twin.
++    const stored = afterStore('__neoValue', tokenKey, hasAsync, isBorrowedInstance(node.service));
++    const mock = profile.honourOverrides
++      ? `if (this.overrides.has(${tokenKey})) {
++      const __neoMocked = this._mock${mockType}(${tokenKey});
++      this.notifyResolve(${tokenKey}, __neoMocked);
++      return __neoMocked;
++    }
++    `
++      : '';
++    const read = transient
++      ? `const __neoValue: ${returns} = ${created}${asCreated};`
++      : asyncSingleton
++        ? `if (!this.instances.has(${tokenKey})) throw new Error('async singleton is not prepared: ' + ${formatToken}(${tokenKey}));
++    const __neoValue: ${returns} = this.instances.get(${tokenKey})${asType};`
++        : `let __neoValue: ${returns};
++    if (this.instances.has(${tokenKey})) __neoValue = this.instances.get(${tokenKey})${asType};
++    else {
++      __neoValue = ${created}${asCreated};
++      ${stored}
++    }`;
+     accessors.push(`
+   private ${getReadName(tokenId)}(): ${returns} {
+-    const __neoValue = this.${getDirectName(tokenId)}();
++    ${mock}${read}
+     this.notifyResolve(${tokenKey}, __neoValue);
+     return __neoValue;
+   }`);

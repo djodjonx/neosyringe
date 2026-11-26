@@ -1,0 +1,24 @@
+== cand-fix-s10 start load { 1.77 2.53 3.21 }
+== cand-fix-s10 exit 0 end-load { 2.09 2.56 3.20 }
+== base-ba192b4-s10 start load { 2.09 2.56 3.20 }
+== base-ba192b4-s10 exit 0 end-load { 2.53 2.63 3.21 }
+== stageD-a3562b1-s10 start load { 2.53 2.63 3.21 }
+== stageD-a3562b1-s10 exit 0 end-load { 2.80 2.69 3.22 }
+== cand-fix-s100 start load { 2.80 2.69 3.22 }
+== cand-fix-s100 exit 0 end-load { 2.73 2.68 3.20 }
+== base-ba192b4-s100 start load { 2.73 2.68 3.20 }
+== base-ba192b4-s100 exit 0 end-load { 3.09 2.77 3.22 }
+== stageD-a3562b1-s100 start load { 3.09 2.77 3.22 }
+== stageD-a3562b1-s100 exit 0 end-load { 2.63 2.68 3.17 }
+== stageD-a3562b1-s100-b start load { 2.17 2.58 3.12 }
+== stageD-a3562b1-s100-b exit 0 end-load { 2.19 2.55 3.09 }
+== base-ba192b4-s100-b start load { 2.19 2.55 3.09 }
+== base-ba192b4-s100-b exit 0 end-load { 2.42 2.58 3.09 }
+== cand-fix-s100-b start load { 2.42 2.58 3.09 }
+== cand-fix-s100-b exit 0 end-load { 2.75 2.64 3.10 }
+== stageD-a3562b1-s100-c start load { 2.75 2.64 3.10 }
+== stageD-a3562b1-s100-c exit 0 end-load { 2.55 2.60 3.07 }
+== base-ba192b4-s100-c start load { 2.55 2.60 3.07 }
+== base-ba192b4-s100-c exit 0 end-load { 2.25 2.53 3.03 }
+== cand-fix-s100-c start load { 2.25 2.53 3.03 }
+== cand-fix-s100-c exit 0 end-load { 3.16 2.71 3.08 }

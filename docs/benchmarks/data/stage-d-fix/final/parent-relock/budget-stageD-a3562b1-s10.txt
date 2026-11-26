@@ -1,0 +1,11 @@
+shape	profile	mode	size	metric	baseline	candidate	ratio	noise	verdict
+parent	full	open	10	import	569124.9999999997	537791.9999999997	0.945	21414.000	pass
+parent	full	open	10	create	583.8620899999978	588.5262499999999	1.008	21.797	pass
+parent	full	open	10	warm-resolve	30.04916999999999	29.7475	0.990	1.804	pass
+parent	full	open	10	cold-resolve	161.80458000000044	165.3795799999989	1.022	30.673	inconclusive
+parent	full	open	10	createScope	197.99417000000176	197.79499999999643	0.999	4.828	pass
+parent	full	open	10	initialize	623.7791000000016	628.6917000000358	1.008	10.308	pass
+parent	full	open	10	destroy	503.4833000000162	496.50000000001455	0.986	8.400	pass
+parent	full	open	10	heapAfterGc	3616448	3654600	1.011	7904.000	pass
+parent	full	open	10	build	79.63429200000019	76.09245899999996	0.956	11.799	inconclusive
+verdict inconclusive

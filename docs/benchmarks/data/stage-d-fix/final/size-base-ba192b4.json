@@ -1,0 +1,79 @@
+{
+  "node": "v22.23.2",
+  "compression": {
+    "input": "minified",
+    "gzipLevel": 9,
+    "brotliQuality": 11
+  },
+  "graph": {
+    "providers": 12,
+    "multiContributions": 3,
+    "asyncSingletons": 1
+  },
+  "variants": {
+    "reference-full": {
+      "raw": 79594,
+      "minified": 32747,
+      "gzip": 3669,
+      "brotli": 2973
+    },
+    "optimized-full": {
+      "raw": 80256,
+      "minified": 34050,
+      "gzip": 3951,
+      "brotli": 3172
+    },
+    "optimized-minimal": {
+      "raw": 58965,
+      "minified": 26635,
+      "gzip": 3271,
+      "brotli": 2676
+    }
+  },
+  "sentinel": "T21_SENTINEL_UNREACHABLE",
+  "bundle": {
+    "open": {
+      "raw": 59706,
+      "minified": 37646,
+      "gzip": 12653,
+      "brotli": 9894,
+      "containsSentinel": true
+    },
+    "closed": {
+      "raw": 30566,
+      "minified": 15706,
+      "gzip": 3238,
+      "brotli": 2841,
+      "containsSentinel": false
+    },
+    "delta": {
+      "raw": 29140,
+      "minified": 21940,
+      "gzip": 9415,
+      "brotli": 7053
+    }
+  },
+  "run": {
+    "open": {
+      "names": [
+        "auth",
+        "log"
+      ],
+      "workerStarts": 1,
+      "effects": [
+        "T21_EFFECT_REQUIRED"
+      ]
+    },
+    "closed": {
+      "names": [
+        "auth",
+        "log"
+      ],
+      "workerStarts": 1,
+      "effects": [
+        "T21_EFFECT_REQUIRED"
+      ]
+    },
+    "equal": true
+  }
+}

@@ -1,0 +1,6 @@
+{"file":"base-chain100.mjs","metric":"cold-resolve","median":10373.749999999973,"perProcess":[10260,10603.3,10373.7]}
+{"file":"M-merge-chain100.mjs","metric":"cold-resolve","median":12793.749999999874,"perProcess":[12346.3,12793.7,13772.5]}
+{"file":"M2-merge-create-chain100.mjs","metric":"cold-resolve","median":11091.66000000016,"perProcess":[10818.7,11091.7,26112.1]}
+{"file":"base-chain100.mjs","metric":"heapAfterGc","median":5711568,"perProcess":[5683752,5711568,5732024]}
+{"file":"M-merge-chain100.mjs","metric":"heapAfterGc","median":5310984,"perProcess":[5310984,5311104,5310952]}
+{"file":"M2-merge-create-chain100.mjs","metric":"heapAfterGc","median":5129592,"perProcess":[5129592,5080928,5163360]}

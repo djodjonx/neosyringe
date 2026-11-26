@@ -1,0 +1,528 @@
+### diff D-flat10.mjs G2-has-throw.mjs
+488a489
+>         if (this.overrides.has(token)) throw new Error('x');
+### diff D-flat10.mjs V1-shared-empty-has.mjs
+61a62
+> const __SHARED_EMPTY = new Map();
+488a490
+>         if (__SHARED_EMPTY.has(token)) throw new Error('x');
+### diff D-flat10.mjs L3-shared-overrides.mjs
+61a62
+> const __EMPTY_OVR = new Map();
+66c67
+<     overrides = new Map();
+---
+>     overrides = __EMPTY_OVR;
+### diff D-flat10.mjs W2-overrides-and-listeners-shared.mjs
+61a62
+> const __EO = new Map(); const __EL = new Set();
+66,67c67,68
+<     overrides = new Map();
+<     resolveListeners = new Set();
+---
+>     overrides = __EO;
+>     resolveListeners = __EL;
+### diff D-flat10.mjs W3-all-collections-shared.mjs
+61a62
+> const __EJ = []; const __EB = new Set([]); const __EO = new Map(); const __EL = new Set();
+66,67c67,68
+<     overrides = new Map();
+<     resolveListeners = new Set();
+---
+>     overrides = __EO;
+>     resolveListeners = __EL;
+72c73
+<     _initJournal = [];
+---
+>     _initJournal = __EJ;
+74c75
+<     _borrowed = new Set([]);
+---
+>     _borrowed = __EB;
+### diff D-flat10.mjs M-merge-flat10.mjs
+149,157d148
+<     _direct_S0_08760e44() {
+<         if (this.instances.has(S0))
+<             return this.instances.get(S0);
+<         const instance = this.create_S0_08760e44();
+<         this.instances.set(S0, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S0);
+<         return instance;
+<     }
+159c150,158
+<         const __neoValue = this._direct_S0_08760e44();
+---
+>         let __neoValue;
+>         if (this.instances.has(S0))
+>             __neoValue = this.instances.get(S0);
+>         else {
+>             __neoValue = this.create_S0_08760e44();
+>             this.instances.set(S0, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S0);
+>         }
+163,171d161
+<     _direct_S1_e63d2944() {
+<         if (this.instances.has(S1))
+<             return this.instances.get(S1);
+<         const instance = this.create_S1_e63d2944();
+<         this.instances.set(S1, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S1);
+<         return instance;
+<     }
+173c163,171
+<         const __neoValue = this._direct_S1_e63d2944();
+---
+>         let __neoValue;
+>         if (this.instances.has(S1))
+>             __neoValue = this.instances.get(S1);
+>         else {
+>             __neoValue = this.create_S1_e63d2944();
+>             this.instances.set(S1, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S1);
+>         }
+177,185d174
+<     _direct_S2_12ea80b4() {
+<         if (this.instances.has(S2))
+<             return this.instances.get(S2);
+<         const instance = this.create_S2_12ea80b4();
+<         this.instances.set(S2, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S2);
+<         return instance;
+<     }
+187c176,184
+<         const __neoValue = this._direct_S2_12ea80b4();
+---
+>         let __neoValue;
+>         if (this.instances.has(S2))
+>             __neoValue = this.instances.get(S2);
+>         else {
+>             __neoValue = this.create_S2_12ea80b4();
+>             this.instances.set(S2, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S2);
+>         }
+191,199d187
+<     _direct_S3_11d558f8() {
+<         if (this.instances.has(S3))
+<             return this.instances.get(S3);
+<         const instance = this.create_S3_11d558f8();
+<         this.instances.set(S3, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S3);
+<         return instance;
+<     }
+201c189,197
+<         const __neoValue = this._direct_S3_11d558f8();
+---
+>         let __neoValue;
+>         if (this.instances.has(S3))
+>             __neoValue = this.instances.get(S3);
+>         else {
+>             __neoValue = this.create_S3_11d558f8();
+>             this.instances.set(S3, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S3);
+>         }
+205,213d200
+<     _direct_S4_817b9c39() {
+<         if (this.instances.has(S4))
+<             return this.instances.get(S4);
+<         const instance = this.create_S4_817b9c39();
+<         this.instances.set(S4, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S4);
+<         return instance;
+<     }
+215c202,210
+<         const __neoValue = this._direct_S4_817b9c39();
+---
+>         let __neoValue;
+>         if (this.instances.has(S4))
+>             __neoValue = this.instances.get(S4);
+>         else {
+>             __neoValue = this.create_S4_817b9c39();
+>             this.instances.set(S4, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S4);
+>         }
+218,226d212
+<     }
+<     _direct_S5_d87a08eb() {
+<         if (this.instances.has(S5))
+<             return this.instances.get(S5);
+<         const instance = this.create_S5_d87a08eb();
+<         this.instances.set(S5, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S5);
+<         return instance;
+229c215,223
+<         const __neoValue = this._direct_S5_d87a08eb();
+---
+>         let __neoValue;
+>         if (this.instances.has(S5))
+>             __neoValue = this.instances.get(S5);
+>         else {
+>             __neoValue = this.create_S5_d87a08eb();
+>             this.instances.set(S5, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S5);
+>         }
+233,241d226
+<     _direct_S6_5e558201() {
+<         if (this.instances.has(S6))
+<             return this.instances.get(S6);
+<         const instance = this.create_S6_5e558201();
+<         this.instances.set(S6, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S6);
+<         return instance;
+<     }
+243c228,236
+<         const __neoValue = this._direct_S6_5e558201();
+---
+>         let __neoValue;
+>         if (this.instances.has(S6))
+>             __neoValue = this.instances.get(S6);
+>         else {
+>             __neoValue = this.create_S6_5e558201();
+>             this.instances.set(S6, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S6);
+>         }
+247,255d239
+<     _direct_S7_caf5c20f() {
+<         if (this.instances.has(S7))
+<             return this.instances.get(S7);
+<         const instance = this.create_S7_caf5c20f();
+<         this.instances.set(S7, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S7);
+<         return instance;
+<     }
+257c241,249
+<         const __neoValue = this._direct_S7_caf5c20f();
+---
+>         let __neoValue;
+>         if (this.instances.has(S7))
+>             __neoValue = this.instances.get(S7);
+>         else {
+>             __neoValue = this.create_S7_caf5c20f();
+>             this.instances.set(S7, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S7);
+>         }
+261,269d252
+<     _direct_S8_a6d239a8() {
+<         if (this.instances.has(S8))
+<             return this.instances.get(S8);
+<         const instance = this.create_S8_a6d239a8();
+<         this.instances.set(S8, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S8);
+<         return instance;
+<     }
+271c254,262
+<         const __neoValue = this._direct_S8_a6d239a8();
+---
+>         let __neoValue;
+>         if (this.instances.has(S8))
+>             __neoValue = this.instances.get(S8);
+>         else {
+>             __neoValue = this.create_S8_a6d239a8();
+>             this.instances.set(S8, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S8);
+>         }
+275,283d265
+<     _direct_S9_e4e9aa2f() {
+<         if (this.instances.has(S9))
+<             return this.instances.get(S9);
+<         const instance = this.create_S9_e4e9aa2f();
+<         this.instances.set(S9, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S9);
+<         return instance;
+<     }
+285c267,275
+<         const __neoValue = this._direct_S9_e4e9aa2f();
+---
+>         let __neoValue;
+>         if (this.instances.has(S9))
+>             __neoValue = this.instances.get(S9);
+>         else {
+>             __neoValue = this.create_S9_e4e9aa2f();
+>             this.instances.set(S9, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S9);
+>         }
+### diff D-flat10.mjs M2-merge-create-flat10.mjs
+78,107d77
+<     create_S0_08760e44() {
+<         return new S0();
+<     }
+<     create_S1_e63d2944() {
+<         return new S1();
+<     }
+<     create_S2_12ea80b4() {
+<         return new S2();
+<     }
+<     create_S3_11d558f8() {
+<         return new S3();
+<     }
+<     create_S4_817b9c39() {
+<         return new S4();
+<     }
+<     create_S5_d87a08eb() {
+<         return new S5();
+<     }
+<     create_S6_5e558201() {
+<         return new S6();
+<     }
+<     create_S7_caf5c20f() {
+<         return new S7();
+<     }
+<     create_S8_a6d239a8() {
+<         return new S8();
+<     }
+<     create_S9_e4e9aa2f() {
+<         return new S9();
+<     }
+149,157d118
+<     _direct_S0_08760e44() {
+<         if (this.instances.has(S0))
+<             return this.instances.get(S0);
+<         const instance = this.create_S0_08760e44();
+<         this.instances.set(S0, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S0);
+<         return instance;
+<     }
+159c120,128
+<         const __neoValue = this._direct_S0_08760e44();
+---
+>         let __neoValue;
+>         if (this.instances.has(S0))
+>             __neoValue = this.instances.get(S0);
+>         else {
+>             __neoValue = new S0();
+>             this.instances.set(S0, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S0);
+>         }
+163,171d131
+<     _direct_S1_e63d2944() {
+<         if (this.instances.has(S1))
+<             return this.instances.get(S1);
+<         const instance = this.create_S1_e63d2944();
+<         this.instances.set(S1, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S1);
+<         return instance;
+<     }
+173c133,141
+<         const __neoValue = this._direct_S1_e63d2944();
+---
+>         let __neoValue;
+>         if (this.instances.has(S1))
+>             __neoValue = this.instances.get(S1);
+>         else {
+>             __neoValue = new S1();
+>             this.instances.set(S1, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S1);
+>         }
+177,185d144
+<     _direct_S2_12ea80b4() {
+<         if (this.instances.has(S2))
+<             return this.instances.get(S2);
+<         const instance = this.create_S2_12ea80b4();
+<         this.instances.set(S2, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S2);
+<         return instance;
+<     }
+187c146,154
+<         const __neoValue = this._direct_S2_12ea80b4();
+---
+>         let __neoValue;
+>         if (this.instances.has(S2))
+>             __neoValue = this.instances.get(S2);
+>         else {
+>             __neoValue = new S2();
+>             this.instances.set(S2, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S2);
+>         }
+191,199d157
+<     _direct_S3_11d558f8() {
+<         if (this.instances.has(S3))
+<             return this.instances.get(S3);
+<         const instance = this.create_S3_11d558f8();
+<         this.instances.set(S3, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S3);
+<         return instance;
+<     }
+201c159,167
+<         const __neoValue = this._direct_S3_11d558f8();
+---
+>         let __neoValue;
+>         if (this.instances.has(S3))
+>             __neoValue = this.instances.get(S3);
+>         else {
+>             __neoValue = new S3();
+>             this.instances.set(S3, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S3);
+>         }
+204,212d169
+<     }
+<     _direct_S4_817b9c39() {
+<         if (this.instances.has(S4))
+<             return this.instances.get(S4);
+<         const instance = this.create_S4_817b9c39();
+<         this.instances.set(S4, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S4);
+<         return instance;
+215c172,180
+<         const __neoValue = this._direct_S4_817b9c39();
+---
+>         let __neoValue;
+>         if (this.instances.has(S4))
+>             __neoValue = this.instances.get(S4);
+>         else {
+>             __neoValue = new S4();
+>             this.instances.set(S4, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S4);
+>         }
+219,227d183
+<     _direct_S5_d87a08eb() {
+<         if (this.instances.has(S5))
+<             return this.instances.get(S5);
+<         const instance = this.create_S5_d87a08eb();
+<         this.instances.set(S5, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S5);
+<         return instance;
+<     }
+229c185,193
+<         const __neoValue = this._direct_S5_d87a08eb();
+---
+>         let __neoValue;
+>         if (this.instances.has(S5))
+>             __neoValue = this.instances.get(S5);
+>         else {
+>             __neoValue = new S5();
+>             this.instances.set(S5, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S5);
+>         }
+233,241d196
+<     _direct_S6_5e558201() {
+<         if (this.instances.has(S6))
+<             return this.instances.get(S6);
+<         const instance = this.create_S6_5e558201();
+<         this.instances.set(S6, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S6);
+<         return instance;
+<     }
+243c198,206
+<         const __neoValue = this._direct_S6_5e558201();
+---
+>         let __neoValue;
+>         if (this.instances.has(S6))
+>             __neoValue = this.instances.get(S6);
+>         else {
+>             __neoValue = new S6();
+>             this.instances.set(S6, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S6);
+>         }
+247,255d209
+<     _direct_S7_caf5c20f() {
+<         if (this.instances.has(S7))
+<             return this.instances.get(S7);
+<         const instance = this.create_S7_caf5c20f();
+<         this.instances.set(S7, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S7);
+<         return instance;
+<     }
+257c211,219
+<         const __neoValue = this._direct_S7_caf5c20f();
+---
+>         let __neoValue;
+>         if (this.instances.has(S7))
+>             __neoValue = this.instances.get(S7);
+>         else {
+>             __neoValue = new S7();
+>             this.instances.set(S7, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S7);
+>         }
+261,269d222
+<     _direct_S8_a6d239a8() {
+<         if (this.instances.has(S8))
+<             return this.instances.get(S8);
+<         const instance = this.create_S8_a6d239a8();
+<         this.instances.set(S8, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S8);
+<         return instance;
+<     }
+271c224,232
+<         const __neoValue = this._direct_S8_a6d239a8();
+---
+>         let __neoValue;
+>         if (this.instances.has(S8))
+>             __neoValue = this.instances.get(S8);
+>         else {
+>             __neoValue = new S8();
+>             this.instances.set(S8, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S8);
+>         }
+275,283d235
+<     _direct_S9_e4e9aa2f() {
+<         if (this.instances.has(S9))
+<             return this.instances.get(S9);
+<         const instance = this.create_S9_e4e9aa2f();
+<         this.instances.set(S9, instance);
+<         if (this._initRunning)
+<             this._initJournal.push(S9);
+<         return instance;
+<     }
+285c237,245
+<         const __neoValue = this._direct_S9_e4e9aa2f();
+---
+>         let __neoValue;
+>         if (this.instances.has(S9))
+>             __neoValue = this.instances.get(S9);
+>         else {
+>             __neoValue = new S9();
+>             this.instances.set(S9, __neoValue);
+>             if (this._initRunning)
+>                 this._initJournal.push(S9);
+>         }
+### diff base-flat10.mjs Bx1-base-no-override-guard.mjs
+518,529d517
+<         // 0. An overridden token always wins, even over a cached real instance.
+<         if (this.overrides.has(token)) {
+<             if (!this.instances.has(token)) {
+<                 const __neoMock = this.overrides.get(token)();
+<                 this.instances.set(token, __neoMock);
+<                 if (__neoMock != null)
+<                     this._borrowed.add(__neoMock);
+<             }
+<             const overridden = this.instances.get(token);
+<             this.notifyResolve(token, overridden);
+<             return overridden;
+<         }
