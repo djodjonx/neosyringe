@@ -155,6 +155,35 @@ const SCOPES = [
   'export const empty = box.createScope({ values: [] });',
 ];
 
+/**
+ * E20 on the transformed Program: the token of an alias is a string id there and the alias is an accessor of the
+ * container class. A read of the alias token and a `resolveMany` of an alias beside its target must compile with no
+ * cast in the four layouts, and an alias whose target has not the type of its token must reach an analyzer error.
+ */
+function aliasFile(name: string, options: string, tail: readonly string[]): string {
+  return [
+    "import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';",
+    'export interface Logger { id: string; }',
+    'export interface Other { label: string; }',
+    "export class Engine { readonly id = 'engine'; }",
+    'const logger = useInterface<Logger>();',
+    'export const box = defineBuilderConfig({',
+    `  name: '${name}',`,
+    `  ${options}`,
+    '  injections: [{ token: Engine }, { token: logger, useExisting: Engine }],',
+    '});',
+    ...tail,
+    '',
+  ].join('\n');
+}
+
+const ALIAS_READS = [
+  'export const viaAlias: Logger = box.resolve(logger);',
+  'export const viaType: Logger = box.resolve(useInterface<Logger>());',
+  'export const both = box.resolveMany([logger, Engine]);',
+  'export const engine: Engine = both[1];',
+];
+
 const FILES: Record<string, string> = {
   'open.ts': containerFile('InlineOpen', ''),
   'closed.ts': containerFile('InlineClosed', "optimization: { mode: 'closed', roots: [UserService, Later] },"),
@@ -189,6 +218,24 @@ const FILES: Record<string, string> = {
     SCOPES,
   ),
   'scope-inputs-wrong.ts': scopeInputsFile('InlineScopeWrong', '', ['export const none = box.createScope();']),
+  'alias-open.ts': aliasFile('InlineAliasOpen', '', ALIAS_READS),
+  'alias-closed.ts': aliasFile('InlineAliasClosed', "optimization: { mode: 'closed', roots: [logger, Engine] },", ALIAS_READS),
+  'alias-minimal-open.ts': aliasFile('InlineAliasMinimalOpen', "runtime: { profile: 'minimal' },", ALIAS_READS),
+  'alias-minimal-closed.ts': aliasFile(
+    'InlineAliasMinimalClosed',
+    "runtime: { profile: 'minimal' }, optimization: { mode: 'closed', roots: [logger, Engine] },",
+    ALIAS_READS,
+  ),
+  'alias-wrong.ts': [
+    "import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';",
+    'export interface Other { label: string; }',
+    "export class Engine { readonly id = 'engine'; }",
+    'export const box = defineBuilderConfig({',
+    "  name: 'InlineAliasWrong',",
+    '  injections: [{ token: Engine }, { token: useInterface<Other>(), useExisting: Engine }],',
+    '});',
+    '',
+  ].join('\n'),
   'override-many-wrong.ts': overrideManyFile('InlineOverrideWrong', '', [
     'export const wrongClass = box.overrideMany([[Mail, () => 42]]);',
     'export const wrongBesideInterface = box.overrideMany([[useInterface<Clock>(), () => ({ now: () => 2 })], [Mail, () => 42]]);',
@@ -248,6 +295,15 @@ function diagnosticsOf(files: readonly string[], config: { testOverrides?: boole
   return found;
 }
 
+/** The diagnostics of `files`, or one line that says the transformer threw: a test then fails on what it expects. */
+function diagnosticsOrThrown(files: readonly string[]): string[] {
+  try {
+    return diagnosticsOf(files);
+  } catch (error) {
+    return [`threw: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`];
+  }
+}
+
 function transformedText(name: string): string {
   const transformed = neoSyringeTransformer(programOf([name]), undefined, {}, extras);
   const file = transformed.getSourceFile(path.join(dir, name));
@@ -299,6 +355,17 @@ describe('T23 B5 the transformed program type-checks with the consumer options (
   it('E18-P16 createScope with no options is refused on the transformed program', () => {
     const found = diagnosticsOf(['scope-inputs-wrong.ts']);
     expect(found.map((line) => line.replace(/:\d+:\d+.*$/, ''))).toEqual(['TS2554 scope-inputs-wrong.ts']);
+  });
+
+  it('E20-P23 an alias token is read and listed beside its target with no cast, open and closed, full and minimal', () => {
+    for (const name of ['alias-open.ts', 'alias-closed.ts', 'alias-minimal-open.ts', 'alias-minimal-closed.ts']) {
+      expect(diagnosticsOrThrown([name]), name).toEqual([]);
+      expect(transformedText(name), `${name}: the container has an accessor of the alias`).toMatch(/private _(?:direct|get)_Logger_\w+\(\)/);
+    }
+  });
+
+  it('E20-P23 an alias whose target has not the type of its token reaches an analyzer error', () => {
+    expect(diagnosticsOrThrown(['alias-wrong.ts']).join('\n')).toMatch(/threw: .*not assignable to token type 'Other'/);
   });
 
   it('T23-R2 the inline program is really transformed: the container class is in the user file', () => {
