@@ -85,6 +85,42 @@ const MANY_FILE = [
   '',
 ].join('\n');
 
+/**
+ * E16 on the transformed Program: the interface and property tokens of an `overrideMany` entry are string ids there. A
+ * batch of a class, an interface and a property token must compile with no cast, in an open and a closed container, and
+ * a class entry whose factory returns another type must still be refused.
+ */
+function overrideManyFile(name: string, options: string, batch: readonly string[]): string {
+  return [
+    "import { defineBuilderConfig, useInterface, useProperty } from '@djodjonx/neosyringe';",
+    'export class Mail { send(): string { return "sent"; } }',
+    'export interface Clock { now(): number; }',
+    'const clock = useInterface<Clock>();',
+    "const retries = useProperty<number>(Mail, 'retries');",
+    'export const box = defineBuilderConfig({',
+    `  name: '${name}',`,
+    `  ${options}`,
+    '  injections: [',
+    '    { token: Mail },',
+    '    { token: clock, useFactory: true, dependencies: [], provider: () => ({ now: () => 1 }) },',
+    '    { token: retries, useFactory: true, dependencies: [], provider: () => 3 },',
+    '  ],',
+    '});',
+    ...batch,
+    '',
+  ].join('\n');
+}
+
+const OVERRIDE_BATCH = [
+  'export const mixed = box.overrideMany([',
+  '  [Mail, () => new Mail()],',
+  '  [useInterface<Clock>(), () => ({ now: () => 2 })],',
+  "  [useProperty<number>(Mail, 'retries'), () => 5],",
+  ']);',
+  'export const byVariable = box.overrideMany([[clock, () => ({ now: () => 3 })], [retries, () => 7]]);',
+  'export const coherent = box.overrideMany([[Mail, () => new Mail()] as const, [clock, () => ({ now: () => 4 })] as const]);',
+];
+
 const FILES: Record<string, string> = {
   'open.ts': containerFile('InlineOpen', ''),
   'closed.ts': containerFile('InlineClosed', "optimization: { mode: 'closed', roots: [UserService, Later] },"),
@@ -108,6 +144,12 @@ const FILES: Record<string, string> = {
     '',
   ].join('\n'),
   'many.ts': MANY_FILE,
+  'override-many-open.ts': overrideManyFile('InlineOverrideOpen', '', OVERRIDE_BATCH),
+  'override-many-closed.ts': overrideManyFile('InlineOverrideClosed', "optimization: { mode: 'closed', roots: [Mail] },", OVERRIDE_BATCH),
+  'override-many-wrong.ts': overrideManyFile('InlineOverrideWrong', '', [
+    'export const wrongClass = box.overrideMany([[Mail, () => 42]]);',
+    'export const wrongBesideInterface = box.overrideMany([[useInterface<Clock>(), () => ({ now: () => 2 })], [Mail, () => 42]]);',
+  ]),
 };
 
 let dir = '';
@@ -150,8 +192,8 @@ function programOf(files: readonly string[]): ts.Program {
 }
 
 /** `TS2345 open.ts:18:9 message`, one line per diagnostic of the user's files in the transformed program. */
-function diagnosticsOf(files: readonly string[]): string[] {
-  const transformed = neoSyringeTransformer(programOf(files), undefined, {}, extras);
+function diagnosticsOf(files: readonly string[], config: { testOverrides?: boolean } = {}): string[] {
+  const transformed = neoSyringeTransformer(programOf(files), undefined, config, extras);
   const found: string[] = [];
   for (const diagnostic of ts.getPreEmitDiagnostics(transformed)) {
     const file = diagnostic.file;
@@ -189,6 +231,16 @@ describe('T23 B5 the transformed program type-checks with the consumer options (
 
   it('E17-P17 resolveMany takes a class, an interface and a property token on the transformed program, in the container and in a factory context', () => {
     expect(diagnosticsOf(['many.ts'])).toEqual([]);
+  });
+
+  it('E16-P17 overrideMany takes a class, an interface and a property token on the transformed program, open and closed', () => {
+    expect(diagnosticsOf(['override-many-open.ts'], { testOverrides: true })).toEqual([]);
+    expect(diagnosticsOf(['override-many-closed.ts'], { testOverrides: true })).toEqual([]);
+  });
+
+  it('E16-P18 a class entry whose factory returns another type is still refused on the transformed program, alone and beside an interface entry', () => {
+    const found = diagnosticsOf(['override-many-wrong.ts'], { testOverrides: true });
+    expect(found.map((line) => line.replace(/:\d+:\d+.*$/, ''))).toEqual(['TS2769 override-many-wrong.ts', 'TS2769 override-many-wrong.ts']);
   });
 
   it('T23-R2 the inline program is really transformed: the container class is in the user file', () => {
