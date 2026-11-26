@@ -58,11 +58,11 @@ A failed container cannot be repaired. To try again, build a new container. Or k
 An async factory cannot be `lifecycle: 'transient'`. The build fails with `NEO_ASYNC_TRANSIENT`: a transient is created on each `resolve()`, which would have to be async.
 :::
 
-- `AsyncContainer` is a deprecated alias of `CoreContainer` and adds no method (`packages/neosyringe/src/types.ts:389`). Use `CoreContainer`, or let the type come from `defineBuilderConfig`.
+- `AsyncContainer` is a deprecated alias of `CoreContainer` and adds no method (`packages/neosyringe/src/types.ts:398`). Use `CoreContainer`, or let the type come from `defineBuilderConfig`.
 
 ## Overrides are awaited too
 
-In a test build (plugin option `testOverrides: true`), `override` and `clearOverrides` return promises. Await them before the next `resolve()`. After a reconfiguration of an async container, call `await container.initialize()` again before you resolve:
+In a test build (plugin option `testOverrides: true`), `override`, `overrideMany` and `clearOverrides` return promises. Await them before the next `resolve()`. After a reconfiguration of an async container, call `await container.initialize()` again before you resolve:
 
 ```typescript
 await container.override(clientToken, () => fakeClient);

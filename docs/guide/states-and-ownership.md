@@ -16,7 +16,7 @@ Everything below was run against the built packages. The tests are in `tests/e2e
 | `destroy()` | Ends the container. Terminal and idempotent. |
 | `createScope()` | A new container with the same recipes and the same parents, and empty caches. |
 
-The full profile also has `override`, `clearOverrides` and `on` (`Container`, `packages/neosyringe/src/types.ts:73`). See [profiles](./profiles.md).
+The full profile also has `override`, `overrideMany`, `clearOverrides` and `on` (`Container`, `packages/neosyringe/src/types.ts:73`). See [profiles](./profiles.md).
 
 ## States
 
@@ -25,17 +25,17 @@ The full profile also has `override`, `clearOverrides` and `on` (`Container`, `p
 | Created, async work pending | Throws `NEO_NOT_INITIALIZED` | Starts the work | Ends the container |
 | Initializing | Throws `NEO_NOT_INITIALIZED` | Returns the same work | Waits for it, then ends the container |
 | Ready | Works | Returns at once | Disposes owned instances |
-| Reconfiguring (during `override` / `clearOverrides`) | Throws `NEO_CONTAINER_BUSY` | Rejects with `NEO_CONTAINER_BUSY` | Rejects with `NEO_CONTAINER_BUSY` |
+| Reconfiguring (during `override` / `overrideMany` / `clearOverrides`) | Throws `NEO_CONTAINER_BUSY` | Rejects with `NEO_CONTAINER_BUSY` | Rejects with `NEO_CONTAINER_BUSY` |
 | Failed (`initialize()` rejected) | Throws `NEO_CONTAINER_FAILED` | Rejects again with the first error | Ends the container |
 | Destroyed | Throws `NEO_CONTAINER_DESTROYED` | Throws `NEO_CONTAINER_DESTROYED` | Does nothing |
 
-The codes come from `packages/core/src/generator/LifecycleEmitter.ts:240` to `:249`. Each cell was checked by running a container, except the `destroy` cell of the Initializing row, which is source only (`packages/core/src/generator/LifecycleEmitter.ts:649` to `:651`):
+The codes come from `packages/core/src/generator/LifecycleEmitter.ts:252` to `:259`. Each cell was checked by running a container, except the `destroy` cell of the Initializing row, which is source only (`packages/core/src/generator/LifecycleEmitter.ts:784` to `:785`):
 
 - A container with an async factory refuses `resolve` before `initialize` (`async.ts` below).
 - When `initialize()` rejects, it first rolls back: the owned instances built during the attempt are disposed in reverse order. It rejects with the factory's own error, or, if a `dispose` threw during the rollback, with a new `Error` that has the same message, a `cause` (the factory's error) and `cleanupErrors`. The next `initialize()` rejects with the same object. `resolve` throws `NEO_CONTAINER_FAILED`. `createScope()` throws `NEO_CONTAINER_FAILED` too, so a failed container cannot give you a fresh scope. Nothing restarts by itself. To try again, build a new container, or take scopes from a root that never ran `initialize()` and drop the scope that failed.
-- While `override` or `clearOverrides` is still closing the old instances, `resolve`, `initialize`, `destroy`, `createScope`, `override` and `clearOverrides` all reject or throw `NEO_CONTAINER_BUSY`. This holds for a container with async factories and for one without. Await each call.
-- While `initialize()` is running, `override`, `clearOverrides` and `createScope()` throw `NEO_CONTAINER_BUSY`, and `resolve` throws `NEO_NOT_INITIALIZED`.
-- `override` and `clearOverrides` are refused with `NEO_CONTAINER_BUSY` while the container is destroying too. This is source only (`packages/core/src/generator/LifecycleEmitter.ts:516` to `:517`), not run here.
+- While `override`, `overrideMany` or `clearOverrides` is still closing the old instances, `resolve`, `initialize`, `destroy`, `createScope`, `override`, `overrideMany` and `clearOverrides` all reject or throw `NEO_CONTAINER_BUSY`. This holds for a container with async factories and for one without. Await each call.
+- While `initialize()` is running, `override`, `overrideMany`, `clearOverrides` and `createScope()` throw `NEO_CONTAINER_BUSY`, and `resolve` throws `NEO_NOT_INITIALIZED`.
+- `override`, `overrideMany` and `clearOverrides` are refused with `NEO_CONTAINER_BUSY` while the container is destroying too. This is source only (`packages/core/src/generator/LifecycleEmitter.ts:635` to `:639`), not run here.
 
 A container with no async factory and no eager root is ready at once. `scopes.ts` below resolves without calling `initialize()`.
 
@@ -96,9 +96,9 @@ await scope.destroy();         // closes this scope only
 
 <<< @/../examples/new-api/factories.ts#with-dependencies
 
-- **`dependencies` is required** in strict validation, even as `[]`. A factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED` (`packages/core/src/analyzer/parsers/InjectionParser.ts:469`). The TypeScript type of an injection still lets you omit it (`packages/neosyringe/src/types.ts:303`): the type does not warn you, the build does.
+- **`dependencies` is required** in strict validation, even as `[]`. A factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED` (`packages/core/src/analyzer/parsers/InjectionParser.ts:469`). The TypeScript type of an injection still lets you omit it (`packages/neosyringe/src/types.ts:312`): the type does not warn you, the build does.
 - An entry is a token, or `{ all: token }` for `resolveAll`.
-- The factory receives a `FactoryContext` with `resolve`, `resolveAll` and `resolveMany` only (`packages/neosyringe/src/types.ts:165`). It has no `initialize`, `destroy`, `override`, `on` or `createScope`.
+- The factory receives a `FactoryContext` with `resolve`, `resolveAll` and `resolveMany` only (`packages/neosyringe/src/types.ts:174`). It has no `initialize`, `destroy`, `override`, `on` or `createScope`.
 - A token that is not in `dependencies` throws `NEO_UNDECLARED_FACTORY_DEP` when the factory asks for it, including from a helper function it calls.
 - The context is only valid while the factory runs. Keeping it and calling it later throws `NEO_FACTORY_CONTEXT_EXPIRED`.
 - A factory may return a value or a promise. A promise makes the token async: `initialize()` waits for it.
@@ -108,7 +108,7 @@ await scope.destroy();         // closes this scope only
 ## Other limits
 
 - Resolving a `multi` token with `resolve` fails with `NEO_MULTI_REQUIRES_RESOLVE_ALL`, at build time when the call is visible.
-- `override` of a `multi` token rejects with `NEO_OVERRIDE_MULTI_UNSUPPORTED`.
+- `override` of a `multi` token rejects with `NEO_OVERRIDE_MULTI_UNSUPPORTED`. So does a `multi` token in an `overrideMany` batch.
 - `on('resolve', listener)` fires on every successful single `resolve`, cache hits included, and returns the function that unsubscribes.
 
 ## Limits

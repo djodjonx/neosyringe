@@ -83,7 +83,7 @@ console.log(container._dependencyGraph);
 
 ### Overriding a registration in tests
 
-The full profile has `override()` / `clearOverrides()`, meant for tests, not for production wiring. They work only in a build made with the plugin option `testOverrides: true`. Without it they reject with `NEO_TEST_API_DISABLED`. Both return promises: await them.
+The full profile has `override()` / `overrideMany()` / `clearOverrides()`, meant for tests, not for production wiring. They work only in a build made with the plugin option `testOverrides: true`. Without it they reject with `NEO_TEST_API_DISABLED`. All three return promises: await them. See [Profiles](./profiles.md) for `overrideMany`.
 
 ```typescript
 await container.override(useInterface<ILogger>(), () => mockLogger);

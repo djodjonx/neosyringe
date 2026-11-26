@@ -6,15 +6,15 @@ A generated container comes in two profiles. The profile is chosen in the config
 
 | Profile | Type | Methods |
 |---------|------|---------|
-| `full` (default) | `Container` | `resolve`, `resolveAll`, `resolveMany`, `initialize`, `destroy`, `createScope`, `override`, `clearOverrides`, `on` |
+| `full` (default) | `Container` | `resolve`, `resolveAll`, `resolveMany`, `initialize`, `destroy`, `createScope`, `override`, `overrideMany`, `clearOverrides`, `on` |
 | `minimal` (opt-in) | `CoreContainer` | `resolve`, `resolveAll`, `resolveMany`, `initialize`, `destroy`, `createScope` |
 
-Types: `CoreContainer` at `packages/neosyringe/src/types.ts:18`, `Container` at `packages/neosyringe/src/types.ts:73`, `ContainerFor` at `packages/neosyringe/src/types.ts:212`.
+Types: `CoreContainer` at `packages/neosyringe/src/types.ts:18`, `Container` at `packages/neosyringe/src/types.ts:73`, `ContainerFor` at `packages/neosyringe/src/types.ts:221`.
 
 <<< @/../examples/new-api/profiles.ts#profiles
 
 - Minimal drops the test overrides and the `resolve` event. It does not drop resource handling: `initialize`, `destroy` and the isolation of scopes stay.
-- `override` and `on` are **absent from the minimal type**: `minimal.override(...)` does not compile (`Property 'override' does not exist on type 'CoreContainer'`), and at run time `override` is `undefined`. Both are checked in `tests/e2e/t20-docs-examples.test.ts`.
+- `override`, `overrideMany` and `on` are **absent from the minimal type**: `minimal.override(...)` does not compile (`Property 'override' does not exist on type 'CoreContainer'`), and at run time `override` is `undefined`. The absence of `override` and `on` is checked in `tests/e2e/t20-docs-examples.test.ts`. The absence of `overrideMany` is checked in `tests/consumer-types/negative/override-many.ts` (type) and by E16-P6b in `packages/core/tests/generator/e16-override-many-runtime.test.ts` (run time).
 - `createScope()` returns the same profile (`this`).
 - Pick `full` when you need events or overrides.
 
@@ -24,11 +24,11 @@ Types: `CoreContainer` at `packages/neosyringe/src/types.ts:18`, `Container` at 
 
 ## Test overrides
 
-`override` and `clearOverrides` exist in the type of the full profile, but they work only if the build enabled them:
+`override`, `overrideMany` and `clearOverrides` exist in the type of the full profile, but they work only if the build enabled them:
 
 | Plugin option | Effect |
 |---------------|--------|
-| `testOverrides` omitted or `false` | `override()` and `clearOverrides()` reject with `NEO_TEST_API_DISABLED`. |
+| `testOverrides` omitted or `false` | `override()`, `overrideMany()` and `clearOverrides()` reject with `NEO_TEST_API_DISABLED`. |
 | `testOverrides: true` | They work. |
 | `testOverrides: true` and `NODE_ENV=production` | The build refuses (`packages/core/src/generator/DebugConfig.ts:35`). |
 
@@ -43,6 +43,10 @@ await container.clearOverrides();
 ```
 
 Every override and every `clearOverrides()` resets all caches of that container. Objects you resolved before keep pointing at the old dependencies: drop them. The mock is borrowed and is never disposed by the container. `override` of a `multi` token rejects with `NEO_OVERRIDE_MULTI_UNSUPPORTED`.
+
+`overrideMany([[tokenA, factoryA], [tokenB, factoryB]])` replaces several tokens in one transition. The whole batch is checked first: a token twice (`NEO_OVERRIDE_DUPLICATE`), a factory that is not a function (`NEO_OVERRIDE_INVALID`) or a `multi` token refuses it, and then no factory is invoked, nothing is disposed and nothing changes. A valid batch runs one cleanup pass, so each owned singleton is disposed once, then installs every mock together. The mocks are borrowed. An async container needs `initialize()` again, as after `override`. An empty batch is checked against the state of the container and changes nothing. While one transition runs, a second `override`, `overrideMany` or `clearOverrides` rejects with `NEO_CONTAINER_BUSY`, and so do `destroy()` and `resolve()`.
+
+A factory that returns another type than its token is a compile error, with the public `Container` type and with the Program the ts-patch transformer builds (`tests/consumer-types/negative/override-many.ts`, E16-P17 and E16-P18 in `packages/unplugin/tests/t23-inline-types.test.ts`). One limit: with `testOverrides` off, the generated member is `overrideMany(_entries: unknown)`, as `override(_token: unknown, _factory)` is. On the transformed Program of such a build, a wrong factory return compiles, and the call still rejects with `NEO_TEST_API_DISABLED` at run time.
 
 ## What the numbers say, and what they do not
 

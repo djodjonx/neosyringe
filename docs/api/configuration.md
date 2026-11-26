@@ -79,7 +79,7 @@ Every entry point (`.vite()`, `.rollup()`, `.webpack()`, `.esbuild()`) takes `Ne
 | `debug` | `false` | Embeds `_graph` data. Forced off when `NODE_ENV=production`. |
 | `devtools` | `false` | Graph page on the Vite dev server only. |
 | `validation` | `'strict'` | **Drives only the usage check at the end of the build.** The analyzer that transforms each file stays strict, so `'compatible'` does not make a factory without `dependencies` legal (`packages/unplugin/src/index.ts:34` to `:37`). See the [migration guide](/guide/migration#validation-compatible-does-not-rescue-it-in-the-plugin). |
-| `testOverrides` | `false` | Turns on `override()` and `clearOverrides()`. Refused when `NODE_ENV=production`. |
+| `testOverrides` | `false` | Turns on `override()`, `overrideMany()` and `clearOverrides()`. Refused when `NODE_ENV=production`. |
 
 ## TypeScript LSP Plugin
 
@@ -140,7 +140,7 @@ A closed container requires `validation: 'strict'`.
 
 Type: `{ profile?: 'full' | 'minimal' }`
 
-`'full'` (default) gives a `Container`. `'minimal'` gives a `CoreContainer` without `override`, `clearOverrides` and `on`. The profile must be a literal the build can read; anything else is `NEO_CONFIG_UNSUPPORTED`. See [Profiles](/guide/profiles).
+`'full'` (default) gives a `Container`. `'minimal'` gives a `CoreContainer` without `override`, `overrideMany`, `clearOverrides` and `on`. The profile must be a literal the build can read; anything else is `NEO_CONFIG_UNSUPPORTED`. See [Profiles](/guide/profiles).
 
 ### name
 
@@ -323,7 +323,7 @@ interface Injection<T> {
 }
 ```
 
-The real type is a union of four disjoint shapes (`packages/neosyringe/src/types.ts:282`).
+The real type is a union of four disjoint shapes (`packages/neosyringe/src/types.ts:291`).
 
 ### token
 
@@ -380,7 +380,7 @@ const plugins = container.resolveAll(useInterface<IPlugin>());
 
 Type: `true`
 
-Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:302`).
+Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:311`).
 
 <<< @/../examples/new-api/factories.ts#arrow
 
@@ -388,7 +388,7 @@ Marks the provider as a factory function. The `Injection` type requires it for a
 
 Type: `readonly DependencyRef[]`. A `DependencyRef` is a token, or `{ all: token }` for `resolveAll`.
 
-Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:303`), so the type does not catch the omission.
+Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:312`), so the type does not catch the omission.
 
 <<< @/../examples/new-api/factories.ts#all-dependency
 

@@ -86,7 +86,7 @@ interface FactoryContext {
 }
 ```
 
-A function that receives a limited context and returns an instance, or a promise of it. The context has `resolve`, `resolveAll` and `resolveMany` only. It is not the container. Declare what it may resolve in `dependencies` (`packages/neosyringe/src/types.ts:165` and `:180`).
+A function that receives a limited context and returns an instance, or a promise of it. The context has `resolve`, `resolveAll` and `resolveMany` only. It is not the container. Declare what it may resolve in `dependencies` (`packages/neosyringe/src/types.ts:174` and `:189`).
 
 <<< @/../examples/new-api/factories.ts#typed-factory
 
@@ -110,7 +110,7 @@ interface Injection<T = any> {
 }
 ```
 
-A single injection definition (`packages/neosyringe/src/types.ts:282`):
+A single injection definition (`packages/neosyringe/src/types.ts:291`):
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -186,6 +186,7 @@ interface CoreContainer {
 
 interface Container extends CoreContainer {
   override<T>(token: Token<T>, factory: () => T): Promise<void>;
+  overrideMany<const E extends readonly OverrideEntry[]>(entries: E & OverrideGuard<E>): Promise<void>;
   clearOverrides(): Promise<void>;
   on(
     event: 'resolve',
@@ -207,6 +208,7 @@ type ContainerFor<C> = C extends { runtime: { profile: 'minimal' } } ? CoreConta
 | `destroy` | Final and idempotent. Closes the singletons this container owns. |
 | `createScope` | A new container with empty caches and the same parents. |
 | `override`, `clearOverrides` | Full profile, `testOverrides: true` builds only. Awaited. Reset all caches. |
+| `overrideMany` | Full profile, `testOverrides: true` builds only. Awaited. The whole batch is checked first, then one transition (one cleanup pass) installs every mock. A refused batch changes nothing. Refusals: `NEO_OVERRIDE_DUPLICATE`, `NEO_OVERRIDE_INVALID`, `NEO_OVERRIDE_MULTI_UNSUPPORTED`, `NEO_CONTAINER_BUSY`, `NEO_CONTAINER_DESTROYED`, `NEO_CONTAINER_FAILED`, `NEO_TEST_API_DISABLED`. A factory that returns another type than its token is a compile error (`OverrideGuard`, `packages/neosyringe/src/types.ts:160`). |
 | `on` | Full profile. Fires on every successful single `resolve`. Returns an unsubscribe function. |
 
 See [States, Scopes and Ownership](/guide/states-and-ownership) and [Profiles](/guide/profiles).

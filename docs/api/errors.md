@@ -31,12 +31,14 @@ Each code below exists in `packages/*/src`. `tests/e2e/t20-docs-examples.test.ts
 | Code | Thrown when | Run |
 |------|-------------|-----|
 | `NEO_NOT_INITIALIZED` | `resolve` before `initialize()` finished. | yes |
-| `NEO_CONTAINER_BUSY` | `resolve`, `initialize`, `destroy`, `createScope`, `override` and `clearOverrides` during a reconfiguration. `override`, `clearOverrides` and `createScope` also while `initialize()` is running. `override` and `clearOverrides` also while the container is destroying (source only: `packages/core/src/generator/LifecycleEmitter.ts:516` to `:517`). | yes |
-| `NEO_CONTAINER_FAILED` | `resolve` and `createScope()` after `initialize()` rejected. `override` and `clearOverrides` too (source only: `packages/core/src/generator/LifecycleEmitter.ts:522` to `:523`). | yes |
+| `NEO_CONTAINER_BUSY` | `resolve`, `initialize`, `destroy`, `createScope`, `override` and `clearOverrides` during a reconfiguration. `override`, `clearOverrides` and `createScope` also while `initialize()` is running. `override` and `clearOverrides` also while the container is destroying (source only: `packages/core/src/generator/LifecycleEmitter.ts:635` to `:639`). `overrideMany` is refused in the same states as `override`. | yes |
+| `NEO_CONTAINER_FAILED` | `resolve` and `createScope()` after `initialize()` rejected. `override`, `overrideMany` and `clearOverrides` too (source only: `packages/core/src/generator/LifecycleEmitter.ts:647` to `:650`). | yes |
 | `NEO_CONTAINER_DESTROYED` | Use of a destroyed container (`resolve`, `initialize`, `createScope`). | yes |
 | `NEO_SCOPE_PARENT_DESTROYED` | A child needs a parent that was destroyed. | yes |
-| `NEO_TEST_API_DISABLED` | `override` or `clearOverrides` in a build without `testOverrides: true`. | yes |
-| `NEO_OVERRIDE_MULTI_UNSUPPORTED` | `override` of a `multi` token. | yes |
+| `NEO_TEST_API_DISABLED` | `override`, `overrideMany` or `clearOverrides` in a build without `testOverrides: true`. `overrideMany([])` too. | yes |
+| `NEO_OVERRIDE_MULTI_UNSUPPORTED` | `override` of a `multi` token, or a `multi` token in an `overrideMany` batch. | yes |
+| `NEO_OVERRIDE_DUPLICATE` | The same token twice in one `overrideMany` batch. Nothing is invoked, disposed or changed. | yes |
+| `NEO_OVERRIDE_INVALID` | An `overrideMany` entry whose factory is not a function. Nothing is invoked, disposed or changed. | yes |
 | `NEO_FACTORY_CONTEXT_EXPIRED` | A factory context used after the factory returned. | yes |
 | `NEO_UNDECLARED_FACTORY_DEP` | See above. | yes |
 | `NEO_ROOT_NOT_EXPORTED` | See above (guard for dynamic access). | |
