@@ -3,7 +3,7 @@ import { expect } from 'vitest';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import type { DependencyGraph } from '../../src/analyzer/types';
 import { Generator } from '../../src/generator/Generator';
-import { createFastProgram, warmLibCache } from '../fastProgram';
+import { cacheLibHost, createFastProgram, warmLibCache } from '../fastProgram';
 import { named } from './t00-contract';
 
 /**
@@ -46,6 +46,16 @@ export interface BuildOptions {
   /** Modules the container file imports: path from the container file, then the module record `require` answers. */
   modules?: ReadonlyMap<string, string>;
   require?: (id: string) => unknown;
+  /**
+   * Lib files of the analysed program (`lib.es2022.d.ts`). Absent: the fast program, whose lib is es5 and which has
+   * no global `Symbol`. A list builds a real program with the lib parsed once and cached.
+   */
+  lib?: readonly string[];
+  /**
+   * What the module reads as `Symbol`: the module runs as the body of a function whose parameter `Symbol` is this
+   * object, so a test hides the well-known symbols without touching the realm (they are not configurable on the global).
+   */
+  runtimeSymbol?: object;
 }
 
 export interface Built {
@@ -75,7 +85,7 @@ function isBox(value: unknown): value is object {
     .every((member) => typeof Reflect.get(value, member) === 'function');
 }
 
-function programFor(files: ReadonlyMap<string, string>): ts.Program {
+export function programFor(files: ReadonlyMap<string, string>, lib?: readonly string[]): ts.Program {
   const options: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.ESNext,
@@ -97,6 +107,7 @@ function programFor(files: ReadonlyMap<string, string>): ts.Program {
   host.directoryExists = (name) => directories.has(name) || (directoryExists?.(name) ?? false);
   const readText = host.readFile.bind(host);
   host.readFile = (name) => files.get(name) ?? readText(name);
+  if (lib !== undefined) return ts.createProgram([...files.keys()], { ...options, lib: [...lib], types: [], skipLibCheck: true }, cacheLibHost(host));
   return createFastProgram([...files.keys()], options, host);
 }
 
@@ -122,7 +133,7 @@ export function build(source: string, options: BuildOptions = {}): Built {
   const fileName = `${directory}/inline.ts`;
   const files = new Map<string, string>([[fileName, source]]);
   for (const [path, text] of options.modules ?? []) files.set(`${directory}/${path}`, text);
-  const program = programFor(files);
+  const program = programFor(files, options.lib);
   const analyzer = options.validation ? new Analyzer(program, { validation: options.validation }) : new Analyzer(program);
   const graphs = analyzer.extractAll().filter((graph) => graph.sourceFileName === fileName);
   const ordered = [...graphs].sort((left, right) => (right.variableStatementStart ?? 0) - (left.variableStatementStart ?? 0));
@@ -144,17 +155,18 @@ export function build(source: string, options: BuildOptions = {}): Built {
   }).outputText;
   const record: { exports: Record<string, unknown> } = { exports: {} };
   const probe: Probe = { log: [], saved: [], counts: {} };
-  const run = new Function('module', 'exports', 'require', 'useInterface', 'useProperty', 'probe', js) as (
+  const run = new Function('module', 'exports', 'require', 'useInterface', 'useProperty', 'probe', 'Symbol', js) as (
     module: typeof record,
     exports: typeof record.exports,
     require: (id: string) => unknown,
     useInterface: () => null,
     useProperty: () => null,
     probe: Probe,
+    symbol: object,
   ) => void;
   run(record, record.exports, options.require ?? ((id) => {
     throw new Error(`unexpected import ${id}`);
-  }), () => null, () => null, probe);
+  }), () => null, () => null, probe, options.runtimeSymbol ?? Symbol);
   const exports = record.exports;
   return {
     code,
