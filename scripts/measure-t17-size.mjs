@@ -241,6 +241,8 @@ const BREAKDOWN_GRAPHS = [
   { label: 'medium', providers: PROVIDERS, containers: 1 },
   { label: 'large', providers: 48, containers: 1 },
   { label: 'many-small', providers: 3, containers: 6 },
+  // More rows than DISPATCH_LINEAR_MAX (packages/core/src/generator/dispatchEmitter.ts): the open output has its shared table here.
+  { label: 'above-threshold', providers: 200, containers: 1 },
 ];
 const BREAKDOWN_CONFIGS = [
   { key: 'open-debug-off', closed: false, debug: false },

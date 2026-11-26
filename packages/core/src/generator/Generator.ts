@@ -8,6 +8,7 @@ import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGua
 import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
+import { DISPATCH_LINEAR_MAX } from './dispatchEmitter';
 import { linkedFactoryLeaseHelpers } from './factoryLeaseEmitter';
 import { providerTypesOf, type GetProviderTypes } from './providerTypes';
 import {
@@ -174,7 +175,11 @@ export class Generator {
       snapshot?: Snapshot;
       names?: NamePool;
     },
-    /** Red-commit stub: accepted, not read yet. */
+    /**
+     * Internal. `linearMax` is the number of rows up to which a dispatch table of the optimized emitter is the linear
+     * `if (token === key)` cases and not the shared table: `0` forces the table, `Infinity` forces the cases. Absent:
+     * `DISPATCH_LINEAR_MAX`. The reference emitter has no table and ignores it.
+     */
     private dispatch?: { linearMax?: number }
   ) {
     // Check for analysis errors and throw the first one for CLI compatibility
@@ -561,6 +566,7 @@ export class Generator {
         legacyParentName: this.legacyParentName,
         eagerLines,
         providerTypes,
+        dispatchLinearMax: this.dispatch?.linearMax ?? DISPATCH_LINEAR_MAX,
         stateFields: `${state.stateFields}${state.eagerField}`,
         ...rootMembers(emitted, closed, getImport),
         runtimeHelpers: runtimeHelpers(hasAsync),

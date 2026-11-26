@@ -11,7 +11,7 @@ import {
   type Piece,
   type UserCopy,
 } from './fragments';
-import { emitDispatchField, emitDispatchRead, type DispatchEntry } from './dispatchEmitter';
+import { dispatchIsLinear, emitDispatchField, emitDispatchRead, emitLinearRead, type DispatchEntry } from './dispatchEmitter';
 import { factoryLeaseHelpers } from './factoryLeaseEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 import {
@@ -73,6 +73,8 @@ export interface OptimizedContainerInput {
   legacyParentName?: string;
   /** The type of each getter, from the provider. Absent: every getter answers `unknown`. */
   providerTypes?: GetProviderTypes;
+  /** Rows up to which a dispatch table is the linear cases and not the shared table. Each table is counted on its own rows. */
+  dispatchLinearMax: number;
 }
 
 /**
@@ -187,13 +189,18 @@ function resolveInterior(input: OptimizedContainerInput, read: string, multiGuar
     ${legacyAndNotFound(input)}`;
 }
 
-/** A table is declared only when a row can be served from it. */
+/**
+ * A table is declared only when a row can be served from it, and only when it has more than `dispatchLinearMax` rows:
+ * a smaller one is the linear cases, read in place and declared nowhere.
+ */
 function tableRead(input: OptimizedContainerInput, field: string, entries: readonly DispatchEntry[]): string {
-  return entries.length === 0 ? '' : emitDispatchRead(input.className, field);
+  if (entries.length === 0) return '';
+  return dispatchIsLinear(entries, input.dispatchLinearMax) ? emitLinearRead(entries, 'single') : emitDispatchRead(input.className, field);
 }
 
 function tableField(input: OptimizedContainerInput, field: string, entries: readonly DispatchEntry[]): string {
-  return entries.length === 0 ? '' : emitDispatchField(input.className, field, entries);
+  if (entries.length === 0 || dispatchIsLinear(entries, input.dispatchLinearMax)) return '';
+  return emitDispatchField(input.className, field, entries);
 }
 
 /**
@@ -245,22 +252,27 @@ function joined(members: readonly string[]): string {
 /**
  * The readers of the multi tokens, and the two tables over them: `__neoRootLists` over the exported roots
  * (closed), `__neoLists` over the internal tokens when `_resolveAllInternal` is emitted. A token that is both
- * has one reader and a row in each table.
+ * has one reader and a row in each table. Each table is decided on its own rows; a reader is a member only for a table
+ * that is read from the `Map`, a linear table has the body inline.
  */
 function listMembers(
   input: OptimizedContainerInput,
   publicLists: readonly ListReader[],
   internalLists: readonly ListReader[],
 ): string[] {
+  const rows = (lists: readonly ListReader[]): DispatchEntry[] => lists.map((reader) => reader.entry);
+  const isTable = (lists: readonly ListReader[]): boolean =>
+    lists.length > 0 && !dispatchIsLinear(rows(lists), input.dispatchLinearMax);
+  const rootsAsTable = isTable(publicLists);
+  const internalAsTable = isTable(internalLists);
   const readers = new Map<TokenId, ListReader>();
-  for (const reader of [...internalLists, ...publicLists]) {
+  for (const reader of [...(internalAsTable ? internalLists : []), ...(rootsAsTable ? publicLists : [])]) {
     if (!readers.has(reader.tokenId)) readers.set(reader.tokenId, reader);
   }
-  const rows = (lists: readonly ListReader[]): DispatchEntry[] => lists.map((reader) => reader.entry);
   return [
     ...[...readers.values()].map((reader) => reader.method),
-    ...(publicLists.length > 0 ? [emitDispatchField(input.className, '__neoRootLists', rows(publicLists), 'list')] : []),
-    ...(internalLists.length > 0 ? [emitDispatchField(input.className, '__neoLists', rows(internalLists), 'list')] : []),
+    ...(rootsAsTable ? [emitDispatchField(input.className, '__neoRootLists', rows(publicLists), 'list')] : []),
+    ...(internalAsTable ? [emitDispatchField(input.className, '__neoLists', rows(internalLists), 'list')] : []),
   ];
 }
 
@@ -299,6 +311,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
     closed,
     minimal,
     input.className,
+    input.dispatchLinearMax,
     listLocals ? undefined : needs.multiAll,
   );
   const resolveAllPublic = withNeeds(fragment`${resolveAll.publicMethod}`, closed ? [] : ['resolveAll']);

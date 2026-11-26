@@ -1,6 +1,6 @@
 import type { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getDirectName, getFactoryName, getReadName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
-import { emitDispatchRead, type DispatchEntry } from './dispatchEmitter';
+import { dispatchIsLinear, emitDispatchRead, emitLinearRead, type DispatchEntry } from './dispatchEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 
 /**
@@ -426,6 +426,8 @@ export interface ListReader {
   entry: DispatchEntry;
   /** The member, as class text. The full profile notifies the resolve event with the asked token, so it takes it. */
   method: string;
+  /** What the member does, as the body of a linear case. */
+  inline: string;
 }
 
 function listReader(
@@ -438,12 +440,14 @@ function listReader(
   if (!nodes || nodes.length === 0) return undefined;
   const name = getListName(tokenId);
   const param = minimal ? '' : 'token: unknown';
+  const inline = directList(graph, tokenId, minimal);
   return {
     tokenId,
     entry: { keyExpression: resolveTokenKey(nodes[0].service, getImport), accessor: name },
     method: `private ${name}(${param}): unknown[] {
-    ${directList(graph, tokenId, minimal)}
+    ${inline}
   }`,
+    inline,
   };
 }
 
@@ -456,7 +460,8 @@ function listReader(
  * Both methods read a table of the class (dispatchEmitter.ts), one reader per multi token: `_resolveAllInternal`
  * reads `__neoLists`, the closed public method reads `__neoRootLists`, which holds the exported roots and nothing
  * else. The caller declares each table over the readers it keeps: `publicLists` for `__neoRootLists`, and
- * `internalLists` for `__neoLists` when it emits `_resolveAllInternal`.
+ * `internalLists` for `__neoLists` when it emits `_resolveAllInternal`. A table of at most `linearMax` readers is read
+ * as linear cases, the body of each reader inline, and the caller declares no table for it.
  */
 export function generateDirectResolveAll(
   graph: DependencyGraph,
@@ -465,6 +470,7 @@ export function generateDirectResolveAll(
   closed: boolean,
   minimal: boolean,
   className: string,
+  linearMax: number,
   internalIds: Iterable<TokenId> = graph.multiNodes?.keys() ?? [],
 ): { publicMethod: string; internalMethod: string; publicLists: ListReader[]; internalLists: ListReader[] } {
   const tail = legacyResolveAll(!minimal);
@@ -478,8 +484,11 @@ export function generateDirectResolveAll(
     }
     return readers;
   };
-  const readFor = (readers: readonly ListReader[], field: string): string =>
-    (readers.length === 0 ? '' : emitDispatchRead(className, field, 'list'));
+  const readFor = (readers: readonly ListReader[], field: string): string => {
+    if (readers.length === 0) return '';
+    const entries = readers.map((reader) => ({ ...reader.entry, inline: reader.inline }));
+    return dispatchIsLinear(entries, linearMax) ? emitLinearRead(entries, 'list') : emitDispatchRead(className, field, 'list');
+  };
   const internalLists = readersFor(internalIds);
   const internalMethod = `${listOverload('private', '_resolveAllInternal')}
     ${open}

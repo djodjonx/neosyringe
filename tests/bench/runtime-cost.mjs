@@ -3,6 +3,8 @@
 // Emitter stays undefined so optimized is chosen iff minimal or closed
 // (packages/core/src/generator/Generator.ts:201-204).
 // Open mode cannot list roots (packages/core/src/analyzer/parsers/ConfigParser.ts:604-616).
+// NEOSYRINGE_BENCH_DISPATCH_LINEAR_MAX forces the Generator's `dispatch.linearMax`: `0` is the shared table always,
+// `Infinity` the linear cases always, another integer a count of rows. Unset: the default of the Generator.
 import { spawnSync, execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -27,6 +29,8 @@ const processes = numberEnv('NEOSYRINGE_BENCH_PROCESSES', 5);
 const samples = numberEnv('NEOSYRINGE_BENCH_SAMPLES', 7);
 const resolveCount = numberEnv('NEOSYRINGE_BENCH_RESOLVE_COUNT', 100_000);
 const resolveBatches = numberEnv('NEOSYRINGE_BENCH_RESOLVE_BATCHES', 7);
+const dispatchLinearMaxText = process.env.NEOSYRINGE_BENCH_DISPATCH_LINEAR_MAX || undefined;
+const dispatchLinearMax = dispatchLinearMaxOf('NEOSYRINGE_BENCH_DISPATCH_LINEAR_MAX', dispatchLinearMaxText);
 const worker = path.join(root, 'tests/bench/runtime-worker.mjs');
 const knownShapes = new Set(['flat', 'chain', 'diamond', 'multi', 'parent']);
 const knownProfiles = new Set(['full', 'minimal']);
@@ -67,6 +71,13 @@ function numberEnv(name, fallback) {
   const value = Number(process.env[name] || fallback);
   if (!Number.isInteger(value) || value < 1) throw new Error(`${name} requires integers >= 1`);
   return value;
+}
+
+function dispatchLinearMaxOf(name, text) {
+  if (text === undefined) return undefined;
+  if (text === 'Infinity') return Infinity;
+  if (!/^\d+$/.test(text)) throw new Error(`${name} requires an integer >= 0 or Infinity`);
+  return Number(text);
 }
 
 function git(args) {
@@ -324,7 +335,8 @@ function inlineSameFileImports(code) {
 
 function builtFactories(graphs) {
   return graphs.map((graph) => {
-    const generator = new Generator(graph, true, undefined, false, false);
+    const dispatch = dispatchLinearMax === undefined ? undefined : { linearMax: dispatchLinearMax };
+    const generator = new Generator(graph, true, undefined, false, false, undefined, undefined, undefined, dispatch);
     const code = inlineSameFileImports(generator.generate());
     const instantiation = generator.generateInstantiation();
     const found = /class (NeoContainer\w*)/.exec(code);
@@ -971,6 +983,8 @@ const report = {
     buildGroups: '5x7; size>=1000 is 1x7',
     caseOrder: 'process-outer, reverse-odd',
   },
+  // Not in `params`: scripts/ci/lib/performance-budget.mjs:34-38,58 refuses two reports whose `params` differ, and the threshold must not.
+  ...(dispatchLinearMaxText === undefined ? {} : { config: { dispatchLinearMax: dispatchLinearMaxText } }),
   schedule,
   cases: cases.map((item) => ({
     shape: item.shape,
