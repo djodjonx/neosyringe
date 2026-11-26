@@ -196,7 +196,7 @@ The factory examples below are regions of `examples/new-api/factories.ts`. `test
 
 ### Factory with Dependencies
 
-The factory receives a `FactoryContext`: `resolve` and `resolveAll`, for the tokens listed in `dependencies` only.
+The factory receives a `FactoryContext`: `resolve`, `resolveAll` and `resolveMany`, for the tokens listed in `dependencies` only.
 
 <<< @/../examples/new-api/factories.ts#with-dependencies
 

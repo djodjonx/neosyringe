@@ -10,11 +10,12 @@ These changes are for the next major version. The destruction rule and the facto
 
 | Before (historical npm, `pnpm migration:historical`) | Now | What you do |
 |--------|-----|-------------|
-| A sync container has no initialize method. An async container throws the LegacyAsync message quoted under the protocol, from initialize and from a resolve. No client was created, because initialize() threw | `initialize()` is on every container (`CoreContainer`, `packages/neosyringe/src/types.ts:36`) | Await it before the first `resolve` when the graph has async work. Calling it on a sync container is harmless. |
+| A sync container has no initialize method. An async container throws the LegacyAsync message quoted under the protocol, from initialize and from a resolve. No client was created, because initialize() threw | `initialize()` is on every container (`CoreContainer`, `packages/neosyringe/src/types.ts:56`) | Await it before the first `resolve` when the graph has async work. Calling it on a sync container is harmless. |
 | Calling destroy and then resolve raised no error. The probed close count was 1, and that 1 is the FakeDatabase mock from the direct-read probe (`scripts/ci/historical-migration.mjs:94`). The plain BEFORE consumer printed `disposed 0` (`scripts/ci/historical-migration.mjs:532`). The real Database leaks on override | `destroy()` is final. Afterwards `resolve`, `initialize` and `createScope` throw `NEO_CONTAINER_DESTROYED` | Take scopes from a container you keep alive, and destroy the scope instead of the root. |
 | Historical override replaced only the overridden token; the already cached Report kept the real Database; the direct resolve printed fake (`scripts/ci/historical-migration.mjs:533`) | Both return `Promise<void>` and reset all caches of that container | Add `await`. Drop objects resolved before the call. |
 | Opaque factories (no `dependencies`). Not run on the historical archive | `dependencies` is required, even `[]`. The build says `NEO_FACTORY_DEPENDENCIES_REQUIRED` | List every token the factory resolves. |
-| A factory received the whole container. Not run on the historical archive | It receives a `FactoryContext`: `resolve` and `resolveAll` only (`packages/neosyringe/src/types.ts:94-97`). This row names no error code | Move `initialize`, `destroy`, `override` and `createScope` calls out of factories. |
+| A factory received the whole container. Not run on the historical archive | It receives a `FactoryContext`: `resolve`, `resolveAll` and `resolveMany` only (`packages/neosyringe/src/types.ts:165-174`). This row names no error code | Move `initialize`, `destroy`, `override` and `createScope` calls out of factories. |
+| A hand-built object typed `CoreContainer`, `Container` or `FactoryContext`, for example a test double. Not run on the historical archive | `resolveMany` is a required member of `CoreContainer` (`packages/neosyringe/src/types.ts:53`) and of `FactoryContext` (`packages/neosyringe/src/types.ts:173`). Without it the object no longer typechecks | Add a `resolveMany` method to the object. |
 | Assuming a change in a parent rewires the child, or the reverse. Not run on the historical archive | A parent-owned service keeps the parent's dependencies | Register the consumer in the container whose dependency you changed. |
 | The historical plugin options do not mention testOverrides or validation. override depended on a runtime check of `process`. The run printed `override checks process.env.NODE_ENV: yes` (`scripts/ci/historical-migration.mjs:469`) | It is a build option: `testOverrides: true`, refused when `NODE_ENV=production`. The run printed `NEO_TEST_API_DISABLED: testOverrides cannot be enabled when NODE_ENV is production` (`packages/core/src/generator/DebugConfig.ts:35`) | Set the plugin option in the test build. |
 | An expression in `useValue` could be moved by generation. Not run on the historical archive | It is evaluated once where the configuration is evaluated, then shared by reference | Check expressions with effects. Use a factory for a value that is deferred or that differs per scope. |
@@ -56,7 +57,7 @@ With the default plugin options the legacy factory is refused:
 NEO_FACTORY_DEPENDENCIES_REQUIRED: factory 'Report' requires a dependencies list.
 ```
 
-Add the `dependencies` list first. That works with the old shape too, because the field is optional in the type (`packages/neosyringe/src/types.ts:223`), so it can ship before the upgrade.
+Add the `dependencies` list first. That works with the old shape too, because the field is optional in the type (`packages/neosyringe/src/types.ts:303`), so it can ship before the upgrade.
 
 ### `validation: 'compatible'` does not rescue it in the plugin
 

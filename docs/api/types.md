@@ -82,10 +82,11 @@ type Factory<T> = (context: FactoryContext) => T | PromiseLike<T>;
 interface FactoryContext {
   resolve<T>(token: Token<T>): T;
   resolveAll<T>(token: Token<T>): T[];
+  resolveMany<const T extends readonly Token<unknown>[]>(tokens: T): ValuesOf<T>;
 }
 ```
 
-A function that receives a limited context and returns an instance, or a promise of it. The context has `resolve` and `resolveAll` only. It is not the container. Declare what it may resolve in `dependencies` (`packages/neosyringe/src/types.ts:94` and `:103`).
+A function that receives a limited context and returns an instance, or a promise of it. The context has `resolve`, `resolveAll` and `resolveMany` only. It is not the container. Declare what it may resolve in `dependencies` (`packages/neosyringe/src/types.ts:165` and `:180`).
 
 <<< @/../examples/new-api/factories.ts#typed-factory
 
@@ -109,7 +110,7 @@ interface Injection<T = any> {
 }
 ```
 
-A single injection definition (`packages/neosyringe/src/types.ts:202`):
+A single injection definition (`packages/neosyringe/src/types.ts:282`):
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -171,12 +172,13 @@ Main configuration for a container:
 
 ## CoreContainer and Container
 
-Two profiles, two types (`packages/neosyringe/src/types.ts:18` and `:53`):
+Two profiles, two types (`packages/neosyringe/src/types.ts:18` and `:73`):
 
 ```typescript
 interface CoreContainer {
   resolve<T>(token: Token<T>): T;
   resolveAll<T>(token: Token<T>): T[];
+  resolveMany<const T extends readonly Token<unknown>[]>(tokens: T): ValuesOf<T>;
   initialize(): Promise<void>;
   destroy(): Promise<void>;
   createScope(): this;
@@ -200,6 +202,7 @@ type ContainerFor<C> = C extends { runtime: { profile: 'minimal' } } ? CoreConta
 |--------|---------|
 | `resolve` | One instance. Throws `NEO_NOT_INITIALIZED` before `initialize()` when the graph has async work. |
 | `resolveAll` | A new array with every `multi: true` contribution. |
+| `resolveMany` | The values of several tokens as a tuple, in the order of the tokens, resolved one by one like `resolve`. The first error stops the batch. |
 | `initialize` | Brings async singletons to ready. Immediate when there is nothing to start. |
 | `destroy` | Final and idempotent. Closes the singletons this container owns. |
 | `createScope` | A new container with empty caches and the same parents. |

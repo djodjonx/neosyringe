@@ -323,7 +323,7 @@ interface Injection<T> {
 }
 ```
 
-The real type is a union of four disjoint shapes (`packages/neosyringe/src/types.ts:202`).
+The real type is a union of four disjoint shapes (`packages/neosyringe/src/types.ts:282`).
 
 ### token
 
@@ -342,7 +342,7 @@ Type: `Provider<T>`
 What provides the instance. Can be:
 
 - Class constructor: `ConsoleLogger`
-- Factory function: `(context) => new Service()` with `useFactory: true` and a `dependencies` list. `context` has `resolve` and `resolveAll` for the declared tokens only.
+- Factory function: `(context) => new Service()` with `useFactory: true` and a `dependencies` list. `context` has `resolve`, `resolveAll` and `resolveMany` for the declared tokens only.
 
 If omitted, the token itself is used (autowiring).
 
@@ -380,7 +380,7 @@ const plugins = container.resolveAll(useInterface<IPlugin>());
 
 Type: `true`
 
-Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:222`).
+Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:302`).
 
 <<< @/../examples/new-api/factories.ts#arrow
 
@@ -388,11 +388,11 @@ Marks the provider as a factory function. The `Injection` type requires it for a
 
 Type: `readonly DependencyRef[]`. A `DependencyRef` is a token, or `{ all: token }` for `resolveAll`.
 
-Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:223`), so the type does not catch the omission.
+Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:303`), so the type does not catch the omission.
 
 <<< @/../examples/new-api/factories.ts#all-dependency
 
-The factory receives a `FactoryContext` (`resolve`, `resolveAll`). Asking for an undeclared token throws `NEO_UNDECLARED_FACTORY_DEP`. Using the context after the factory returned throws `NEO_FACTORY_CONTEXT_EXPIRED`.
+The factory receives a `FactoryContext` (`resolve`, `resolveAll`, `resolveMany`). Asking for an undeclared token throws `NEO_UNDECLARED_FACTORY_DEP`. Using the context after the factory returned throws `NEO_FACTORY_CONTEXT_EXPIRED`.
 
 ### ownership
 

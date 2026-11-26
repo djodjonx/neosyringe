@@ -6,10 +6,10 @@ A generated container comes in two profiles. The profile is chosen in the config
 
 | Profile | Type | Methods |
 |---------|------|---------|
-| `full` (default) | `Container` | `resolve`, `resolveAll`, `initialize`, `destroy`, `createScope`, `override`, `clearOverrides`, `on` |
-| `minimal` (opt-in) | `CoreContainer` | `resolve`, `resolveAll`, `initialize`, `destroy`, `createScope` |
+| `full` (default) | `Container` | `resolve`, `resolveAll`, `resolveMany`, `initialize`, `destroy`, `createScope`, `override`, `clearOverrides`, `on` |
+| `minimal` (opt-in) | `CoreContainer` | `resolve`, `resolveAll`, `resolveMany`, `initialize`, `destroy`, `createScope` |
 
-Types: `CoreContainer` at `packages/neosyringe/src/types.ts:18`, `Container` at `packages/neosyringe/src/types.ts:53`, `ContainerFor` at `packages/neosyringe/src/types.ts:135`.
+Types: `CoreContainer` at `packages/neosyringe/src/types.ts:18`, `Container` at `packages/neosyringe/src/types.ts:73`, `ContainerFor` at `packages/neosyringe/src/types.ts:212`.
 
 <<< @/../examples/new-api/profiles.ts#profiles
 

@@ -28,7 +28,7 @@ await container.destroy();
 
 ## What initialize does
 
-- Every container has `initialize(): Promise<void>` (`packages/neosyringe/src/types.ts:36`). A container with no async work returns at once. You can call it everywhere without checking.
+- Every container has `initialize(): Promise<void>` (`packages/neosyringe/src/types.ts:56`). A container with no async work returns at once. You can call it everywhere without checking.
 - It builds the async singletons, in dependency order, and waits for each one before its consumers run. A factory that needs another async service lists it in `dependencies`.
 - Two `initialize()` calls at the same time share the work. A factory does not run twice.
 - A child of an async parent needs `await child.initialize()` too: it readies the parent as well. Without it, the child's `resolve()` throws `NEO_NOT_INITIALIZED`.
@@ -58,7 +58,7 @@ A failed container cannot be repaired. To try again, build a new container. Or k
 An async factory cannot be `lifecycle: 'transient'`. The build fails with `NEO_ASYNC_TRANSIENT`: a transient is created on each `resolve()`, which would have to be async.
 :::
 
-- `AsyncContainer` is a deprecated alias of `CoreContainer` and adds no method (`packages/neosyringe/src/types.ts:309`). Use `CoreContainer`, or let the type come from `defineBuilderConfig`.
+- `AsyncContainer` is a deprecated alias of `CoreContainer` and adds no method (`packages/neosyringe/src/types.ts:389`). Use `CoreContainer`, or let the type come from `defineBuilderConfig`.
 
 ## Overrides are awaited too
 

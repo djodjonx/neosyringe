@@ -16,7 +16,7 @@ Everything below was run against the built packages. The tests are in `tests/e2e
 | `destroy()` | Ends the container. Terminal and idempotent. |
 | `createScope()` | A new container with the same recipes and the same parents, and empty caches. |
 
-The full profile also has `override`, `clearOverrides` and `on` (`Container`, `packages/neosyringe/src/types.ts:53`). See [profiles](./profiles.md).
+The full profile also has `override`, `clearOverrides` and `on` (`Container`, `packages/neosyringe/src/types.ts:73`). See [profiles](./profiles.md).
 
 ## States
 
@@ -96,9 +96,9 @@ await scope.destroy();         // closes this scope only
 
 <<< @/../examples/new-api/factories.ts#with-dependencies
 
-- **`dependencies` is required** in strict validation, even as `[]`. A factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED` (`packages/core/src/analyzer/parsers/InjectionParser.ts:469`). The TypeScript type of an injection still lets you omit it (`packages/neosyringe/src/types.ts:223`): the type does not warn you, the build does.
+- **`dependencies` is required** in strict validation, even as `[]`. A factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED` (`packages/core/src/analyzer/parsers/InjectionParser.ts:469`). The TypeScript type of an injection still lets you omit it (`packages/neosyringe/src/types.ts:303`): the type does not warn you, the build does.
 - An entry is a token, or `{ all: token }` for `resolveAll`.
-- The factory receives a `FactoryContext` with `resolve` and `resolveAll` only (`packages/neosyringe/src/types.ts:94`). It has no `initialize`, `destroy`, `override`, `on` or `createScope`.
+- The factory receives a `FactoryContext` with `resolve`, `resolveAll` and `resolveMany` only (`packages/neosyringe/src/types.ts:165`). It has no `initialize`, `destroy`, `override`, `on` or `createScope`.
 - A token that is not in `dependencies` throws `NEO_UNDECLARED_FACTORY_DEP` when the factory asks for it, including from a helper function it calls.
 - The context is only valid while the factory runs. Keeping it and calling it later throws `NEO_FACTORY_CONTEXT_EXPIRED`.
 - A factory may return a value or a promise. A promise makes the token async: `initialize()` waits for it.
