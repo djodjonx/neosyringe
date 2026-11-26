@@ -6,7 +6,7 @@ Everything below was run against the built packages. The tests are in `tests/e2e
 
 ## Operations every container has
 
-`CoreContainer` is the type of every generated container (`packages/neosyringe/src/types.ts:18`).
+`CoreContainer` is the type of every generated container (`packages/neosyringe/src/types.ts:29`).
 
 | Operation | Meaning |
 |-----------|---------|
@@ -16,7 +16,7 @@ Everything below was run against the built packages. The tests are in `tests/e2e
 | `destroy()` | Ends the container. Terminal and idempotent. |
 | `createScope()` | A new container with the same recipes and the same parents, and empty caches. |
 
-The full profile also has `override`, `overrideMany`, `clearOverrides` and `on` (`Container`, `packages/neosyringe/src/types.ts:73`). See [profiles](./profiles.md).
+The full profile also has `override`, `overrideMany`, `clearOverrides` and `on` (`Container`, `packages/neosyringe/src/types.ts:86`). See [profiles](./profiles.md).
 
 ## States
 
@@ -29,13 +29,13 @@ The full profile also has `override`, `overrideMany`, `clearOverrides` and `on` 
 | Failed (`initialize()` rejected) | Throws `NEO_CONTAINER_FAILED` | Rejects again with the first error | Ends the container |
 | Destroyed | Throws `NEO_CONTAINER_DESTROYED` | Throws `NEO_CONTAINER_DESTROYED` | Does nothing |
 
-The codes come from `packages/core/src/generator/LifecycleEmitter.ts:255` to `:260`. Each cell was checked by running a container, except the `destroy` cell of the Initializing row, which is source only (`packages/core/src/generator/LifecycleEmitter.ts:816` to `:814`):
+The codes come from `packages/core/src/generator/LifecycleEmitter.ts:324` to `:329`. Each cell was checked by running a container, except the `destroy` cell of the Initializing row, which is source only (`packages/core/src/generator/LifecycleEmitter.ts:884` to `:888`):
 
 - A container with an async factory refuses `resolve` before `initialize` (`async.ts` below).
 - When `initialize()` rejects, it first rolls back: the owned instances built during the attempt are disposed in reverse order. It rejects with the factory's own error, or, if a `dispose` threw during the rollback, with a new `Error` that has the same message, a `cause` (the factory's error) and `cleanupErrors`. The next `initialize()` rejects with the same object. `resolve` throws `NEO_CONTAINER_FAILED`. `createScope()` throws `NEO_CONTAINER_FAILED` too, so a failed container cannot give you a fresh scope. Nothing restarts by itself. To try again, build a new container, or take scopes from a root that never ran `initialize()` and drop the scope that failed.
 - While `override`, `overrideMany` or `clearOverrides` is still closing the old instances, `resolve`, `initialize`, `destroy`, `createScope`, `override`, `overrideMany` and `clearOverrides` all reject or throw `NEO_CONTAINER_BUSY`. This holds for a container with async factories and for one without. Await each call.
 - While `initialize()` is running, `override`, `overrideMany`, `clearOverrides` and `createScope()` throw `NEO_CONTAINER_BUSY`, and `resolve` throws `NEO_NOT_INITIALIZED`.
-- `override`, `overrideMany` and `clearOverrides` are refused with `NEO_CONTAINER_BUSY` while the container is destroying too. This is source only (`packages/core/src/generator/LifecycleEmitter.ts:653` to `:654`), not run here.
+- `override`, `overrideMany` and `clearOverrides` are refused with `NEO_CONTAINER_BUSY` while the container is destroying too. This is source only (`packages/core/src/generator/LifecycleEmitter.ts:722` to `:723`), not run here.
 
 A container with no async factory and no eager root is ready at once. `scopes.ts` below resolves without calling `initialize()`.
 
@@ -110,8 +110,8 @@ await scope.destroy();                    // closes the Handler it built, never 
 ## Who owns what
 | Origin | Owner | Closed by `destroy()` |
 |--------|-------|-----------------------|
-| Class singleton built by this container | This container | Yes, if it has a `dispose` function |
-| Singleton returned by a factory in this container | This container | Yes, if it has a `dispose` function |
+| Class singleton built by this container | This container | Yes, if it has a `dispose` function, or a `[Symbol.asyncDispose]` or `[Symbol.dispose]` method ([Disposable Services](./disposable.md#standard-protocols)) |
+| Singleton returned by a factory in this container | This container | Yes, if it has a `dispose` function, or one of the two symbol methods |
 | Factory with `ownership: 'borrowed'` | Whoever created the resource | No |
 | `useValue` | Whoever created the value | No |
 | Value given to `createScope({ values })` | Whoever created the value | No |
@@ -130,14 +130,14 @@ await scope.destroy();                    // closes the Handler it built, never 
 
 <<< @/../examples/new-api/factories.ts#with-dependencies
 
-- **`dependencies` is required** in strict validation, even as `[]`. A factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED` (`packages/core/src/analyzer/parsers/InjectionParser.ts:574`). The TypeScript type of an injection still lets you omit it (`packages/neosyringe/src/types.ts:398`): the type does not warn you, the build does.
+- **`dependencies` is required** in strict validation, even as `[]`. A factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED` (`packages/core/src/analyzer/parsers/InjectionParser.ts:761`). The TypeScript type of an injection still lets you omit it (`packages/neosyringe/src/types.ts:411`): the type does not warn you, the build does.
 - An entry is a token, or `{ all: token }` for `resolveAll`.
-- The factory receives a `FactoryContext` with `resolve`, `resolveAll` and `resolveMany` only (`packages/neosyringe/src/types.ts:174`). It has no `initialize`, `destroy`, `override`, `on` or `createScope`.
+- The factory receives a `FactoryContext` with `resolve`, `resolveAll` and `resolveMany` only (`packages/neosyringe/src/types.ts:187`). It has no `initialize`, `destroy`, `override`, `on` or `createScope`.
 - A token that is not in `dependencies` throws `NEO_UNDECLARED_FACTORY_DEP` when the factory asks for it, including from a helper function it calls.
 - The context is only valid while the factory runs. Keeping it and calling it later throws `NEO_FACTORY_CONTEXT_EXPIRED`.
 - A factory may return a value or a promise. A promise makes the token async: `initialize()` waits for it.
 - An async factory cannot be `lifecycle: 'transient'`: the build fails with `NEO_ASYNC_TRANSIENT`.
-- A factory that calls `resolve` or `resolveAll` directly on a captured container, such as `otherContainer.resolve(Dep)`, fails the build with `NEO_UNDECLARED_FACTORY_DEP` ("resolves a captured container instead of its context", `packages/core/src/analyzer/parsers/InjectionParser.ts:689` to `:614`). Only indirect access is out of reach of the build: a helper function that holds the container, or a receiver that is not a plain variable. Nothing checks it. Pass the value in as a token instead.
+- A factory that calls `resolve` or `resolveAll` directly on a captured container, such as `otherContainer.resolve(Dep)`, fails the build with `NEO_UNDECLARED_FACTORY_DEP` ("resolves a captured container instead of its context", `packages/core/src/analyzer/parsers/InjectionParser.ts:767` to `:692`). Only indirect access is out of reach of the build: a helper function that holds the container, or a receiver that is not a plain variable. Nothing checks it. Pass the value in as a token instead.
 
 ## Other limits
 
@@ -154,4 +154,4 @@ await scope.destroy();                    // closes the Handler it built, never 
 
 A singleton whose value is `undefined` is now returned on the reference emitter (`packages/core/src/generator/Generator.ts:395`) instead of `NeoServiceNotFoundError`. The same check keeps that local `undefined` from falling through to a parent.
 
-A sync factory that calls `initialize()` while the state is `initializing` and that factory is still on the synchronous stack (`this._syncInit > 0`) gets `NEO_CONTAINER_BUSY` (`packages/core/src/generator/LifecycleEmitter.ts:191`) instead of joining the in-flight promise, which could deadlock. In every other state the call keeps its own result: `ready` resolves (`packages/core/src/generator/LifecycleEmitter.ts:193`), `failed` rejects with the first failure (`packages/core/src/generator/LifecycleEmitter.ts:194`), and `destroyed` throws `NEO_CONTAINER_DESTROYED` (`packages/core/src/generator/LifecycleEmitter.ts:196`). The depth flag lives on both container shapes (`packages/core/src/generator/Generator.ts:640`). It is raised only around the synchronous factory call, and only when the container has async work (`packages/core/src/generator/FactoryEmitter.ts:283` to `:239`). A container with no async factory does not emit the increment or the decrement: its `initialize()` never reads `_syncInit` (`packages/core/src/generator/LifecycleEmitter.ts:272`). A factory that awaits, then calls `initialize()`, is not flagged. A factory resolved after the container is ready, including one resolved from a scope, gets the resolved promise.
+A sync factory that calls `initialize()` while the state is `initializing` and that factory is still on the synchronous stack (`this._syncInit > 0`) gets `NEO_CONTAINER_BUSY` (`packages/core/src/generator/LifecycleEmitter.ts:324`) instead of joining the in-flight promise, which could deadlock. In every other state the call keeps its own result: `ready` resolves (`packages/core/src/generator/LifecycleEmitter.ts:326`), `failed` rejects with the first failure (`packages/core/src/generator/LifecycleEmitter.ts:327`), and `destroyed` throws `NEO_CONTAINER_DESTROYED` (`packages/core/src/generator/LifecycleEmitter.ts:328` to `:330`). The depth flag lives on both container shapes (`packages/core/src/generator/Generator.ts:911`). It is raised only around the synchronous factory call, and only when the container has async work (`packages/core/src/generator/FactoryEmitter.ts:351` to `:355`). A container with no async factory does not emit the increment or the decrement: its `initialize()` never reads `_syncInit` (`packages/core/src/generator/FactoryEmitter.ts:339`). A factory that awaits, then calls `initialize()`, is not flagged. A factory resolved after the container is ready, including one resolved from a scope, gets the resolved promise.

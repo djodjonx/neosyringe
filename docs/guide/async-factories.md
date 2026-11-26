@@ -28,7 +28,7 @@ await container.destroy();
 
 ## What initialize does
 
-- Every container has `initialize(): Promise<void>` (`packages/neosyringe/src/types.ts:56`). A container with no async work returns at once. You can call it everywhere without checking.
+- Every container has `initialize(): Promise<void>` (`packages/neosyringe/src/types.ts:67`). A container with no async work returns at once. You can call it everywhere without checking.
 - It builds the async singletons, in dependency order, and waits for each one before its consumers run. A factory that needs another async service lists it in `dependencies`.
 - Two `initialize()` calls at the same time share the work. A factory does not run twice.
 - A child of an async parent needs `await child.initialize()` too: it readies the parent as well. Without it, the child's `resolve()` throws `NEO_NOT_INITIALIZED`.
@@ -36,16 +36,16 @@ await container.destroy();
 
 ## When initialization fails
 
-`initialize()` first rolls back. The owned instances built during the failed attempt are disposed in reverse order of construction. Borrowed instances are left alone (`packages/core/src/generator/LifecycleEmitter.ts:212` to `:223`). Then it rejects, in one of two ways:
+`initialize()` first rolls back. The owned instances built during the failed attempt are disposed in reverse order of construction, with the same rules as `destroy()`: `dispose()`, else `[Symbol.asyncDispose]()`, else `[Symbol.dispose]()`, and a promise the method returns is awaited (see [Disposable Services](./disposable.md#standard-protocols)). Borrowed instances are left alone (`packages/core/src/generator/LifecycleEmitter.ts:346` to `:349`). Then it rejects, in one of two ways:
 
 - With the factory's own error, when every `dispose` succeeded.
-- With a new `Error` when a `dispose` threw. It has the same message, a `cause` (the factory's error) and `cleanupErrors` (the errors thrown by `dispose`). The rollback does not stop at the first failing `dispose` (`packages/core/src/generator/LifecycleEmitter.ts:230` to `:233`).
+- With a new `Error` when a `dispose` threw. It has the same message, a `cause` (the factory's error) and `cleanupErrors` (the errors thrown by `dispose`). The rollback does not stop at the first failing `dispose` (`packages/core/src/generator/LifecycleEmitter.ts:351` to `:360`).
 
 The container is then failed:
 
 - another `initialize()` rejects with that same error (or wrapper),
 - `resolve()` throws `NEO_CONTAINER_FAILED`,
-- `createScope()` throws `NEO_CONTAINER_FAILED` (`packages/core/src/generator/LifecycleEmitter.ts:297` to `:297` for a container with async work, `:303` to `:305` without),
+- `createScope()` throws `NEO_CONTAINER_FAILED` (`packages/core/src/generator/LifecycleEmitter.ts:432` to `:434` for a container with async work, `:442` to `:444` without),
 - nothing is retried by itself.
 
 A failed container cannot be repaired. To try again, build a new container. Or keep a root container that never ran `initialize()`, take your scopes from it, and drop a scope that failed: the root stays usable. See [States, Scopes and Ownership](./states-and-ownership.md).
@@ -58,7 +58,7 @@ A failed container cannot be repaired. To try again, build a new container. Or k
 An async factory cannot be `lifecycle: 'transient'`. The build fails with `NEO_ASYNC_TRANSIENT`: a transient is created on each `resolve()`, which would have to be async.
 :::
 
-- `AsyncContainer` is a deprecated alias of `CoreContainer` and adds no method (`packages/neosyringe/src/types.ts:531`). Use `CoreContainer`, or let the type come from `defineBuilderConfig`.
+- `AsyncContainer` is a deprecated alias of `CoreContainer` and adds no method (`packages/neosyringe/src/types.ts:544`). Use `CoreContainer`, or let the type come from `defineBuilderConfig`.
 
 ## Overrides are awaited too
 

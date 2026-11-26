@@ -9,7 +9,7 @@ A generated container comes in two profiles. The profile is chosen in the config
 | `full` (default) | `Container` | `resolve`, `resolveAll`, `resolveMany`, `initialize`, `destroy`, `createScope`, `override`, `overrideMany`, `clearOverrides`, `on` |
 | `minimal` (opt-in) | `CoreContainer` | `resolve`, `resolveAll`, `resolveMany`, `initialize`, `destroy`, `createScope` |
 
-Types: `CoreContainer` at `packages/neosyringe/src/types.ts:18`, `Container` at `packages/neosyringe/src/types.ts:73`, `ContainerFor` at `packages/neosyringe/src/types.ts:265`.
+Types: `CoreContainer` at `packages/neosyringe/src/types.ts:29`, `Container` at `packages/neosyringe/src/types.ts:86`, `ContainerFor` at `packages/neosyringe/src/types.ts:278`.
 
 <<< @/../examples/new-api/profiles.ts#profiles
 
@@ -20,7 +20,7 @@ Types: `CoreContainer` at `packages/neosyringe/src/types.ts:18`, `Container` at 
 
 ### With scope inputs
 
-A builder with `scopeInputs` returns a `ContainerTemplate` of its profile, and each scope is a `BoundContainer` of that profile: `full` has `override`, `overrideMany`, `clearOverrides` and `on` on the scope, `minimal` has the `CoreContainer` members only (`packages/neosyringe/src/types.ts:239`). The template has `createScope` and `destroy` in both. See [ContainerTemplate and BoundContainer](/api/types#containertemplate-and-boundcontainer).
+A builder with `scopeInputs` returns a `ContainerTemplate` of its profile, and each scope is a `BoundContainer` of that profile: `full` has `override`, `overrideMany`, `clearOverrides` and `on` on the scope, `minimal` has the `CoreContainer` members only (`packages/neosyringe/src/types.ts:252`). The template has `createScope` and `destroy` in both. See [ContainerTemplate and BoundContainer](/api/types#containertemplate-and-boundcontainer).
 
 ### The profile must be a literal
 

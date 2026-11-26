@@ -10,12 +10,13 @@ These changes are for the next major version. The destruction rule and the facto
 
 | Before (historical npm, `pnpm migration:historical`) | Now | What you do |
 |--------|-----|-------------|
-| A sync container has no initialize method. An async container throws the LegacyAsync message quoted under the protocol, from initialize and from a resolve. No client was created, because initialize() threw | `initialize()` is on every container (`CoreContainer`, `packages/neosyringe/src/types.ts:56`) | Await it before the first `resolve` when the graph has async work. Calling it on a sync container is harmless. |
+| A sync container has no initialize method. An async container throws the LegacyAsync message quoted under the protocol, from initialize and from a resolve. No client was created, because initialize() threw | `initialize()` is on every container (`CoreContainer`, `packages/neosyringe/src/types.ts:67`) | Await it before the first `resolve` when the graph has async work. Calling it on a sync container is harmless. |
 | Calling destroy and then resolve raised no error. The probed close count was 1, and that 1 is the FakeDatabase mock from the direct-read probe (`scripts/ci/historical-migration.mjs:94`). The plain BEFORE consumer printed `disposed 0` (`scripts/ci/historical-migration.mjs:532`). The real Database leaks on override | `destroy()` is final. Afterwards `resolve`, `initialize` and `createScope` throw `NEO_CONTAINER_DESTROYED` | Take scopes from a container you keep alive, and destroy the scope instead of the root. |
 | Historical override replaced only the overridden token; the already cached Report kept the real Database; the direct resolve printed fake (`scripts/ci/historical-migration.mjs:533`) | Both return `Promise<void>` and reset all caches of that container | Add `await`. Drop objects resolved before the call. |
 | Opaque factories (no `dependencies`). Not run on the historical archive | `dependencies` is required, even `[]`. The build says `NEO_FACTORY_DEPENDENCIES_REQUIRED` | List every token the factory resolves. |
-| A factory received the whole container. Not run on the historical archive | It receives a `FactoryContext`: `resolve`, `resolveAll` and `resolveMany` only (`packages/neosyringe/src/types.ts:174-183`). This row names no error code | Move `initialize`, `destroy`, `override` and `createScope` calls out of factories. |
-| A hand-built object typed `CoreContainer`, `Container` or `FactoryContext`, for example a test double. Not run on the historical archive | `resolveMany` is a required member of `CoreContainer` (`packages/neosyringe/src/types.ts:53`) and of `FactoryContext` (`packages/neosyringe/src/types.ts:182`). Without it the object no longer typechecks | Add a `resolveMany` method to the object. |
+| A factory received the whole container. Not run on the historical archive | It receives a `FactoryContext`: `resolve`, `resolveAll` and `resolveMany` only (`packages/neosyringe/src/types.ts:187-196`). This row names no error code | Move `initialize`, `destroy`, `override` and `createScope` calls out of factories. |
+| A hand-built object typed `CoreContainer`, `Container` or `FactoryContext`, for example a test double. Not run on the historical archive | `resolveMany` is a required member of `CoreContainer` (`packages/neosyringe/src/types.ts:64`) and of `FactoryContext` (`packages/neosyringe/src/types.ts:195`). Without it the object no longer typechecks | Add a `resolveMany` method to the object. |
+| A hand-built object typed `CoreContainer`, `Container`, `AsyncContainer`, `ContainerTemplate` or `BoundContainer`, for example a test double or an adapter, that has `destroy()` and no `[Symbol.asyncDispose]`. Not run on the historical archive | When the lib declares the symbol (`ESNext` or `ESNext.Disposable`), `[Symbol.asyncDispose]` is a required member of these five types (`packages/neosyringe/src/types.ts:21`, `:29`, `:260`). Without it the object no longer typechecks: `TS2741: Property '[SymbolConstructor.asyncDispose]' is missing` (`tests/consumer-types/negative-disposable/consumer.ts:34` to `:37`). A lib that does not declare the symbol sees no change | Add `async [Symbol.asyncDispose]() { await this.destroy(); }` to the object (`tests/consumer-types/positive-disposable/consumer.ts:61` to `:84`). |
 | Assuming a change in a parent rewires the child, or the reverse. Not run on the historical archive | A parent-owned service keeps the parent's dependencies | Register the consumer in the container whose dependency you changed. |
 | The historical plugin options do not mention testOverrides or validation. override depended on a runtime check of `process`. The run printed `override checks process.env.NODE_ENV: yes` (`scripts/ci/historical-migration.mjs:469`) | It is a build option: `testOverrides: true`, refused when `NODE_ENV=production`. The run printed `NEO_TEST_API_DISABLED: testOverrides cannot be enabled when NODE_ENV is production` (`packages/core/src/generator/DebugConfig.ts:35`) | Set the plugin option in the test build. |
 | An expression in `useValue` could be moved by generation. Not run on the historical archive | It is evaluated once where the configuration is evaluated, then shared by reference | Check expressions with effects. Use a factory for a value that is deferred or that differs per scope. |
@@ -57,7 +58,7 @@ With the default plugin options the legacy factory is refused:
 NEO_FACTORY_DEPENDENCIES_REQUIRED: factory 'Report' requires a dependencies list.
 ```
 
-Add the `dependencies` list first. That works with the old shape too, because the field is optional in the type (`packages/neosyringe/src/types.ts:398`), so it can ship before the upgrade.
+Add the `dependencies` list first. That works with the old shape too, because the field is optional in the type (`packages/neosyringe/src/types.ts:411`), so it can ship before the upgrade.
 
 ### `validation: 'compatible'` does not rescue it in the plugin
 
@@ -124,9 +125,9 @@ The candidate also printed `NEO_FACTORY_DEPENDENCIES_REQUIRED` for the legacy fa
 
 ## A holder typed `CoreContainer` that receives a template or a scope
 
-Only for a project that adds `scopeInputs`. A container without `scopeInputs` is typed as before, and its `createScope()` still returns `this` (`packages/neosyringe/src/types.ts:67`).
+Only for a project that adds `scopeInputs`. A container without `scopeInputs` is typed as before, and its `createScope()` still returns `this` (`packages/neosyringe/src/types.ts:80`).
 
-A builder with `scopeInputs` returns a `ContainerTemplate`, and its `createScope({ values })` returns a `BoundContainer` (`packages/neosyringe/src/types.ts:247` and `:239`). Neither is assignable to `CoreContainer` or `Container`: `createScope` takes values there, and the template has no `resolve`. A field, a parameter or a hand-written double typed `CoreContainer` or `Container` that you assign one of them to stops compiling.
+A builder with `scopeInputs` returns a `ContainerTemplate`, and its `createScope({ values })` returns a `BoundContainer` (`packages/neosyringe/src/types.ts:260` and `:252`). Neither is assignable to `CoreContainer` or `Container`: `createScope` takes values there, and the template has no `resolve`. A field, a parameter or a hand-written double typed `CoreContainer` or `Container` that you assign one of them to stops compiling.
 
 | You hold | Type it |
 |----------|---------|
