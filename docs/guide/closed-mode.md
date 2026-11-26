@@ -41,9 +41,9 @@ The five tokens play different parts:
 
 - `resolve(token)` is accepted for simple roots only. `resolveAll(token)` is accepted for `{ all: token }` roots only.
 - A call that the build can see outside the roots fails the build with `NEO_ROOT_NOT_EXPORTED`.
-- A call that the build cannot see (dynamic access, JavaScript) reaches a guard in the generated container. It throws an error whose `code` is `NEO_ROOT_NOT_EXPORTED` (`packages/core/src/generator/Generator.ts:671`, covered by `packages/core/tests/generator/t17-direct-profiles.test.ts:840`).
+- A call that the build cannot see (dynamic access, JavaScript) reaches a guard in the generated container. It throws an error whose `code` is `NEO_ROOT_NOT_EXPORTED` (`packages/core/src/generator/Generator.ts:673`, covered by `packages/core/tests/generator/t17-direct-profiles.test.ts:840`).
 - A dependency that a root needs stays in the container but is not public. Factories reach it through the `context`, because it is in their `dependencies`.
-- `override()` of a token that is not a root is accepted in a closed container, and so is `override()` of a token that was pruned. The plan for the next major asked for a refusal. Main has no root check on the override path (`packages/core/src/generator/LifecycleEmitter.ts:682` to `:687`). `tests/e2e/t20-docs-examples.test.ts` calls both.
+- `override()` of a token that is not a root is accepted in a closed container, and so is `override()` of a token that was pruned. The plan for the next major asked for a refusal. Main has no root check on the override path (`packages/core/src/generator/LifecycleEmitter.ts:697` to `:702`). `tests/e2e/t20-docs-examples.test.ts` calls both.
 
 ### Eager services
 
@@ -71,9 +71,9 @@ The registration is absent from the container, but a module-level effect is kept
 
 ## What closed mode requires
 
-- `validation: 'strict'`. Closed mode with `validation: 'compatible'` is `NEO_CLOSED_REQUIRES_STRICT` (`packages/core/src/analyzer/parsers/ConfigParser.ts:792`).
+- `validation: 'strict'`. Closed mode with `validation: 'compatible'` is `NEO_CLOSED_REQUIRES_STRICT` (`packages/core/src/analyzer/parsers/ConfigParser.ts:378`).
 - Every factory declares `dependencies`. An opaque factory in a closed container is `NEO_FACTORY_DEPENDENCIES_REQUIRED`.
-- `mode` written as the string literal `'open'` or `'closed'` (`packages/core/src/analyzer/parsers/ConfigParser.ts:582`). `mode: 'open'` with `roots` or `eager` is `NEO_CONFIG_UNSUPPORTED` (`packages/core/src/analyzer/parsers/ConfigParser.ts:606`).
+- `mode` written as the string literal `'open'` or `'closed'` (`packages/core/src/analyzer/parsers/ConfigParser.ts:84` to `:90`). `mode: 'open'` with `roots` or `eager` is `NEO_CONFIG_UNSUPPORTED` (`packages/core/src/analyzer/parsers/ConfigParser.ts:107` to `:111`).
 - Validation still covers the registrations that were pruned: a duplicate, a cycle or a missing provider is reported even if the provider is not kept.
 
 ## See why something was kept

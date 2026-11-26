@@ -120,7 +120,10 @@ defineBuilderConfig({
 
   // Open is the default and keeps every registration.
   // Closed keeps roots, eager services, and what they need.
-  optimization: { mode: 'closed', roots: [UserService], eager: [Warmup] }
+  optimization: { mode: 'closed', roots: [UserService], eager: [Warmup] },
+
+  // Values each scope is given by createScope({ values }): see scopeInputs below.
+  scopeInputs: [requestToken]
 });
 ```
 
@@ -141,6 +144,12 @@ A closed container requires `validation: 'strict'`.
 Type: `{ profile?: 'full' | 'minimal' }`
 
 `'full'` (default) gives a `Container`. `'minimal'` gives a `CoreContainer` without `override`, `overrideMany`, `clearOverrides` and `on`. The profile must be a literal the build can read; anything else is `NEO_CONFIG_UNSUPPORTED`. See [Profiles](/guide/profiles).
+
+### scopeInputs
+
+Type: `readonly InputToken[]` (`packages/neosyringe/src/types.ts:445`)
+
+The values each scope is given by `createScope({ values })`: a literal list of `useInterface<T>()` and `useProperty(...)` tokens. Every input is required and borrowed. The builder then returns a model that creates scopes and is destroyed, and does not resolve. A partial cannot declare it, and a class token is not an input. See [ContainerTemplate and BoundContainer](/api/types#containertemplate-and-boundcontainer) for the types and [states and ownership](/guide/states-and-ownership#scope-inputs) for the lifetime of the values.
 
 ### name
 
@@ -323,7 +332,7 @@ interface Injection<T> {
 }
 ```
 
-The real type is a union of four disjoint shapes (`packages/neosyringe/src/types.ts:291`).
+The real type is a union of four disjoint shapes (`packages/neosyringe/src/types.ts:353`).
 
 ### token
 
@@ -380,7 +389,7 @@ const plugins = container.resolveAll(useInterface<IPlugin>());
 
 Type: `true`
 
-Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:311`).
+Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:373`).
 
 <<< @/../examples/new-api/factories.ts#arrow
 
@@ -388,7 +397,7 @@ Marks the provider as a factory function. The `Injection` type requires it for a
 
 Type: `readonly DependencyRef[]`. A `DependencyRef` is a token, or `{ all: token }` for `resolveAll`.
 
-Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:312`), so the type does not catch the omission.
+Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:374`), so the type does not catch the omission.
 
 <<< @/../examples/new-api/factories.ts#all-dependency
 

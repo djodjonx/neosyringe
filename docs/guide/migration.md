@@ -57,7 +57,7 @@ With the default plugin options the legacy factory is refused:
 NEO_FACTORY_DEPENDENCIES_REQUIRED: factory 'Report' requires a dependencies list.
 ```
 
-Add the `dependencies` list first. That works with the old shape too, because the field is optional in the type (`packages/neosyringe/src/types.ts:312`), so it can ship before the upgrade.
+Add the `dependencies` list first. That works with the old shape too, because the field is optional in the type (`packages/neosyringe/src/types.ts:374`), so it can ship before the upgrade.
 
 ### `validation: 'compatible'` does not rescue it in the plugin
 
@@ -121,6 +121,20 @@ AFTER (candidate tarballs) behaviour, with `testOverrides: true`: `mocked` `"rep
 
 The candidate also printed `NEO_FACTORY_DEPENDENCIES_REQUIRED` for the legacy factory under strict validation and under `validation: 'compatible'`, `NEO_DISPOSABLE_TRANSIENT_CAPTURED` for a singleton that captures a disposable transient, and `{"during":"NEO_CONTAINER_BUSY","after":"fake","closed":1,"syncInitialize":"function"}` when `override` was not awaited. Script note, not an observation: the FactoryContext block is the constant string `no code asserted: the guide row does not name one, and this script does not invent one` (`scripts/ci/historical-migration.mjs:666`). Closed mode was not run: `not run here. Closed mode stays on tests/e2e/t20-migration.test.ts` (`tests/e2e/t20-migration.test.ts:106`).
 :::
+
+## A holder typed `CoreContainer` that receives a template or a scope
+
+Only for a project that adds `scopeInputs`. A container without `scopeInputs` is typed as before, and its `createScope()` still returns `this` (`packages/neosyringe/src/types.ts:67`).
+
+A builder with `scopeInputs` returns a `ContainerTemplate`, and its `createScope({ values })` returns a `BoundContainer` (`packages/neosyringe/src/types.ts:247` and `:239`). Neither is assignable to `CoreContainer` or `Container`: `createScope` takes values there, and the template has no `resolve`. A field, a parameter or a hand-written double typed `CoreContainer` or `Container` that you assign one of them to stops compiling.
+
+| You hold | Type it |
+|----------|---------|
+| The builder that declares `scopeInputs` | `ContainerTemplate<I, P>`, or let `defineBuilderConfig` infer it |
+| What `createScope({ values })` answered | `BoundContainer<I, P>`, with the same `I` and `P` |
+| A parent for `useContainer` | A builder without `scopeInputs`. A template or a bound scope is refused as a parent |
+
+`I` is the tuple of the input tokens, as `typeof` of the list. A function that only resolves can take `Pick<CoreContainer, 'resolve'>` and receive the scope.
 
 ## Open to closed is a second change
 

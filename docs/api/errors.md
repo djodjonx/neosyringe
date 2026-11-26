@@ -12,14 +12,14 @@ Each code below exists in `packages/*/src`. `tests/e2e/t20-docs-examples.test.ts
 
 | Code | Raised when | Run |
 |------|-------------|-----|
-| `NEO_CONFIG_UNSUPPORTED` | A configuration shape the build cannot read: a non-literal `runtime.profile`, `useValue` declared `owned`, `mode: 'open'` with `roots`. | yes |
+| `NEO_CONFIG_UNSUPPORTED` | A configuration shape the build cannot read: a non-literal `runtime.profile`, `useValue` declared `owned`, `mode: 'open'` with `roots`. For `scopeInputs`: a list that is not a literal array, a spread, an element that is not a `useInterface<T>()` or `useProperty(...)` token (a class token, `{ token, multi: true }`), and a partial that declares `scopeInputs` (not supported in a partial in this version, `packages/core/src/analyzer/parsers/ConfigParser.ts:208`). Each is reported at its own element, or at the list (`packages/core/src/analyzer/parsers/ConfigParser.ts:200` to `:219`). | yes |
 | `NEO_FACTORY_DEPENDENCIES_REQUIRED` | A factory has no `dependencies` list in strict validation. In `compatible` it is a warning (the factory is opaque). | yes |
 | `NEO_ASYNC_TRANSIENT` | An async factory with `lifecycle: 'transient'`. | yes |
 | `NEO_DISPOSABLE_TRANSIENT_CAPTURED` | A singleton captures a disposable transient, including through a chain of non-disposable transients. A singleton with `scoped: true` is still refused. A transient consumer, including one with `scoped: true`, is not. Strict is an error. `validation: 'compatible'` is a warning only on the core analyzer (`packages/core/src/analyzer/validators/DisposableTransientCaptureValidator.ts:301`). The plugin and the CLI stay strict (`packages/unplugin/src/session.ts:559`, `packages/cli/src/index.ts:105`). | yes |
-| `NEO_DUPLICATE_PROVIDER` | A simple token is registered twice, in the same container, a parent or a partial. | |
+| `NEO_DUPLICATE_PROVIDER` | A simple token is registered twice, in the same container, a parent or a partial. A scope input listed twice in `scopeInputs` (reported at the second), or a token that `scopeInputs` and a registration of the container or of a folded partial both provide (reported at that registration, `packages/core/src/analyzer/parsers/ConfigParser.ts:257` and `:269`). | |
 | `NEO_MISSING_PROVIDER` | A dependency is not in the view of the container. | |
 | `NEO_CYCLE` | A dependency cycle. | |
-| `NEO_UNKNOWN_CONTAINER` | A `resolve` whose receiver the build cannot attribute. An undecidable receiver, such as `get().createScope()`, stays this error (`packages/core/src/analyzer/collectors/resolutionUsages.ts:142`, `packages/core/src/analyzer/validators/MissingDependencyValidator.ts:136`). | yes |
+| `NEO_UNKNOWN_CONTAINER` | A `resolve` whose receiver the build cannot attribute. An undecidable receiver, such as `get().createScope()`, stays this error (`packages/core/src/analyzer/collectors/resolutionUsages.ts:144`, `packages/core/src/analyzer/validators/MissingDependencyValidator.ts:136`). | yes |
 | `NEO_MULTI_REQUIRES_RESOLVE_ALL` | `resolve` of a `multi` token (build time when visible, run time otherwise). | yes |
 | `NEO_ROOT_NOT_EXPORTED` | `resolve` of a token outside the roots of a closed container (build time when visible, run time otherwise). | yes |
 | `NEO_CLOSED_REQUIRES_STRICT` | Closed mode with `validation: 'compatible'`. | yes |
@@ -31,10 +31,17 @@ Each code below exists in `packages/*/src`. `tests/e2e/t20-docs-examples.test.ts
 | Code | Thrown when | Run |
 |------|-------------|-----|
 | `NEO_NOT_INITIALIZED` | `resolve` before `initialize()` finished. | yes |
-| `NEO_CONTAINER_BUSY` | `resolve`, `initialize`, `destroy`, `createScope`, `override` and `clearOverrides` during a reconfiguration. `override`, `clearOverrides` and `createScope` also while `initialize()` is running. `override` and `clearOverrides` also while the container is destroying (source only: `packages/core/src/generator/LifecycleEmitter.ts:635` to `:639`). `overrideMany` is refused in the same states as `override`. | yes |
-| `NEO_CONTAINER_FAILED` | `resolve` and `createScope()` after `initialize()` rejected. `override`, `overrideMany` and `clearOverrides` too (source only: `packages/core/src/generator/LifecycleEmitter.ts:647` to `:650`). | yes |
+| `NEO_CONTAINER_BUSY` | `resolve`, `initialize`, `destroy`, `createScope`, `override` and `clearOverrides` during a reconfiguration. `override`, `clearOverrides` and `createScope` also while `initialize()` is running. `override` and `clearOverrides` also while the container is destroying (source only: `packages/core/src/generator/LifecycleEmitter.ts:650` to `:654`). `overrideMany` is refused in the same states as `override`. | yes |
+| `NEO_CONTAINER_FAILED` | `resolve` and `createScope()` after `initialize()` rejected. `override`, `overrideMany` and `clearOverrides` too (source only: `packages/core/src/generator/LifecycleEmitter.ts:662` to `:665`). | yes |
 | `NEO_CONTAINER_DESTROYED` | Use of a destroyed container (`resolve`, `initialize`, `createScope`). | yes |
-| `NEO_SCOPE_PARENT_DESTROYED` | A child needs a parent that was destroyed. | yes |
+| `NEO_SCOPE_PARENT_DESTROYED` | A child needs a parent that was destroyed. `createScope({ values })` of a container with `scopeInputs` checks its parents too, before it reads the values (`packages/core/src/generator/inputEmitter.ts:126`); the `createScope()` of a container without inputs does not. | yes |
+| `NEO_SCOPE_INPUT_UNKNOWN` | `createScope({ values })` was given a token the container does not declare in `scopeInputs`. The message names it: `scope input 'X' is not declared`. | |
+| `NEO_SCOPE_INPUT_DUPLICATE` | `createScope({ values })` was given a declared token twice: `scope input 'X' is given twice`. | |
+| `NEO_SCOPE_INPUT_MISSING` | `createScope()` without values, or without one of the declared inputs. The message lists every missing input, in declared order: `scope inputs missing: A, B`. A scope never inherits the values of the scope it comes from, so `scope.createScope()` asks for all of them again. | |
+| `NEO_SCOPE_INPUTS_INVALID` | `createScope(options)` where `options` is not an object, `options.values` is not a list, or an entry is not an object: `createScope() needs { values: [{ token, useValue }] }`. | |
+| `NEO_SCOPE_INPUTS_UNBOUND` | `resolve`, `resolveAll`, `resolveMany` or `initialize` on the model of a container with `scopeInputs`, called from untyped code. The type has none of them. The message names the operation and the inputs: `resolve() needs scope inputs: A, B; call createScope({ values })`. `initialize()` rejects, the others throw. The model stays usable: it still makes scopes and can be destroyed. | |
+
+The five `NEO_SCOPE_INPUT*` codes are raised before any value is stored and before any factory runs: a refused `createScope` builds nothing (`packages/core/src/generator/inputEmitter.ts:81` to `:89`). The values are checked in this order: the shape of the options, then each entry in list order (unknown, then repeated), then the missing inputs. A token is compared by the id the build gave it, so two interfaces of the same shape are two tokens at run time (`packages/core/src/generator/inputEmitter.ts:65`). The checker cannot tell them apart: see [types](./types.md#containertemplate-and-boundcontainer).
 | `NEO_TEST_API_DISABLED` | `override`, `overrideMany` or `clearOverrides` in a build without `testOverrides: true`. `overrideMany([])` too. | yes |
 | `NEO_OVERRIDE_MULTI_UNSUPPORTED` | `override` of a `multi` token, or a `multi` token in an `overrideMany` batch. | yes |
 | `NEO_OVERRIDE_DUPLICATE` | The same token twice in one `overrideMany` batch. Nothing is invoked, disposed or changed. | yes |

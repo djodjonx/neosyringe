@@ -29,13 +29,13 @@ The full profile also has `override`, `overrideMany`, `clearOverrides` and `on` 
 | Failed (`initialize()` rejected) | Throws `NEO_CONTAINER_FAILED` | Rejects again with the first error | Ends the container |
 | Destroyed | Throws `NEO_CONTAINER_DESTROYED` | Throws `NEO_CONTAINER_DESTROYED` | Does nothing |
 
-The codes come from `packages/core/src/generator/LifecycleEmitter.ts:252` to `:259`. Each cell was checked by running a container, except the `destroy` cell of the Initializing row, which is source only (`packages/core/src/generator/LifecycleEmitter.ts:784` to `:785`):
+The codes come from `packages/core/src/generator/LifecycleEmitter.ts:253` to `:260`. Each cell was checked by running a container, except the `destroy` cell of the Initializing row, which is source only (`packages/core/src/generator/LifecycleEmitter.ts:813` to `:814`):
 
 - A container with an async factory refuses `resolve` before `initialize` (`async.ts` below).
 - When `initialize()` rejects, it first rolls back: the owned instances built during the attempt are disposed in reverse order. It rejects with the factory's own error, or, if a `dispose` threw during the rollback, with a new `Error` that has the same message, a `cause` (the factory's error) and `cleanupErrors`. The next `initialize()` rejects with the same object. `resolve` throws `NEO_CONTAINER_FAILED`. `createScope()` throws `NEO_CONTAINER_FAILED` too, so a failed container cannot give you a fresh scope. Nothing restarts by itself. To try again, build a new container, or take scopes from a root that never ran `initialize()` and drop the scope that failed.
 - While `override`, `overrideMany` or `clearOverrides` is still closing the old instances, `resolve`, `initialize`, `destroy`, `createScope`, `override`, `overrideMany` and `clearOverrides` all reject or throw `NEO_CONTAINER_BUSY`. This holds for a container with async factories and for one without. Await each call.
 - While `initialize()` is running, `override`, `overrideMany`, `clearOverrides` and `createScope()` throw `NEO_CONTAINER_BUSY`, and `resolve` throws `NEO_NOT_INITIALIZED`.
-- `override`, `overrideMany` and `clearOverrides` are refused with `NEO_CONTAINER_BUSY` while the container is destroying too. This is source only (`packages/core/src/generator/LifecycleEmitter.ts:635` to `:639`), not run here.
+- `override`, `overrideMany` and `clearOverrides` are refused with `NEO_CONTAINER_BUSY` while the container is destroying too. This is source only (`packages/core/src/generator/LifecycleEmitter.ts:650` to `:654`), not run here.
 
 A container with no async factory and no eager root is ready at once. `scopes.ts` below resolves without calling `initialize()`.
 
@@ -71,16 +71,50 @@ await scope.destroy();         // closes this scope only
 - You cannot create a scope from a destroyed container: `createScope()` throws `NEO_CONTAINER_DESTROYED`.
 - There is no request context. A scope per request is something you create and close yourself.
 
-`createScope()` is the same container for the usage check (`packages/core/src/analyzer/collectors/resolutionUsages.ts:147`). `scope.resolve(Repo)` is checked like a resolve on that container. A receiver the build cannot decide, such as `get().createScope()`, stays `NEO_UNKNOWN_CONTAINER` (`packages/core/src/analyzer/validators/MissingDependencyValidator.ts:136`). In the usage check, `validation: 'compatible'` turns only that undecidable case into a warning (`packages/core/src/analyzer/validators/MissingDependencyValidator.ts:135`). It does not make legacy factories legal; see the [migration guide](./migration.md).
+`createScope()` is the same container for the usage check (`packages/core/src/analyzer/collectors/resolutionUsages.ts:149`). `scope.resolve(Repo)` is checked like a resolve on that container. A receiver the build cannot decide, such as `get().createScope()`, stays `NEO_UNKNOWN_CONTAINER` (`packages/core/src/analyzer/validators/MissingDependencyValidator.ts:136`). In the usage check, `validation: 'compatible'` turns only that undecidable case into a warning (`packages/core/src/analyzer/validators/MissingDependencyValidator.ts:135`). It does not make legacy factories legal; see the [migration guide](./migration.md).
+
+### Scope inputs
+
+A scope often needs data that belongs to one request, one tenant or one transaction. A builder that declares `scopeInputs` receives it in `createScope({ values })`, and the services of that scope read it like any other dependency. Nothing is shared between scopes: no request context exists, and a scope never copies the values of the scope it comes from (`packages/core/src/generator/inputEmitter.ts:123` to `:130`).
+
+```typescript
+const requestToken = useInterface<RequestContext>();
+const retries = useProperty<number>(Handler, 'retries');
+
+export const requests = defineBuilderConfig({
+  useContainer: application,    // optional: a normal parent, as before
+  scopeInputs: [requestToken, retries],
+  injections: [{ token: Handler }],
+});
+
+const scope = requests.createScope({
+  values: [
+    { token: retries, useValue: 3 },
+    { token: requestToken, useValue: { requestId, tenantId } },
+  ],
+});
+await scope.initialize();
+const handler = scope.resolve(Handler);   // built with this request, on first use
+await scope.destroy();                    // closes the Handler it built, never the request object
+```
+
+- **The builder is a model.** Its type has `createScope` and `destroy` only (`ContainerTemplate`, see [types](/api/types#containertemplate-and-boundcontainer)). Called from untyped code, its `resolve`, `resolveAll`, `resolveMany` and `initialize` throw `NEO_SCOPE_INPUTS_UNBOUND`, which names the missing inputs, before any factory runs. The model stays usable.
+- **Everything is checked first.** Each input is required, in any order, once. An unknown token, a repeated token, a missing input and options of the wrong shape are refused with a stable code before any value is stored and before any factory runs (`NEO_SCOPE_INPUT_UNKNOWN`, `NEO_SCOPE_INPUT_DUPLICATE`, `NEO_SCOPE_INPUT_MISSING`, `NEO_SCOPE_INPUTS_INVALID`; see [errors](/api/errors#thrown-at-run-time-by-the-generated-container)). The list is read once: the entries are copied, so changing the array afterwards changes nothing.
+- **A value is present when you give it.** `{ token, useValue: undefined }` is the value `undefined`. An entry you leave out is missing.
+- **Two scopes, two states.** Each scope has its own values, its own singletons and its own destruction. Destroying one changes neither the model, nor its parents, nor a sibling.
+- **Values are borrowed.** `scope.destroy()` disposes the singletons the scope built and owns, once. It never disposes a value you gave, even a disposable one and even one a parent owns: the owner closes it (`packages/core/src/generator/ResolveEmitter.ts:52` to `:54`).
+- **First construction sees them.** A lazy singleton, an `eager` root of a closed container and an async singleton read the values when they are first built. A closed container does not export an input: `scope.resolve(requestToken)` is `NEO_ROOT_NOT_EXPORTED` there, at build time when the call is visible.
+- **A destroyed parent is refused.** `createScope({ values })` of a container whose parent was destroyed throws `NEO_SCOPE_PARENT_DESTROYED`, and a destroyed container throws `NEO_CONTAINER_DESTROYED`. A destroyed scope releases its values: the map it was built with, and the borrowed mark it set on each value it resolved (`packages/core/src/generator/inputEmitter.ts:139` to `:150`), so the scope does not keep the objects you gave it alive. A `destroy()` refused with `NEO_CONTAINER_BUSY` (during an `override`) closes nothing and releases nothing: the scope still answers its values.
+- **Not in a partial, not on a class.** An input is an interface or a property token (`useInterface<T>()`, `useProperty(...)`), never a class, never `multi`. A partial cannot declare `scopeInputs` in this version: declare them on the builder and list the tokens in the partial's `expects`.
 
 ## Who owns what
-
 | Origin | Owner | Closed by `destroy()` |
 |--------|-------|-----------------------|
 | Class singleton built by this container | This container | Yes, if it has a `dispose` function |
 | Singleton returned by a factory in this container | This container | Yes, if it has a `dispose` function |
 | Factory with `ownership: 'borrowed'` | Whoever created the resource | No |
 | `useValue` | Whoever created the value | No |
+| Value given to `createScope({ values })` | Whoever created the value | No |
 | Service resolved from a parent | The parent | Never by the child |
 | Transient instance | The caller | No: the container does not keep it |
 | Mock installed with `override` | The test | No |
@@ -96,7 +130,7 @@ await scope.destroy();         // closes this scope only
 
 <<< @/../examples/new-api/factories.ts#with-dependencies
 
-- **`dependencies` is required** in strict validation, even as `[]`. A factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED` (`packages/core/src/analyzer/parsers/InjectionParser.ts:469`). The TypeScript type of an injection still lets you omit it (`packages/neosyringe/src/types.ts:312`): the type does not warn you, the build does.
+- **`dependencies` is required** in strict validation, even as `[]`. A factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED` (`packages/core/src/analyzer/parsers/InjectionParser.ts:469`). The TypeScript type of an injection still lets you omit it (`packages/neosyringe/src/types.ts:374`): the type does not warn you, the build does.
 - An entry is a token, or `{ all: token }` for `resolveAll`.
 - The factory receives a `FactoryContext` with `resolve`, `resolveAll` and `resolveMany` only (`packages/neosyringe/src/types.ts:174`). It has no `initialize`, `destroy`, `override`, `on` or `createScope`.
 - A token that is not in `dependencies` throws `NEO_UNDECLARED_FACTORY_DEP` when the factory asks for it, including from a helper function it calls.
@@ -114,10 +148,10 @@ await scope.destroy();         // closes this scope only
 ## Limits
 
 - A ring of factory nodes is rejected with `NEO_CYCLE` and no `RangeError` at depth 100, 500 and 1000. The product test covers 100, 500 and 1000; its passing check is the ring of 1000 (`packages/core/tests/generator/t06-lifecycle-corpus.test.ts`, "L10 long ring rejected by the product"): `Analyzer.extractAll`, then `GraphValidator.validateAll`. A ring of 2000 needs about 650-700 KB of stack: it passes at the default stack (about 984 KB) and at `--stack-size=700`, and throws `RangeError: Maximum call stack size exceeded` in `GraphValidator.detectCycleCollect` (`packages/core/src/generator/GraphValidator.ts:153`) at `--stack-size=650`. Depth 5000 is the first of 100, 500, 1000, 2000 and 5000 that overflows on the default stack: the same `RangeError` at `GraphValidator.detectCycleCollect` (`packages/core/src/generator/GraphValidator.ts:153`). The walk is still recursive (`packages/core/src/generator/GraphValidator.ts:171`). Open point for topic 13.
-- A local transient factory that returns `undefined` is not the same on the two emitters. The reference emitter does not store the result, so `resolve` falls through (`packages/core/src/generator/Generator.ts:394`) and throws `NeoServiceNotFoundError` with message `[T06UndefT] Service not found or token not registered: UndefT` (`packages/core/src/generator/Generator.ts:416`). The optimized emitter returns `undefined` (`packages/core/src/generator/ResolveEmitter.ts:277`). Open point. The corpus does not generate that case, and no test asserts the throw.
+- A local transient factory that returns `undefined` is not the same on the two emitters. The reference emitter does not store the result, so `resolve` falls through (`packages/core/src/generator/Generator.ts:395`) and throws `NeoServiceNotFoundError` with message `[T06UndefT] Service not found or token not registered: UndefT` (`packages/core/src/generator/Generator.ts:417`). The optimized emitter returns `undefined` (`packages/core/src/generator/ResolveEmitter.ts:279`). Open point. The corpus does not generate that case, and no test asserts the throw.
 
 ## Migration
 
-A singleton whose value is `undefined` is now returned on the reference emitter (`packages/core/src/generator/Generator.ts:394`) instead of `NeoServiceNotFoundError`. The same check keeps that local `undefined` from falling through to a parent.
+A singleton whose value is `undefined` is now returned on the reference emitter (`packages/core/src/generator/Generator.ts:395`) instead of `NeoServiceNotFoundError`. The same check keeps that local `undefined` from falling through to a parent.
 
-A sync factory that calls `initialize()` while the state is `initializing` and that factory is still on the synchronous stack (`this._syncInit > 0`) gets `NEO_CONTAINER_BUSY` (`packages/core/src/generator/LifecycleEmitter.ts:188`) instead of joining the in-flight promise, which could deadlock. In every other state the call keeps its own result: `ready` resolves (`packages/core/src/generator/LifecycleEmitter.ts:190`), `failed` rejects with the first failure (`packages/core/src/generator/LifecycleEmitter.ts:191`), and `destroyed` throws `NEO_CONTAINER_DESTROYED` (`packages/core/src/generator/LifecycleEmitter.ts:193`). The depth flag lives on both container shapes (`packages/core/src/generator/Generator.ts:638`). It is raised only around the synchronous factory call, and only when the container has async work (`packages/core/src/generator/FactoryEmitter.ts:232` to `:238`). A container with no async factory does not emit the increment or the decrement: its `initialize()` never reads `_syncInit` (`packages/core/src/generator/LifecycleEmitter.ts:269`). A factory that awaits, then calls `initialize()`, is not flagged. A factory resolved after the container is ready, including one resolved from a scope, gets the resolved promise.
+A sync factory that calls `initialize()` while the state is `initializing` and that factory is still on the synchronous stack (`this._syncInit > 0`) gets `NEO_CONTAINER_BUSY` (`packages/core/src/generator/LifecycleEmitter.ts:189`) instead of joining the in-flight promise, which could deadlock. In every other state the call keeps its own result: `ready` resolves (`packages/core/src/generator/LifecycleEmitter.ts:191`), `failed` rejects with the first failure (`packages/core/src/generator/LifecycleEmitter.ts:192`), and `destroyed` throws `NEO_CONTAINER_DESTROYED` (`packages/core/src/generator/LifecycleEmitter.ts:194`). The depth flag lives on both container shapes (`packages/core/src/generator/Generator.ts:639`). It is raised only around the synchronous factory call, and only when the container has async work (`packages/core/src/generator/FactoryEmitter.ts:233` to `:239`). A container with no async factory does not emit the increment or the decrement: its `initialize()` never reads `_syncInit` (`packages/core/src/generator/LifecycleEmitter.ts:270`). A factory that awaits, then calls `initialize()`, is not flagged. A factory resolved after the container is ready, including one resolved from a scope, gets the resolved promise.
