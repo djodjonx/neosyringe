@@ -1,0 +1,25 @@
+== linear-s16 start 07:48:10 load { 12.19 17.71 11.49 }
+== linear-s16 exit 0 secs 50
+== table-s16 start 07:49:00 load { 6.94 15.43 11.00 }
+== table-s16 exit 0 secs 105
+== linear-s32 start 07:50:45 load { 50.85 28.01 16.34 }
+== linear-s32 exit 0 secs 58
+== table-s32 start 07:51:43 load { 23.87 24.51 15.83 }
+== table-s32 exit 0 secs 56
+== linear-s64 start 07:52:39 load { 13.03 21.37 15.20 }
+== linear-s64 exit 0 secs 45
+== table-s64 start 07:53:24 load { 8.73 19.10 14.69 }
+== table-s64 exit 0 secs 46
+== linear-s128 start 07:54:10 load { 6.85 17.16 14.20 }
+== linear-s128 exit 0 secs 55
+== table-s128 start 07:55:05 load { 6.06 15.09 13.60 }
+== table-s128 exit 0 secs 55
+== linear-s256 start 07:56:00 load { 4.95 13.27 13.02 }
+== linear-s256 exit 0 secs 64
+== table-s256 start 07:57:04 load { 4.67 11.50 12.36 }
+== table-s256 exit 0 secs 62
+== linear-s512 start 07:58:06 load { 3.47 9.93 11.72 }
+== linear-s512 exit 0 secs 109
+== table-s512 start 07:59:55 load { 3.00 7.84 10.68 }
+== table-s512 exit 0 secs 111
+== done 08:01:46

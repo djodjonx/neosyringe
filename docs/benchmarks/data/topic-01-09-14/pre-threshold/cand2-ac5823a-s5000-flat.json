@@ -1,0 +1,78 @@
+{
+  "environment": {
+    "node": "v22.23.2",
+    "typescript": "5.9.3",
+    "sha": "ac5823a7f394133e1a6b4e026894c30b21e37292",
+    "dirty": false,
+    "cpu": "Apple M4 Max",
+    "cores": 16,
+    "memory": 68719476736,
+    "os": "Darwin 27.2.0 darwin",
+    "flags": "[\"--expose-gc\"]",
+    "timerResolutionNs": 41.00000660400838
+  },
+  "params": {
+    "sizes": [
+      5000
+    ],
+    "shapes": [
+      "flat"
+    ],
+    "profiles": [
+      "full",
+      "minimal"
+    ],
+    "modes": [
+      "open",
+      "closed"
+    ],
+    "processes": 5,
+    "samples": 7,
+    "resolveCount": 100000,
+    "resolveBatches": 7,
+    "sampleMinimumNs": 1000000,
+    "k": {},
+    "multiResolveCount": "max(256, floor(50000 / size))",
+    "buildGroups": "5x7; size>=1000 is 1x7",
+    "caseOrder": "process-outer, reverse-odd"
+  },
+  "schedule": [],
+  "cases": [
+    {
+      "shape": "flat",
+      "profile": "full",
+      "mode": "open",
+      "size": 5000,
+      "checksum": 249717916,
+      "resolveCount": 100000,
+      "error": "file://<repo>/tests/bench/lib/measure.mjs:88\n  if (!fits(elapsedNs, minimumNs, false)) throw new Error('batch k exceeded');\n                                                ^\n\nError: batch k exceeded\n    at assertCovers (file://<repo>/tests/bench/lib/measure.mjs:88:49)\n    at searchK (file://<repo>/tests/bench/lib/measure.mjs:218:5)\n    at async calibrateTimed (file://<repo>/tests/bench/lib/measure.mjs:330:16)\n    at async file://<repo>/tests/bench/runtime-worker.mjs:27:17\n\nNode.js v22.23.2"
+    },
+    {
+      "shape": "flat",
+      "profile": "full",
+      "mode": "closed",
+      "size": 5000,
+      "checksum": 249717916,
+      "resolveCount": 100000,
+      "error": "file://<repo>/tests/bench/lib/measure.mjs:88\n  if (!fits(elapsedNs, minimumNs, false)) throw new Error('batch k exceeded');\n                                                ^\n\nError: batch k exceeded\n    at assertCovers (file://<repo>/tests/bench/lib/measure.mjs:88:49)\n    at searchK (file://<repo>/tests/bench/lib/measure.mjs:218:5)\n    at async calibrateTimed (file://<repo>/tests/bench/lib/measure.mjs:330:16)\n    at async file://<repo>/tests/bench/runtime-worker.mjs:27:17\n\nNode.js v22.23.2"
+    },
+    {
+      "shape": "flat",
+      "profile": "minimal",
+      "mode": "open",
+      "size": 5000,
+      "checksum": 249717916,
+      "resolveCount": 100000,
+      "error": "file://<repo>/tests/bench/lib/measure.mjs:88\n  if (!fits(elapsedNs, minimumNs, false)) throw new Error('batch k exceeded');\n                                                ^\n\nError: batch k exceeded\n    at assertCovers (file://<repo>/tests/bench/lib/measure.mjs:88:49)\n    at searchK (file://<repo>/tests/bench/lib/measure.mjs:218:5)\n    at async calibrateTimed (file://<repo>/tests/bench/lib/measure.mjs:330:16)\n    at async file://<repo>/tests/bench/runtime-worker.mjs:27:17\n\nNode.js v22.23.2"
+    },
+    {
+      "shape": "flat",
+      "profile": "minimal",
+      "mode": "closed",
+      "size": 5000,
+      "checksum": 249717916,
+      "resolveCount": 100000,
+      "error": "file://<repo>/tests/bench/lib/measure.mjs:88\n  if (!fits(elapsedNs, minimumNs, false)) throw new Error('batch k exceeded');\n                                                ^\n\nError: batch k exceeded\n    at assertCovers (file://<repo>/tests/bench/lib/measure.mjs:88:49)\n    at searchK (file://<repo>/tests/bench/lib/measure.mjs:218:5)\n    at async calibrateTimed (file://<repo>/tests/bench/lib/measure.mjs:330:16)\n    at async file://<repo>/tests/bench/runtime-worker.mjs:27:17\n\nNode.js v22.23.2"
+    }
+  ]
+}
