@@ -705,7 +705,7 @@ export class InjectionParser {
       if (found) return;
       if (TSContext.ts.isCallExpression(node) && TSContext.ts.isPropertyAccessExpression(node.expression)) {
         const name = node.expression.name.text;
-        if ((name === 'resolve' || name === 'resolveAll') && this.isOtherContainerReceiver(node.expression.expression, paramSymbol)) {
+        if ((name === 'resolve' || name === 'resolveAll' || name === 'resolveMany') && this.isOtherContainerReceiver(node.expression.expression, paramSymbol)) {
           found = true;
           return;
         }

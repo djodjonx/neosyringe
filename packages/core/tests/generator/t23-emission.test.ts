@@ -8,7 +8,12 @@ import { createVirtualProgram } from '../helpers/createVirtualProgram';
 import { captureRoot, memoryProgram } from '../helpers/memoryModules';
 
 /** The type a generated factory declaration carries: the user text is assigned to it, so it is checked against it. */
-const FACTORY_TYPE = '(context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[] }) => unknown';
+/** The context type a factory is written against, with the names of the two `resolveMany` aliases. */
+function factoryTypeWith(token: string, values: string): string {
+  return `(context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly ${token}<unknown>[]>(tokens: T): ${values}<T>; resolveMany<const T extends readonly (${token}<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends ${token}<infer V> ? V : never : never } }) => unknown`;
+}
+
+const FACTORY_TYPE = factoryTypeWith('__NeoToken', '__NeoValues');
 
 interface RuntimeContainer {
   resolve: (token: unknown) => unknown;
@@ -401,7 +406,12 @@ describe('T23 an origin without a source file to read is generated text (R7)', (
     const graph = graphOf([['Local', node]]);
     const rendered = new Generator(graph, true).generateRendered();
     expect(rendered.copies).toEqual([]);
-    expect(rendered.code).toContain(`const userFactory: ${FACTORY_TYPE} = () => ({ n: 5 });`);
+    // Inline output suffixes the alias names: read them from the output.
+    const token = /^type (__NeoToken\w*)</m.exec(rendered.code)?.[1];
+    const values = /^type (__NeoValues\w*)</m.exec(rendered.code)?.[1];
+    expect(token, 'token alias declared').toBeDefined();
+    expect(values, 'values alias declared').toBeDefined();
+    expect(rendered.code).toContain(`const userFactory: ${factoryTypeWith(token ?? '', values ?? '')} = () => ({ n: 5 });`);
     expect(rendered.code).toBe(new Generator(graph, true).generate());
   });
 });

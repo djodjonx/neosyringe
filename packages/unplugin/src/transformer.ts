@@ -124,7 +124,7 @@ export default function neoSyringeTransformer(
     if (output.code !== sourceFile.text) transformedSources.set(sourceFile.fileName, output.code);
   }
 
-  // A resolve / resolveAll call is checked against its container once every file is known,
+  // A resolve / resolveAll / resolveMany call is checked against its container once every file is known,
   // as the bundler plugin does at buildEnd. The same snapshot answers for the whole program.
   const usageErrors = canReachNeoSyringe ? resolutionUsageErrors(analysisProgram) : [];
   if (usageErrors.length > 0) {

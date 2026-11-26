@@ -97,6 +97,12 @@ jobs:
       - name: Negative closed consumer types
         run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative-closed --expect-file expected-diagnostic.txt
 
+      - name: Positive consumer types from the packed archive
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/positive --pack
+
+      - name: Negative consumer types from the packed archive
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative --expect-file expected-diagnostic.txt --pack
+
       - name: Scale consumer types 1000
         run: node scripts/ci/consumer-types-scale.mjs 1000
 

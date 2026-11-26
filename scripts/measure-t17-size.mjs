@@ -229,7 +229,7 @@ const MEMBER_CATEGORIES = [
   ['factory-policy', /^__neoPolicy|^__neoRead_|^__neoLease$/],
   ['accessors', /^_direct_|^_get_|^_list_/],
   ['dispatch-tables', /^__neo(Dispatch|Roots|Lists|RootLists)/],
-  ['resolve', /^(resolve|resolveAll|_resolveInternal|_resolveAllInternal)$/],
+  ['resolve', /^(resolve|resolveAll|resolveMany|_resolveInternal|_resolveAllInternal)$/],
   ['lifecycle', /^(initialize|_runInitialize|createScope|destroy|_runDestroy|_close|override|clearOverrides|_reconfigure)$/],
   ['events', /^(on|notifyResolve)$/],
   ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock)$/],

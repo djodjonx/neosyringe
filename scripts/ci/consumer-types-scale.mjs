@@ -6,8 +6,8 @@
 // --pack alone runs `pnpm pack` on packages/neosyringe, proves the tarball carries the build on disk,
 // extracts it and typechecks the consumer against the extracted package. It does not build.
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
-import { assertDistNewerThanSrc, assertTarballFromBuild, extractTarball } from './lib/tarball-proof.mjs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { PackError, resolveTypesEntry } from './lib/pack-archive.mjs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,16 +47,6 @@ if (bad !== undefined && bad !== 'start' && bad !== 'middle' && bad !== 'end') {
   fail(`--bad must be start, middle, or end, got ${bad ?? ''}`);
 }
 
-function typesEntry(dir) {
-  const pkgFile = path.join(dir, 'package.json');
-  if (!existsSync(pkgFile)) return path.join(dir, 'index.ts');
-  const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'));
-  const exported = pkg.exports?.['.']?.types;
-  const relative = typeof exported === 'string' ? exported : pkg.types;
-  if (typeof relative !== 'string') return path.join(dir, 'index.ts');
-  return path.resolve(dir, relative);
-}
-
 function badIndex(where) {
   if (where === 'start') return 0;
   if (where === 'end') return size - 1;
@@ -66,31 +56,14 @@ function badIndex(where) {
 const dir = mkdtempSync(path.join(tmpdir(), 'neosyringe-scale-'));
 scratch = dir;
 
-function packFresh() {
-  const packed = spawnSync('pnpm', ['pack', '--json', '--pack-destination', dir], {
-    cwd: packageDir,
-    encoding: 'utf8',
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  if (packed.status !== 0) fail(`pnpm pack failed\n${packed.stdout ?? ''}\n${packed.stderr ?? ''}`);
-  const output = packed.stdout ?? '';
-  const parsed = JSON.parse(output.slice(output.indexOf('{'), output.lastIndexOf('}') + 1));
-  const filename = parsed.filename ?? parsed.name;
-  if (typeof filename !== 'string' || !filename.endsWith('.tgz')) fail(`pnpm pack json has no tarball:\n${output}`);
-  const tarball = path.isAbsolute(filename) ? filename : path.join(dir, filename);
-  const pkg = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
-  assertDistNewerThanSrc(path.join(packageDir, pkg.types), path.join(packageDir, 'src'));
-  assertTarballFromBuild(tarball, packageDir);
-  return tarball;
-}
-
 /** Where the consumer finds the types: the source, an extracted tarball, or an extracted folder. */
 function resolveEntry() {
-  if (pack === undefined) return { entry: sourceEntry, label: 'source' };
-  if (pack !== '' && !pack.endsWith('.tgz')) return { entry: typesEntry(path.resolve(pack)), label: 'folder' };
-  const tarball = pack === '' ? packFresh() : path.resolve(pack);
-  const unpacked = extractTarball(tarball, path.join(dir, 'extracted'));
-  return { entry: typesEntry(unpacked), label: `archive ${path.basename(tarball)}` };
+  try {
+    return resolveTypesEntry({ pack, packageDir, scratch: dir, sourceEntry });
+  } catch (error) {
+    if (error instanceof PackError) fail(error.message);
+    throw error;
+  }
 }
 
 const classes = [];

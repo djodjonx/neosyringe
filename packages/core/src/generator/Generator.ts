@@ -4,7 +4,8 @@ import { DependencyGraph, DependencyNode, SourceRewrite, TokenId, TypeReference 
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
-import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, legacyParentInterface, parentOpenCheck, resolveListenerOverload, singleOverload, isBorrowedInstance, afterStore } from './ResolveEmitter';
+import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, legacyParentInterface, manyEntryGuard, parentOpenCheck, resolveListenerOverload, singleOverload, isBorrowedInstance, afterStore } from './ResolveEmitter';
+import { emitManyAliases, emitResolveMany, type ManyNames } from './manyEmitter';
 import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
@@ -109,6 +110,8 @@ export class Generator {
   private readonly notFoundErrorClassName: string;
   /** Interface that types the `useContainer` parents the class reads. */
   private readonly legacyParentName: string;
+  /** Names of the two type aliases `resolveMany` and the factory contexts are written with. */
+  private readonly manyNames: ManyNames;
   /** Identity of this container among the artifacts of the build. Keys the names it takes from the pool. */
   private readonly artifactKey: string;
   /** Names of generated top-level bindings. Shared by every Generator of one source file. */
@@ -210,6 +213,10 @@ export class Generator {
     this.containerClassName = this.names.forKey(`class:${artifactKey}`, `NeoContainer${suffix}`);
     this.notFoundErrorClassName = this.names.forKey(`error:${artifactKey}`, `NeoServiceNotFoundError${suffix}`);
     this.legacyParentName = this.names.forKey(`legacy:${artifactKey}`, `NeoLegacyParent${suffix}`);
+    this.manyNames = {
+      token: this.names.forKey(`many-token:${artifactKey}`, `__NeoToken${suffix}`),
+      values: this.names.forKey(`many-values:${artifactKey}`, `__NeoValues${suffix}`),
+    };
   }
 
   /**
@@ -564,6 +571,7 @@ export class Generator {
         className: this.containerClassName,
         notFoundErrorClassName: this.notFoundErrorClassName,
         legacyParentName: this.legacyParentName,
+        manyNames: this.manyNames,
         eagerLines,
         providerTypes,
         dispatchLinearMax: this.dispatch?.linearMax ?? DISPATCH_LINEAR_MAX,
@@ -582,7 +590,7 @@ ${containerClass}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     }
 
-    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName);
+    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, undefined, this.manyNames);
     const resolveCases = generateResolveCases(
       emitted,
       sorted,
@@ -590,9 +598,9 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
       hasAsync,
       `${this.containerClassName}.formatToken`,
     );
-    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName);
+    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, this.manyNames);
     // The policy and the lease of the declared factories: only the helpers a creator asks for.
-    const factoryHelpers = linkedFactoryLeaseHelpers(this.containerClassName, [...factories, ...multiFactories]);
+    const factoryHelpers = linkedFactoryLeaseHelpers(this.containerClassName, [...factories, ...multiFactories], this.manyNames);
     const resolveAllMethod = generateResolveAllMethod(emitted, getImport, hasAsync, closed);
     const initializeMethod = hasAsync
       ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines)
@@ -682,6 +690,8 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
 ${importLines.join('\n')}
 ${concat(captureLines, '\n')}
 
+${emitManyAliases(this.manyNames)}
+
 ${legacyParentInterface(this.legacyParentName)}
 
 class ${this.notFoundErrorClassName} extends Error {
@@ -755,6 +765,8 @@ class ${this.containerClassName} {
   ${destroyMethod}
 
   ${resolveAllMethod}
+
+  ${emitResolveMany(manyEntryGuard(hasAsync, false), this.manyNames)}
 
   private resolveLocal(token: unknown): unknown {
     ${resolveCases.join('\n    ')}

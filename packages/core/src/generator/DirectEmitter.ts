@@ -13,6 +13,7 @@ import {
 } from './fragments';
 import { dispatchIsLinear, emitDispatchField, emitDispatchRead, emitLinearRead, type DispatchEntry } from './dispatchEmitter';
 import { factoryLeaseHelpers } from './factoryLeaseEmitter';
+import { DEFAULT_MANY_NAMES, emitManyAliases, emitResolveMany, type ManyNames } from './manyEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 import {
   constructionExpression,
@@ -32,6 +33,7 @@ import {
   generateMultiResolveGuard,
   legacyParentInterface,
   type ListReader,
+  manyEntryGuard,
   parentOpenCheck,
   resolveListenerOverload,
   singleOverload,
@@ -72,6 +74,8 @@ export interface OptimizedContainerInput {
   copy?: UserCopy;
   /** Name of the generated interface that types the `useContainer` parents. Absent: `NeoLegacyParent`. */
   legacyParentName?: string;
+  /** Names of the type aliases `resolveMany` and the factory contexts are written with. Absent: the plain names. */
+  manyNames?: ManyNames;
   /** The type of each getter, from the provider. Absent: every getter answers `unknown`. */
   providerTypes?: GetProviderTypes;
   /** Rows up to which a dispatch table is the linear cases and not the shared table. Each table is counted on its own rows. */
@@ -314,6 +318,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const { graph, sorted, getImport, getForeignImport, hasAsync, closed, minimal } = input;
   const copy = input.copy ?? generatedCopy;
   const parentName = input.legacyParentName ?? 'NeoLegacyParent';
+  const manyNames = input.manyNames ?? DEFAULT_MANY_NAMES;
   const providerTypes = input.providerTypes ?? noProviderTypes;
   const direct: DirectReads = { notify: !minimal };
   const honourOverrides = !minimal && input.testOverrides;
@@ -332,8 +337,8 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
     }
   }
   const creators = [
-    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, new Set(inlined.keys())),
-    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className),
+    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, new Set(inlined.keys()), manyNames),
+    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, manyNames),
   ];
   const accessors = [
     ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides, single: unified }, `${input.className}.formatToken`, providerTypes, inlined),
@@ -360,7 +365,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const catalog: Helper[] = [
     { id: 'resolveSingle', parts: [generatedText(joined([resolve.internalMethod, resolve.internalTable]))], needs: [] },
     { id: 'resolveAll', parts: [generatedText(resolveAll.internalMethod)], needs: [] },
-    ...factoryLeaseHelpers(input.className),
+    ...factoryLeaseHelpers(input.className, manyNames),
   ];
   // Deviation from the spec's `linkHelpers`: the helpers are kept in their slots (after `resolve`,
   // after `resolveAll`) and not put before every root, because moving them would change the
@@ -396,12 +401,16 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const single = linked.get('resolveSingle');
   if (single) members.push(single);
   members.push(formatTokenMember(), destroy, resolveAllPublic);
+  // A public member: it loops over the public `resolve`, so a token has the guard, the closed-root check and the events of a single call.
+  members.push(emitResolveMany(manyEntryGuard(hasAsync, minimal), manyNames));
   const many = linked.get('resolveAll');
   if (many) members.push(many);
   members.push(...listMembers(input, resolveAll.publicLists, many ? resolveAll.internalLists : []));
   members.push(input.debugGetters);
 
-  const container = fragment`${legacyParentInterface(parentName)}
+  const container = fragment`${emitManyAliases(manyNames)}
+
+${legacyParentInterface(parentName)}
 
 class ${input.notFoundErrorClassName} extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }

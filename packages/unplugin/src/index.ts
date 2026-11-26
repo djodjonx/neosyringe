@@ -145,7 +145,7 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
     },
 
     /**
-     * Re-check resolve / resolveAll against each call's container once every file is known.
+     * Re-check resolve / resolveAll / resolveMany against each call's container once every file is known.
      */
     buildEnd() {
       let errors: string[] = [];

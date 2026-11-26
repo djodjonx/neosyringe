@@ -23,7 +23,8 @@ export class MissingDependencyValidator implements IValidator {
   ) {}
 
   /**
-   * Checks each resolve / resolveAll in this file against that call's container.
+   * Checks each resolve / resolveAll, and each token of a resolveMany list, in this file against that call's container.
+   * A diagnostic points at `usage.at`: the call, or the element of a resolveMany list.
    * Constructor checks stay on {@link validate} and still union single and multi.
    */
   validateResolutionUsages(sourceFile: ts.SourceFile, allConfigs: Map<string, ConfigGraph>): AnalysisError[] {
@@ -32,12 +33,12 @@ export class MissingDependencyValidator implements IValidator {
     const views = new Map<string, ContainerTokenView>();
     for (const usage of usages) {
       if (!usage.containerKey) {
-        errors.push(this.unknownContainer(usage.node, sourceFile));
+        errors.push(this.unknownContainer(usage.at, sourceFile, usage.dynamicList === true));
         continue;
       }
       const view = this.viewFor(allConfigs, usage.containerKey, views);
       if (!view) {
-        errors.push(this.unknownContainer(usage.node, sourceFile));
+        errors.push(this.unknownContainer(usage.at, sourceFile));
         continue;
       }
       if (!usage.tokenId) continue;
@@ -49,7 +50,7 @@ export class MissingDependencyValidator implements IValidator {
           code: 'NEO_ROOT_NOT_EXPORTED',
           severity: 'error',
           message: `NEO_ROOT_NOT_EXPORTED: '${getSimpleName(usage.tokenId)}' is not an exported root of this closed container.`,
-          node: usage.node,
+          node: usage.at,
           sourceFile,
           containerId: usage.containerKey,
         });
@@ -58,7 +59,7 @@ export class MissingDependencyValidator implements IValidator {
       if (allowed.has(usage.tokenId)) {
         // The token exists. A closed container still refuses it outside its roots.
         // ADR006 lines 29-31. Factory context is not this path.
-        const denied = this.privateRoot(allConfigs.get(usage.containerKey), usage.kind, usage.tokenId, usage.node, sourceFile, usage.containerKey);
+        const denied = this.privateRoot(allConfigs.get(usage.containerKey), usage.kind, usage.tokenId, usage.at, sourceFile, usage.containerKey);
         if (denied) errors.push(denied);
         continue;
       }
@@ -68,7 +69,7 @@ export class MissingDependencyValidator implements IValidator {
           code: 'NEO_MULTI_REQUIRES_RESOLVE_ALL',
           severity: 'error',
           message: `NEO_MULTI_REQUIRES_RESOLVE_ALL: '${getSimpleName(usage.tokenId)}' is multi; use resolveAll`,
-          node: usage.node,
+          node: usage.at,
           sourceFile,
           containerId: usage.containerKey,
           context: { tokenText: usage.tokenId },
@@ -82,7 +83,7 @@ export class MissingDependencyValidator implements IValidator {
         code: 'NEO_MISSING_PROVIDER',
         severity: 'error',
         message: `NEO_MISSING_PROVIDER: '${getSimpleName(usage.tokenId)}' is not in container '${usage.containerKey}'`,
-        node: usage.node,
+        node: usage.at,
         sourceFile,
         containerId: usage.containerKey,
         context: { tokenText: usage.tokenId },
@@ -128,12 +129,15 @@ export class MissingDependencyValidator implements IValidator {
     };
   }
 
-  private unknownContainer(node: ts.Node, sourceFile: ts.SourceFile): AnalysisError {
+  /** `dynamicList`: a resolveMany list the analyzer cannot read, on a container it knows. Same rule, same severity. */
+  private unknownContainer(node: ts.Node, sourceFile: ts.SourceFile, dynamicList = false): AnalysisError {
     return {
       type: 'unsupported',
       code: 'NEO_UNKNOWN_CONTAINER',
       severity: this.validation === 'compatible' ? 'warning' : 'error',
-      message: 'NEO_UNKNOWN_CONTAINER: resolve receiver is not a known container',
+      message: dynamicList
+        ? 'NEO_UNKNOWN_CONTAINER: resolveMany tokens are not a literal list'
+        : 'NEO_UNKNOWN_CONTAINER: resolve receiver is not a known container',
       node,
       sourceFile,
     };

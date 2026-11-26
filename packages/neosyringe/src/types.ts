@@ -32,6 +32,26 @@ export interface CoreContainer {
    */
   resolveAll<T>(token: Token<T>): T[];
 
+  /**
+   * Resolves several tokens in one call and answers their values as a tuple, in the order of the tokens.
+   *
+   * - The result has one value per token, with its own type: `resolveMany([Mailer, clock])` is `[Mailer, Clock]`.
+   *   An array that is not a tuple gives an array, and an empty list gives `[]`.
+   * - Every token is resolved by `resolve()`, left to right, so it has the same guards, events and errors.
+   *   A token listed twice is resolved twice: a singleton answers the same instance, a transient a new one.
+   * - The container is checked before the list is read: an empty list on a destroyed container, a container
+   *   that is not initialized or whose parent is destroyed throws the same error code as `resolve()`. The message
+   *   names `resolveMany()` for `NEO_NOT_INITIALIZED`; the other guards keep the message of `resolve()`.
+   * - The first error stops the batch: later tokens are not resolved, and what the earlier tokens built stays
+   *   built. There is no rollback.
+   * - Synchronous: a token of an async factory is read after `initialize()`, and the values are never promises.
+   *
+   * The build plugin reads a literal list: each element is checked like a `resolve()` call, at its own position.
+   * A list the plugin cannot read (a variable, a call, a spread of a variable) works at run time and is reported
+   * like a receiver it cannot follow (`NEO_UNKNOWN_CONTAINER`, an error in `strict`, a warning in `compatible`).
+   */
+  resolveMany<const T extends readonly Token<unknown>[]>(tokens: T): ValuesOf<T>;
+
   /** Brings async singletons to ready. Sync containers resolve this immediately. */
   initialize(): Promise<void>;
 
@@ -145,6 +165,12 @@ export type ScopeArguments<I extends readonly InputToken[], E extends readonly I
 export interface FactoryContext {
   resolve<T>(token: Token<T>): T;
   resolveAll<T>(token: Token<T>): T[];
+  /**
+   * The tuple of the values of the tokens, in order, like {@link CoreContainer.resolveMany}. Every token goes
+   * through this context's own `resolve`: an undeclared token throws `NEO_UNDECLARED_FACTORY_DEP`, and a context
+   * used after its factory returned throws `NEO_FACTORY_CONTEXT_EXPIRED`, an empty list included.
+   */
+  resolveMany<const T extends readonly Token<unknown>[]>(tokens: T): ValuesOf<T>;
 }
 
 /**

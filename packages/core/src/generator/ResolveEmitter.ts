@@ -71,6 +71,18 @@ export function parentOpenCheck(hasAsync: boolean, minimal = false): string {
     this._assertParents();`;
 }
 
+/**
+ * The guard `resolveMany` runs before it reads its list, whatever the list holds: the checks `resolve` makes, so an
+ * empty batch is refused as a batch of one token is. A sync container has the same open check as the interior of
+ * `resolve` ({@link parentOpenCheck}). An async one checks its initialization state first, as its public `resolve`
+ * does with `_guardPublic`, then the parents.
+ */
+export function manyEntryGuard(hasAsync: boolean, minimal: boolean): string {
+  if (!hasAsync) return parentOpenCheck(false, minimal);
+  return `this._guardPublic('resolveMany()');
+    this._assertParents();`;
+}
+
 /** Same token keys as {@link generateMultiResolveGuard}. Checked before any state change. */
 export function generateOverrideMultiGuard(graph: DependencyGraph, getImport: GetImport): string {
   if (!graph.multiNodes || graph.multiNodes.size === 0) return '';

@@ -17,7 +17,7 @@ interface LocatedUsage {
 }
 
 /**
- * Re-check resolve / resolveAll once every transformed file is known.
+ * Re-check resolve / resolveAll / resolveMany once every transformed file is known.
  * Warnings stay out of the build failure. The three usage codes are read from
  * `error.code`, not from the message text.
  */
@@ -68,7 +68,7 @@ function sortLocated(items: LocatedUsage[]): void {
   );
 }
 
-/** A resolve / resolveAll call the checker refuses. These are reported once every file is known, not per file. */
+/** A resolve / resolveAll / resolveMany call the checker refuses. These are reported once every file is known, not per file. */
 export function isResolutionUsageError(error: AnalysisError): boolean {
   if (error.severity === 'warning') return false;
   if (error.code === 'NEO_ROOT_NOT_EXPORTED') return true;

@@ -1,4 +1,5 @@
 import { generatedText, selectHelpers, type Fragment, type Helper } from './fragments';
+import { DEFAULT_MANY_NAMES, factoryContextType, manyContextFunction, type ManyNames } from './manyEmitter';
 
 /**
  * Permission policy and lease of a declared factory (topic 14).
@@ -20,16 +21,6 @@ export interface PolicyEntry {
   readonly keyExpression: string;
   readonly mode: PolicyMode;
 }
-
-/**
- * What a factory body reads of its context. The calls are generic: the factory text is the user's and states
- * the type it expects (`new UserService(ctx.resolve(loggerToken))` asks for an `ILogger`), the context only
- * forwards a token. A context that answered `unknown` would refuse that text (TS2345) in the Program the
- * transformer builds from the transformed source, and would refuse a parameter annotated with the public
- * `FactoryContext`. The closures of the lease are `<T,>(token: unknown): T`: the trailing comma keeps the arrow
- * generic when the output lands in a `.tsx` file.
- */
-export const FACTORY_CONTEXT = '{ resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[] }';
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
@@ -57,33 +48,34 @@ function policyHelper(): string {
  * `resolve<T>(token)`: the read answers `unknown` and the one assertion `as T` is the contract of the user's factory text.
  * The messages are the ones every factory has always thrown.
  */
-function leaseHelper(className: string): string {
+function leaseHelper(className: string, names: ManyNames): string {
+  const expiredCheck = "if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');";
   return `private static __neoLease(
     policy: ${policyType(className)},
     label: string,
     host: ${className},
     read: (host: ${className}, token: unknown, all: boolean) => unknown,
-  ): { readonly context: ${FACTORY_CONTEXT}; readonly expire: () => void } {
+  ): { readonly context: ${factoryContextType(names)}; readonly expire: () => void } {
     let expired = false;
     const fail = (code: string, detail: string): never => {
       const error = new Error(code + ': factory ' + label + ' ' + detail) as Error & { code: string };
       error.code = code;
       throw error;
     };
+    const resolve = <T,>(token: unknown): T => {
+      ${expiredCheck}
+      const mode = policy.mode(token);
+      if (mode !== 'simple' && mode !== 'all') fail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
+      return read(host, token, false) as T;
+    };
+    const resolveAll = <T,>(token: unknown): T[] => {
+      ${expiredCheck}
+      if (policy.mode(token) !== 'all') fail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
+      return read(host, token, true) as T[];
+    };
+    ${manyContextFunction(names, 'resolveMany', 'resolve', expiredCheck)}
     return {
-      context: {
-        resolve: <T,>(token: unknown): T => {
-          if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-          const mode = policy.mode(token);
-          if (mode !== 'simple' && mode !== 'all') fail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
-          return read(host, token, false) as T;
-        },
-        resolveAll: <T,>(token: unknown): T[] => {
-          if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-          if (policy.mode(token) !== 'all') fail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
-          return read(host, token, true) as T[];
-        },
-      },
+      context: { resolve, resolveAll, resolveMany },
       expire: () => { expired = true; },
     };
   }`;
@@ -93,20 +85,20 @@ function leaseHelper(className: string): string {
  * The two helpers of the class `className`, as catalog entries. Neither calls another helper. The name is checked where
  * a declaration is emitted ({@link emitFactoryPolicy}), so a class with no declared factory writes nothing of it.
  */
-export function factoryLeaseHelpers(className: string): Helper[] {
+export function factoryLeaseHelpers(className: string, names: ManyNames = DEFAULT_MANY_NAMES): Helper[] {
   return [
     { id: 'factoryPolicy', parts: [generatedText(policyHelper())], needs: [] },
-    { id: 'factoryLease', parts: [generatedText(leaseHelper(className))], needs: [] },
+    { id: 'factoryLease', parts: [generatedText(leaseHelper(className, names))], needs: [] },
   ];
 }
 
 /** The helpers `roots` ask for, for an emitter that declares its other helpers itself (the reference emitter). */
-export function linkedFactoryLeaseHelpers(className: string, roots: readonly Fragment[]): Helper[] {
+export function linkedFactoryLeaseHelpers(className: string, roots: readonly Fragment[], names: ManyNames = DEFAULT_MANY_NAMES): Helper[] {
   const own = roots.map((root): Fragment => ({
     parts: root.parts,
     needs: root.needs.filter((id) => id === 'factoryPolicy' || id === 'factoryLease'),
   }));
-  return selectHelpers(own, factoryLeaseHelpers(className));
+  return selectHelpers(own, factoryLeaseHelpers(className, names));
 }
 
 /** The member and field names of one declaration, so the call site and the declaration cannot drift apart. */

@@ -30,7 +30,7 @@ const COMMON = [
   'export class Audit { constructor(readonly logger: Logger) {} }',
   'export class Report { constructor(readonly logger: Logger) {} }',
   'export class Later { constructor(readonly logger: Logger) {} }',
-  "const unavailable: FactoryContext = { resolve: () => { throw new Error('no context'); }, resolveAll: () => [] };",
+  "const unavailable: FactoryContext = { resolve: () => { throw new Error('no context'); }, resolveAll: () => [], resolveMany: () => { throw new Error('no context'); } };",
 ].join('\n');
 
 /** The documented factory forms: unannotated context, annotated with the public type, default parameter, async. */
@@ -56,6 +56,35 @@ export const container = defineBuilderConfig({
 `;
 }
 
+/**
+ * E17 on the transformed Program: `useInterface<Clock>()` and `useProperty(...)` are rewritten to string ids, so the
+ * list a user wrote with a class, an interface and a property token must still be accepted by `resolveMany` of the
+ * container and of the factory context, and a class token must keep its own value type.
+ */
+const MANY_FILE = [
+  "import { defineBuilderConfig, useInterface, useProperty } from '@djodjonx/neosyringe';",
+  'export class Mail { send(): string { return "sent"; } }',
+  'export interface Clock { now(): number; }',
+  'const clock = useInterface<Clock>();',
+  "const retries = useProperty<number>(Mail, 'retries');",
+  'export const box = defineBuilderConfig({',
+  "  name: 'InlineMany',",
+  '  injections: [',
+  '    { token: Mail },',
+  '    { token: clock, useFactory: true, dependencies: [], provider: () => ({ now: () => 1 }) },',
+  '    { token: retries, useFactory: true, dependencies: [], provider: () => 3 },',
+  '    {',
+  '      token: useInterface<Pair>(), useFactory: true, dependencies: [Mail, clock, retries],',
+  '      provider: (ctx) => { const [mail, clockValue] = ctx.resolveMany([Mail, useInterface<Clock>()]); const first: Mail = mail; return { mail: first, ready: clockValue !== undefined }; },',
+  '    },',
+  '  ],',
+  '});',
+  'export interface Pair { mail: Mail; ready: boolean; }',
+  'export const everything = box.resolveMany([Mail, useInterface<Clock>(), useProperty<number>(Mail, "retries")]);',
+  'export const firstMail: Mail = everything[0];',
+  '',
+].join('\n');
+
 const FILES: Record<string, string> = {
   'open.ts': containerFile('InlineOpen', ''),
   'closed.ts': containerFile('InlineClosed', "optimization: { mode: 'closed', roots: [UserService, Later] },"),
@@ -78,6 +107,7 @@ const FILES: Record<string, string> = {
     'export const everyone: UserService[] = open.resolveAll(UserService);',
     '',
   ].join('\n'),
+  'many.ts': MANY_FILE,
 };
 
 let dir = '';
@@ -155,6 +185,10 @@ describe('T23 B5 the transformed program type-checks with the consumer options (
 
   it('T23-R2 a consumer that types its resolve listener with the public Token shape raises no diagnostic', () => {
     expect(diagnosticsOf(['open.ts', 'closed.ts', 'consumer.ts'])).toEqual([]);
+  });
+
+  it('E17-P17 resolveMany takes a class, an interface and a property token on the transformed program, in the container and in a factory context', () => {
+    expect(diagnosticsOf(['many.ts'])).toEqual([]);
   });
 
   it('T23-R2 the inline program is really transformed: the container class is in the user file', () => {

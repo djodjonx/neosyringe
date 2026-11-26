@@ -485,7 +485,7 @@ describe('T23-P5 a rewritten marker inside a factory splits the copy (B2, B3)', 
   it('T23-P5 the code of the rewritten factory is unchanged by carrying the rewrite as data', () => {
     const space = workspace({ 'app.ts': WITH_MARKERS });
     const output = transform(space, 'app.ts', WITH_MARKERS);
-    expect(output.code).toMatch(/const userFactory: \(context: \{ resolve<T>\(token: unknown\): T; resolveAll<T>\(token: unknown\): T\[\] \}\) => IB \| PromiseLike<IB> = \(k: \{ resolve\(token: unknown\): IA \}\) => k\.resolve\("IA_[0-9a-f]+"\);/);
+    expect(output.code).toMatch(/const userFactory: \(context: \{ resolve<T>\(token: unknown\): T; resolveAll<T>\(token: unknown\): T\[\]; resolveMany<const T extends readonly __NeoToken_[0-9a-f]+<unknown>\[\]>\(tokens: T\): __NeoValues_[0-9a-f]+<T>; resolveMany<const T extends readonly \(__NeoToken_[0-9a-f]+<unknown> \| string\)\[\]>\(tokens: T\): \{ -readonly \[K in keyof T\]: T\[K\] extends infer E \? E extends string \? unknown : E extends __NeoToken_[0-9a-f]+<infer V> \? V : never : never \} \}\) => IB \| PromiseLike<IB> = \(k: \{ resolve\(token: unknown\): IA \}\) => k\.resolve\("IA_[0-9a-f]+"\);/);
     expect(output.code).not.toContain('useInterface<');
   });
 

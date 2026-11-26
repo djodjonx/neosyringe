@@ -15,12 +15,12 @@ import {
 } from './fragments';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 import {
-  FACTORY_CONTEXT,
   emitFactoryPolicy,
   emitFactoryRead,
   emitLeaseOpen,
   type PolicyEntry,
 } from './factoryLeaseEmitter';
+import { DEFAULT_MANY_NAMES, factoryContextType, manyContextFunction, type ManyNames } from './manyEmitter';
 
 /**
  * Resolves a TypeScript symbol to a string reference usable in generated code.
@@ -325,9 +325,9 @@ interface FactoryBody {
  * can name types the factory, so a factory that does not fit its registration is an error in the output.
  * `unknown` where the type has no name.
  */
-function factoryType(declared: string | undefined): string {
+function factoryType(declared: string | undefined, names: ManyNames): string {
   const answer = declared === undefined ? 'unknown' : `${declared} | PromiseLike<${declared}>`;
-  return `(context: ${FACTORY_CONTEXT}) => ${answer}`;
+  return `(context: ${factoryContextType(names)}) => ${answer}`;
 }
 
 function emitFactoryBody(
@@ -341,6 +341,7 @@ function emitFactoryBody(
   className: string,
   factoryId: string,
   declared: string | undefined,
+  names: ManyNames = DEFAULT_MANY_NAMES,
 ): FactoryBody {
   const userFactory = concat(
     service.factorySource === undefined
@@ -381,7 +382,7 @@ function emitFactoryBody(
   const warmup = warmupLines.join('\n    ');
   const holdStart = '';
   const release = '';
-  const typedFactory = `const userFactory: ${factoryType(declared)} =`;
+  const typedFactory = `const userFactory: ${factoryType(declared, names)} =`;
   if (opaqueFactory) {
     const expireStmt = 'const __neoExpire = () => { __neoExpired = true; };';
     const failStmt = `const __neoFail = (code: string, detail: string): never => {
@@ -389,10 +390,18 @@ function emitFactoryBody(
       error.code = code;
       throw error;
     };`;
+    // The batch reads through the context's own `resolve`, after its expiry check: it never reaches the container behind it.
+    const manyFunction = manyContextFunction(
+      names,
+      '__neoResolveMany',
+      '__neoContext.resolve',
+      "if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');",
+    );
     const opaqueBody = fragment`${typedFactory} ${userFactory};
     let __neoExpired = false;
     ${expireStmt}
     ${failStmt}
+    ${manyFunction}
     const __neoContext = {
       resolve: <T,>(token: unknown): T => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
@@ -402,6 +411,7 @@ function emitFactoryBody(
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         return ${all()}<T>(token);
       },
+      resolveMany: __neoResolveMany,
     };
     ${holdStart}
     ${emitInvocation('', release, hasAsync)}`;
@@ -499,6 +509,7 @@ export function generateFactories(
   providerTypes: GetProviderTypes = noProviderTypes,
   className = DEFAULT_CLASS_NAME,
   inlined: ReadonlySet<TokenId> = new Set(),
+  names: ManyNames = DEFAULT_MANY_NAMES,
 ): Fragment[] {
   const factories: Fragment[] = [];
 
@@ -517,7 +528,7 @@ export function generateFactories(
     }
 
     if (node.service.type === 'factory' && node.service.factorySource) {
-      const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor);
+      const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor, names);
       factories.push(creator(factoryId, emitted.body, emitted.body.needs, 'unknown', emitted.members));
     } else {
       if (!node.service.implementationSymbol) {
@@ -546,6 +557,7 @@ export function generateMultiFactories(
   copy: UserCopy = generatedCopy,
   providerTypes: GetProviderTypes = noProviderTypes,
   className = DEFAULT_CLASS_NAME,
+  names: ManyNames = DEFAULT_MANY_NAMES,
 ): Fragment[] {
   const factories: Fragment[] = [];
   if (!graph.multiNodes) return factories;
@@ -555,7 +567,7 @@ export function generateMultiFactories(
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
 
       if (node.service.type === 'factory' && node.service.factorySource) {
-        const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor);
+        const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor, names);
         factories.push(creator(factoryId, emitted.body, emitted.body.needs, 'unknown', emitted.members));
       } else if (node.service.type === 'value' && node.service.valueSource !== undefined) {
         factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`, [], providerTypes(node).creator));
