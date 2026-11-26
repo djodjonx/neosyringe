@@ -156,6 +156,10 @@ class NeoContainer {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
+  public overrideMany(_entries: unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
+  }
+
   public clearOverrides(): Promise<void> {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
@@ -404,6 +408,10 @@ class NeoContainer {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
+  public overrideMany(_entries: unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
+  }
+
   public clearOverrides(): Promise<void> {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
@@ -644,6 +652,10 @@ class NeoContainer {
   }
 
   public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
+  }
+
+  public overrideMany(_entries: unknown): Promise<void> {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
@@ -896,6 +908,10 @@ class NeoContainer {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
+  public overrideMany(_entries: unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
+  }
+
   public clearOverrides(): Promise<void> {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
@@ -1137,6 +1153,10 @@ class NeoContainer {
   }
 
   public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
+  }
+
+  public overrideMany(_entries: unknown): Promise<void> {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
@@ -1470,6 +1490,10 @@ class NeoContainer {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
+  public overrideMany(_entries: unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
+  }
+
   public clearOverrides(): Promise<void> {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
@@ -1736,6 +1760,10 @@ class NeoContainer {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
+  public overrideMany(_entries: unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
+  }
+
   public clearOverrides(): Promise<void> {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
@@ -1977,6 +2005,10 @@ class NeoContainer {
   }
 
   public override(_token: unknown, _factory: () => unknown): Promise<void> {
+    return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
+  }
+
+  public overrideMany(_entries: unknown): Promise<void> {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
   }
 
