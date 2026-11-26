@@ -11,7 +11,7 @@ import { GraphValidator } from '../../packages/core/src/generator/index';
 import { Generator } from '../../packages/core/src/generator/index';
 
 describe('Generated Code Snapshots', () => {
-  const generateCode = (fileContent: string) => {
+  const generateCode = (fileContent: string, emitter?: 'reference' | 'optimized') => {
     const fileName = 'snapshot-test.ts';
 
     const fullContent = `
@@ -36,7 +36,7 @@ describe('Generated Code Snapshots', () => {
     const validator = new GraphValidator();
     validator.validate(graph);
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, undefined, true, false, emitter);
     return generator.generate();
   };
 
@@ -228,6 +228,32 @@ describe('Generated Code Snapshots', () => {
     `);
 
     expect(code).toMatchSnapshot();
+  });
+
+  // A container with scope inputs (topic 18): the model, its plan, the bound guards and the releasing destroy.
+  const SCOPE_INPUTS = `
+      function defineBuilderConfig(config: any) { return config; }
+      function useInterface<T>(): any { return null; }
+      function useProperty<T>(cls: any, name: string): any { return null; }
+
+      interface IRequest { id: string; }
+      class Handler {
+        constructor(private request: IRequest, private retries: number) {}
+      }
+
+      export const c = defineBuilderConfig({
+        name: 'ScopeInputsApp',
+        scopeInputs: [useInterface<IRequest>(), useProperty<number>(Handler, 'retries')],
+        injections: [{ token: Handler }]
+      });
+    `;
+
+  it('should match snapshot for scope inputs, reference emitter', () => {
+    expect(generateCode(SCOPE_INPUTS, 'reference')).toMatchSnapshot();
+  });
+
+  it('should match snapshot for scope inputs, optimized emitter', () => {
+    expect(generateCode(SCOPE_INPUTS, 'optimized')).toMatchSnapshot();
   });
 });
 
