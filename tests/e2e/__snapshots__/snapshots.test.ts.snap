@@ -5,6 +5,14 @@ exports[`Generated Code Snapshots > should match snapshot for complex real-world
 import * as Import_0 from 'snapshot-test.ts';
 
 
+type __NeoToken<T> =
+  | (new (...args: never[]) => T)
+  | { __brand: 'InterfaceToken'; __type: T }
+  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };
+type __NeoValues<T extends readonly __NeoToken<unknown>[]> = {
+  -readonly [K in keyof T]: T[K] extends __NeoToken<infer V> ? V : never;
+};
+
 interface NeoLegacyParent {
   resolve?(token: unknown): unknown;
   resolveAll?(token: unknown): unknown;
@@ -244,6 +252,19 @@ class NeoContainer {
     return this._resolveAllInternal(token);
   }
 
+  public resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>;
+  public resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never };
+  public resolveMany(tokens: readonly (__NeoToken<unknown> | string)[]): unknown[] {
+    if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
+    const __neoTokens = [...tokens];
+    const __neoValues: unknown[] = [];
+    for (const __neoToken of __neoTokens) __neoValues.push(this.resolve(__neoToken));
+    return __neoValues;
+  }
+
   private _resolveAllInternal<T>(token: unknown): T[];
   private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
@@ -286,6 +307,14 @@ exports[`Generated Code Snapshots > should match snapshot for interface tokens 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
+type __NeoToken<T> =
+  | (new (...args: never[]) => T)
+  | { __brand: 'InterfaceToken'; __type: T }
+  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };
+type __NeoValues<T extends readonly __NeoToken<unknown>[]> = {
+  -readonly [K in keyof T]: T[K] extends __NeoToken<infer V> ? V : never;
+};
 
 interface NeoLegacyParent {
   resolve?(token: unknown): unknown;
@@ -466,6 +495,19 @@ class NeoContainer {
     return this._resolveAllInternal(token);
   }
 
+  public resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>;
+  public resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never };
+  public resolveMany(tokens: readonly (__NeoToken<unknown> | string)[]): unknown[] {
+    if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
+    const __neoTokens = [...tokens];
+    const __neoValues: unknown[] = [];
+    for (const __neoToken of __neoTokens) __neoValues.push(this.resolve(__neoToken));
+    return __neoValues;
+  }
+
   private _resolveAllInternal<T>(token: unknown): T[];
   private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
@@ -508,6 +550,14 @@ exports[`Generated Code Snapshots > should match snapshot for legacy container 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
+type __NeoToken<T> =
+  | (new (...args: never[]) => T)
+  | { __brand: 'InterfaceToken'; __type: T }
+  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };
+type __NeoValues<T extends readonly __NeoToken<unknown>[]> = {
+  -readonly [K in keyof T]: T[K] extends __NeoToken<infer V> ? V : never;
+};
 
 interface NeoLegacyParent {
   resolve?(token: unknown): unknown;
@@ -688,6 +738,19 @@ class NeoContainer {
     return this._resolveAllInternal(token);
   }
 
+  public resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>;
+  public resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never };
+  public resolveMany(tokens: readonly (__NeoToken<unknown> | string)[]): unknown[] {
+    if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
+    const __neoTokens = [...tokens];
+    const __neoValues: unknown[] = [];
+    for (const __neoToken of __neoTokens) __neoValues.push(this.resolve(__neoToken));
+    return __neoValues;
+  }
+
   private _resolveAllInternal<T>(token: unknown): T[];
   private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
@@ -730,6 +793,14 @@ exports[`Generated Code Snapshots > should match snapshot for mixed scopes 1`] =
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
+type __NeoToken<T> =
+  | (new (...args: never[]) => T)
+  | { __brand: 'InterfaceToken'; __type: T }
+  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };
+type __NeoValues<T extends readonly __NeoToken<unknown>[]> = {
+  -readonly [K in keyof T]: T[K] extends __NeoToken<infer V> ? V : never;
+};
 
 interface NeoLegacyParent {
   resolve?(token: unknown): unknown;
@@ -917,6 +988,19 @@ class NeoContainer {
     return this._resolveAllInternal(token);
   }
 
+  public resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>;
+  public resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never };
+  public resolveMany(tokens: readonly (__NeoToken<unknown> | string)[]): unknown[] {
+    if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
+    const __neoTokens = [...tokens];
+    const __neoValues: unknown[] = [];
+    for (const __neoToken of __neoTokens) __neoValues.push(this.resolve(__neoToken));
+    return __neoValues;
+  }
+
   private _resolveAllInternal<T>(token: unknown): T[];
   private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
@@ -959,6 +1043,14 @@ exports[`Generated Code Snapshots > should match snapshot for parent container 1
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
+type __NeoToken<T> =
+  | (new (...args: never[]) => T)
+  | { __brand: 'InterfaceToken'; __type: T }
+  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };
+type __NeoValues<T extends readonly __NeoToken<unknown>[]> = {
+  -readonly [K in keyof T]: T[K] extends __NeoToken<infer V> ? V : never;
+};
 
 interface NeoLegacyParent {
   resolve?(token: unknown): unknown;
@@ -1139,6 +1231,19 @@ class NeoContainer {
     return this._resolveAllInternal(token);
   }
 
+  public resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>;
+  public resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never };
+  public resolveMany(tokens: readonly (__NeoToken<unknown> | string)[]): unknown[] {
+    if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
+    const __neoTokens = [...tokens];
+    const __neoValues: unknown[] = [];
+    for (const __neoToken of __neoTokens) __neoValues.push(this.resolve(__neoToken));
+    return __neoValues;
+  }
+
   private _resolveAllInternal<T>(token: unknown): T[];
   private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
@@ -1182,6 +1287,14 @@ exports[`Generated Code Snapshots > should match snapshot for property tokens 1`
 import * as Import_0 from 'snapshot-test.ts';
 
 
+type __NeoToken<T> =
+  | (new (...args: never[]) => T)
+  | { __brand: 'InterfaceToken'; __type: T }
+  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };
+type __NeoValues<T extends readonly __NeoToken<unknown>[]> = {
+  -readonly [K in keyof T]: T[K] extends __NeoToken<infer V> ? V : never;
+};
+
 interface NeoLegacyParent {
   resolve?(token: unknown): unknown;
   resolveAll?(token: unknown): unknown;
@@ -1208,7 +1321,7 @@ class NeoContainer {
   // -- Factories --
   
   private create_PropertyToken_ApiService_apiUrl_8db03951(): unknown {
-    const userFactory: (context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[] }) => unknown = () => 'http://localhost';
+    const userFactory: (context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>; resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never } }) => unknown = () => 'http://localhost';
     const __neoLease = NeoContainer.__neoLease(NeoContainer.__neoPolicy_create_PropertyToken_ApiService_apiUrl_8db03951Get(), "PropertyToken:ApiService.apiUrl", this, NeoContainer.__neoRead_create_PropertyToken_ApiService_apiUrl_8db03951);
     const __neoContext = __neoLease.context;
     const __neoExpire = __neoLease.expire;
@@ -1321,27 +1434,34 @@ class NeoContainer {
     label: string,
     host: NeoContainer,
     read: (host: NeoContainer, token: unknown, all: boolean) => unknown,
-  ): { readonly context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[] }; readonly expire: () => void } {
+  ): { readonly context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>; resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never } }; readonly expire: () => void } {
     let expired = false;
     const fail = (code: string, detail: string): never => {
       const error = new Error(code + ': factory ' + label + ' ' + detail) as Error & { code: string };
       error.code = code;
       throw error;
     };
+    const resolve = <T,>(token: unknown): T => {
+      if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+      const mode = policy.mode(token);
+      if (mode !== 'simple' && mode !== 'all') fail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
+      return read(host, token, false) as T;
+    };
+    const resolveAll = <T,>(token: unknown): T[] => {
+      if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+      if (policy.mode(token) !== 'all') fail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
+      return read(host, token, true) as T[];
+    };
+    function resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>;
+    function resolveMany(tokens: readonly (__NeoToken<unknown> | string)[]): unknown[] {
+      if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+      const __neoTokens = [...tokens];
+      const __neoValues: unknown[] = [];
+      for (const __neoToken of __neoTokens) __neoValues.push(resolve(__neoToken));
+      return __neoValues;
+    }
     return {
-      context: {
-        resolve: <T,>(token: unknown): T => {
-          if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-          const mode = policy.mode(token);
-          if (mode !== 'simple' && mode !== 'all') fail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolve an undeclared dependency');
-          return read(host, token, false) as T;
-        },
-        resolveAll: <T,>(token: unknown): T[] => {
-          if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-          if (policy.mode(token) !== 'all') fail('NEO_UNDECLARED_FACTORY_DEP', 'cannot resolveAll an undeclared dependency');
-          return read(host, token, true) as T[];
-        },
-      },
+      context: { resolve, resolveAll, resolveMany },
       expire: () => { expired = true; },
     };
   }
@@ -1453,6 +1573,19 @@ class NeoContainer {
     return this._resolveAllInternal(token);
   }
 
+  public resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>;
+  public resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never };
+  public resolveMany(tokens: readonly (__NeoToken<unknown> | string)[]): unknown[] {
+    if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
+    const __neoTokens = [...tokens];
+    const __neoValues: unknown[] = [];
+    for (const __neoToken of __neoTokens) __neoValues.push(this.resolve(__neoToken));
+    return __neoValues;
+  }
+
   private _resolveAllInternal<T>(token: unknown): T[];
   private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
@@ -1495,6 +1628,14 @@ exports[`Generated Code Snapshots > should match snapshot for service with depen
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
+type __NeoToken<T> =
+  | (new (...args: never[]) => T)
+  | { __brand: 'InterfaceToken'; __type: T }
+  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };
+type __NeoValues<T extends readonly __NeoToken<unknown>[]> = {
+  -readonly [K in keyof T]: T[K] extends __NeoToken<infer V> ? V : never;
+};
 
 interface NeoLegacyParent {
   resolve?(token: unknown): unknown;
@@ -1687,6 +1828,19 @@ class NeoContainer {
     return this._resolveAllInternal(token);
   }
 
+  public resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>;
+  public resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never };
+  public resolveMany(tokens: readonly (__NeoToken<unknown> | string)[]): unknown[] {
+    if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
+    const __neoTokens = [...tokens];
+    const __neoValues: unknown[] = [];
+    for (const __neoToken of __neoTokens) __neoValues.push(this.resolve(__neoToken));
+    return __neoValues;
+  }
+
   private _resolveAllInternal<T>(token: unknown): T[];
   private _resolveAllInternal(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
@@ -1729,6 +1883,14 @@ exports[`Generated Code Snapshots > should match snapshot for simple service 1`]
 "
 import * as Import_0 from 'snapshot-test.ts';
 
+
+type __NeoToken<T> =
+  | (new (...args: never[]) => T)
+  | { __brand: 'InterfaceToken'; __type: T }
+  | { __brand: 'PropertyToken'; __type: T; __class: unknown; __name: string };
+type __NeoValues<T extends readonly __NeoToken<unknown>[]> = {
+  -readonly [K in keyof T]: T[K] extends __NeoToken<infer V> ? V : never;
+};
 
 interface NeoLegacyParent {
   resolve?(token: unknown): unknown;
@@ -1907,6 +2069,19 @@ class NeoContainer {
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     return this._resolveAllInternal(token);
+  }
+
+  public resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>;
+  public resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never };
+  public resolveMany(tokens: readonly (__NeoToken<unknown> | string)[]): unknown[] {
+    if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
+    if (this._failure !== undefined) throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed', this._failure);
+    if (this._touchClosed(false)) throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+    this._assertParents();
+    const __neoTokens = [...tokens];
+    const __neoValues: unknown[] = [];
+    for (const __neoToken of __neoTokens) __neoValues.push(this.resolve(__neoToken));
+    return __neoValues;
   }
 
   private _resolveAllInternal<T>(token: unknown): T[];
