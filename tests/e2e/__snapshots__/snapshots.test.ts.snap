@@ -236,6 +236,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     this._assertRoot(token, true);
@@ -282,6 +286,8 @@ class NeoContainer {
     return [{"token":"ConsoleLogger_0ae00c12","dependencies":[]},{"token":"ILogger_40a89407","dependencies":["ConsoleLogger_0ae00c12"]},{"token":"IAudit_dc30f515","dependencies":["ILogger_40a89407"]},{"token":"Reader_f4a196a6","dependencies":["ILogger_40a89407"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "AliasApp");
@@ -510,6 +516,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     return this._resolveAllInternal(token);
@@ -560,6 +570,8 @@ class NeoContainer {
     return [{"token":"ConsoleLogger_0ae00c12","dependencies":[]},{"token":"ILogger_40a89407","dependencies":["ConsoleLogger_0ae00c12"]},{"token":"IAudit_dc30f515","dependencies":["ILogger_40a89407"]},{"token":"Reader_f4a196a6","dependencies":["ILogger_40a89407"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "AliasApp");
@@ -733,6 +745,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     this._assertRoot(token, true);
@@ -777,6 +793,8 @@ class NeoContainer {
     return [{"token":"ConsoleLogger_0ae00c12","dependencies":[]},{"token":"ILogger_40a89407","dependencies":["ConsoleLogger_0ae00c12"]},{"token":"IAudit_dc30f515","dependencies":["ILogger_40a89407"]},{"token":"Reader_f4a196a6","dependencies":["ILogger_40a89407"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "AliasApp");
@@ -947,6 +965,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     return this._resolveAllInternal(token);
@@ -995,6 +1017,8 @@ class NeoContainer {
     return [{"token":"ConsoleLogger_0ae00c12","dependencies":[]},{"token":"ILogger_40a89407","dependencies":["ConsoleLogger_0ae00c12"]},{"token":"IAudit_dc30f515","dependencies":["ILogger_40a89407"]},{"token":"Reader_f4a196a6","dependencies":["ILogger_40a89407"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "AliasApp");
@@ -1227,6 +1251,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     this._assertRoot(token, true);
@@ -1315,6 +1343,8 @@ class NeoContainer {
     return [{"token":"ConsoleLogger_0ae00c12","dependencies":[]},{"token":"ILogger_40a89407","dependencies":["ConsoleLogger_0ae00c12"]},{"token":"IAudit_dc30f515","dependencies":["ILogger_40a89407"]},{"token":"Reader_f4a196a6","dependencies":["ILogger_40a89407"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "AliasApp");
@@ -1533,6 +1563,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
@@ -1615,6 +1649,8 @@ class NeoContainer {
     return [{"token":"ConsoleLogger_0ae00c12","dependencies":[]},{"token":"ILogger_40a89407","dependencies":["ConsoleLogger_0ae00c12"]},{"token":"IAudit_dc30f515","dependencies":["ILogger_40a89407"]},{"token":"Reader_f4a196a6","dependencies":["ILogger_40a89407"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "AliasApp");
@@ -1843,6 +1879,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     this._assertRoot(token, true);
@@ -1931,6 +1971,8 @@ class NeoContainer {
     return [{"token":"ConsoleLogger_0ae00c12","dependencies":[]},{"token":"ILogger_40a89407","dependencies":["ConsoleLogger_0ae00c12"]},{"token":"IAudit_dc30f515","dependencies":["ILogger_40a89407"]},{"token":"Reader_f4a196a6","dependencies":["ILogger_40a89407"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "AliasApp");
@@ -2145,6 +2187,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     if (this._reconfiguring) throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
@@ -2227,6 +2273,8 @@ class NeoContainer {
     return [{"token":"ConsoleLogger_0ae00c12","dependencies":[]},{"token":"ILogger_40a89407","dependencies":["ConsoleLogger_0ae00c12"]},{"token":"IAudit_dc30f515","dependencies":["ILogger_40a89407"]},{"token":"Reader_f4a196a6","dependencies":["ILogger_40a89407"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "AliasApp");
@@ -2484,6 +2532,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     return this._resolveAllInternal(token);
@@ -2534,6 +2586,8 @@ class NeoContainer {
     return [{"token":"ILogger_40a89407","dependencies":[]},{"token":"IDatabase_5d4f4cb7","dependencies":["ILogger_40a89407"]},{"token":"ICache_d95eb76f","dependencies":["ILogger_40a89407"]},{"token":"UserRepository_ccb9cdae","dependencies":["IDatabase_5d4f4cb7","ICache_d95eb76f"]},{"token":"UserService_883381ff","dependencies":["UserRepository_ccb9cdae","ILogger_40a89407"]},{"token":"AuthService_2d28d7a2","dependencies":["UserService_883381ff","ILogger_40a89407"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "RealWorldApp");
@@ -2731,6 +2785,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     return this._resolveAllInternal(token);
@@ -2781,6 +2839,8 @@ class NeoContainer {
     return [{"token":"ILogger_40a89407","dependencies":[]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "InterfaceApp");
@@ -2978,6 +3038,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     return this._resolveAllInternal(token);
@@ -3028,6 +3092,8 @@ class NeoContainer {
     return [{"token":"NewService_4f96ffdd","dependencies":["LegacyService_46f42bdb"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer([legacy], "LegacyApp");
@@ -3232,6 +3298,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     return this._resolveAllInternal(token);
@@ -3282,6 +3352,8 @@ class NeoContainer {
     return [{"token":"SingletonService_ef57b246","dependencies":[]},{"token":"TransientService_035fe2c5","dependencies":[]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "ScopesApp");
@@ -3479,6 +3551,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     return this._resolveAllInternal(token);
@@ -3529,6 +3605,8 @@ class NeoContainer {
     return [{"token":"AppService_f5397b19","dependencies":[]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer([parent], "ChildApp");
@@ -3654,6 +3732,22 @@ class NeoContainer {
     error.code = code;
     if (arguments.length >= 3) error.cause = cause;
     return error;
+  }
+
+  private _neoDisposer(value: unknown): (() => unknown) | undefined {
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
+    const target: object = value;
+    const legacy: unknown = Reflect.get(target, 'dispose');
+    if (typeof legacy === 'function') return () => Reflect.apply(legacy, target, []);
+    const symbols = Symbol as SymbolConstructor & { dispose?: symbol; asyncDispose?: symbol };
+    for (const key of [symbols.asyncDispose, symbols.dispose]) {
+      if (key === undefined) continue;
+      const method: unknown = Reflect.get(target, key);
+      if (method === undefined || method === null) continue;
+      if (typeof method !== 'function') throw new TypeError('disposal protocol must be callable');
+      return () => Reflect.apply(method, target, []);
+    }
+    return undefined;
   }
 
   public initialize(): Promise<void> {
@@ -3817,12 +3911,16 @@ class NeoContainer {
     const __neoSeen = new Set();
     const __neoErrors: unknown[] = [];
     const __neoPending: unknown[] = [];
-    if (this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) { const __neoInst = this.instances.get("PropertyToken:ApiService.apiUrl_8db03951") as { dispose?: () => unknown } | null | undefined; if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { if (typeof __neoInst?.dispose === 'function') { const __neoResult = __neoInst.dispose(); if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult); } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }
+    if (this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) { const __neoInst = this.instances.get("PropertyToken:ApiService.apiUrl_8db03951") as { dispose?: () => unknown } | null | undefined; if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { const __neoRun = this._neoDisposer(__neoInst); if (__neoRun) { const __neoResult = __neoRun(); if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult); } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }
     for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
     if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
+  }
+
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
   }
 
   public resolveAll<T>(token: unknown): T[];
@@ -3875,6 +3973,8 @@ class NeoContainer {
     return [{"token":"PropertyToken:ApiService.apiUrl_8db03951","dependencies":[]},{"token":"ApiService_75972c9e","dependencies":["PropertyToken:ApiService.apiUrl_8db03951"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "PropertyApp");
@@ -4167,6 +4267,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     this._assertBound('resolveAll()');
@@ -4219,6 +4323,8 @@ class NeoContainer {
     return [{"token":"IRequest_14ace9a4","dependencies":[]},{"token":"PropertyToken:Handler.retries_69193ec7","dependencies":[]},{"token":"Handler_b7a17611","dependencies":["IRequest_14ace9a4","PropertyToken:Handler.retries_69193ec7"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "ScopeInputsApp");
@@ -4497,6 +4603,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     this._assertBound('resolveAll()');
@@ -4571,6 +4681,8 @@ class NeoContainer {
     return [{"token":"IRequest_14ace9a4","dependencies":[]},{"token":"PropertyToken:Handler.retries_69193ec7","dependencies":[]},{"token":"Handler_b7a17611","dependencies":["IRequest_14ace9a4","PropertyToken:Handler.retries_69193ec7"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "ScopeInputsApp");
@@ -4780,6 +4892,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     return this._resolveAllInternal(token);
@@ -4830,6 +4946,8 @@ class NeoContainer {
     return [{"token":"Logger_8b5cbb1b","dependencies":[]},{"token":"UserService_883381ff","dependencies":["Logger_8b5cbb1b"]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "UserApp");
@@ -5027,6 +5145,10 @@ class NeoContainer {
     return Promise.resolve();
   }
 
+  [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
+    return this.destroy();
+  }
+
   public resolveAll<T>(token: unknown): T[];
   public resolveAll(token: unknown): unknown[] {
     return this._resolveAllInternal(token);
@@ -5077,6 +5199,8 @@ class NeoContainer {
     return [{"token":"SimpleService_0c8fd872","dependencies":[]}];
   }
 }
+type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
+interface NeoContainer extends NeoContainerAsyncDisposal {}
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "SimpleApp");
