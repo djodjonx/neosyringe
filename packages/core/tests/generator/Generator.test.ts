@@ -147,7 +147,8 @@ describe('Generator', () => {
       const generator = new Generator(graph);
       const code = generator.generate();
 
-      expect(code).toContain('private create__scope_Package(): InstanceType<typeof Import_0.Pkg>');
+      expect(code).toContain('private _get__scope_Package(): InstanceType<typeof Import_0.Pkg>');
+      expect(code).not.toContain('create__scope_Package');
   });
 
   it('should respect export modifiers for container variable', () => {

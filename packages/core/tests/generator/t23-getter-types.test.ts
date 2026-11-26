@@ -263,6 +263,15 @@ const LITERAL: Corpus = {
   },
 };
 
+/**
+ * The same corpus as a closed container with the given roots. Closed mode keeps the creator and the `_direct_` accessor of
+ * every provider beside `_get_`, which open mode merges into the one `_get_`.
+ */
+function closedOf(corpus: Corpus, roots: string): Corpus {
+  const main = (corpus.files['main.ts'] ?? '').replace(/(name: '\w+',)/, `$1\n        optimization: { mode: 'closed', roots: [${roots}] },`);
+  return { files: { ...corpus.files, 'main.ts': main } };
+}
+
 function methodSignature(code: string, accessor: RegExp): string {
   const found = code.match(accessor);
   if (!found) throw new Error(`no method matches ${accessor}`);
@@ -279,8 +288,14 @@ function methodBody(code: string, accessor: RegExp): string {
 }
 
 describe('T23-P8 getters have the type of their provider', () => {
-  it('T23-P8 a class provider names its instance type on the creator, the direct accessor and the read accessor', () => {
+  it('T23-P8 a class provider names its instance type on its one read accessor in open mode, which has no creator and no direct accessor', () => {
     const { code } = emitOptimized(ACCESSORS);
+    expect(methodSignature(code, /private _get_T23Svc\w*\(\): [^{]+\{/)).toContain('(): InstanceType<typeof Import_0.T23Svc> {');
+    expect(code).not.toMatch(/private (?:create_|_direct_)T23Svc/);
+  });
+
+  it('T23-P8 a class provider names its instance type on the creator, the direct accessor and the read accessor in closed mode', () => {
+    const { code } = emitOptimized(closedOf(ACCESSORS, 'T23Needs, T23NeedsHidden'));
     expect(methodSignature(code, /private create_T23Svc\w*\(\): [^{]+\{/)).toContain('(): InstanceType<typeof Import_0.T23Svc> {');
     expect(methodSignature(code, /private _direct_T23Svc\w*\(\): [^{]+\{/)).toContain('(): InstanceType<typeof Import_0.T23Svc> {');
     expect(methodSignature(code, /private _get_T23Svc\w*\(\): [^{]+\{/)).toContain('(): InstanceType<typeof Import_0.T23Svc> {');
@@ -307,8 +322,16 @@ describe('T23-P8 getters have the type of their provider', () => {
     expect(required).toEqual(['./main.ts']);
   });
 
-  it('T23-P8 a factory accessor narrows its cache read and its creator result to the declared type', () => {
+  it('T23-P8 a factory accessor narrows its cache read and its creator result to the declared type in open mode', () => {
     const { code, diagnostics } = emitOptimized(ACCESSORS);
+    const accessor = methodBody(code, /private _get_T23Made\w*\(\): [^{]+\{/);
+    expect(accessor).toMatch(/if \(this\.instances\.has\([^)]*\)\) __neoValue = this\.instances\.get\([^)]*\) as __neo_Type_T23Made;/);
+    expect(accessor).toMatch(/__neoValue = this\.create_T23Made\w*\(\) as __neo_Type_T23Made;/);
+    expect(diagnostics.map(formatDiagnostic)).toEqual([]);
+  });
+
+  it('T23-P8 a factory accessor narrows its cache read and its creator result to the declared type in closed mode', () => {
+    const { code, diagnostics } = emitOptimized(closedOf(ACCESSORS, 'T23Needs, T23NeedsHidden'));
     const accessor = methodBody(code, /private _direct_T23Made\w*\(\): [^{]+\{/);
     expect(accessor).toMatch(/if \(this\.instances\.has\([^)]*\)\) return this\.instances\.get\([^)]*\) as __neo_Type_T23Made;/);
     expect(accessor).toMatch(/const instance = this\.create_T23Made\w*\(\) as __neo_Type_T23Made;/);
@@ -317,8 +340,8 @@ describe('T23-P8 getters have the type of their provider', () => {
 
   it('T23-P8 a constructor argument read from a typed accessor carries no assertion', () => {
     const { code } = emitOptimized(ACCESSORS);
-    const construction = code.match(/return new Import_0\.T23Svc\(.*\);/)?.[0] ?? '';
-    expect(construction).toMatch(/^return new Import_0\.T23Svc\(this\._get_T23Leaf\w*\(\)\);$/);
+    const construction = code.match(/new Import_0\.T23Svc\(.*\)/)?.[0] ?? '';
+    expect(construction).toMatch(/^new Import_0\.T23Svc\(this\._get_T23Leaf\w*\(\)\)$/);
     expect(construction).not.toContain(' as ');
   });
 
@@ -354,9 +377,12 @@ describe('T23-P8 getters have the type of their provider', () => {
 
   it('T23-P8 a generic class provider has `unknown` getters: its instance type is not one type', () => {
     const { code, diagnostics } = emitOptimized(GENERIC);
-    expect(methodSignature(code, /private create_T23Box\w*\(\): [^{]+\{/)).toContain('(): unknown {');
-    expect(methodSignature(code, /private _direct_T23Box\w*\(\): [^{]+\{/)).toContain('(): unknown {');
     expect(methodSignature(code, /private _get_T23Box\w*\(\): [^{]+\{/)).toContain('(): unknown {');
+    // Closed mode keeps the creator and the direct accessor beside it.
+    const closed = emitOptimized(closedOf(GENERIC, 'T23Box')).code;
+    expect(methodSignature(closed, /private create_T23Box\w*\(\): [^{]+\{/)).toContain('(): unknown {');
+    expect(methodSignature(closed, /private _direct_T23Box\w*\(\): [^{]+\{/)).toContain('(): unknown {');
+    expect(methodSignature(closed, /private _get_T23Box\w*\(\): [^{]+\{/)).toContain('(): unknown {');
     // The non-generic neighbour keeps its type.
     expect(methodSignature(code, /private _get_T23Leaf\w*\(\): [^{]+\{/)).toContain('(): InstanceType<typeof Import_0.T23Leaf> {');
     expect(diagnostics.map(formatDiagnostic)).toEqual([]);
@@ -369,8 +395,9 @@ describe('T23-P8 getters have the type of their provider', () => {
 
   it('T23-P8 that class token is named by its own name, which needs no public constructor', () => {
     const { code } = emitOptimized(PRIVATE_CTOR);
+    const closed = emitOptimized(closedOf(PRIVATE_CTOR, 'T23Uses')).code;
     for (const name of ['T23Clock', 'T23Guard', 'T23Port']) {
-      expect(methodSignature(code, new RegExp(`private _direct_${name}\\w*\\(\\): [^{]+\\{`))).toContain(`(): Import_0.${name} {`);
+      expect(methodSignature(closed, new RegExp(`private _direct_${name}\\w*\\(\\): [^{]+\\{`))).toContain(`(): Import_0.${name} {`);
       expect(methodSignature(code, new RegExp(`private _get_${name}\\w*\\(\\): [^{]+\\{`))).toContain(`(): Import_0.${name} {`);
     }
     expect(code).not.toContain('InstanceType<typeof Import_0.T23Clock>');
@@ -385,7 +412,8 @@ describe('T23-P8 getters have the type of their provider', () => {
   it('T23-P8 a factory under a token that is a value alias of a class has no diagnostic and `unknown` accessors', () => {
     const { code, diagnostics } = emitOptimized(ALIAS_TOKEN);
     expect(diagnostics.map(formatDiagnostic)).toEqual([]);
-    expect(methodSignature(code, /private _direct_T23Clock\w*\(\): [^{]+\{/)).toContain('(): unknown {');
+    const closed = emitOptimized(closedOf(ALIAS_TOKEN, 'T23Uses')).code;
+    expect(methodSignature(closed, /private _direct_T23Clock\w*\(\): [^{]+\{/)).toContain('(): unknown {');
     expect(methodSignature(code, /private _get_T23Clock\w*\(\): [^{]+\{/)).toContain('(): unknown {');
     // The reader's constructor argument is narrowed once, to the class it asks for.
     expect(code).toMatch(/new Import_0\.T23Uses\(this\._get_T23Clock\w*\(\) as ConstructorParameters<typeof Import_0\.T23Uses>\[0\]\)/);

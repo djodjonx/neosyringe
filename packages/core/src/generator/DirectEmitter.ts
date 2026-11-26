@@ -15,6 +15,7 @@ import { dispatchIsLinear, emitDispatchField, emitDispatchRead, emitLinearRead, 
 import { factoryLeaseHelpers } from './factoryLeaseEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
 import {
+  constructionExpression,
   generateFactories,
   generateMultiFactories,
   getReadName,
@@ -93,7 +94,14 @@ function mockMethod(): string {
   }`;
 }
 
-function eventMembers(): string {
+/**
+ * `on()` of the full profile. In open mode a box starts on a listener set shared by every box of the class, which stays
+ * empty: `on()` gives the box a set of its own before it adds the first listener.
+ */
+function eventMembers(className: string, sharedListeners: boolean): string {
+  const own = sharedListeners
+    ? `if (this.resolveListeners === ${className}.__neoNoListeners) this.resolveListeners = new Set();\n    `
+    : '';
   return `/**
    * Subscribes to container events — currently only 'resolve', fired with the
    * token and the resolved instance every time resolve() succeeds (whether
@@ -102,7 +110,7 @@ function eventMembers(): string {
    * caught and ignored.
    */
   ${resolveListenerOverload()}
-    this.resolveListeners.add(listener);
+    ${own}this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
@@ -115,6 +123,22 @@ function eventMembers(): string {
       }
     }
   }`;
+}
+
+/**
+ * The override table and the resolve listeners of a box. In open mode a box that has no test overrides and no listener
+ * holds no table of its own: it points at an empty one shared by the class. Nothing writes the shared tables:
+ * `on()` replaces the listener set before it adds, and `override()` is refused when test overrides are off.
+ */
+function tableFieldsOf(className: string, single: boolean, testOverrides: boolean): string {
+  const listeners = 'Set<(token: unknown, instance: unknown) => void>';
+  const overrides = 'Map<unknown, () => unknown>';
+  if (!single) return `\n  private overrides = new ${overrides}();\n  private resolveListeners = new ${listeners}();`;
+  const sharedOverrides = testOverrides ? '' : `\n  private static readonly __neoNoOverrides = new ${overrides}();`;
+  const own = testOverrides ? `new ${overrides}()` : `${className}.__neoNoOverrides`;
+  return `\n  private static readonly __neoNoListeners = new ${listeners}();${sharedOverrides}
+  private overrides: ${overrides} = ${own};
+  private resolveListeners: ${listeners} = ${className}.__neoNoListeners;`;
 }
 
 function formatTokenMember(): string {
@@ -293,12 +317,26 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   const providerTypes = input.providerTypes ?? noProviderTypes;
   const direct: DirectReads = { notify: !minimal };
   const honourOverrides = !minimal && input.testOverrides;
+  // Full profile, open mode: one `_get_` accessor per registration. A sync class provider has no other reader, so its
+  // accessor builds it in place and its creator is not emitted. Closed mode keeps its creators (an eager root calls
+  // one) and its `_direct_` accessors; the minimal profile has no `_get_`.
+  const unified = !minimal && !closed;
+  const inlined = new Map<TokenId, string>();
+  if (unified) {
+    for (const tokenId of sorted) {
+      const node = graph.nodes.get(tokenId);
+      // Only a class registration has an implementation symbol (packages/core/src/analyzer/graphAdapter.ts:374-419).
+      const symbol = node?.service.implementationSymbol;
+      if (!node || !symbol) continue;
+      inlined.set(tokenId, constructionExpression(node, symbol, graph, getImport, getForeignImport, hasAsync, closed, direct, providerTypes));
+    }
+  }
   const creators = [
-    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className),
+    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, new Set(inlined.keys())),
     ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className),
   ];
   const accessors = [
-    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides }, `${input.className}.formatToken`, providerTypes),
+    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides, single: unified }, `${input.className}.formatToken`, providerTypes, inlined),
     ...generateDirectContributions(graph, hasAsync, providerTypes),
   ];
   const needs = factoryContextNeeds(graph);
@@ -337,9 +375,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
       ? generateEagerSyncInitialize(input.eagerLines, minimal)
       : generateSyncInitializeMethod(minimal);
   const destroy = generateDestroyMethod(graph, sorted, getImport, hasAsync, minimal);
-  const tableFields = minimal
-    ? ''
-    : `\n  private overrides = new Map<unknown, () => unknown>();\n  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();`;
+  const tableFields = minimal ? '' : tableFieldsOf(input.className, unified, input.testOverrides);
   const members: Piece[] = [
     input.runtimeHelpers + input.assertRootMethod,
     initialize,
@@ -352,7 +388,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   }
   if (!minimal) {
     members.push(generateOverrideMethods(graph, sorted, getImport, hasAsync, input.testOverrides));
-    members.push(eventMembers());
+    members.push(eventMembers(input.className, unified));
   }
   if (honourOverrides) members.push(mockMethod());
   members.push(resolve.publicMethod);

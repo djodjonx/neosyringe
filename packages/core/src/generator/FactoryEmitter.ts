@@ -441,6 +441,29 @@ function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = []
   }${members}`, needs);
 }
 
+/**
+ * The `new Class(args)` of a class provider, for an accessor that builds it in place. The caller holds the class
+ * symbol, which only a class registration has (packages/core/src/analyzer/graphAdapter.ts:421 drops one without it, and
+ * the value and factory nodes at :374 and :400 set none). It does not declare the generic resolver its arguments call
+ * (only `resolveSingle`, :192 of this file): the open public `resolve` already asks for it
+ * (packages/core/src/generator/DirectEmitter.ts:254), and an accessor is inlined in open mode only.
+ */
+export function constructionExpression(
+  node: DependencyNode,
+  symbol: ts.Symbol,
+  graph: DependencyGraph,
+  getImport: GetImport,
+  getForeignImport: GetImport,
+  hasAsync: boolean,
+  closed: boolean,
+  direct: DirectReads | undefined,
+  providerTypes: GetProviderTypes,
+): string {
+  const className = getImport(symbol);
+  const args = constructorArguments(node.dependencies, graph, getImport, getForeignImport, hasAsync, closed, direct, className, providerTypes);
+  return `new ${className}(${args.text})`;
+}
+
 /** `return new Class(args);`, with the need of the generic resolver its arguments call. */
 function construction(
   node: DependencyNode,
@@ -475,6 +498,7 @@ export function generateFactories(
   copy: UserCopy = generatedCopy,
   providerTypes: GetProviderTypes = noProviderTypes,
   className = DEFAULT_CLASS_NAME,
+  inlined: ReadonlySet<TokenId> = new Set(),
 ): Fragment[] {
   const factories: Fragment[] = [];
 
@@ -482,6 +506,8 @@ export function generateFactories(
     const node = graph.nodes.get(tokenId);
     if (!node) continue;
     if (node.service.type === 'parent') continue;
+    // A creator the accessor writes in its own body has no method of its own.
+    if (inlined.has(tokenId)) continue;
 
     const factoryId = getFactoryName(tokenId);
 

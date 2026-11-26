@@ -1054,7 +1054,8 @@ describe('T17 direct accessors and runtime profiles', () => {
     const reference = open(graph, 'reference', { testOverrides: true });
     expect(byDefault.source).toBe(optimized.source);
     expect(byDefault.source).not.toBe(reference.source);
-    expect(byDefault.source).toContain('_direct_Local');
+    expect(byDefault.source).toContain('private _get_Local');
+    expect(byDefault.source).not.toContain('_direct_Local');
     expect(byDefault.source).not.toContain('resolveLocal');
     const { container } = byDefault;
     assertFull(container);

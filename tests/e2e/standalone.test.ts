@@ -94,7 +94,8 @@ describe('E2E - NeoSyringe Standalone', () => {
     // Verify generated code structure
     expect(code).toContain('class NeoContainer');
     expect(code).toContain('"AppContainer"');
-    expect(code).toContain('create_');
+    expect(code).toContain('private _get_');
+    expect(code).toMatch(/new \w+\.OrderService\(/);
     expect(code).toContain('resolve');
     expect(code).toContain('this.instances');
   });

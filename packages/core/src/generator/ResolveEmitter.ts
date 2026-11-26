@@ -293,13 +293,64 @@ export interface DirectProfile {
   minimal: boolean;
   /** Full profile with test overrides: an internal read must honour a mock too. */
   honourOverrides: boolean;
+  /** Full profile, open mode: one `_get_` accessor per registration, with no `_direct_` twin. */
+  single: boolean;
+}
+
+interface SingleAccessor {
+  name: string;
+  returns: string;
+  tokenKey: string;
+  /** The expression that builds the value, asserted to the accessor's type. */
+  created: string;
+  asType: string;
+  mockType: string;
+  transient: boolean;
+  asyncSingleton: boolean;
+  honourOverrides: boolean;
+  stored: string;
+  formatToken: string;
+}
+
+/**
+ * The `_get_` accessor of open mode: the read of `_direct_` and the resolve event in one method. An override answers
+ * through `_mock` and fires the event, a cache hit fires it, a fresh value is stored then fires it.
+ */
+function singleAccessor(a: SingleAccessor): string {
+  const mock = a.honourOverrides
+    ? `if (this.overrides.has(${a.tokenKey})) {
+      const __neoMocked = this._mock${a.mockType}(${a.tokenKey});
+      this.notifyResolve(${a.tokenKey}, __neoMocked);
+      return __neoMocked;
+    }
+    `
+    : '';
+  const read = a.transient
+    ? `const __neoValue: ${a.returns} = ${a.created};`
+    : a.asyncSingleton
+      ? `if (!this.instances.has(${a.tokenKey})) throw new Error('async singleton is not prepared: ' + ${a.formatToken}(${a.tokenKey}));
+    const __neoValue: ${a.returns} = this.instances.get(${a.tokenKey})${a.asType};`
+      : `let __neoValue: ${a.returns};
+    if (this.instances.has(${a.tokenKey})) __neoValue = this.instances.get(${a.tokenKey})${a.asType};
+    else {
+      __neoValue = ${a.created};
+      ${a.stored}
+    }`;
+  return `
+  private ${a.name}(): ${a.returns} {
+    ${mock}${read}
+    this.notifyResolve(${a.tokenKey}, __neoValue);
+    return __neoValue;
+  }`;
 }
 
 /**
  * One accessor per registration, reading its own container state.
  * The cache flag is the presence of the key in `instances`, never the value, so a
  * factory that returns undefined or null runs once. Full profile adds a `_get_` twin
- * that fires the resolve event on every read, cache hit included.
+ * that fires the resolve event on every read, cache hit included. In open mode the twin is the only accessor:
+ * `_get_` reads, creates and fires the event itself, and a class provider in `inlined` is built in its body
+ * (the text is the `new Class(args)` of its creator, which is then not emitted).
  *
  * An accessor answers the type of its provider (`providerTypes`), `unknown` where the output cannot name it.
  * Its body is checked against that type. Three reads need one `as <type>` each, and only those:
@@ -318,6 +369,7 @@ export function generateDirectAccessors(
   profile: DirectProfile,
   formatToken: string,
   providerTypes: GetProviderTypes = noProviderTypes,
+  inlined: ReadonlyMap<TokenId, string> = new Map(),
 ): string[] {
   const accessors: string[] = [];
   for (const tokenId of sorted) {
@@ -334,6 +386,15 @@ export function generateDirectAccessors(
     const asType = types.accessor === undefined ? '' : ` as ${types.accessor}`;
     const asCreated = types.creator === types.accessor ? '' : asType;
     const mockType = types.accessor === undefined ? '' : `<${types.accessor}>`;
+    if (profile.single) {
+      const created = inlined.get(tokenId) ?? `this.${factoryId}()`;
+      accessors.push(singleAccessor({
+        name: getReadName(tokenId), returns, tokenKey, created: `${created}${asCreated}`, asType, mockType,
+        transient, asyncSingleton, honourOverrides: profile.honourOverrides,
+        stored: afterStore('__neoValue', tokenKey, hasAsync, isBorrowedInstance(node.service)), formatToken,
+      }));
+      continue;
+    }
     const mock = profile.honourOverrides ? `if (this.overrides.has(${tokenKey})) return this._mock${mockType}(${tokenKey});\n    ` : '';
     const body = transient
       ? `return this.${factoryId}()${asCreated};`

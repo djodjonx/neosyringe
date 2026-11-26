@@ -76,7 +76,7 @@ type SingleCtor = new () => { n: number };
 export interface Executed {
   box: Runtime;
   parent?: Runtime;
-  /** Generated source of the cell container. Optimized output names `_direct_` accessors. */
+  /** Generated source of the cell container. Optimized output names `_direct_` or `_get_` accessors. */
   source: string;
   single: unknown;
   fresh: string;
@@ -345,7 +345,7 @@ export async function assertCell(emit: Emit, cell: ContractCell, emitter?: Produ
     const current = await emit(cell);
     executed = current;
     if (emitter !== undefined) {
-      const direct = current.source.includes('private _direct_');
+      const direct = /private (?:_direct_|_get_)\w*\(/.test(current.source);
       expect(direct, `${emitter} emitter`).toBe(emitter === 'optimized');
     }
     const { box } = current;

@@ -94,7 +94,7 @@ describe('Generator - Factory Support', () => {
     const code = generator.generate();
 
     // Transient should not use instances Map
-    expect(code).toContain('return this.create_IRequest()');
+    expect(code).toMatch(/private _get_IRequest\w*\(\): unknown \{\s*const __neoValue: unknown = this\.create_IRequest\(\);/);
     expect(code).not.toContain('this.instances.has("IRequest")');
   });
 
