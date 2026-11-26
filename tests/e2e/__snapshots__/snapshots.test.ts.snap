@@ -221,8 +221,12 @@ class NeoContainer {
     this._assertParents();
     
     
-    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
-    if (__neoRead !== undefined) return __neoRead.call(this);
+    if (token === "ILogger_40a89407") return this._get_ILogger_40a89407();
+    if (token === "IDatabase_5d4f4cb7") return this._get_IDatabase_5d4f4cb7();
+    if (token === "ICache_d95eb76f") return this._get_ICache_d95eb76f();
+    if (token === Import_0.UserRepository) return this._get_UserRepository_ccb9cdae();
+    if (token === Import_0.UserService) return this._get_UserService_883381ff();
+    if (token === Import_0.AuthService) return this._get_AuthService_2d28d7a2();
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -239,17 +243,6 @@ class NeoContainer {
     }
 
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
-  }
-
-  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
-  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
-    let __neoTable = NeoContainer.__neoDispatch;
-    if (__neoTable === undefined) {
-      const __neoRows: Array<readonly [unknown, (this: NeoContainer) => unknown]> = [["ILogger_40a89407", NeoContainer.prototype._get_ILogger_40a89407], ["IDatabase_5d4f4cb7", NeoContainer.prototype._get_IDatabase_5d4f4cb7], ["ICache_d95eb76f", NeoContainer.prototype._get_ICache_d95eb76f], [Import_0.UserRepository, NeoContainer.prototype._get_UserRepository_ccb9cdae], [Import_0.UserService, NeoContainer.prototype._get_UserService_883381ff], [Import_0.AuthService, NeoContainer.prototype._get_AuthService_2d28d7a2]];
-      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>(__neoRows);
-      if (__neoRows.every((__neoRow) => __neoRow[0] !== undefined)) NeoContainer.__neoDispatch = __neoTable;
-    }
-    return __neoTable;
   }
 
   private static formatToken(token: unknown): string {
@@ -457,8 +450,7 @@ class NeoContainer {
     this._assertParents();
     
     
-    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
-    if (__neoRead !== undefined) return __neoRead.call(this);
+    if (token === "ILogger_40a89407") return this._get_ILogger_40a89407();
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -475,17 +467,6 @@ class NeoContainer {
     }
 
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
-  }
-
-  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
-  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
-    let __neoTable = NeoContainer.__neoDispatch;
-    if (__neoTable === undefined) {
-      const __neoRows: Array<readonly [unknown, (this: NeoContainer) => unknown]> = [["ILogger_40a89407", NeoContainer.prototype._get_ILogger_40a89407]];
-      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>(__neoRows);
-      if (__neoRows.every((__neoRow) => __neoRow[0] !== undefined)) NeoContainer.__neoDispatch = __neoTable;
-    }
-    return __neoTable;
   }
 
   private static formatToken(token: unknown): string {
@@ -693,8 +674,7 @@ class NeoContainer {
     this._assertParents();
     
     
-    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
-    if (__neoRead !== undefined) return __neoRead.call(this);
+    if (token === Import_0.NewService) return this._get_NewService_4f96ffdd();
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -711,17 +691,6 @@ class NeoContainer {
     }
 
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
-  }
-
-  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
-  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
-    let __neoTable = NeoContainer.__neoDispatch;
-    if (__neoTable === undefined) {
-      const __neoRows: Array<readonly [unknown, (this: NeoContainer) => unknown]> = [[Import_0.NewService, NeoContainer.prototype._get_NewService_4f96ffdd]];
-      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>(__neoRows);
-      if (__neoRows.every((__neoRow) => __neoRow[0] !== undefined)) NeoContainer.__neoDispatch = __neoTable;
-    }
-    return __neoTable;
   }
 
   private static formatToken(token: unknown): string {
@@ -943,8 +912,8 @@ class NeoContainer {
     this._assertParents();
     
     
-    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
-    if (__neoRead !== undefined) return __neoRead.call(this);
+    if (token === Import_0.SingletonService) return this._get_SingletonService_ef57b246();
+    if (token === Import_0.TransientService) return this._get_TransientService_035fe2c5();
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -961,17 +930,6 @@ class NeoContainer {
     }
 
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
-  }
-
-  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
-  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
-    let __neoTable = NeoContainer.__neoDispatch;
-    if (__neoTable === undefined) {
-      const __neoRows: Array<readonly [unknown, (this: NeoContainer) => unknown]> = [[Import_0.SingletonService, NeoContainer.prototype._get_SingletonService_ef57b246], [Import_0.TransientService, NeoContainer.prototype._get_TransientService_035fe2c5]];
-      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>(__neoRows);
-      if (__neoRows.every((__neoRow) => __neoRow[0] !== undefined)) NeoContainer.__neoDispatch = __neoTable;
-    }
-    return __neoTable;
   }
 
   private static formatToken(token: unknown): string {
@@ -1179,8 +1137,7 @@ class NeoContainer {
     this._assertParents();
     
     
-    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
-    if (__neoRead !== undefined) return __neoRead.call(this);
+    if (token === Import_0.AppService) return this._get_AppService_f5397b19();
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -1197,17 +1154,6 @@ class NeoContainer {
     }
 
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
-  }
-
-  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
-  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
-    let __neoTable = NeoContainer.__neoDispatch;
-    if (__neoTable === undefined) {
-      const __neoRows: Array<readonly [unknown, (this: NeoContainer) => unknown]> = [[Import_0.AppService, NeoContainer.prototype._get_AppService_f5397b19]];
-      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>(__neoRows);
-      if (__neoRows.every((__neoRow) => __neoRow[0] !== undefined)) NeoContainer.__neoDispatch = __neoTable;
-    }
-    return __neoTable;
   }
 
   private static formatToken(token: unknown): string {
@@ -1498,8 +1444,8 @@ class NeoContainer {
     this._assertParents();
     
     
-    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
-    if (__neoRead !== undefined) return __neoRead.call(this);
+    if (token === "PropertyToken:ApiService.apiUrl_8db03951") return this._get_PropertyToken_ApiService_apiUrl_8db03951();
+    if (token === Import_0.ApiService) return this._get_ApiService_75972c9e();
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -1516,17 +1462,6 @@ class NeoContainer {
     }
 
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
-  }
-
-  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
-  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
-    let __neoTable = NeoContainer.__neoDispatch;
-    if (__neoTable === undefined) {
-      const __neoRows: Array<readonly [unknown, (this: NeoContainer) => unknown]> = [["PropertyToken:ApiService.apiUrl_8db03951", NeoContainer.prototype._get_PropertyToken_ApiService_apiUrl_8db03951], [Import_0.ApiService, NeoContainer.prototype._get_ApiService_75972c9e]];
-      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>(__neoRows);
-      if (__neoRows.every((__neoRow) => __neoRow[0] !== undefined)) NeoContainer.__neoDispatch = __neoTable;
-    }
-    return __neoTable;
   }
 
   private static formatToken(token: unknown): string {
@@ -1762,8 +1697,8 @@ class NeoContainer {
     this._assertParents();
     
     
-    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
-    if (__neoRead !== undefined) return __neoRead.call(this);
+    if (token === Import_0.Logger) return this._get_Logger_8b5cbb1b();
+    if (token === Import_0.UserService) return this._get_UserService_883381ff();
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -1780,17 +1715,6 @@ class NeoContainer {
     }
 
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
-  }
-
-  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
-  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
-    let __neoTable = NeoContainer.__neoDispatch;
-    if (__neoTable === undefined) {
-      const __neoRows: Array<readonly [unknown, (this: NeoContainer) => unknown]> = [[Import_0.Logger, NeoContainer.prototype._get_Logger_8b5cbb1b], [Import_0.UserService, NeoContainer.prototype._get_UserService_883381ff]];
-      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>(__neoRows);
-      if (__neoRows.every((__neoRow) => __neoRow[0] !== undefined)) NeoContainer.__neoDispatch = __neoTable;
-    }
-    return __neoTable;
   }
 
   private static formatToken(token: unknown): string {
@@ -1998,8 +1922,7 @@ class NeoContainer {
     this._assertParents();
     
     
-    const __neoRead = NeoContainer.__neoDispatchTable().get(token);
-    if (__neoRead !== undefined) return __neoRead.call(this);
+    if (token === Import_0.SimpleService) return this._get_SimpleService_0c8fd872();
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
             try {
@@ -2016,17 +1939,6 @@ class NeoContainer {
     }
 
     throw new NeoServiceNotFoundError(\`[\${this.name}] Service not found or token not registered: \${NeoContainer.formatToken(token)}\`);
-  }
-
-  private static __neoDispatch: Map<unknown, (this: NeoContainer) => unknown> | undefined;
-  private static __neoDispatchTable(): Map<unknown, (this: NeoContainer) => unknown> {
-    let __neoTable = NeoContainer.__neoDispatch;
-    if (__neoTable === undefined) {
-      const __neoRows: Array<readonly [unknown, (this: NeoContainer) => unknown]> = [[Import_0.SimpleService, NeoContainer.prototype._get_SimpleService_0c8fd872]];
-      __neoTable = new Map<unknown, (this: NeoContainer) => unknown>(__neoRows);
-      if (__neoRows.every((__neoRow) => __neoRow[0] !== undefined)) NeoContainer.__neoDispatch = __neoTable;
-    }
-    return __neoTable;
   }
 
   private static formatToken(token: unknown): string {
