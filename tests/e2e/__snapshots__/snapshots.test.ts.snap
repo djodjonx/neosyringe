@@ -3941,12 +3941,29 @@ class NeoContainer {
     const __neoSeen = new Set();
     const __neoErrors: unknown[] = [];
     const __neoPending: unknown[] = [];
-    if (this.instances.has("PropertyToken:ApiService.apiUrl_8db03951")) { const __neoInst = this.instances.get("PropertyToken:ApiService.apiUrl_8db03951") as { dispose?: () => unknown } | null | undefined; if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { const __neoRun = this._neoDisposer(__neoInst); if (__neoRun) { const __neoResult = __neoRun(); if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult); } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }
+    this._neoDisposeSlot("PropertyToken:ApiService.apiUrl_8db03951", __neoSeen, __neoErrors, true, __neoPending);
     for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }
     this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
     if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
+  }
+
+  private _neoDisposeSlot(__neoKey: unknown, __neoSeen: Set<unknown>, __neoErrors: unknown[], __neoGuarded: boolean, __neoPending?: unknown[]): Promise<unknown> | undefined {
+    if (!this.instances.has(__neoKey)) return undefined;
+    const __neoInst = this.instances.get(__neoKey) as { dispose?: () => unknown } | null | undefined;
+    if (__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst))) return undefined;
+    if (__neoInst != null) __neoSeen.add(__neoInst);
+    try {
+      let __neoResult: unknown;
+      if (__neoGuarded) { const __neoRun = this._neoDisposer(__neoInst); if (!__neoRun) return undefined; __neoResult = __neoRun(); } else { __neoResult = (__neoInst as { dispose(): unknown }).dispose(); }
+      if (!(__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function')) return undefined;
+      if (__neoPending) { __neoPending.push(__neoResult); return undefined; }
+      return Promise.resolve(__neoResult).then(undefined, (__neoDisposeError: unknown) => { __neoErrors.push(__neoDisposeError); });
+    } catch (__neoDisposeError) {
+      __neoErrors.push(__neoDisposeError);
+      return undefined;
+    }
   }
 
   [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
