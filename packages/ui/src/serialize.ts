@@ -8,6 +8,16 @@ import {
 } from '@djodjonx/neosyringe-core/analyzer';
 import type { SerializableGraph, SerializableMultiRegistration, SerializableNode } from './types';
 
+// The light entry (`@djodjonx/neosyringe-ui/serialize`): the two serializers and the types they return. No renderer.
+export type {
+  SerializableBorrowedRegistration,
+  SerializableDiagnostic,
+  SerializableGraph,
+  SerializableMultiRegistration,
+  SerializableNode,
+  SerializableRetentionEntry,
+} from './types';
+
 function serializeMulti(multiNodes: Map<string, DependencyNode[]>): SerializableMultiRegistration[] {
   const serialized: SerializableMultiRegistration[] = [];
   for (const registrations of multiNodes.values()) {

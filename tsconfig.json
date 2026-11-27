@@ -10,6 +10,7 @@
     "declaration": true,
     "paths": {
       "@djodjonx/neosyringe-ui": ["./packages/ui/src"],
+      "@djodjonx/neosyringe-ui/serialize": ["./packages/ui/src/serialize.ts"],
       "@djodjonx/neosyringe": ["./packages/neosyringe/src"],
       "@djodjonx/neosyringe-core/analyzer": ["./packages/core/src/analyzer/index.ts"],
       "@djodjonx/neosyringe-core/generator": ["./packages/core/src/generator/index.ts"],

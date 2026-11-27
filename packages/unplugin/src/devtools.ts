@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { buildStandaloneHtml } from '@djodjonx/neosyringe-ui';
-import type { SerializableGraph } from '@djodjonx/neosyringe-ui';
+import type { SerializableGraph } from '@djodjonx/neosyringe-ui/serialize';
 
 type Next = () => void;
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: Next) => void;

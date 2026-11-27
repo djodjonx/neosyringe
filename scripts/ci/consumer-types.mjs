@@ -4,9 +4,11 @@
 // Without --expect-file, tsc must succeed.
 // With --expect-file, tsc must fail and its output must contain each
 // non-empty line of that file. A missing line is a failure, not a pass.
-// With --pack [<tarball|dir>] the fixture reads `@djodjonx/neosyringe` from the extracted package instead of from the
-// `paths` mapping of its tsconfig. `--pack` alone runs `pnpm pack` on packages/neosyringe, proves the tarball carries the
+// With --pack [<tarball|dir>] the fixture reads the package from the extracted package instead of from the
+// `paths` mapping of its tsconfig. `--pack` alone runs `pnpm pack` on the package, proves the tarball carries the
 // build on disk, and extracts it; a value is a tarball or an extracted folder. It does not build.
+// The package is `@djodjonx/neosyringe` (packages/neosyringe) unless `--package ui` names the light UI entry
+// `@djodjonx/neosyringe-ui/serialize` (packages/ui).
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -15,8 +17,20 @@ import { fileURLToPath } from 'node:url';
 import { PackError, resolveTypesEntry } from './lib/pack-archive.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const packageDir = path.join(root, 'packages/neosyringe');
-const sourceEntry = path.join(packageDir, 'src/index.ts');
+// The package a fixture imports: its folder, the specifier of the fixture, the export it reads and its source entry.
+const PACKAGES = {
+  neosyringe: { dir: 'packages/neosyringe', specifier: '@djodjonx/neosyringe', subpath: '.', source: 'src/index.ts' },
+  ui: { dir: 'packages/ui', specifier: '@djodjonx/neosyringe-ui/serialize', subpath: './serialize', source: 'src/serialize.ts' },
+};
+const packageFlag = process.argv.indexOf('--package');
+const packageName = packageFlag >= 0 ? process.argv[packageFlag + 1] : 'neosyringe';
+const target = Object.hasOwn(PACKAGES, packageName ?? '') ? PACKAGES[packageName] : undefined;
+if (target === undefined) {
+  console.error(`unknown --package ${packageName ?? ''}: expected ${Object.keys(PACKAGES).join(' or ')}`);
+  process.exit(1);
+}
+const packageDir = path.join(root, target.dir);
+const sourceEntry = path.join(packageDir, target.source);
 const dirArg = process.argv[2];
 const expectFlag = process.argv.indexOf('--expect-file');
 const expectName = expectFlag >= 0 ? process.argv[expectFlag + 1] : undefined;
@@ -56,7 +70,7 @@ function project() {
   scratch = mkdtempSync(path.join(tmpdir(), 'neosyringe-consumer-'));
   let resolved;
   try {
-    resolved = resolveTypesEntry({ pack, packageDir, scratch, sourceEntry });
+    resolved = resolveTypesEntry({ pack, packageDir, scratch, sourceEntry, subpath: target.subpath });
   } catch (error) {
     if (error instanceof PackError) fail(error.message);
     fail(error instanceof Error ? error.message : String(error));
@@ -66,7 +80,7 @@ function project() {
   const config = path.join(scratch, 'tsconfig.json');
   writeFileSync(config, JSON.stringify({
     extends: tsconfig,
-    compilerOptions: { baseUrl: '.', paths: { '@djodjonx/neosyringe': [entry] } },
+    compilerOptions: { baseUrl: '.', paths: { [target.specifier]: [entry] } },
   }));
   const shown = entry.startsWith(scratch) ? path.relative(scratch, entry) : path.relative(root, entry);
   return { config, label: `ok from=${label} types=${shown}` };

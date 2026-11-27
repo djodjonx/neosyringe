@@ -5,7 +5,7 @@ import { resolveDebugFlag, resolveTestOverridesFlag } from '@djodjonx/neosyringe
 import { releaseGraphCache } from './analysisCache';
 import { usageErrorsAtBuildEnd } from './buildEndUsages';
 import { callsCanReachNeoSyringe, hasNeoSyringeMarkers } from './markerUtils';
-import { createDevtoolsMiddleware } from './devtools';
+import { lazyOnce } from './lazy';
 import {
   applyWatchChange,
   closeProjectSession,
@@ -78,6 +78,13 @@ function environmentName(context: object | undefined): string | undefined {
     ? environment.name
     : undefined;
 }
+
+/**
+ * The devtools module holds the HTTP middleware and, through it, the HTML renderer of `@djodjonx/neosyringe-ui`.
+ * Nothing needs it before a Vite dev server serves the devtools, so it is a separate chunk loaded on the first
+ * `configureServer` that asks for it.
+ */
+const loadDevtools = lazyOnce(() => import('./devtools'));
 
 /**
  * NeoSyringe build plugin for Vite, Rollup, Webpack, and other bundlers.
@@ -299,9 +306,12 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
         clearCollisions();
         closeSession('free');
       },
-      configureServer(server) {
+      async configureServer(server) {
         if (process.env.NODE_ENV === 'production') return;
         if (options.devtools !== true) return;
+        // Vite awaits this hook. A failed load rejects it with the load's own error, and the next call loads again.
+        // `serving` turns on after the load: a failed load installs no middleware, so no graph may be kept for it.
+        const { createDevtoolsMiddleware } = await loadDevtools();
         serving = true;
         const middleware = createDevtoolsMiddleware(() => [...state.devtoolsGraphs.values()]);
         server.middlewares.use(middleware);

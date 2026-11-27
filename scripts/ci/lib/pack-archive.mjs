@@ -9,9 +9,17 @@ import { assertDistNewerThanSrc, assertTarballFromBuild, extractTarball } from '
 /** A failure of `pnpm pack` itself, which the callers report as a plain message. */
 export class PackError extends Error {}
 
-/** The `.d.ts` entry a package folder declares: `exports['.'].types`, `types`, or `index.ts`. */
-export function typesEntry(dir) {
+/**
+ * The `.d.ts` entry a package folder declares for `subpath`. The root (`.`): `exports['.'].types`, `types`, or `index.ts`.
+ * Any other subpath: `exports[subpath].types`, and an error when the package declares none.
+ */
+export function typesEntry(dir, subpath = '.') {
   const pkgFile = path.join(dir, 'package.json');
+  if (subpath !== '.') {
+    const subpathTypes = existsSync(pkgFile) ? JSON.parse(readFileSync(pkgFile, 'utf8')).exports?.[subpath]?.types : undefined;
+    if (typeof subpathTypes !== 'string') throw new PackError(`${pkgFile} declares no types for the export ${subpath}`);
+    return path.resolve(dir, subpathTypes);
+  }
   if (!existsSync(pkgFile)) return path.join(dir, 'index.ts');
   const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'));
   const exported = pkg.exports?.['.']?.types;
@@ -45,12 +53,12 @@ export function packFresh(packageDir, destDir) {
 /**
  * The types entry a consumer reads. `pack` undefined: `sourceEntry`. `''`: a fresh archive of `packageDir`, extracted
  * into `<scratch>/extracted`. A `.tgz` path: that archive, extracted the same way. Any other value: an extracted folder.
- * `label` says which one it was.
+ * `subpath` is the export of the package the consumer imports (`.` by default). `label` says which one it was.
  */
-export function resolveTypesEntry({ pack, packageDir, scratch, sourceEntry }) {
+export function resolveTypesEntry({ pack, packageDir, scratch, sourceEntry, subpath = '.' }) {
   if (pack === undefined) return { entry: sourceEntry, label: 'source' };
-  if (pack !== '' && !pack.endsWith('.tgz')) return { entry: typesEntry(path.resolve(pack)), label: 'folder' };
+  if (pack !== '' && !pack.endsWith('.tgz')) return { entry: typesEntry(path.resolve(pack), subpath), label: 'folder' };
   const tarball = pack === '' ? packFresh(packageDir, scratch) : path.resolve(pack);
   const unpacked = extractTarball(tarball, path.join(scratch, 'extracted'));
-  return { entry: typesEntry(unpacked), label: `archive ${path.basename(tarball)}` };
+  return { entry: typesEntry(unpacked, subpath), label: `archive ${path.basename(tarball)}` };
 }

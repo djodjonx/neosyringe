@@ -5,8 +5,8 @@ import { Analyzer, CollisionRegistry, formatUnsupportedMarker, resolveNeoMarker,
 import type { AnalysisError, DependencyGraph, DependencyNode, SourceOrigin, SourceRewrite } from '@djodjonx/neosyringe-core/analyzer';
 import { Generator, GraphValidator, NamePool, reservedNamesOf, snapshotOfFiles, type CopyMapping, type GraphValidationError, type Snapshot } from '@djodjonx/neosyringe-core/generator';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
-import { serializeGraph } from '@djodjonx/neosyringe-ui';
-import type { SerializableGraph } from '@djodjonx/neosyringe-ui';
+import { serializeGraph } from '@djodjonx/neosyringe-ui/serialize';
+import type { SerializableGraph } from '@djodjonx/neosyringe-ui/serialize';
 import {
   canonicalPath,
   cloneGraph,

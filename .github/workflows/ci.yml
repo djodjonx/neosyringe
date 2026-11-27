@@ -106,6 +106,12 @@ jobs:
       - name: Negative disposable consumer types
         run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative-disposable --expect-file expected-diagnostic.txt
 
+      - name: Positive UI serialize consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/ui-serialize/positive --package ui
+
+      - name: Negative UI serialize consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/ui-serialize/negative --package ui --expect-file expected-diagnostic.txt
+
       - name: Positive consumer types from the packed archive
         run: node scripts/ci/consumer-types.mjs tests/consumer-types/positive --pack
 
@@ -120,6 +126,12 @@ jobs:
 
       - name: Negative disposable consumer types from the packed archive
         run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative-disposable --expect-file expected-diagnostic.txt --pack
+
+      - name: Positive UI serialize consumer types from the packed archive
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/ui-serialize/positive --package ui --pack
+
+      - name: Negative UI serialize consumer types from the packed archive
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/ui-serialize/negative --package ui --expect-file expected-diagnostic.txt --pack
 
       - name: Scale consumer types 1000
         run: node scripts/ci/consumer-types-scale.mjs 1000

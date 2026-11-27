@@ -8,8 +8,9 @@ import * as esbuild from 'esbuild';
 import { rollup, type RollupBuild } from 'rollup';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 
-// The plugin imports @djodjonx/neosyringe-ui from dist. Follow src so the
-// serializeGraph fields land in data.json without a rebuild.
+// The devtools module imports @djodjonx/neosyringe-ui from dist. Follow src so the
+// serializeGraph fields land in data.json without a rebuild. The light entry
+// (@djodjonx/neosyringe-ui/serialize) is aliased to its source in vitest.config.ts.
 vi.mock('@djodjonx/neosyringe-ui', () => import('../../ui/src/index'));
 import { neoSyringePlugin } from '../src/index';
 
@@ -31,7 +32,7 @@ type ServedGraph = {
 
 type Hooks = {
   transform: (code: string, id: string) => unknown;
-  configureServer: (server: { middlewares: { use: (fn: Middleware) => void } }) => void;
+  configureServer: (server: { middlewares: { use: (fn: Middleware) => void } }) => unknown;
   watchChange?: (id: string, change: { event: 'create' | 'update' | 'delete' }) => void;
 };
 
@@ -39,7 +40,7 @@ type Session = {
   id: string;
   installed: boolean;
   transform: (code: string) => unknown;
-  serve: () => void;
+  serve: () => Promise<void>;
   read: () => ServedGraph[];
   body: (url: string) => string;
   watchDelete: () => void;
@@ -211,10 +212,10 @@ function start(options?: { devtools?: boolean; project?: string; bundler?: 'vite
   const id = path.join(dir, 'container.ts');
   let installed = false;
   let middleware: Middleware | undefined;
-  const serve = (): void => {
+  const serve = async (): Promise<void> => {
     const configure = plugin.configureServer ?? plugin.vite?.configureServer;
     if (!configure) throw new Error('configureServer absent');
-    configure({
+    await configure({
       middlewares: {
         use(fn) {
           installed = true;
@@ -261,9 +262,9 @@ function tokenIds(graphs: ServedGraph[]): string[] {
 }
 
 describe('T12 devtools', () => {
-  it('T12-A01 devtools lists the container', () => {
+  it('T12-A01 devtools lists the container', async () => {
     const session = start({ devtools: true });
-    session.serve();
+    await session.serve();
     expect(session.read()).toEqual([]);
     session.transform(CACHE);
     const data = session.read();
@@ -272,9 +273,9 @@ describe('T12 devtools', () => {
     expect(tokenIds(data).some((tokenId) => tokenId.includes('Cache'))).toBe(true);
   });
 
-  it('T12-A02 two containers in one file', () => {
+  it('T12-A02 two containers in one file', async () => {
     const session = start({ devtools: true });
-    session.serve();
+    await session.serve();
     session.transform(PAIR);
     const data = session.read();
     expect(data).toHaveLength(2);
@@ -282,9 +283,9 @@ describe('T12 devtools', () => {
     expect(data.map((graph) => graph.exportedVariableName).sort()).toEqual(['left', 'right']);
   });
 
-  it('T12-A03 removed containers leave no stale entry', () => {
+  it('T12-A03 removed containers leave no stale entry', async () => {
     const session = start({ devtools: true });
-    session.serve();
+    await session.serve();
 
     session.transform(BOTH);
     session.transform(KEPT_ONLY);
@@ -305,39 +306,39 @@ describe('T12 devtools', () => {
     expect(session.read()).toEqual([]);
   });
 
-  it('T12-A03 a local marker name drops the file', () => {
+  it('T12-A03 a local marker name drops the file', async () => {
     const session = start({ devtools: true });
-    session.serve();
+    await session.serve();
     session.transform(CACHE);
     session.transform(LOCAL_MARKER);
     expect(session.read()).toEqual([]);
   });
 
-  it('T12-A03 a throwing rebuild drops the file', () => {
+  it('T12-A03 a throwing rebuild drops the file', async () => {
     const session = start({ devtools: true });
-    session.serve();
+    await session.serve();
     session.transform(CACHE);
     expect(() => session.transform(BARE_RETURN)).toThrow(/must be assigned to a variable/);
     expect(session.read()).toEqual([]);
   });
 
-  it('T12-A04 two sessions stay isolated', () => {
+  it('T12-A04 two sessions stay isolated', async () => {
     const alpha = start({ devtools: true });
     const beta = start({ devtools: true });
-    alpha.serve();
-    beta.serve();
+    await alpha.serve();
+    await beta.serve();
     alpha.transform(named('alphaContainer', 'AlphaMark'));
     beta.transform(named('betaContainer', 'BetaMark'));
     expect(alpha.read().map((graph) => graph.exportedVariableName)).toEqual(['alphaContainer']);
     expect(beta.read().map((graph) => graph.exportedVariableName)).toEqual(['betaContainer']);
   });
 
-  it('T12-A05 devtools off installs nothing', () => {
+  it('T12-A05 devtools off installs nothing', async () => {
     for (const devtools of [undefined, false] as const) {
       const session = devtools === undefined ? start() : start({ devtools });
       const log = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
-        session.serve();
+        await session.serve();
         expect(session.installed).toBe(false);
         expect(log).not.toHaveBeenCalled();
       } finally {
@@ -358,7 +359,7 @@ describe('T12 devtools', () => {
       const blocked = start({ devtools: true });
       const log = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
-        blocked.serve();
+        await blocked.serve();
         expect(blocked.installed).toBe(false);
         expect(log).not.toHaveBeenCalled();
       } finally {
@@ -367,7 +368,7 @@ describe('T12 devtools', () => {
 
       restore();
       const produced = start({ devtools: true });
-      produced.serve();
+      await produced.serve();
       process.env.NODE_ENV = 'production';
       produced.transform(CACHE);
       restore();
@@ -375,7 +376,7 @@ describe('T12 devtools', () => {
 
       const early = start({ devtools: true });
       early.transform(CACHE);
-      early.serve();
+      await early.serve();
       expect(early.read()).toEqual([]);
 
       process.env.NODE_ENV = 'production';
@@ -424,7 +425,7 @@ describe('T12 devtools', () => {
     }
   });
 
-  it('T12-A06 rollup without serve collects nothing', () => {
+  it('T12-A06 rollup without serve collects nothing', async () => {
     const previous = process.env.NODE_ENV;
     try {
       if (previous === 'production') delete process.env.NODE_ENV;
@@ -436,7 +437,7 @@ describe('T12 devtools', () => {
           ? String((output as { code: unknown }).code)
           : '';
       expect(code).toContain('class NeoContainer_');
-      session.serve();
+      await session.serve();
       expect(session.read()).toEqual([]);
     } finally {
       if (previous === undefined) delete process.env.NODE_ENV;
@@ -446,7 +447,7 @@ describe('T12 devtools', () => {
 
   it('T12-P8 http server serves html and json', async () => {
     const session = start({ devtools: true });
-    session.serve();
+    await session.serve();
     session.transform(CACHE);
     const middleware = session.middleware();
     const server = http.createServer((req, res) => {

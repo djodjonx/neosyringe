@@ -187,6 +187,19 @@ describe('CI workflows', () => {
     expect(release).toContain(negative);
   });
 
+  it('G15-M2 the UI serialize consumers run from the source and from the packed archive in ci, and from the source before a release', () => {
+    const positive = 'node scripts/ci/consumer-types.mjs tests/consumer-types/ui-serialize/positive --package ui';
+    const negative = 'node scripts/ci/consumer-types.mjs tests/consumer-types/ui-serialize/negative --package ui --expect-file expected-diagnostic.txt';
+    const commands = runs(loadJobs('.github/workflows/ci.yml')['consumer-types']!);
+    for (const command of [positive, `${positive} --pack`, negative, `${negative} --pack`]) {
+      expect(commands.filter((candidate) => candidate === command), command).toHaveLength(1);
+    }
+    const release = runs(loadJobs('.github/workflows/release.yml').verify!);
+    for (const command of [positive, negative]) {
+      expect(release.filter((candidate) => candidate === command), `release verify: ${command}`).toHaveLength(1);
+    }
+  });
+
   it('T15 distribution runs consumer-dist after check-dist', () => {
     const commands = runs(loadJobs('.github/workflows/ci.yml').distribution!);
     const checkAt = commands.indexOf('node scripts/ci/check-dist.mjs');

@@ -50,6 +50,7 @@ const NAMED = [
   ['@djodjonx/neosyringe', 'useInterface'],
   ['@djodjonx/neosyringe-plugin', 'neoSyringePlugin'],
   ['@djodjonx/neosyringe-ui', 'buildStandaloneHtml'],
+  ['@djodjonx/neosyringe-ui/serialize', 'serializeGraph'],
 ];
 
 const FORBIDDEN_BUNDLE = [
@@ -282,7 +283,8 @@ try {
     "import { neoSyringePlugin } from '@djodjonx/neosyringe-plugin';",
     "import transformer from '@djodjonx/neosyringe-plugin/transformer';",
     "import { buildStandaloneHtml } from '@djodjonx/neosyringe-ui';",
-    'export const surface = [Analyzer, Generator, TSContext, useInterface, neoSyringePlugin, transformer, buildStandaloneHtml];',
+    "import { serializeGraph } from '@djodjonx/neosyringe-ui/serialize';",
+    'export const surface = [Analyzer, Generator, TSContext, useInterface, neoSyringePlugin, transformer, buildStandaloneHtml, serializeGraph];',
     '',
   ].join('\n'));
   writeFileSync(path.join(consumerDir, 'lsp.cts'), [
