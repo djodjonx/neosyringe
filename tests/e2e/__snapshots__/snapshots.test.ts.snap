@@ -126,10 +126,11 @@ class NeoContainer {
     throw error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -399,10 +400,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -677,10 +679,11 @@ class NeoContainer {
     throw error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -891,10 +894,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -1103,10 +1107,11 @@ class NeoContainer {
     throw error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -1420,10 +1425,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -1735,10 +1741,11 @@ class NeoContainer {
     throw error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -2048,10 +2055,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -2413,10 +2421,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -2671,10 +2680,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -2924,10 +2934,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -3183,10 +3194,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -3437,10 +3449,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -3652,8 +3665,8 @@ class NeoContainer {
   // -- Factories --
   
   private create_PropertyToken_ApiService_apiUrl_8db03951(): unknown {
-    const userFactory: (context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>; resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never } }) => unknown = () => 'http://localhost';
-    const __neoLease = NeoContainer.__neoLease(NeoContainer.__neoPolicy_create_PropertyToken_ApiService_apiUrl_8db03951Get(), "PropertyToken:ApiService.apiUrl", this, NeoContainer.__neoRead_create_PropertyToken_ApiService_apiUrl_8db03951);
+    const userFactory: (context: { readonly signal: NeoContainerSignal; resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>; resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never } }) => unknown = () => 'http://localhost';
+    const __neoLease = NeoContainer.__neoLease(NeoContainer.__neoPolicy_create_PropertyToken_ApiService_apiUrl_8db03951Get(), "PropertyToken:ApiService.apiUrl", this, NeoContainer.__neoRead_create_PropertyToken_ApiService_apiUrl_8db03951, this._neoSignal());
     const __neoContext = __neoLease.context;
     const __neoExpire = __neoLease.expire;
     
@@ -3750,10 +3763,18 @@ class NeoContainer {
     return undefined;
   }
 
-  public initialize(): Promise<void> {
+  private static __neoIdleSignal?: NeoContainerSignal;
+
+  private _neoSignal(): NeoContainerSignal {
+    const __neoNative = (globalThis as { AbortController?: new () => { readonly signal: NeoContainerSignal } }).AbortController;
+    return NeoContainer.__neoIdleSignal ??= __neoNative !== undefined ? new __neoNative().signal : { aborted: false, addEventListener() {}, removeEventListener() {} };
+  }
+
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -3781,7 +3802,8 @@ class NeoContainer {
     label: string,
     host: NeoContainer,
     read: (host: NeoContainer, token: unknown, all: boolean) => unknown,
-  ): { readonly context: { resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>; resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never } }; readonly expire: () => void } {
+    signal: NeoContainerSignal,
+  ): { readonly context: { readonly signal: NeoContainerSignal; resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>; resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never } }; readonly expire: () => void } {
     let expired = false;
     const fail = (code: string, detail: string): never => {
       const error = new Error(code + ': factory ' + label + ' ' + detail) as Error & { code: string };
@@ -3808,7 +3830,15 @@ class NeoContainer {
       return __neoValues;
     }
     return {
-      context: { resolve, resolveAll, resolveMany },
+      context: {
+        get signal() {
+          if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+          return signal;
+        },
+        resolve,
+        resolveAll,
+        resolveMany,
+      },
       expire: () => { expired = true; },
     };
   }
@@ -3975,6 +4005,7 @@ class NeoContainer {
 }
 type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
 interface NeoContainer extends NeoContainerAsyncDisposal {}
+type NeoContainerSignal = { readonly aborted: boolean; readonly reason?: unknown; addEventListener(type: 'abort', listener: () => void, options?: { once?: boolean }): void; removeEventListener(type: 'abort', listener: () => void): void };
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "PropertyApp");
@@ -4136,11 +4167,12 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (!this._scope) return Promise.reject(this._unbound('initialize()'));
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -4453,11 +4485,12 @@ class NeoContainer {
     return this._inputs?.get(slot);
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (!this._scope) return Promise.reject(this._unbound('initialize()'));
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -4777,10 +4810,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
@@ -5031,10 +5065,11 @@ class NeoContainer {
     return error;
   }
 
-  public initialize(): Promise<void> {
+  public initialize(options?: { readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }): Promise<void> {
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }
 
