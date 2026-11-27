@@ -24,6 +24,7 @@ export interface OptimizationTarget {
   publicMultiRoots?: TokenId[];
   eagerRoots?: TokenId[];
   runtimeProfile?: 'full' | 'minimal';
+  initializationConcurrency?: number;
   scopeInputs?: ScopeInput[];
   errors?: AnalysisError[];
 }
@@ -196,6 +197,62 @@ export function readRuntimeProfile(
     return;
   }
   target.runtimeProfile = profile.text;
+}
+
+const INITIALIZATION_MESSAGE = 'NEO_CONFIG_UNSUPPORTED: initialization.concurrency must be a positive integer literal';
+
+/** `initialization` of a partial. The type refuses it too (`PartialConfig` has no such member). */
+export const PARTIAL_INITIALIZATION_MESSAGE =
+  'NEO_CONFIG_UNSUPPORTED: initialization is not supported in a partial config: declare it on the builder.';
+
+/**
+ * Literal `initialization.concurrency` only: a positive integer literal, in an object literal with no spread or computed
+ * member. Absent, or `undefined` (for `initialization` or `concurrency`), is the sequential default. Anything else is
+ * `NEO_CONFIG_UNSUPPORTED` at the position of what is wrong: zero, a negative number (a prefix expression), a number
+ * with a fraction or beyond the safe integers, a variable, a string, a spread or computed member, an `initialization` that
+ * is not an object literal. The value is read at build time: it is never an argument of `initialize()`.
+ */
+export function readInitialization(
+  configObj: ts.ObjectLiteralExpression,
+  target: OptimizationTarget,
+): void {
+  const initialization = literalMember(configObj, 'initialization').initializer;
+  if (!initialization) return;
+  const sourceFile = configObj.getSourceFile();
+  const unsupported = (node: ts.Node, reason: string): void => {
+    pushConfigError(target, {
+      type: 'unsupported',
+      code: 'NEO_CONFIG_UNSUPPORTED',
+      message: `${INITIALIZATION_MESSAGE}: ${reason}.`,
+      node,
+      sourceFile,
+    });
+  };
+  const body = unwrapExpression(initialization);
+  if (TSContext.ts.isIdentifier(body) && body.text === 'undefined') return;
+  if (!TSContext.ts.isObjectLiteralExpression(body)) {
+    unsupported(initialization, 'initialization must be an object literal');
+    return;
+  }
+  const member = literalMember(body, 'concurrency');
+  if (member.opaque) {
+    unsupported(member.opaque, 'initialization must be an object literal without spread or computed members');
+    return;
+  }
+  const valueNode = member.initializer;
+  if (!valueNode) return;
+  const value = unwrapExpression(valueNode);
+  if (TSContext.ts.isIdentifier(value) && value.text === 'undefined') return;
+  if (!TSContext.ts.isNumericLiteral(value)) {
+    unsupported(valueNode, 'a number literal is required');
+    return;
+  }
+  const count = Number(value.text);
+  if (!Number.isSafeInteger(count) || count < 1) {
+    unsupported(valueNode, 'the number must be an integer of at least 1');
+    return;
+  }
+  target.initializationConcurrency = count;
 }
 
 const SCOPE_INPUTS_MESSAGE =

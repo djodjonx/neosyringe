@@ -222,9 +222,20 @@ export type Optimization =
 
 export type RuntimeProfile = { profile?: 'full' | 'minimal' };
 
+/**
+ * How `initialize()` starts the async singletons. `concurrency` is a positive integer literal: at most that many
+ * initialization steps run at once, and a step starts only after every step it needs has finished. Default: 1, the
+ * sequential order. A larger value lets independent steps start in any order and, when two of them fail, rejects with an
+ * `AggregateError`. Read by the plugin at build time, so it is a literal of the builder and never an argument of
+ * `initialize()`.
+ */
+export type InitializationOptions = { concurrency?: number };
+
 export type BuilderCapabilities = {
   optimization?: Optimization;
   runtime?: RuntimeProfile;
+  /** Bounded concurrent initialization of the async singletons. Not available in a partial. */
+  initialization?: InitializationOptions;
 };
 
 /** The two runtime profiles. */

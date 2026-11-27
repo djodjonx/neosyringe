@@ -8,7 +8,7 @@ import { buildContainerTokenView } from './resolutionUsages';
 import { extendsCaptureText, extendsReferenceName } from '../shared/extendsReference';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 import { NeoTokenError } from '../errors/NeoTokenError';
-import { PARTIAL_SCOPE_INPUTS_MESSAGE, closedModeDiagnostics, readOptimization, readRuntimeProfile, readScopeInputs, type OptimizationTarget } from '../parsers/ConfigParser';
+import { PARTIAL_INITIALIZATION_MESSAGE, PARTIAL_SCOPE_INPUTS_MESSAGE, closedModeDiagnostics, readInitialization, readOptimization, readRuntimeProfile, readScopeInputs, type OptimizationTarget } from '../parsers/ConfigParser';
 import { InjectionParser } from '../parsers/InjectionParser';
 import { DependencyAnalyzer } from '../validators/DependencyAnalyzer';
 
@@ -130,6 +130,7 @@ export class ConfigCollector implements IConfigCollector {
       config.publicMultiRoots = optimization.publicMultiRoots;
       config.eagerRoots = optimization.eagerRoots;
       config.runtimeProfile = optimization.runtimeProfile;
+      config.initializationConcurrency = optimization.initializationConcurrency;
       config.optimizationErrors = optimization.errors;
       const added = [...(optimization.errors ?? []), ...closedErrors];
       if (added.length > 0) config.valueErrors = [...(config.valueErrors ?? []), ...added];
@@ -310,7 +311,7 @@ export class ConfigCollector implements IConfigCollector {
     // Get container name
     const containerName = this.getContainerName(configArg);
     // Optimization and runtime are read in finalizeOptimization, once every partial is known.
-    const mergedValueErrors = [...valueErrors, ...expectedErrors, ...this.partialInputErrors(configArg, type, sourceFile)];
+    const mergedValueErrors = [...valueErrors, ...expectedErrors, ...this.partialInputErrors(configArg, type, sourceFile), ...this.partialInitializationErrors(configArg, type, sourceFile)];
 
     return {
       containerId,
@@ -889,6 +890,7 @@ export class ConfigCollector implements IConfigCollector {
     configs: Map<string, ConfigGraph>,
   ): void {
     readRuntimeProfile(configArg, optimization);
+    readInitialization(configArg, optimization);
     readScopeInputs(configArg, optimization, (expr) => this.scopeInputTokenId(expr), this.registrationSites(config, configs, new Set()));
     config.scopeInputs = optimization.scopeInputs;
   }
@@ -919,6 +921,13 @@ export class ConfigCollector implements IConfigCollector {
     const property = type === 'partial' ? this.findProperty(configArg, 'scopeInputs') : undefined;
     if (!property) return [];
     return [{ type: 'unsupported', code: 'NEO_CONFIG_UNSUPPORTED', message: PARTIAL_SCOPE_INPUTS_MESSAGE, node: property, sourceFile }];
+  }
+
+  /** `initialization` of a partial. The type refuses it too (`PartialConfig` has no such member): the bound belongs to the builder. */
+  private partialInitializationErrors(configArg: ts.ObjectLiteralExpression, type: ConfigType, sourceFile: ts.SourceFile): AnalysisError[] {
+    const property = type === 'partial' ? this.findProperty(configArg, 'initialization') : undefined;
+    if (!property) return [];
+    return [{ type: 'unsupported', code: 'NEO_CONFIG_UNSUPPORTED', message: PARTIAL_INITIALIZATION_MESSAGE, node: property, sourceFile }];
   }
 
   /** The id of an interface or property token expression, `undefined` for anything else (a class, an object, a call). */

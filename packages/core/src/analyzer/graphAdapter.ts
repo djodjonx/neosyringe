@@ -311,6 +311,7 @@ export class GraphAdapter {
     graph.publicMultiRoots = config.publicMultiRoots;
     graph.eagerRoots = config.eagerRoots;
     graph.runtimeProfile = config.runtimeProfile;
+    graph.initializationConcurrency = config.initializationConcurrency;
     if (config.optimizationErrors && config.optimizationErrors.length > 0) {
       if (!graph.errors) graph.errors = [];
       graph.errors.push(...config.optimizationErrors);

@@ -365,6 +365,9 @@ export interface ConfigGraph {
   /** Literal `runtime.profile`. Absent means full. ADR007 "Profils de génération". */
   runtimeProfile?: 'full' | 'minimal';
 
+  /** Literal `initialization.concurrency`, a positive integer. Absent means 1, the sequential initialization. BUILDER ONLY. */
+  initializationConcurrency?: number;
+
   /** The inputs of a literal `scopeInputs`, in declared order. A rejected entry is not listed. BUILDER ONLY. */
   scopeInputs?: ScopeInput[];
 
@@ -537,6 +540,9 @@ export interface DependencyGraph {
 
   /** Literal `runtime.profile`. Absent means full. ADR007 "Profils de génération". */
   runtimeProfile?: 'full' | 'minimal';
+
+  /** Literal `initialization.concurrency`: how many initialization steps run at once. Absent means 1, the sequential order. */
+  initializationConcurrency?: number;
 
   /**
    * The scope inputs of the container, in declared order. Each one is also a node of `nodes`: a borrowed singleton `value` with an `inputSlot`.

@@ -1,4 +1,4 @@
-import type { DependencyGraph, ServiceDefinition, TokenId } from '../analyzer/types';
+import type { DependencyGraph, DependencyNode, ServiceDefinition, TokenId } from '../analyzer/types';
 import { getFactoryName, multiRegistrationKey, resolveTokenKey, type GetImport } from './FactoryEmitter';
 import { emitOverrideMany, type ManyNames } from './manyEmitter';
 import { boundInitializeGuard, hasScopeInputs, inputCreateScopeMethod, inputDestroyMethod } from './inputEmitter';
@@ -239,7 +239,17 @@ function linkNodeOrder(
   }
 }
 
-function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport: GetImport, minimal = false): string[] {
+/**
+ * The async initialization steps of a graph, in the stable topological order, with the steps each multi token stands
+ * for. A step is an async singleton registration or an async singleton multi contribution. A transient one is never a
+ * step: the analyzer refuses it, and a hand-built graph that has one gets none.
+ */
+function asyncSteps(
+  graph: DependencyGraph,
+  sorted: TokenId[],
+  getImport: GetImport,
+  minimal: boolean,
+): OrderedStep[] {
   const steps: OrderedStep[] = [];
   const ids = new Set<string>();
   const multiIds = new Map<string, string[]>();
@@ -282,7 +292,213 @@ function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport:
   }
   linkNodeOrder(sorted, graph, needs);
   linkAsyncConsumers(graph, multiIds, needs);
-  return stableOrder(steps, before).map((step) => step.line);
+  return stableOrder(steps, before);
+}
+
+function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport: GetImport, minimal = false): string[] {
+  return asyncSteps(graph, sorted, getImport, minimal).map((step) => step.line);
+}
+
+/** One initialization step as the scheduler runs it: the ranks of the steps it waits for, and the step itself. */
+interface InitJob {
+  id: string;
+  deps: number[];
+  line: string;
+}
+
+/**
+ * The concurrent initialization of a graph: the jobs in the order a sequential initialization would run them (the
+ * rank of a job is its priority), and how many may run at once. `undefined` when the initialization is sequential: no
+ * concurrency, a concurrency of 1, or fewer than two steps (the number of jobs bounds the concurrency, so one job has
+ * nothing to run beside).
+ *
+ * A job waits for every step its registration reaches through registrations that are not steps: a sync factory or class,
+ * a multi token read with `resolveAll`, an alias (read as its target). Those are built while the step runs, so what they
+ * read must exist by then. The walk stops at a step, and a step is waited for as a whole.
+ *
+ * An opaque registration (no `dependencies` list) declares nothing, so what it reads is unknown. A job whose registration,
+ * or any registration its walk reaches that is not a step, is opaque waits for every job of a lower rank. A job of a higher
+ * rank keeps the dependencies it computed: they include the opaque job when its walk reaches it. Only the nearest lower
+ * such job and the ranks after it are written, because that job already waits for every rank below it: the number of
+ * dependencies written stays linear in the number of jobs.
+ *
+ * @throws Error if the jobs wait for each other: a cycle the service graph does not show (a multi contribution a
+ * registration reads, which reads that registration). It is refused here, before any effect.
+ */
+export function initializationJobs(
+  graph: DependencyGraph,
+  sorted: TokenId[],
+  getImport: GetImport,
+  minimal = false,
+): { limit: number; jobs: InitJob[] } | undefined {
+  const requested = graph.initializationConcurrency ?? 1;
+  if (requested <= 1) return undefined;
+  const steps = asyncSteps(graph, sorted, getImport, minimal);
+  if (steps.length < 2) return undefined;
+  const ranks = new Map(steps.map((step, index) => [step.id, index]));
+  const plan = aliasPlanOf(graph);
+  const reached = new Map<string, ReadonlySet<number>>();
+  /** Stands in a set of ranks for "every job of a lower rank": a registration the walk reached is opaque. */
+  const UNKNOWN = -1;
+
+  /** The steps `dependencies` need: the step itself, or what the registration that is not a step needs. */
+  const needed = (dependencies: readonly TokenId[], visiting: Set<string>): Set<number> => {
+    const found = new Set<number>();
+    const visit = (id: string, node: DependencyNode): void => {
+      const rank = ranks.get(id);
+      if (rank !== undefined) {
+        found.add(rank);
+        return;
+      }
+      const known = reached.get(id);
+      if (known !== undefined) {
+        for (const item of known) found.add(item);
+        return;
+      }
+      // A cycle through registrations that are not steps is a service cycle: the analyzer refuses it.
+      if (visiting.has(id)) return;
+      visiting.add(id);
+      const inner = needed(node.dependencies, visiting);
+      if (node.service.opaque === true) inner.add(UNKNOWN);
+      visiting.delete(id);
+      reached.set(id, inner);
+      for (const item of inner) found.add(item);
+    };
+    for (const dependency of orderingDependencies(plan, dependencies)) {
+      const single = graph.nodes.get(dependency);
+      if (single) visit(`node:${dependency}`, single);
+      graph.multiNodes?.get(dependency)?.forEach((node, index) => visit(`multi:${dependency}:${index}`, node));
+    }
+    return found;
+  };
+
+  const own = new Map<string, DependencyNode>();
+  for (const [tokenId, node] of graph.nodes) own.set(`node:${tokenId}`, node);
+  for (const [tokenId, nodes] of graph.multiNodes ?? []) nodes.forEach((node, index) => own.set(`multi:${tokenId}:${index}`, node));
+
+  /** The nearest lower job that waits for every job below it: what a later opaque job can lean on. */
+  let barrier = -1;
+  const jobs: InitJob[] = steps.map((step, rank) => {
+    const node = own.get(step.id);
+    const found = node ? needed(node.dependencies, new Set([step.id])) : new Set<number>();
+    if (node?.service.opaque === true) found.add(UNKNOWN);
+    if (found.delete(UNKNOWN)) {
+      // Transitive reduction: the previous barrier already waits for every rank below it, so only it and the ranks
+      // after it are written. A graph of opaque jobs writes one dependency per job, not one per lower rank.
+      for (let lower = Math.max(barrier, 0); lower < rank; lower += 1) found.add(lower);
+      barrier = rank;
+    }
+    const deps = [...found].sort((left, right) => left - right);
+    return { id: step.id, deps, line: step.line };
+  });
+  assertAcyclicJobs(jobs);
+  return { limit: Math.min(requested, jobs.length), jobs };
+}
+
+/**
+ * Refuses jobs that wait for each other, naming the jobs that never become ready. A rank outside the list would be a job
+ * that never finishes, so it is refused the same way: the ranks come from the list itself, and none is out of it today.
+ */
+function assertAcyclicJobs(jobs: readonly InitJob[]): void {
+  const pending = jobs.map((job) => job.deps.length);
+  const followers: number[][] = jobs.map(() => []);
+  jobs.forEach((job, index) => {
+    for (const dep of job.deps) followers[dep]?.push(index);
+  });
+  const queue = pending.flatMap((count, index) => (count === 0 ? [index] : []));
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    for (const next of followers[queue[cursor] ?? 0] ?? []) {
+      pending[next] = (pending[next] ?? 1) - 1;
+      if (pending[next] === 0) queue.push(next);
+    }
+  }
+  if (queue.length === jobs.length) return;
+  const stuck = jobs.filter((_, index) => !queue.includes(index)).map((job) => job.id);
+  throw new Error(`[Generator] Cycle detected between initialization steps: ${stuck.join(', ')}. Validate the graph before calling generate().`);
+}
+
+/**
+ * `__neoRunJobs`, the member of a container that runs its initialization steps with a bound. It is emitted only for
+ * a graph that has a concurrency above 1 and at least two steps ({@link initializationJobs}), so a sequential container
+ * pays nothing for it. The jobs come in the order of priority (the index of a job), each with the indexes of the jobs it
+ * waits for; the compiler has checked that they form no cycle, so the member trusts them.
+ *
+ * - At most `limit` jobs run at once, and a job starts when every job it waits for has finished.
+ * - The ready jobs leave in index order, from an integer min-heap of about fifteen lines. A runtime cannot import the
+ *   compile-time queue (`MinIndexQueue`, minHeap.ts), so the heap is written here; a test pins that both pop the same.
+ * - One progress callback (`wake`) is armed per wait. A job that finishes calls it, so the wait is one reaction on a
+ *   fresh promise per finished job and never one more reaction on a slow job still pending (`Promise.race(active)` of
+ *   every iteration would add one per short job).
+ * - After the first failure no job starts. The jobs already started are waited for, then the failure is thrown: the
+ *   same object when it is the only one, an `AggregateError` whose `cause` is the first when there are several.
+ *   The rollback of the container follows, as for a sequential initialization. The emitted text sets `cause` by
+ *   assignment through a local `AggregateError & { cause?: unknown }` assertion, not by the `{ cause }` option: the
+ *   emitted code is checked against the es2021 lib, which has no `ErrorOptions`, and an es2021 runtime ignores a third
+ *   argument. The assertion only widens the type, and `cause` is an own enumerable property, unlike the native option.
+ */
+export function initSchedulerMember(): string {
+  return `private async __neoRunJobs(jobs: ReadonlyArray<{ deps: readonly number[]; run: () => Promise<void> }>, limit: number): Promise<void> {
+    const pending: number[] = jobs.map((job) => job.deps.length);
+    const followers: number[][] = jobs.map(() => []);
+    jobs.forEach((job, index) => { for (const dep of job.deps) followers[dep]?.push(index); });
+    const ready: number[] = [];
+    const push = (value: number): void => {
+      let at = ready.length;
+      ready.push(value);
+      for (let up = (at - 1) >> 1; at > 0 && (ready[up] ?? 0) > value; up = (at - 1) >> 1) { ready[at] = ready[up] ?? 0; at = up; }
+      ready[at] = value;
+    };
+    const pop = (): number => {
+      const first = ready[0] ?? 0;
+      const last = ready.pop() ?? 0;
+      if (ready.length === 0) return first;
+      let at = 0;
+      for (let child = 1; child < ready.length; child = at * 2 + 1) {
+        if (child + 1 < ready.length && (ready[child + 1] ?? 0) < (ready[child] ?? 0)) child += 1;
+        if (last <= (ready[child] ?? 0)) break;
+        ready[at] = ready[child] ?? 0;
+        at = child;
+      }
+      ready[at] = last;
+      return first;
+    };
+    pending.forEach((count, index) => { if (count === 0) push(index); });
+    const failures: unknown[] = [];
+    let active = 0;
+    let wake: (() => void) | undefined;
+    const start = (index: number): void => {
+      active += 1;
+      const run = jobs[index]?.run;
+      void (run ? run() : Promise.resolve()).then(() => {
+        for (const next of followers[index] ?? []) {
+          pending[next] = (pending[next] ?? 1) - 1;
+          if (pending[next] === 0) push(next);
+        }
+      }, (failure: unknown) => { failures.push(failure); }).then(() => {
+        active -= 1;
+        const notify = wake;
+        wake = undefined;
+        notify?.();
+      });
+    };
+    while (ready.length > 0 || active > 0) {
+      while (failures.length === 0 && ready.length > 0 && active < limit) start(pop());
+      if (active === 0) break;
+      await new Promise<void>((resolve) => { wake = resolve; });
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) {
+      const aggregate = new AggregateError(failures, 'initialization failed') as AggregateError & { cause?: unknown };
+      aggregate.cause = failures[0];
+      throw aggregate;
+    }
+  }`;
+}
+
+/** The statement that runs the jobs of {@link initializationJobs}: parents are checked once more, then the jobs start. */
+function runJobsLines(plan: { limit: number; jobs: InitJob[] }): string[] {
+  const jobs = plan.jobs.map((job) => `        { deps: [${job.deps.join(', ')}], run: async () => { ${job.line} } },`);
+  return ['this._assertParents();', `await this.__neoRunJobs([\n${jobs.join('\n')}\n      ], ${plan.limit});`];
 }
 
 /**
@@ -316,7 +532,9 @@ export function generateInitializeMethod(
   lines.push(
     `if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`
   );
-  lines.push(...orderedAsyncLines(graph, sorted, getImport, minimal));
+  // A bounded concurrency above 1 runs the steps as jobs; the default writes the sequential lines it always did.
+  const plan = initializationJobs(graph, sorted, getImport, minimal);
+  lines.push(...(plan ? runJobsLines(plan) : orderedAsyncLines(graph, sorted, getImport, minimal)));
   lines.push(...eagerLines);
 
   // Joining the in-flight promise from a sync factory still on the stack deadlocks. Only state 'initializing' refuses.

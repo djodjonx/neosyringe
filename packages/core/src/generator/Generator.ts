@@ -6,7 +6,7 @@ import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
 import { generateAliasMembers, generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, legacyParentInterface, manyEntryGuard, parentOpenCheck, resolveListenerOverload, singleOverload, isBorrowedInstance, afterStore } from './ResolveEmitter';
 import { emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
-import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod, disposerMember, needsDisposer, asyncDisposalTypes } from './LifecycleEmitter';
+import { hasAsyncFactories, generateInitializeMethod, initSchedulerMember, initializationJobs, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod, disposerMember, needsDisposer, asyncDisposalTypes } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
 import { DISPATCH_LINEAR_MAX } from './dispatchEmitter';
@@ -581,7 +581,7 @@ export class Generator {
         dispatchLinearMax: this.dispatch?.linearMax ?? DISPATCH_LINEAR_MAX,
         stateFields: `${state.stateFields}${state.eagerField}`,
         ...rootMembers(emitted, closed, getImport),
-        runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync)),
+        runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync, emitted.runtimeProfile === 'minimal')),
         debugGetters: this.emitDebugGetter(emitted),
         copy,
       });
@@ -624,7 +624,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
                     if (legacyResult != null) this._borrowed.add(legacyResult);`;
     const borrowNotify = '';
     const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines);
-    const runtimeHelpersText = runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync));
+    const runtimeHelpersText = runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync));
     const captureLines: Piece[] = [...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)];
     const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
     const assertOne = closed ? 'this._assertRoot(token, false);' : '';
@@ -919,11 +919,20 @@ function generatedContainerHeader(): string {
   return '';
 }
 
-function runtimeHelpers(hasAsync: boolean, disposer: boolean): string {
+/**
+ * True when `initialize()` runs its steps as jobs: the container has async steps of its own and a bounded concurrency
+ * above 1 meets at least two of them. Only then is `__neoRunJobs` a member. `minimal` is the profile `initialize()` is
+ * emitted for: it changes the text of a step, never how many there are.
+ */
+function runsJobs(graph: DependencyGraph, sorted: TokenId[], getImport: GetImport, hasAsync: boolean, minimal = false): boolean {
+  return hasAsync && initializationJobs(graph, sorted, getImport, minimal) !== undefined;
+}
+
+function runtimeHelpers(hasAsync: boolean, disposer: boolean, jobs: boolean): string {
   return `${touchClosedMethod()}
 
   ${assertParentsMethod()}
-  ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}`;
+  ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}${jobs ? `\n\n  ${initSchedulerMember()}` : ''}`;
 }
 
 /** Exported root sets and their guard. Closed mode only. ADR006 lines 29-33. */
