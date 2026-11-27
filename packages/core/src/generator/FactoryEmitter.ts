@@ -23,6 +23,7 @@ import {
 import { inputRead } from './inputEmitter';
 import { aliasPlanOf } from '../analyzer/shared/aliasLinks';
 import { DEFAULT_MANY_NAMES, factoryContextType, manyContextFunction, type ManyNames } from './manyEmitter';
+import { signalTypeName } from './signalEmitter';
 
 /**
  * Resolves a TypeScript symbol to a string reference usable in generated code.
@@ -376,9 +377,9 @@ interface FactoryBody {
  * can name types the factory, so a factory that does not fit its registration is an error in the output.
  * `unknown` where the type has no name.
  */
-function factoryType(declared: string | undefined, names: ManyNames): string {
+function factoryType(declared: string | undefined, names: ManyNames, className: string): string {
   const answer = declared === undefined ? 'unknown' : `${declared} | PromiseLike<${declared}>`;
-  return `(context: ${factoryContextType(names)}) => ${answer}`;
+  return `(context: ${factoryContextType(names, signalTypeName(className))}) => ${answer}`;
 }
 
 function emitFactoryBody(
@@ -433,7 +434,7 @@ function emitFactoryBody(
   const warmup = warmupLines.join('\n    ');
   const holdStart = '';
   const release = '';
-  const typedFactory = `const userFactory: ${factoryType(declared, names)} =`;
+  const typedFactory = `const userFactory: ${factoryType(declared, names, className)} =`;
   if (opaqueFactory) {
     const expireStmt = 'const __neoExpire = () => { __neoExpired = true; };';
     const failStmt = `const __neoFail = (code: string, detail: string): never => {
@@ -453,7 +454,12 @@ function emitFactoryBody(
     ${expireStmt}
     ${failStmt}
     ${manyFunction}
+    const __neoSignal = this._neoSignal();
     const __neoContext = {
+      get signal() {
+        if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+        return __neoSignal;
+      },
       resolve: <T,>(token: unknown): T => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         return ${one()}<T>(token);

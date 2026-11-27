@@ -1,5 +1,6 @@
 import { generatedText, selectHelpers, type Fragment, type Helper } from './fragments';
 import { DEFAULT_MANY_NAMES, factoryContextType, manyContextFunction, type ManyNames } from './manyEmitter';
+import { signalTypeName } from './signalEmitter';
 
 /**
  * Permission policy and lease of a declared factory (topic 14).
@@ -12,6 +13,10 @@ import { DEFAULT_MANY_NAMES, factoryContextType, manyContextFunction, type ManyN
  *
  * Both helpers are private static members of the generated class, linked only when a declared factory needs them.
  * An opaque factory (no `dependencies` list) keeps its own context: it may ask for any token.
+ *
+ * The context also has `signal` (topic 19): the signal of the initialization the call belongs to, read when the lease is
+ * opened, or a signal that never aborts when the factory is called outside an initialization. A context that has expired
+ * refuses `.signal` like every other member.
  */
 
 export type PolicyMode = 'simple' | 'all';
@@ -55,7 +60,8 @@ function leaseHelper(className: string, names: ManyNames): string {
     label: string,
     host: ${className},
     read: (host: ${className}, token: unknown, all: boolean) => unknown,
-  ): { readonly context: ${factoryContextType(names)}; readonly expire: () => void } {
+    signal: ${signalTypeName(className)},
+  ): { readonly context: ${factoryContextType(names, signalTypeName(className))}; readonly expire: () => void } {
     let expired = false;
     const fail = (code: string, detail: string): never => {
       const error = new Error(code + ': factory ' + label + ' ' + detail) as Error & { code: string };
@@ -75,7 +81,15 @@ function leaseHelper(className: string, names: ManyNames): string {
     };
     ${manyContextFunction(names, 'resolveMany', 'resolve', expiredCheck)}
     return {
-      context: { resolve, resolveAll, resolveMany },
+      context: {
+        get signal() {
+          ${expiredCheck}
+          return signal;
+        },
+        resolve,
+        resolveAll,
+        resolveMany,
+      },
       expire: () => { expired = true; },
     };
   }`;
@@ -142,7 +156,7 @@ export function emitFactoryRead(className: string, factoryId: string, body: stri
 export function emitLeaseOpen(className: string, factoryId: string, label: string): string {
   assertIdentifier(className);
   const { get, read } = names(factoryId);
-  return `const __neoLease = ${className}.__neoLease(${className}.${get}(), ${label}, this, ${className}.${read});
+  return `const __neoLease = ${className}.__neoLease(${className}.${get}(), ${label}, this, ${className}.${read}, this._neoSignal());
     const __neoContext = __neoLease.context;
     const __neoExpire = __neoLease.expire;`;
 }

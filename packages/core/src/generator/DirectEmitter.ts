@@ -383,7 +383,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   );
 
   const initialize = hasAsync
-    ? generateInitializeMethod(graph, sorted, getImport, hasAsync, input.eagerLines, minimal)
+    ? generateInitializeMethod(graph, sorted, getImport, hasAsync, input.eagerLines, minimal, input.className)
     : input.eagerLines.length > 0
       ? generateEagerSyncInitialize(input.eagerLines, minimal, boundInitializeGuard(graph))
       : generateSyncInitializeMethod(minimal, boundInitializeGuard(graph));

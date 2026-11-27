@@ -230,9 +230,9 @@ const MEMBER_CATEGORIES = [
   ['accessors', /^_direct_|^_get_|^_list_/],
   ['dispatch-tables', /^__neo(Dispatch|Roots|Lists|RootLists)/],
   ['resolve', /^(resolve|resolveAll|resolveMany|_resolveInternal|_resolveAllInternal)$/],
-  ['lifecycle', /^(initialize|_runInitialize|createScope|destroy|_runDestroy|_close|override|overrideMany|clearOverrides|_reconfigure)$/],
+  ['lifecycle', /^(initialize|_startInitialize|_runInitialize|createScope|destroy|_runDestroy|_close|override|overrideMany|clearOverrides|_reconfigure)$/],
   ['events', /^(on|notifyResolve)$/],
-  ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock|_neoDisposer)$/],
+  ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock|_neoDisposer|__neoController|__neoIdle|__neoIdleSignal|_neoSignal|_neoCheck)$/],
   ['debug-metadata', /^(_graph|_dependencyGraph)$/],
 ];
 const CATEGORY_IDS = [...MEMBER_CATEGORIES.map(([id]) => id), 'user-code', 'state', 'other-members', 'class-shell', 'imports', 'glue'];

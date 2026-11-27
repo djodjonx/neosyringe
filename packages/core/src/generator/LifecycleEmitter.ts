@@ -5,6 +5,7 @@ import { boundInitializeGuard, hasScopeInputs, inputCreateScopeMethod, inputDest
 import { MinIndexQueue } from './minHeap';
 import { afterStore, isBorrowedInstance, overrideTokenChecks } from './ResolveEmitter';
 import { aliasPlanOf, orderingDependencies } from '../analyzer/shared/aliasLinks';
+import { signalTypeName } from './signalEmitter';
 
 /**
  * What a cached singleton is read as when it is disposed. The cache holds `unknown`; one assertion
@@ -431,7 +432,11 @@ function assertAcyclicJobs(jobs: readonly InitJob[]): void {
  *   every iteration would add one per short job).
  * - After the first failure no job starts. The jobs already started are waited for, then the failure is thrown: the
  *   same object when it is the only one, an `AggregateError` whose `cause` is the first when there are several.
- *   The rollback of the container follows, as for a sequential initialization. The emitted text sets `cause` by
+ *   The rollback of the container follows, as for a sequential initialization.
+ * - Cancellation (topic 19): once the signal of the caller has aborted, or `destroy()` has begun, no job starts, and the
+ *   jobs already started are waited for as after a failure. A destroy that skips jobs does not make the initialization
+ *   fail: the call without options resolves, as it does for a sequential initialization that destroy cuts short. When no job failed, the abort reason is thrown after the join (`_neoCheck`), so the
+ *   rollback runs with the late values of those jobs in the journal. The emitted text sets `cause` by
  *   assignment through a local `AggregateError & { cause?: unknown }` assertion, not by the `{ cause }` option: the
  *   emitted code is checked against the es2021 lib, which has no `ErrorOptions`, and an es2021 runtime ignores a third
  *   argument. The assertion only widens the type, and `cause` is an own enumerable property, unlike the native option.
@@ -482,7 +487,7 @@ export function initSchedulerMember(): string {
       });
     };
     while (ready.length > 0 || active > 0) {
-      while (failures.length === 0 && ready.length > 0 && active < limit) start(pop());
+      while (failures.length === 0 && this._initCancel === undefined && this._state !== 'destroying' && ready.length > 0 && active < limit) start(pop());
       if (active === 0) break;
       await new Promise<void>((resolve) => { wake = resolve; });
     }
@@ -492,6 +497,7 @@ export function initSchedulerMember(): string {
       aggregate.cause = failures[0];
       throw aggregate;
     }
+    this._neoCheck();
   }`;
 }
 
@@ -502,6 +508,16 @@ function runJobsLines(plan: { limit: number; jobs: InitJob[] }): string[] {
 }
 
 /**
+ * Cancellation (topic 19). The method is not `async`, so a join answers the very promise the first call answered. Two
+ * promises are kept: `_initWork` ends when the initialization really ends (the factories that run have returned and the
+ * rollback is done; `destroy()` waits on it), `_initObserved` is what the caller waits on, and it rejects earlier, with
+ * `signal.reason`, when the signal of the caller aborts. A step checks the signal of the caller before it starts
+ * (`_neoCheck`), so a late value of a factory that ignored the signal is stored and journaled by the step that
+ * produced it, and the rollback closes it. `destroy()` aborts the signal the factories see. A sequential initialization
+ * does not stop on a destroy: its steps still run and are closed with the rest, as before. A concurrent one starts no
+ * queued job once the container is destroying (`__neoRunJobs`). The listener on the caller's signal is removed when the
+ * work settles.
+ *
  * About `(this._state as string)` below: the cleanup awaits a dispose, and destroy() may set 'destroying'
  * in the meantime. The check above that threw on 'destroying' narrows the property for the compiler, which
  * does not follow state across an await. The assertion widens it back; it adds no runtime code.
@@ -519,11 +535,15 @@ export function generateInitializeMethod(
   hasAsync: boolean,
   eagerLines: string[] = [],
   minimal = false,
+  className = 'NeoContainer',
 ): string {
   if (!hasAsync) return generateSyncInitializeMethod(minimal, boundInitializeGuard(graph));
 
+  const signal = signalTypeName(className);
   const lines: string[] = [];
 
+  // Nothing starts once the caller has cancelled: not the parents' initialization, not a factory.
+  lines.push('this._neoCheck();');
   // Cascade first: a local async factory may itself resolve() a parent-provided
   // singleton, so the parent/legacy chain must be ready before we create ours.
   // Guarded at runtime (not statically) so this also covers declareContainerTokens
@@ -532,24 +552,75 @@ export function generateInitializeMethod(
   lines.push(
     `if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`
   );
-  // A bounded concurrency above 1 runs the steps as jobs; the default writes the sequential lines it always did.
+  // A bounded concurrency above 1 runs the steps as jobs; the default writes the sequential lines it always did. The
+  // sequential lines check the signal before each step and once after the last; the scheduler checks before each job
+  // it starts and after the join.
   const plan = initializationJobs(graph, sorted, getImport, minimal);
-  lines.push(...(plan ? runJobsLines(plan) : orderedAsyncLines(graph, sorted, getImport, minimal)));
+  if (plan) {
+    lines.push('this._neoCheck();', ...runJobsLines(plan));
+  } else {
+    for (const line of orderedAsyncLines(graph, sorted, getImport, minimal)) lines.push('this._neoCheck();', line);
+    lines.push('this._neoCheck();');
+  }
   lines.push(...eagerLines);
 
-  // Joining the in-flight promise from a sync factory still on the stack deadlocks. Only state 'initializing' refuses.
-  const initializeOutput = `public async initialize(): Promise<void> {
-    ${boundInitializeGuard(graph)}if (this._state === 'initializing' && this._syncInit > 0) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
-    if (this._state === 'initializing') return this._initWork;
+  // Joining the in-flight promise from a sync factory still on the stack deadlocks. Only the busy states refuse.
+  // `initialize` is not `async`: a join answers the very promise the first call answered (`_initObserved`).
+  const initializeOutput = `public initialize(options?: { readonly signal?: ${signal} }): Promise<void> {
+    ${boundInitializeGuard(graph)}if ((this._state === 'initializing' || this._state === 'cancelling') && this._syncInit > 0) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
+    const __neoUser = options?.signal;
+    if (this._state === 'initializing' || this._state === 'cancelling') {
+      if (__neoUser !== undefined && __neoUser !== this._initSignal) return Promise.reject(this._neoFail('NEO_INIT_OPTIONS_CONFLICT', 'initialize() is running with another signal'));
+      return this._initObserved;
+    }
     if (this._state === 'ready') return Promise.resolve();
     if (this._state === 'failed') return Promise.reject(this._failure);
     if (this._state === 'destroying' || this._state === 'destroyed') {
-      throw this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed');
+      return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     }
-    ${minimal ? '' : "if (this._state === 'reconfiguring') throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');"}
+    ${minimal ? '' : "if (this._state === 'reconfiguring') return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));"}
+    if (__neoUser !== undefined && (__neoUser === null || typeof __neoUser.addEventListener !== 'function' || typeof __neoUser.removeEventListener !== 'function')) return Promise.reject(new TypeError('initialize() needs an AbortSignal in options.signal'));
+    return this._startInitialize(__neoUser);
+  }
+
+  private _startInitialize(__neoUser: ${signal} | undefined): Promise<void> {
     this._state = 'initializing';
-    this._initWork = this._runInitialize();
-    return this._initWork;
+    const __neoController = ${className}.__neoController();
+    this._initController = __neoController;
+    this._initSignal = __neoUser;
+    this._initCancel = undefined;
+    let __neoResolve: () => void = () => {};
+    let __neoReject: (reason: unknown) => void = () => {};
+    const __neoObserved = new Promise<void>((resolve, reject) => {
+      __neoResolve = resolve;
+      __neoReject = reject;
+    });
+    this._initObserved = __neoObserved;
+    const __neoRelay = (): void => {
+      const __neoReason: unknown = __neoUser?.reason;
+      this._initCancel = { reason: __neoReason };
+      if (this._state === 'initializing') this._state = 'cancelling';
+      __neoReject(__neoReason);
+      __neoController.abort(__neoReason);
+    };
+    if (__neoUser !== undefined) {
+      if (__neoUser.aborted) __neoRelay();
+      else __neoUser.addEventListener('abort', __neoRelay, { once: true });
+    }
+    const __neoWork = this._runInitialize();
+    this._initWork = __neoWork;
+    const __neoSettle = (): void => {
+      __neoUser?.removeEventListener('abort', __neoRelay);
+      if (this._initController === __neoController) {
+        this._initController = undefined;
+        this._initSignal = undefined;
+      }
+    };
+    void __neoWork.then(
+      () => { __neoSettle(); __neoResolve(); },
+      (__neoError: unknown) => { __neoSettle(); __neoReject(__neoError); },
+    );
+    return __neoObserved;
   }
 
   private async _runInitialize(): Promise<void> {
@@ -593,7 +664,7 @@ export function generateInitializeMethod(
   }
 
   private _guardPublic(op: string = 'resolve()'): void {
-    if (this._state === 'created' || this._state === 'initializing') {
+    if (this._state === 'created' || this._state === 'initializing' || this._state === 'cancelling') {
       throw this._neoFail('NEO_NOT_INITIALIZED', 'call await container.initialize() before ' + op);
     }
     ${minimal ? '' : `if (this._state === 'reconfiguring') {
@@ -617,25 +688,34 @@ export function generateInitializeMethod(
 }
 
 /**
+ * What a sync `initialize` reads of its options: whether the signal has aborted, and why. A sync container has nothing to
+ * cancel while it runs, so an aborted signal refuses the call before any eager line, and the container is left as it was.
+ * The shape is written inline: a sync class has no signal alias unless one of its factories reads a context.
+ */
+const SYNC_OPTIONS = '{ readonly signal?: { readonly aborted: boolean; readonly reason?: unknown } }';
+
+/**
  * Sync containers still expose initialize(). It is not `async` and it does not
  * touch `_initialized`: those shapes belong to containers that have async work.
  */
 export function generateSyncInitializeMethod(minimal = false, bound = ''): string {
-  return `public initialize(): Promise<void> {
+  return `public initialize(options?: ${SYNC_OPTIONS}): Promise<void> {
     ${bound}if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     ${minimal ? '' : "if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));"}
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     return Promise.resolve();
   }`;
 }
 
 /** Sync eager roots run once. A second initialize() is a no-op. ADR006 line 12. */
 export function generateEagerSyncInitialize(lines: string[], minimal = false, bound = ''): string {
-  return `public initialize(): Promise<void> {
+  return `public initialize(options?: ${SYNC_OPTIONS}): Promise<void> {
     ${bound}if (this._eagerOnce) return Promise.resolve();
     if (this._touchClosed(false)) return Promise.reject(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     ${minimal ? '' : "if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));"}
     if (this._failure !== undefined) return Promise.reject(this._failure);
+    if (options?.signal?.aborted) return Promise.reject(options.signal.reason);
     this._eagerOnce = true;
     ${lines.join('\n    ')}
     return Promise.resolve();
@@ -651,7 +731,7 @@ function createScopeGuard(hasAsync: boolean, minimal: boolean): string {
   if (this._state === 'failed') {
     throw this._neoFail('NEO_CONTAINER_FAILED', 'container initialization failed');
   }
-  if (this._state === 'initializing'${minimal ? '' : " || this._state === 'reconfiguring'"}) {
+  if (this._state === 'initializing' || this._state === 'cancelling'${minimal ? '' : " || this._state === 'reconfiguring'"}) {
     throw this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning');
   }`
     : `${minimal ? '' : `if (this._reconfiguring) {
@@ -938,7 +1018,7 @@ export function generateOverrideMethods(
   const gates: Gate[] = [
     {
       when: (state) => hasAsync
-        ? `${state} === 'initializing' || ${state} === 'reconfiguring' || ${state} === 'destroying'`
+        ? `${state} === 'initializing' || ${state} === 'cancelling' || ${state} === 'reconfiguring' || ${state} === 'destroying'`
         : `this._reconfiguring || this._destroyWork`,
       code: 'NEO_CONTAINER_BUSY',
       detail: 'container is transitioning',
@@ -1113,6 +1193,8 @@ function destroyMembers(
     this._destroyWork = __neoRun;
     const __neoClear = () => { if (this._destroyWork === __neoRun) this._destroyWork = undefined; };
     void __neoRun.then(__neoClear, __neoClear);
+    // The terminal state and the work are installed: a listener that calls destroy() or resolve() sees both.
+    this._initController?.abort(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     return __neoRun;
   }
 

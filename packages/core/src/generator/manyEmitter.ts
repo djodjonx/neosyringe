@@ -180,8 +180,9 @@ export function manyContextFunction(names: ManyNames, functionName: string, reso
  * What a factory body reads of its context. The calls are generic: the factory text is the user's and states the type it
  * expects (`new UserService(ctx.resolve(loggerToken))` asks for an `ILogger`), the context only forwards a token. A context
  * that answered `unknown` would refuse that text (TS2345) in the Program the transformer builds from the transformed
- * source, and would refuse a parameter annotated with the public `FactoryContext`.
+ * source, and would refuse a parameter annotated with the public `FactoryContext`. `signal` is the name of the signal alias
+ * of the class (`signalTypeName`): the public `FactoryContext` has a `signal` too, so the context stays assignable to it.
  */
-export function factoryContextType(names: ManyNames): string {
-  return `{ resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly ${names.token}<unknown>[]>(tokens: T): ${names.values}<T>; resolveMany${looseHead(names)}: ${looseValues(names)} }`;
+export function factoryContextType(names: ManyNames, signal: string): string {
+  return `{ readonly signal: ${signal}; resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly ${names.token}<unknown>[]>(tokens: T): ${names.values}<T>; resolveMany${looseHead(names)}: ${looseValues(names)} }`;
 }

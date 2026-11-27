@@ -23,6 +23,34 @@ export type AsyncDisposalMembers = SymbolConstructor extends { readonly asyncDis
   : Record<never, never>;
 
 /**
+ * The part of an `AbortSignal` that `initialize({ signal })` and `FactoryContext.signal` use. It is written out so that
+ * the types need neither the DOM lib nor `@types/node` (`lib: ["ES2021"]` is enough). A real `AbortSignal` is assignable
+ * to it, so `new AbortController().signal` and `AbortSignal.timeout(ms)` are passed as they are.
+ */
+export interface AbortSignalLike {
+  readonly aborted: boolean;
+  /** Why the signal aborted. `initialize()` rejects with this value, as it is. */
+  readonly reason?: unknown;
+  addEventListener(type: 'abort', listener: () => void, options?: { once?: boolean }): void;
+  removeEventListener(type: 'abort', listener: () => void): void;
+}
+
+/**
+ * Options of `initialize()`. Opt in: a call without options behaves as it always did.
+ */
+export interface InitializeOptions {
+  /**
+   * Cancels this initialization. A signal that is already aborted starts no factory: the promise rejects with
+   * `signal.reason` and the container is failed. While the initialization runs, an abort makes the promise reject
+   * with `signal.reason` at once; the container keeps closing what the running factories still produce, and the
+   * factories see the abort through `FactoryContext.signal`. Once the container is ready the signal is forgotten.
+   * A call that joins a running initialization passes no signal or the same signal; another signal is refused with
+   * `NEO_INIT_OPTIONS_CONFLICT`.
+   */
+  readonly signal?: AbortSignalLike;
+}
+
+/**
  * Capabilities shared by every generated container, including the minimal profile.
  * `Token` is declared below; the methods only mention it.
  */
@@ -63,8 +91,14 @@ export interface CoreContainer extends AsyncDisposalMembers {
    */
   resolveMany<const T extends readonly Token<unknown>[]>(tokens: T): ValuesOf<T>;
 
-  /** Brings async singletons to ready. Sync containers resolve this immediately. */
-  initialize(): Promise<void>;
+  /**
+   * Brings async singletons to ready. Sync containers resolve this immediately.
+   *
+   * With `{ signal }` the initialization can be cancelled (see {@link InitializeOptions.signal}). The promise rejects
+   * with `signal.reason` when the signal aborts, and `destroy()` still waits for the factories that are running and for
+   * the cleanup of what they produced.
+   */
+  initialize(options?: InitializeOptions): Promise<void>;
 
   /**
    * Ends this container. Terminal and idempotent: a later resolve() or initialize()
@@ -185,6 +219,14 @@ export type ScopeArguments<I extends readonly InputToken[], E extends readonly I
  * What a factory is allowed to resolve. It is not the full container.
  */
 export interface FactoryContext {
+  /**
+   * Aborts when the initialization this factory runs for is cancelled (`initialize({ signal })`) or when the container
+   * is destroyed while it runs. A factory called outside an initialization (a sync or transient factory resolved later)
+   * gets a signal that never aborts: that one is shared by every such call, so a listener added to it is never called and
+   * never removed. Do not add one per call. Like the rest of the context it expires with the factory call: reading it later
+   * throws `NEO_FACTORY_CONTEXT_EXPIRED`. It is not a place to carry request data.
+   */
+  readonly signal: AbortSignalLike;
   resolve<T>(token: Token<T>): T;
   resolveAll<T>(token: Token<T>): T[];
   /**

@@ -12,6 +12,7 @@ import { emitOptimizedContainer } from './DirectEmitter';
 import { DISPATCH_LINEAR_MAX } from './dispatchEmitter';
 import { boundGuard, boundInitializeGuard, hasScopeInputs, inputConstructor, inputMembers } from './inputEmitter';
 import { linkedFactoryLeaseHelpers } from './factoryLeaseEmitter';
+import { controllerTypeName, needsSignal, signalMembers, signalTypeName, signalTypes } from './signalEmitter';
 import { providerTypesOf, type GetProviderTypes } from './providerTypes';
 import {
   NamePool,
@@ -562,7 +563,7 @@ export class Generator {
     const eagerLines = eagerSyncLines(emitted, getImport, hasAsync);
 
     if (this.useOptimizedEmitter()) {
-      const state = containerState(emitted, hasAsync, eagerLines, emitted.runtimeProfile === 'minimal');
+      const state = containerState(emitted, hasAsync, eagerLines, this.containerClassName, emitted.runtimeProfile === 'minimal');
       const containerClass = emitOptimizedContainer({
         graph: emitted,
         sorted,
@@ -581,7 +582,7 @@ export class Generator {
         dispatchLinearMax: this.dispatch?.linearMax ?? DISPATCH_LINEAR_MAX,
         stateFields: `${state.stateFields}${state.eagerField}`,
         ...rootMembers(emitted, closed, getImport),
-        runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync, emitted.runtimeProfile === 'minimal')),
+        runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync, emitted.runtimeProfile === 'minimal'), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined),
         debugGetters: this.emitDebugGetter(emitted),
         copy,
       });
@@ -591,7 +592,7 @@ ${this.renderImportLines(imports, sourceGraph, typeImports).join('\n')}
 ${concat([...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)], '\n')}
 
 ${containerClass}
-${asyncDisposalTypes(this.containerClassName)}
+${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync)}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     }
 
@@ -608,7 +609,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     const factoryHelpers = linkedFactoryLeaseHelpers(this.containerClassName, [...factories, ...multiFactories], this.manyNames);
     const resolveAllMethod = generateResolveAllMethod(emitted, getImport, hasAsync, closed);
     const initializeMethod = hasAsync
-      ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines)
+      ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines, false, this.containerClassName)
       : eagerLines.length > 0
         ? generateEagerSyncInitialize(eagerLines, false, boundInitializeGuard(emitted))
         : generateSyncInitializeMethod(false, boundInitializeGuard(emitted));
@@ -623,8 +624,8 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     const borrowBefore = `const legacyResult = legacyContainer.resolve(token);
                     if (legacyResult != null) this._borrowed.add(legacyResult);`;
     const borrowNotify = '';
-    const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines);
-    const runtimeHelpersText = runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync));
+    const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines, this.containerClassName);
+    const runtimeHelpersText = runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined);
     const captureLines: Piece[] = [...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)];
     const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
     const assertOne = closed ? 'this._assertRoot(token, false);' : '';
@@ -784,7 +785,7 @@ class ${this.containerClassName} {
 ${aliases ? `\n  ${aliases.members}\n` : ''}
   ${this.emitDebugGetter(emitted)}
 }
-${asyncDisposalTypes(this.containerClassName)}
+${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync)}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   }
 
@@ -894,6 +895,7 @@ function containerState(
   graph: DependencyGraph,
   hasAsync: boolean,
   eagerLines: string[],
+  className: string,
   minimal = false,
 ): { stateFields: string; eagerField: string } {
   const borrowedList = borrowedSeeds(graph).join(', ');
@@ -902,8 +904,12 @@ function containerState(
   private _destroyWork?: Promise<void>;`;
   const eagerField = !hasAsync && eagerLines.length > 0 ? '\n  private _eagerOnce = false;' : '';
   const stateFields = hasAsync
-    ? `private _state: 'created' | 'initializing' ${minimal ? '' : "| 'reconfiguring' "}| 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
+    ? `private _state: 'created' | 'initializing' | 'cancelling' ${minimal ? '' : "| 'reconfiguring' "}| 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
   private _initWork?: Promise<void>;
+  private _initObserved: Promise<void> = Promise.resolve();
+  private _initController?: ${controllerTypeName(className)};
+  private _initSignal?: ${signalTypeName(className)};
+  private _initCancel?: { readonly reason: unknown };
   private _failure: unknown;
   private _initRunning = false;
   private _initJournal: unknown[] = [];
@@ -928,11 +934,11 @@ function runsJobs(graph: DependencyGraph, sorted: TokenId[], getImport: GetImpor
   return hasAsync && initializationJobs(graph, sorted, getImport, minimal) !== undefined;
 }
 
-function runtimeHelpers(hasAsync: boolean, disposer: boolean, jobs: boolean): string {
+function runtimeHelpers(hasAsync: boolean, disposer: boolean, jobs: boolean, signalClass?: string): string {
   return `${touchClosedMethod()}
 
   ${assertParentsMethod()}
-  ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}${jobs ? `\n\n  ${initSchedulerMember()}` : ''}`;
+  ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}${jobs ? `\n\n  ${initSchedulerMember()}` : ''}${signalClass === undefined ? '' : `\n\n  ${signalMembers(signalClass, hasAsync)}`}`;
 }
 
 /** Exported root sets and their guard. Closed mode only. ADR006 lines 29-33. */
