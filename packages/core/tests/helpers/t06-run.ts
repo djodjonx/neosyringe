@@ -35,6 +35,8 @@ export interface OpenOptions {
   readonly emitter?: Emitter;
   readonly parent?: Container;
   readonly testOverrides?: boolean;
+  /** Generator `observation`: the container carries the optional production observation (topic 22). Absent: off. */
+  readonly observation?: boolean;
   /** Const bindings the copied factory source still names, prepended to the generated module. */
   readonly prelude?: string;
 }
@@ -204,6 +206,10 @@ function instantiate(graph: DependencyGraph, options: OpenOptions): Opened {
     false,
     options.testOverrides === true,
     options.emitter,
+    undefined,
+    undefined,
+    undefined,
+    options.observation === true ? { observation: true } : undefined,
   ).generate();
   const js = ts.transpileModule(`${options.prelude ?? ''}\n${generated}`, {
     compilerOptions: {

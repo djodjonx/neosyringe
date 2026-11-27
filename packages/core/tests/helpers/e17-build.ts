@@ -43,6 +43,8 @@ export interface BuildOptions {
   inline?: boolean;
   validation?: 'compatible';
   testOverrides?: boolean;
+  /** Generator `observation` (topic 22): the container has `observe()` and `stateSnapshot()`. Absent: off. */
+  observation?: boolean;
   /** Modules the container file imports: path from the container file, then the module record `require` answers. */
   modules?: ReadonlyMap<string, string>;
   require?: (id: string) => unknown;
@@ -145,7 +147,18 @@ export function build(source: string, options: BuildOptions = {}): Built {
     const end = graph.defineBuilderConfigEnd;
     if (name === undefined || start === undefined || end === undefined) throw new Error('missing container position');
     named(graphs, name);
-    const generator = new Generator(graph, options.inline !== false, undefined, false, options.testOverrides === true, options.emitter);
+    const generator = new Generator(
+      graph,
+      options.inline !== false,
+      undefined,
+      false,
+      options.testOverrides === true,
+      options.emitter,
+      undefined,
+      undefined,
+      undefined,
+      options.observation === true ? { observation: true } : undefined,
+    );
     const text = generator.generate();
     generated.push(text);
     code = `${code.slice(0, start)}${text}\nexport const ${name} = ${generator.generateInstantiation()};${code.slice(end)}`;

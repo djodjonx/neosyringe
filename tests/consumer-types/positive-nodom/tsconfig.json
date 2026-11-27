@@ -13,5 +13,5 @@
       "@djodjonx/neosyringe": ["../../../packages/neosyringe"]
     }
   },
-  "files": ["signal.ts"]
+  "files": ["signal.ts", "observation.ts"]
 }

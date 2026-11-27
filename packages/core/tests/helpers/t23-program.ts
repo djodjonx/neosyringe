@@ -150,6 +150,8 @@ export interface EmissionCase {
   parent: boolean;
   /** Ambient declarations of the user-scope names a factory body reads (the output is a separate file). */
   ambient?: string;
+  /** Generator `observation` (topic 22): the output carries `observe()` and `stateSnapshot()`. Absent: off. */
+  observation?: boolean;
   /** Analyzer validation. `compatible` lets a factory without a dependencies list through (an opaque factory). */
   validation?: 'compatible';
 }
@@ -442,7 +444,18 @@ export function emitCase(emission: EmissionCase, emitter: ProductEmitter): CaseE
   const program = programOf(userPath, emission.source);
   const graphs = (emission.validation ? new Analyzer(program, { validation: emission.validation }) : new Analyzer(program)).extractAll();
   const render = (name: string): string =>
-    new Generator(named(graphs, name), false, dirname(userPath), true, emission.testOverrides, emitter).generate();
+    new Generator(
+      named(graphs, name),
+      false,
+      dirname(userPath),
+      true,
+      emission.testOverrides,
+      emitter,
+      undefined,
+      undefined,
+      undefined,
+      emission.observation === true ? { observation: true } : undefined,
+    ).generate();
   const outputs: EmittedModule[] = [{ file: 'box.out.ts', code: render('box') }];
   let ambient: string | undefined = emission.ambient;
   if (emission.parent) {

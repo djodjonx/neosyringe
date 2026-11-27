@@ -59,3 +59,11 @@ signal.ts(15,18): error TS2322: Type 'string' is not assignable to type 'AbortSi
 signal.ts(17,18): error TS2353: Object literal may only specify known properties, and 'timeout' does not exist in type 'InitializeOptions'.
 signal.ts(19,16): error TS2559: Type '3' has no properties in common with type 'InitializeOptions'.
 signal.ts(21,14): error TS2741: Property 'signal' is missing in type '{ resolve: () => never; resolveAll: () => never[]; resolveMany: () => never; }' but required in type 'FactoryContext'.
+observation.ts(21,9): error TS2339: Property 'on' does not exist on type 'CoreContainer'.
+observation.ts(22,9): error TS2339: Property 'override' does not exist on type 'CoreContainer'.
+observation.ts(24,33): error TS2339: Property 'value' does not exist on type 'Readonly<ObservationEvent>'.
+observation.ts(25,33): error TS2339: Property 'error' does not exist on type 'Readonly<ObservationEvent>'.
+observation.ts(26,33): error TS2339: Property 'message' does not exist on type 'Readonly<ObservationEvent>'.
+observation.ts(28,16): error TS2345: Argument of type 'string' is not assignable to parameter of type 'ObservationSink'.
+observation.ts(30,35): error TS2322: Type 'number' is not assignable to type '() => number'.
+observation.ts(32,22): error TS2353: Object literal may only specify known properties, and 'send' does not exist in type 'ObservationChannel'.

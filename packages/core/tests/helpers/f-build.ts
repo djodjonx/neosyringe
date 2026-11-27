@@ -54,6 +54,8 @@ export interface Spec {
   part?: string;
   alias?: string;
   dispose?: boolean;
+  /** `dispose()` reports itself, then answers the gate `<name>:dispose` of the controller: an async disposer a test holds. */
+  disposeGate?: boolean;
   opaque?: boolean;
   cooperative?: boolean;
 }
@@ -89,9 +91,11 @@ function injection(spec: Spec): string {
   const deps = spec.deps ?? [];
   const multi = spec.part === undefined ? '' : 'multi: true,';
   const declared = spec.opaque === true ? '' : ` dependencies: [${dependencyList(deps)}],`;
-  const value = spec.dispose === true
-    ? `{ name: ${JSON.stringify(label)}, dispose() { probe.disposed(${JSON.stringify(label)}); } }`
-    : `{ name: ${JSON.stringify(label)} }`;
+  const value = spec.disposeGate === true
+    ? `{ name: ${JSON.stringify(label)}, dispose() { probe.disposed(${JSON.stringify(label)}); return probe.gate(${JSON.stringify(`${label}:dispose`)}); } }`
+    : spec.dispose === true
+      ? `{ name: ${JSON.stringify(label)}, dispose() { probe.disposed(${JSON.stringify(label)}); } }`
+      : `{ name: ${JSON.stringify(label)} }`;
   const wait = spec.cooperative === true
     ? `const signal = ctx.signal;
         await Promise.race([probe.gate(${JSON.stringify(label)}), new Promise((_, reject) => {
@@ -136,6 +140,8 @@ export interface SourceOptions {
   eager?: readonly string[];
   /** Generate the test overrides (`override`, `overrideMany`, `clearOverrides` do real work instead of refusing). */
   testOverrides?: boolean;
+  /** Generate the optional production observation (topic 22): `observe()` and `stateSnapshot()` on the container. */
+  observation?: boolean;
   /** A `useContainer` parent of the container, an open full container named `parent` that holds these registrations. */
   parent?: readonly Spec[];
 }
@@ -350,8 +356,9 @@ export async function withRun<T>(
     `const probe = Reflect.get(globalThis, '${PROBE_KEY}');`,
   ].join('\n');
   Reflect.set(globalThis, PROBE_KEY, probe);
-  const parent = options.parent === undefined ? undefined : loaded.open('parent', { emitter: cell.emitter, prelude });
-  const opened = loaded.open('box', { emitter: cell.emitter, prelude, parent: parent?.container, testOverrides: options.testOverrides === true });
+  const observation = options.observation === true;
+  const parent = options.parent === undefined ? undefined : loaded.open('parent', { emitter: cell.emitter, prelude, observation });
+  const opened = loaded.open('box', { emitter: cell.emitter, prelude, parent: parent?.container, testOverrides: options.testOverrides === true, observation });
   const box: object = opened.container;
   try {
     return await scenario({
