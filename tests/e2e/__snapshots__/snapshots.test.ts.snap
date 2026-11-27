@@ -33,8 +33,8 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _singleRoots = new Set<unknown>([Import_0.Reader, "IAudit_dc30f515"]);
-  private _multiRoots = new Set<unknown>([]);
+  private readonly _singleRoots: ReadonlySet<unknown> = NeoContainer.__neoReadRootSets()[0];
+  private readonly _multiRoots: ReadonlySet<unknown> = NeoContainer.__neoReadRootSets()[1];
 
   // -- Factories --
   
@@ -117,6 +117,17 @@ class NeoContainer {
     error.code = code;
     if (arguments.length >= 3) error.cause = cause;
     return error;
+  }
+
+  private static __neoRootSets?: readonly [ReadonlySet<unknown>, ReadonlySet<unknown>];
+
+  private static __neoReadRootSets(): readonly [ReadonlySet<unknown>, ReadonlySet<unknown>] {
+    let __neoSets = NeoContainer.__neoRootSets;
+    if (__neoSets === undefined) {
+      __neoSets = [new Set<unknown>([Import_0.Reader, "IAudit_dc30f515"]), new Set<unknown>([])];
+      if (!__neoSets[0].has(undefined) && !__neoSets[1].has(undefined)) NeoContainer.__neoRootSets = __neoSets;
+    }
+    return __neoSets;
   }
 
   private _assertRoot(token: unknown, all: boolean): void {
@@ -610,8 +621,8 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _singleRoots = new Set<unknown>([Import_0.Reader, "IAudit_dc30f515"]);
-  private _multiRoots = new Set<unknown>([]);
+  private readonly _singleRoots: ReadonlySet<unknown> = NeoContainer.__neoReadRootSets()[0];
+  private readonly _multiRoots: ReadonlySet<unknown> = NeoContainer.__neoReadRootSets()[1];
 
   // -- Factories --
   
@@ -670,6 +681,17 @@ class NeoContainer {
     error.code = code;
     if (arguments.length >= 3) error.cause = cause;
     return error;
+  }
+
+  private static __neoRootSets?: readonly [ReadonlySet<unknown>, ReadonlySet<unknown>];
+
+  private static __neoReadRootSets(): readonly [ReadonlySet<unknown>, ReadonlySet<unknown>] {
+    let __neoSets = NeoContainer.__neoRootSets;
+    if (__neoSets === undefined) {
+      __neoSets = [new Set<unknown>([Import_0.Reader, "IAudit_dc30f515"]), new Set<unknown>([])];
+      if (!__neoSets[0].has(undefined) && !__neoSets[1].has(undefined)) NeoContainer.__neoRootSets = __neoSets;
+    }
+    return __neoSets;
   }
 
   private _assertRoot(token: unknown, all: boolean): void {
@@ -1062,8 +1084,8 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _singleRoots = new Set<unknown>([Import_0.Reader, "IAudit_dc30f515"]);
-  private _multiRoots = new Set<unknown>([]);
+  private readonly _singleRoots: ReadonlySet<unknown> = NeoContainer.__neoReadRootSets()[0];
+  private readonly _multiRoots: ReadonlySet<unknown> = NeoContainer.__neoReadRootSets()[1];
 
   // -- Factories --
   
@@ -1098,6 +1120,17 @@ class NeoContainer {
     error.code = code;
     if (arguments.length >= 3) error.cause = cause;
     return error;
+  }
+
+  private static __neoRootSets?: readonly [ReadonlySet<unknown>, ReadonlySet<unknown>];
+
+  private static __neoReadRootSets(): readonly [ReadonlySet<unknown>, ReadonlySet<unknown>] {
+    let __neoSets = NeoContainer.__neoRootSets;
+    if (__neoSets === undefined) {
+      __neoSets = [new Set<unknown>([Import_0.Reader, "IAudit_dc30f515"]), new Set<unknown>([])];
+      if (!__neoSets[0].has(undefined) && !__neoSets[1].has(undefined)) NeoContainer.__neoRootSets = __neoSets;
+    }
+    return __neoSets;
   }
 
   private _assertRoot(token: unknown, all: boolean): void {
@@ -1696,8 +1729,8 @@ class NeoContainer {
   private _closed = false;
   private _borrowed = new Set<unknown>([]);
   private _destroyWork?: Promise<void>;
-  private _singleRoots = new Set<unknown>([Import_0.Reader, "IAudit_dc30f515"]);
-  private _multiRoots = new Set<unknown>([]);
+  private readonly _singleRoots: ReadonlySet<unknown> = NeoContainer.__neoReadRootSets()[0];
+  private readonly _multiRoots: ReadonlySet<unknown> = NeoContainer.__neoReadRootSets()[1];
 
   // -- Factories --
   
@@ -1732,6 +1765,17 @@ class NeoContainer {
     error.code = code;
     if (arguments.length >= 3) error.cause = cause;
     return error;
+  }
+
+  private static __neoRootSets?: readonly [ReadonlySet<unknown>, ReadonlySet<unknown>];
+
+  private static __neoReadRootSets(): readonly [ReadonlySet<unknown>, ReadonlySet<unknown>] {
+    let __neoSets = NeoContainer.__neoRootSets;
+    if (__neoSets === undefined) {
+      __neoSets = [new Set<unknown>([Import_0.Reader, "IAudit_dc30f515"]), new Set<unknown>([])];
+      if (!__neoSets[0].has(undefined) && !__neoSets[1].has(undefined)) NeoContainer.__neoRootSets = __neoSets;
+    }
+    return __neoSets;
   }
 
   private _assertRoot(token: unknown, all: boolean): void {
