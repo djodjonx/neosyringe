@@ -591,7 +591,7 @@ export class Generator {
         providerTypes,
         dispatchLinearMax: this.dispatch?.linearMax ?? DISPATCH_LINEAR_MAX,
         stateFields: `${state.stateFields}${state.eagerField}`,
-        ...rootMembers(emitted, closed, getImport),
+        ...rootMembers(emitted, closed, getImport, this.containerClassName),
         runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync, emitted.runtimeProfile === 'minimal'), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined, observed(emitted.runtimeProfile === 'minimal')),
         debugGetters: this.emitDebugGetter(emitted),
         copy,
@@ -703,7 +703,7 @@ ${aliases ? `\n    ${aliases.step}` : ''}
     ${bound}${resolveGuard}${resolveInterior}
   }`;
 
-    const { rootFields, assertRootMethod } = rootMembers(emitted, closed, getImport);
+    const { rootFields, assertRootMethod } = rootMembers(emitted, closed, getImport, this.containerClassName);
 
     return fragment`${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
 ${importLines.join('\n')}
@@ -953,17 +953,43 @@ function runtimeHelpers(hasAsync: boolean, disposer: boolean, jobs: boolean, sig
   ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}${jobs ? `\n\n  ${initSchedulerMember()}` : ''}${signalClass === undefined ? '' : `\n\n  ${signalMembers(signalClass, hasAsync)}`}${observation === undefined ? '' : `\n\n  ${observationMembers(observation)}`}`;
 }
 
-/** Exported root sets and their guard. Closed mode only. ADR006 lines 29-33. */
+/**
+ * Exported root sets and their guard. Closed mode only. ADR006 lines 29-33.
+ *
+ * The two sets are the same for every container of the class, so the class builds them once (`__neoReadRootSets`, on the first
+ * container, not when the class is defined: a root is an expression of the user's file, and one that is declared further down
+ * or comes from an import cycle may not be bound yet) and a container keeps a reference. A container that was made with a root
+ * that still read `undefined` does not store them: the next one builds them again. Before, each container built its own two
+ * sets, and a closed `create` kept them alive with it (docs/benchmarks/stage-f-compile-overhead.md, "Runtime cost").
+ *
+ * The sets are shared by every container of the class, so their type is `ReadonlySet`: the generated code only reads them, and
+ * a later change that adds or deletes a token fails the strict typecheck of the emitted program.
+ * The two fields read the pair one after the other, so a construction made while a root reads `undefined` builds the pair twice
+ * (four sets, nothing kept). This is left as it is: a single read would need a third field and would change the names the
+ * guard and its tests read, for a case that lasts only until the root is bound.
+ */
 function rootMembers(
   graph: DependencyGraph,
   closed: boolean,
   getImport: GetImport,
+  className: string,
 ): { rootFields: string; assertRootMethod: string } {
   const exported = closed ? exportedRootIds(graph) : undefined;
   const rootFields = exported
-    ? `\n  private _singleRoots = new Set<unknown>([${rootKeyExprs(exported.single, graph, getImport)}]);\n  private _multiRoots = new Set<unknown>([${rootKeyExprs(exported.multi, graph, getImport)}]);`
+    ? `\n  private readonly _singleRoots: ReadonlySet<unknown> = ${className}.__neoReadRootSets()[0];\n  private readonly _multiRoots: ReadonlySet<unknown> = ${className}.__neoReadRootSets()[1];`
     : '';
-  const assertRootMethod = closed ? `
+  const assertRootMethod = exported ? `
+
+  private static __neoRootSets?: readonly [ReadonlySet<unknown>, ReadonlySet<unknown>];
+
+  private static __neoReadRootSets(): readonly [ReadonlySet<unknown>, ReadonlySet<unknown>] {
+    let __neoSets = ${className}.__neoRootSets;
+    if (__neoSets === undefined) {
+      __neoSets = [new Set<unknown>([${rootKeyExprs(exported.single, graph, getImport)}]), new Set<unknown>([${rootKeyExprs(exported.multi, graph, getImport)}])];
+      if (!__neoSets[0].has(undefined) && !__neoSets[1].has(undefined)) ${className}.__neoRootSets = __neoSets;
+    }
+    return __neoSets;
+  }
 
   private _assertRoot(token: unknown, all: boolean): void {
     if ((all ? this._multiRoots : this._singleRoots).has(token)) return;
