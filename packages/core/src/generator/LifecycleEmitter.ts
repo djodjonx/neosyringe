@@ -972,23 +972,76 @@ function combinedDisposals(
   return { slots: ordered, awaitClose };
 }
 
-function disposeCall(slot: DisposalSlot, immediateAwait: boolean, observation = false): string {
-  const follow = immediateAwait
-    ? `if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') await __neoResult;`
-    : `if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult);`;
-  const registration = JSON.stringify(slot.id.startsWith('node:') ? slot.id.slice('node:'.length) : slot.id);
-  if (slot.guarded) {
-    const run = observation ? observedDisposal(registration, '__neoRun()') : 'const __neoResult = __neoRun();';
-    return `const __neoRun = this._neoDisposer(__neoInst); if (__neoRun) { ${run} ${follow} }`;
-  }
-  const run = observation ? observedDisposal(registration, '__neoInst.dispose()') : 'const __neoResult = __neoInst.dispose();';
-  return `${run} ${follow}`;
+/** The registration a disposal slot reports under when the container is observed (topic 22). */
+function registrationOf(slot: DisposalSlot): string {
+  return JSON.stringify(slot.id.startsWith('node:') ? slot.id.slice('node:'.length) : slot.id);
 }
 
-function disposeSlot(slot: DisposalSlot, immediateAwait: boolean, observation = false): string {
-  const call = disposeCall(slot, immediateAwait, observation);
-  const read = slot.guarded ? MAYBE_DISPOSABLE : DISPOSABLE;
-  return `if (this.instances.has(${slot.tokenKey})) { const __neoInst = this.instances.get(${slot.tokenKey}) as ${read}; if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { ${call} } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }`;
+/**
+ * The observed call of one disposal (topic 22), written once in `_neoDisposeSlot`: `dispose` begins before the disposer
+ * runs and ends once, with the settlement of a promise it returns or the error it throws. It assigns the `__neoResult`
+ * the member declared, as the plain call does.
+ */
+function observedSlotCall(call: string): string {
+  return `const __neoOp = this._neoObs().begin('dispose', this._scopeId, __neoRegistration); try { __neoResult = ${call}; __neoResult = this._neoSettle(__neoOp, __neoResult); } catch (__neoThrown) { __neoOp('error', __neoThrown); throw __neoThrown; }`;
+}
+
+/**
+ * The disposal of one slot, written once per class (stage F, docs/benchmarks/stage-f-compile-overhead.md): each slot of
+ * `destroy()` and of the reconfiguration is a call of it. The protocols used to be inlined at every slot, which made the
+ * generated code, and its transpilation, grow with the number of disposable services.
+ * - the instance is read from the cache; a borrowed one, or one already disposed through another key (`__neoSeen`), is left
+ *   alone, and a live one is marked seen before its disposer runs;
+ * - a `guarded` slot (the factory may return anything, or the disposer is keyed by a symbol) asks `_neoDisposer` which
+ *   method to call and does nothing when there is none; an unguarded one calls `dispose()` as is, so a missing method throws
+ *   the same TypeError as before. A graph with no guarded slot has no such parameter and no such branch;
+ * - a failure of the call is gathered in `__neoErrors`; a promise it returns is either pushed to `__neoPending`
+ *   (an early slot: the caller awaits them together) or answered, with its rejection gathered, for the caller to await
+ *   at once (a late slot, whose dependents must wait).
+ * The member exists only when the graph has a disposal slot.
+ */
+function disposeSlotMember(slots: DisposalSlot[], observation: boolean): string {
+  const guarded = slots.some((slot) => slot.guarded);
+  // A graph with no guarded slot reads every instance as disposable and calls `dispose()` on it directly.
+  const plain = guarded ? `(__neoInst as ${DISPOSABLE}).dispose()` : '__neoInst.dispose()';
+  const params = [
+    '__neoKey: unknown',
+    '__neoSeen: Set<unknown>',
+    '__neoErrors: unknown[]',
+    ...(guarded ? ['__neoGuarded: boolean'] : []),
+    ...(observation ? ['__neoRegistration: string'] : []),
+    '__neoPending?: unknown[]',
+  ];
+  const run = (call: string): string => (observation ? observedSlotCall(call) : `__neoResult = ${call};`);
+  const invoke = guarded
+    ? `if (__neoGuarded) { const __neoRun = this._neoDisposer(__neoInst); if (!__neoRun) return undefined; ${run('__neoRun()')} } else { ${run(plain)} }`
+    : run(plain);
+  return `private _neoDisposeSlot(${params.join(', ')}): Promise<unknown> | undefined {
+    if (!this.instances.has(__neoKey)) return undefined;
+    const __neoInst = this.instances.get(__neoKey) as ${guarded ? MAYBE_DISPOSABLE : DISPOSABLE};
+    if (__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst))) return undefined;
+    if (__neoInst != null) __neoSeen.add(__neoInst);
+    try {
+      let __neoResult: unknown;
+      ${invoke}
+      if (!(__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function')) return undefined;
+      if (__neoPending) { __neoPending.push(__neoResult); return undefined; }
+      return Promise.resolve(__neoResult).then(undefined, (__neoDisposeError: unknown) => { __neoErrors.push(__neoDisposeError); });
+    } catch (__neoDisposeError) {
+      __neoErrors.push(__neoDisposeError);
+      return undefined;
+    }
+  }`;
+}
+
+/** One slot: a call of `_neoDisposeSlot`. An early slot hands its promise to `__neoPending`, a late one awaits it at once. */
+function disposeSlot(slot: DisposalSlot, immediateAwait: boolean, guarded: boolean, observation: boolean): string {
+  const args = [slot.tokenKey, '__neoSeen', '__neoErrors'];
+  if (guarded) args.push(String(slot.guarded));
+  if (observation) args.push(registrationOf(slot));
+  if (!immediateAwait) args.push('__neoPending');
+  const call = `this._neoDisposeSlot(${args.join(', ')})`;
+  return immediateAwait ? `if (__neoLate = ${call}) await __neoLate;` : `${call};`;
 }
 
 /**
@@ -998,16 +1051,18 @@ function disposeSlot(slot: DisposalSlot, immediateAwait: boolean, observation = 
  */
 function sharedDisposalLines(slots: DisposalSlot[], awaitClose: boolean, observation = false): string[] {
   if (slots.length === 0) return ['this.instances.clear();'];
+  const guarded = slots.some((slot) => slot.guarded);
   const lines = ['const __neoSeen = new Set();', 'const __neoErrors: unknown[] = [];'];
   const early = slots.filter((slot) => !slot.late);
   const late = slots.filter((slot) => slot.late);
   const defer = awaitClose && early.length > 0;
   if (defer) lines.push('const __neoPending: unknown[] = [];');
-  for (const slot of early) lines.push(disposeSlot(slot, false, observation));
+  if (late.length > 0) lines.push('let __neoLate: Promise<unknown> | undefined;');
+  for (const slot of early) lines.push(disposeSlot(slot, false, guarded, observation));
   if (defer) {
     lines.push('for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }');
   }
-  for (const slot of late) lines.push(disposeSlot(slot, true, observation));
+  for (const slot of late) lines.push(disposeSlot(slot, true, guarded, observation));
   lines.push('this.instances.clear();');
   return lines;
 }
@@ -1178,19 +1233,20 @@ export function generateDestroyMethod(
   minimal = false,
   observation = false,
 ): string {
-  const members = `${destroyMembers(graph, sorted, getImport, hasAsync, minimal, observation)}\n\n  ${asyncDisposalMember()}`;
+  const collected = combinedDisposals(graph, sorted, getImport);
+  // The disposal of one slot is written once, and only for a graph that has a slot (`_reconfigure` calls it too).
+  const slotMember = collected.slots.length === 0 ? '' : `\n\n  ${disposeSlotMember(collected.slots, observation)}`;
+  const members = `${destroyMembers(graph, collected, hasAsync, minimal, observation)}${slotMember}\n\n  ${asyncDisposalMember()}`;
   return hasScopeInputs(graph) ? `${inputDestroyMethod()}\n\n  ${members}` : members;
 }
 
 function destroyMembers(
   graph: DependencyGraph,
-  sorted: TokenId[],
-  getImport: GetImport,
+  collected: ReturnType<typeof combinedDisposals>,
   hasAsync = false,
   minimal = false,
   observation = false,
 ): string {
-  const collected = combinedDisposals(graph, sorted, getImport);
   const lines = disposalLines(collected.slots, collected.awaitClose, minimal, observation);
   const body = lines.join('\n    ');
   const join = destroyJoinPrefix();

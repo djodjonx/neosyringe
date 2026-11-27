@@ -232,7 +232,7 @@ const MEMBER_CATEGORIES = [
   ['resolve', /^(resolve|resolveAll|resolveMany|_resolveInternal|_resolveAllInternal)$/],
   ['lifecycle', /^(initialize|_startInitialize|_runInitialize|createScope|destroy|_runDestroy|_close|override|overrideMany|clearOverrides|_reconfigure)$/],
   ['events', /^(on|notifyResolve)$/],
-  ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock|_neoDisposer|__neoController|__neoIdle|__neoIdleSignal|_neoSignal|_neoCheck)$/],
+  ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock|_neoDisposer|_neoDisposeSlot|__neoController|__neoIdle|__neoIdleSignal|_neoSignal|_neoCheck)$/],
   ['observation', /^(observe|stateSnapshot|_neoObs|_neoAdopt|_neoSettle|_neoRegistration|_obs|_scopeId|_scoped)$/],
   ['debug-metadata', /^(_graph|_dependencyGraph)$/],
 ];
