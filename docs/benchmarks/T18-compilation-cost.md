@@ -77,7 +77,7 @@ Avant les groupes de taille 10, 100 et 1000 et avant les quatre groupes 5000 `li
 
 Le banc empaquette `packages/unplugin/src` avec esbuild 0.27.2 (`packages/unplugin/package.json:49`) sous `os.tmpdir()` (`tests/bench/compile-cost.mjs:210-212`). Le répertoire est effacé à la fin et sur SIGINT ou SIGTERM (`tests/bench/compile-cost.mjs:436-440`, `tests/bench/compile-cost.mjs:463-465`).
 
-Profil et mode sont des littéraux dans le `defineBuilderConfig` généré (`tests/bench/compile-cost.mjs:10-11`). Le parseur lit le profil (`packages/core/src/analyzer/parsers/ConfigParser.ts:657-673`) et refuse le mode fermé hors validation stricte (`packages/core/src/analyzer/parsers/ConfigParser.ts:788-794`). L'analyseur est strict par défaut (`packages/core/src/analyzer/Analyzer.ts:185`). L'émetteur optimisé sert au profil `minimal` ou au mode `closed` (`packages/core/src/generator/Generator.ts:201-203`).
+Profil et mode sont des littéraux dans le `defineBuilderConfig` généré (`tests/bench/compile-cost.mjs:10-11`). Le parseur lit le profil (`packages/core/src/analyzer/parsers/ConfigParser.ts:657-673`) et refuse le mode fermé hors validation stricte (`packages/core/src/analyzer/parsers/ConfigParser.ts:788-794`). L'analyseur est strict par défaut (`packages/core/src/analyzer/Analyzer.ts:185`). L'émetteur optimisé sert au profil `minimal` ou au mode `closed` (`packages/core/src/generator/Generator.ts:202-204`).
 
 `linear` : N conteneurs, chacun n'injecte que `Shared`. `diamond` : `Left` et `Right` injectent `Shared`, N feuilles injectent les deux (`tests/bench/compile-cost.mjs:14-15`).
 

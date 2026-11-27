@@ -2,7 +2,7 @@
 
 Banc reproductible. Un processus Node neuf par cas et par index de processus. La compilation est hors du chronomètre du worker. L'ordre des cas est inversé aux index de processus impairs (`tests/bench/runtime-cost.mjs:893`).
 
-Le banc charge `Analyzer` et `Generator` depuis le `dist` déjà construit (`tests/bench/runtime-cost.mjs:17-18`). L'émetteur passé au générateur est absent (`tests/bench/runtime-cost.mjs:327`), donc l'émetteur optimisé est choisi quand le profil est `minimal` ou le mode `closed` (`packages/core/src/generator/Generator.ts:201-204`). Le worker ne charge pas esbuild. esbuild ne sert qu'à la taille minifiée, après les processus (`tests/bench/runtime-cost.mjs:795`).
+Le banc charge `Analyzer` et `Generator` depuis le `dist` déjà construit (`tests/bench/runtime-cost.mjs:17-18`). L'émetteur passé au générateur est absent (`tests/bench/runtime-cost.mjs:327`), donc l'émetteur optimisé est choisi quand le profil est `minimal` ou le mode `closed` (`packages/core/src/generator/Generator.ts:202-205`). Le worker ne charge pas esbuild. esbuild ne sert qu'à la taille minifiée, après les processus (`tests/bench/runtime-cost.mjs:795`).
 
 ## Matrice
 

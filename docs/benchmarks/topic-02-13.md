@@ -12,7 +12,7 @@ node node_modules/typescript/bin/tsc --noEmit --extendedDiagnostics --pretty fal
 
 Le projet temporaire est hors du `tsconfig` du dépôt. Il contient un `consumer.ts` de N classes et N inscriptions passées à `defineBuilderConfig`. « Avant » pointe vers une copie de `packages/neosyringe/src/types.ts` lue par `git show 1934d9c:packages/neosyringe/src/types.ts`, réexportée par un `index.ts` temporaire. « Après » pointe vers `packages/neosyringe/src/index.ts`. Plafond de 90 s par case. Aucune case n'a atteint le plafond.
 
-Le garde récursif est remplacé par un type mappé (`packages/neosyringe/src/types.ts:256-273`).
+Le garde récursif est remplacé par un type mappé (`packages/neosyringe/src/types.ts:298-315`).
 
 | N | Variante | statut | TS2589 | Check time | Instantiations | Mémoire |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -34,11 +34,11 @@ Mesure de cette étape, un processus `node` neuf par sonde (`spawnSync(process.e
 | reference | 317 | 318 | 158 |
 | optimized | 2766 | 2767 | 1383 |
 
-L'émetteur ouvert complet est la référence (`packages/core/src/generator/Generator.ts:116-119`). Le choix automatique confirme la même règle (`packages/core/src/generator/Generator.ts:220-223`). Le saut de la référence est `create_*` puis `resolve` puis `resolveLocal` (`packages/core/src/generator/Generator.ts:535`). L'accesseur direct optimisé est `packages/core/src/generator/ResolveEmitter.ts:469`. Son jumeau `_get_` est `packages/core/src/generator/ResolveEmitter.ts:474`.
+L'émetteur ouvert complet est la référence (`packages/core/src/generator/Generator.ts:117-120`). Le choix automatique confirme la même règle (`packages/core/src/generator/Generator.ts:221-224`). Le saut de la référence est `create_*` puis `resolve` puis `resolveLocal` (`packages/core/src/generator/Generator.ts:536`). L'accesseur direct optimisé est `packages/core/src/generator/ResolveEmitter.ts:469`. Son jumeau `_get_` est `packages/core/src/generator/ResolveEmitter.ts:474`.
 
 La recherche de cycle de cette étape est itérative (`packages/core/src/generator/cycleSearch.ts:48`, appelée depuis `packages/core/src/generator/GraphValidator.ts:171` et `packages/core/src/analyzer/validators/CycleValidator.ts:29`). Les arêtes d'un membre passent par un ensemble (`packages/core/src/generator/cycleSearch.ts:26`). Aucun compteur ne prétend mesurer ce travail : le test W4 ne vérifie que la déduplication et l'ordre d'insertion des arêtes. Le débordement mesuré avant le remplacement itératif, sur un programme réel en anneau de 5000, venait de la recherche récursive. `generate` levait alors une erreur de `TopologicalSorter`, pas un `RangeError`. À froid, pointe en premier : `GraphValidator` tenait 3000 et échouait à 4000. `CycleValidator` tenait 2000 et échouait à 3000.
 
-L'ordre stable est un tas sur l'index initial (`packages/core/src/generator/LifecycleEmitter.ts:127-131`). Chaque comparaison du tas passe par un seul assistant compté (`packages/core/src/generator/minHeap.ts:55-56`). Pour 10000 étapes indépendantes, mesure : 226682 comparaisons, 20000 visites, 20000 opérations de tas. Le test P29 plafonne les comparaisons à `2 * (V + E) * ceil(log2(V + 1))`, soit 280000 ; un balayage linéaire par `pop` en compterait environ 50 millions. La destruction place déjà le dépendant avant sa dépendance (`packages/core/src/generator/LifecycleEmitter.ts:782`). Le correctif de la profondeur d'appel reste au topic 01.
+L'ordre stable est un tas sur l'index initial (`packages/core/src/generator/LifecycleEmitter.ts:128-132`). Chaque comparaison du tas passe par un seul assistant compté (`packages/core/src/generator/minHeap.ts:55-56`). Pour 10000 étapes indépendantes, mesure : 226682 comparaisons, 20000 visites, 20000 opérations de tas. Le test P29 plafonne les comparaisons à `2 * (V + E) * ceil(log2(V + 1))`, soit 280000 ; un balayage linéaire par `pop` en compterait environ 50 millions. La destruction place déjà le dépendant avant sa dépendance (`packages/core/src/generator/LifecycleEmitter.ts:862`). Le correctif de la profondeur d'appel reste au topic 01.
 
 ## A13-2 — ancre et nombre des diagnostics de cycle
 
@@ -58,7 +58,7 @@ La dernière ligne est une différence connue et voulue : un doublon de dépenda
 
 ## Unions et tableaux élargis
 
-Le garde d'`injections` regarde chaque position d'un tuple, et le type d'élément d'un tableau élargi (`packages/neosyringe/src/types.ts:256-273`). Une fabrique mal typée dans un tableau élargi est donc refusée. `1934d9c` laissait passer tout tableau dont la longueur n'est pas connue. Mesure : `tsc --noEmit` sur un projet jetable, avant (copie de `types.ts` de `1934d9c`) et après. `BadF` renvoie `string` pour un jeton `Port`. `GoodF` renvoie `Port`.
+Le garde d'`injections` regarde chaque position d'un tuple, et le type d'élément d'un tableau élargi (`packages/neosyringe/src/types.ts:298-315`). Une fabrique mal typée dans un tableau élargi est donc refusée. `1934d9c` laissait passer tout tableau dont la longueur n'est pas connue. Mesure : `tsc --noEmit` sur un projet jetable, avant (copie de `types.ts` de `1934d9c`) et après. `BadF` renvoie `string` pour un jeton `Port`. `GoodF` renvoie `Port`.
 
 | Forme de `injections` | avant | après |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ Le garde d'`injections` regarde chaque position d'un tuple, et le type d'éléme
 
 Raison : le refus ne touche que des configurations dont la fabrique renvoie vraiment le mauvais type. L'audit interdit de relâcher un garde, pas de le resserrer. Le type mappé est la forme du pack de spécifications.
 
-Limite restante : un élément qui est une union `BadF | GoodF` cache le membre fautif. `EnsureFactory` se distribue sur l'union et garde le membre valide (`packages/neosyringe/src/types.ts:346`). Les formes `(BadF | GoodF)[]` et `[BadF | GoodF]` restent acceptées. Le test W8 les fige.
+Limite restante : un élément qui est une union `BadF | GoodF` cache le membre fautif. `EnsureFactory` se distribue sur l'union et garde le membre valide (`packages/neosyringe/src/types.ts:388`). Les formes `(BadF | GoodF)[]` et `[BadF | GoodF]` restent acceptées. Le test W8 les fige.
 
 Note de migration : une configuration dont une fabrique a le mauvais type, rangée dans un tableau élargi, ne compile plus. Typer la fabrique correctement, ou annoter le tableau `Injection[]` si le type de retour est bon.
 

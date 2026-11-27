@@ -147,7 +147,7 @@ Type: `{ profile?: 'full' | 'minimal' }`
 
 ### initialization
 
-Type: `{ concurrency?: number }` (`packages/neosyringe/src/types.ts:232`)
+Type: `{ concurrency?: number }` (`packages/neosyringe/src/types.ts:274`)
 
 How many async singletons `initialize()` builds at once. Default `1`: one after the other, in dependency order. A larger value is a positive integer literal. `0`, a negative number, a fraction, a variable, a string, a spread or computed member and an `initialization` that is not an object literal are `NEO_CONFIG_UNSUPPORTED` at the value (`packages/core/src/analyzer/parsers/ConfigParser.ts:215`). It belongs to the builder: a partial cannot declare it, and `initialize()` takes no option for it. With a value above 1, independent services may start in any order, and two failures at once reject with an `AggregateError`. See [Async Factories](/guide/async-factories#starting-async-services-at-the-same-time).
 
@@ -161,7 +161,7 @@ export const container = defineBuilderConfig({
 
 ### scopeInputs
 
-Type: `readonly InputToken[]` (`packages/neosyringe/src/types.ts:533`)
+Type: `readonly InputToken[]` (`packages/neosyringe/src/types.ts:575`)
 
 The values each scope is given by `createScope({ values })`: a literal list of `useInterface<T>()` and `useProperty(...)` tokens. Every input is required and borrowed. The builder then returns a model that creates scopes and is destroyed, and does not resolve. A partial cannot declare it, and a class token is not an input. See [ContainerTemplate and BoundContainer](/api/types#containertemplate-and-boundcontainer) for the types and [states and ownership](/guide/states-and-ownership#scope-inputs) for the lifetime of the values.
 
@@ -350,7 +350,7 @@ interface Injection<T> {
 }
 ```
 
-The real type is a union of five disjoint shapes (`packages/neosyringe/src/types.ts:401`).
+The real type is a union of five disjoint shapes (`packages/neosyringe/src/types.ts:443`).
 
 ### token
 
@@ -424,7 +424,7 @@ const plugins = container.resolveAll(useInterface<IPlugin>());
 
 Type: `true`
 
-Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:421`).
+Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:463`).
 
 <<< @/../examples/new-api/factories.ts#arrow
 
@@ -432,11 +432,11 @@ Marks the provider as a factory function. The `Injection` type requires it for a
 
 Type: `readonly DependencyRef[]`. A `DependencyRef` is a token, or `{ all: token }` for `resolveAll`.
 
-Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:422`), so the type does not catch the omission.
+Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:464`), so the type does not catch the omission.
 
 <<< @/../examples/new-api/factories.ts#all-dependency
 
-The factory receives a `FactoryContext` (`resolve`, `resolveAll`, `resolveMany`). Asking for an undeclared token throws `NEO_UNDECLARED_FACTORY_DEP`. Using the context after the factory returned throws `NEO_FACTORY_CONTEXT_EXPIRED`.
+The factory receives a `FactoryContext` (`resolve`, `resolveAll`, `resolveMany`, `signal`). Asking for an undeclared token throws `NEO_UNDECLARED_FACTORY_DEP`. Using the context, or reading its `signal`, after the factory returned throws `NEO_FACTORY_CONTEXT_EXPIRED`.
 
 ### ownership
 

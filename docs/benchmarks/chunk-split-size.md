@@ -31,7 +31,7 @@ Roles come from the esbuild metafile, not from file names. esbuild also sets `en
 
 Each raw build and each minified build was executed. All five returned `{"tag":"CHUNK_SPLIT_HEAVY","marker":"CHUNK_SPLIT_CONTAINER"}`.
 
-The bytes depend on the absolute build path and on the Node zlib version (gzip). The file name is hashed into the container id (`packages/core/src/analyzer/shared/HashUtils.ts:157-160`) and into the generated class suffix (`packages/core/src/generator/Generator.ts:150-154`). The script builds in a fixed directory per checkout. Another checkout, or another Node zlib build, can print other gzip bytes. These numbers are not a promise.
+The bytes depend on the absolute build path and on the Node zlib version (gzip). The file name is hashed into the container id (`packages/core/src/analyzer/shared/HashUtils.ts:157-160`) and into the generated class suffix (`packages/core/src/generator/Generator.ts:151-155`). The script builds in a fixed directory per checkout. Another checkout, or another Node zlib build, can print other gzip bytes. These numbers are not a promise.
 
 ## Bytes
 
@@ -53,6 +53,6 @@ The bytes depend on the absolute build path and on the Node zlib version (gzip).
 
 The deferred chunk is the same in the four split cells. The heavy provider is not removed in closed mode: the root factory reaches it. `closed-full` is 16397 raw against `open-full` 16814 raw, and 8260 minified against 8237 minified. No gain is claimed.
 
-Minimal is a different feature set. The optimized emitter is used when the profile is minimal or the mode is closed (`packages/core/src/generator/Generator.ts:201-203`). Do not read the smaller initial chunk as a free saving.
+Minimal is a different feature set. The optimized emitter is used when the profile is minimal or the mode is closed (`packages/core/src/generator/Generator.ts:202-204`). Do not read the smaller initial chunk as a free saving.
 
 One synthetic provider, one graph, one machine, esbuild only. Rollup is not measured. A real provider can be smaller or larger, and its text changes how well it compresses. The single cjs bundles of `scripts/measure-t17-size.mjs` still do not split chunks (`scripts/measure-t17-size.mjs:158`).

@@ -28,7 +28,7 @@ await container.destroy();
 
 ## What initialize does
 
-- Every container has `initialize(): Promise<void>` (`packages/neosyringe/src/types.ts:67`). A container with no async work returns at once. You can call it everywhere without checking.
+- Every container has `initialize(options?: InitializeOptions): Promise<void>` (`packages/neosyringe/src/types.ts:101`). A container with no async work returns at once. You can call it everywhere without checking.
 - It builds the async singletons, in dependency order, and waits for each one before its consumers run. A factory that needs another async service lists it in `dependencies`. One at a time by default; [`initialization.concurrency`](#starting-async-services-at-the-same-time) lets independent ones start together.
 - Two `initialize()` calls at the same time share the work. A factory does not run twice.
 - A child of an async parent needs `await child.initialize()` too: it readies the parent as well. Without it, the child's `resolve()` throws `NEO_NOT_INITIALIZED`.
@@ -49,36 +49,120 @@ export const container = defineBuilderConfig({
 });
 ```
 
-- **A literal of the builder.** `N` is a positive integer literal, read when the plugin builds the container (`packages/core/src/analyzer/parsers/ConfigParser.ts:215`). `0`, a negative number, `1.5`, a variable, a string, a spread member or a computed member is `NEO_CONFIG_UNSUPPORTED`, reported at that value (`packages/core/src/analyzer/parsers/ConfigParser.ts:251`). It is not an argument of `initialize()`, and a partial that declares it is refused (`packages/core/src/analyzer/collectors/ConfigCollector.ts:927`). The type is `InitializationOptions` (`packages/neosyringe/src/types.ts:232`).
-- **The default is 1.** With no option, or `concurrency: 1`, `initialize()` is written as it was before, text for text (`packages/core/src/generator/LifecycleEmitter.ts:335`). So is a container with fewer than two async steps (`packages/core/src/generator/LifecycleEmitter.ts:337`). `N` is capped to the number of steps (`packages/core/src/generator/LifecycleEmitter.ts:395`).
-- **A step waits for every async step it needs.** There is one step per async singleton and per async `multi` contribution. A step starts when every step it reaches has finished, also when it reaches it through a sync factory or class, a `multi` token it reads with `resolveAll`, or an alias (`packages/core/src/generator/LifecycleEmitter.ts:328`). The `dependencies` of a factory are part of that graph (`packages/core/src/analyzer/shared/registrationGraph.ts:90`, `packages/core/src/analyzer/graphAdapter.ts:450`). Steps start in the order a sequential initialization would run them.
-- **An opaque factory waits for every earlier step.** A factory with no `dependencies` list (`validation: 'compatible'`, an opaque factory: `packages/core/src/analyzer/types.ts:231`) declares nothing, so the build cannot tell which steps it resolves. Its step, and the step of a registration that reads one through a sync factory or class, starts only when every step that comes before it in the sequential order has finished (`packages/core/src/generator/LifecycleEmitter.ts:319` to `:323`). The emitted list names only the nearest earlier step that waits the same way and the steps after it, because that step already waits for every step before it; a container whose factories are all opaque writes one dependency per step (`packages/core/src/generator/LifecycleEmitter.ts:385` to `:390`). A step that comes after it and does not reach it is not held back. This keeps the order safe but gives up the overlap for that step: list its `dependencies` to get it back. Closed mode refuses an opaque factory (`packages/core/src/analyzer/parsers/ConfigParser.ts:460`).
-- **Parents and eager roots keep their place.** The `useContainer` parents are initialized first, one after the other, then the parents are checked once more (`packages/core/src/generator/LifecycleEmitter.ts:533`, `packages/core/src/generator/LifecycleEmitter.ts:501`). The `eager` roots run after the last step (`packages/core/src/generator/LifecycleEmitter.ts:538`).
-- **A cycle is refused before anything runs.** Steps that wait for each other make `generate()` throw, at build time (`packages/core/src/generator/LifecycleEmitter.ts:402`).
+- **A literal of the builder.** `N` is a positive integer literal, read when the plugin builds the container (`packages/core/src/analyzer/parsers/ConfigParser.ts:215`). `0`, a negative number, `1.5`, a variable, a string, a spread member or a computed member is `NEO_CONFIG_UNSUPPORTED`, reported at that value (`packages/core/src/analyzer/parsers/ConfigParser.ts:251`). It is not an argument of `initialize()`, and a partial that declares it is refused (`packages/core/src/analyzer/collectors/ConfigCollector.ts:927`). The type is `InitializationOptions` (`packages/neosyringe/src/types.ts:274`).
+- **The default is 1.** With no option, or `concurrency: 1`, `initialize()` is written exactly as it is with no option, and its steps run in the order they always had (`packages/core/src/generator/LifecycleEmitter.ts:336`). So is a container with fewer than two async steps (`packages/core/src/generator/LifecycleEmitter.ts:338`). `N` is capped to the number of steps (`packages/core/src/generator/LifecycleEmitter.ts:396`).
+- **A step waits for every async step it needs.** There is one step per async singleton and per async `multi` contribution. A step starts when every step it reaches has finished, also when it reaches it through a sync factory or class, a `multi` token it reads with `resolveAll`, or an alias (`packages/core/src/generator/LifecycleEmitter.ts:329`). The `dependencies` of a factory are part of that graph (`packages/core/src/analyzer/shared/registrationGraph.ts:90`, `packages/core/src/analyzer/graphAdapter.ts:450`). Steps start in the order a sequential initialization would run them.
+- **An opaque factory waits for every earlier step.** A factory with no `dependencies` list (`validation: 'compatible'`, an opaque factory: `packages/core/src/analyzer/types.ts:231`) declares nothing, so the build cannot tell which steps it resolves. Its step, and the step of a registration that reads one through a sync factory or class, starts only when every step that comes before it in the sequential order has finished (`packages/core/src/generator/LifecycleEmitter.ts:320` to `:324`). The emitted list names only the nearest earlier step that waits the same way and the steps after it, because that step already waits for every step before it; a container whose factories are all opaque writes one dependency per step (`packages/core/src/generator/LifecycleEmitter.ts:386` to `:391`). A step that comes after it and does not reach it is not held back. This keeps the order safe but gives up the overlap for that step: list its `dependencies` to get it back. Closed mode refuses an opaque factory (`packages/core/src/analyzer/parsers/ConfigParser.ts:460`).
+- **Parents and eager roots keep their place.** The `useContainer` parents are initialized first, one after the other, then the parents are checked once more (`packages/core/src/generator/LifecycleEmitter.ts:553`, `packages/core/src/generator/LifecycleEmitter.ts:507`). The `eager` roots run after the last step (`packages/core/src/generator/LifecycleEmitter.ts:565`).
+- **A cycle is refused before anything runs.** Steps that wait for each other make `generate()` throw, at build time (`packages/core/src/generator/LifecycleEmitter.ts:403`).
 
 ### When a concurrent initialization fails
 
-After the first failure no new step starts. The steps already started are waited for, then the rollback runs as described below (`packages/core/src/generator/LifecycleEmitter.ts:485` to `:488`). A step that finishes after the failure is rolled back too: its owned value is disposed once.
+After the first failure no new step starts. The steps already started are waited for, then the rollback runs as described below (`packages/core/src/generator/LifecycleEmitter.ts:490` to `:493`). A step that finishes after the failure is rolled back too: its owned value is disposed once.
 
-- **One failure** rejects with that same error object, as with `N = 1` (`packages/core/src/generator/LifecycleEmitter.ts:489`).
-- **Two or more failures** reject with an `AggregateError`. Its message is `initialization failed`, its `errors` are the failures in the order they happened, and its `cause` is the first one (`packages/core/src/generator/LifecycleEmitter.ts:490` to `:493`). This is the one difference from `N = 1`, where only the first factory that fails runs. Code that tests `error instanceof` a factory's own error type must look at `error.cause` when it opts in.
+- **One failure** rejects with that same error object, as with `N = 1` (`packages/core/src/generator/LifecycleEmitter.ts:494`).
+- **Two or more failures** reject with an `AggregateError`. Its message is `initialization failed`, its `errors` are the failures in the order they happened, and its `cause` is the first one (`packages/core/src/generator/LifecycleEmitter.ts:495` to `:498`). This is the one difference from `N = 1`, where only the first factory that fails runs. Code that tests `error instanceof` a factory's own error type must look at `error.cause` when it opts in.
 
-A promise that is still pending cannot be cancelled. The container waits for the real end of every started factory before it rolls back, so a slow factory delays the rejection. Cooperative cancellation with a signal is not part of this option.
+A promise that is still pending cannot be cancelled by the container. It waits for the real end of every started factory before it rolls back, so a slow factory delays the rejection. A factory can be asked to stop with a signal: see [Cancelling an initialization](#cancelling-an-initialization).
 
 `tests/bench/init-cost.mjs` measures the scheduling time and the heap of a container with 10000 async steps. This page quotes no result from it.
 
+## Cancelling an initialization
+
+`initialize({ signal })` takes the signal of an `AbortController`. It is opt-in: a call with no options behaves as it always did.
+
+```typescript
+const controller = new AbortController();
+const ready = container.initialize({ signal: controller.signal });
+
+// Later, when the caller gives up:
+controller.abort(new Error('startup cancelled'));
+await ready.catch((error) => {
+  // `error` is the object that was passed to abort(), not a copy.
+});
+```
+
+The option is `InitializeOptions`, one optional member `signal` (`packages/neosyringe/src/types.ts:41`, `packages/neosyringe/src/types.ts:50`). Its type is `AbortSignalLike` (`packages/neosyringe/src/types.ts:30`), the members of an `AbortSignal` that the container reads, written out so the types need neither the DOM lib nor `@types/node`. A real `AbortSignal`, an `AbortSignal.timeout(ms)` and a hand-made object with the same members are all accepted (`tests/consumer-types/positive/signal.ts`, `tests/consumer-types/positive-nodom/signal.ts` with `lib: ["ES2021"]`). The generated file declares the same shape for itself and reads `AbortController` from `globalThis` when it is needed; a runtime without that global gets a stand-in with the same members (`packages/core/src/generator/signalEmitter.ts:81-106`). A listener of that stand-in that throws does not stop the others: the error is reported to the host as an unhandled rejection, and the abort goes on (`packages/core/src/generator/signalEmitter.ts:101-103`).
+
+### What happens
+
+- **Aborted before the start.** No factory runs, and a `useContainer` parent is not asked to initialize (`packages/core/src/generator/LifecycleEmitter.ts:546`). The promise rejects with `signal.reason` and the container ends failed with that reason as its failure: the next `initialize()` rejects with it, `resolve()` throws `NEO_CONTAINER_FAILED` with it as `cause` (`packages/core/src/generator/LifecycleEmitter.ts:607`, `packages/core/src/generator/LifecycleEmitter.ts:632`).
+- **Aborted while it runs.** Two promises are kept (`packages/core/src/generator/LifecycleEmitter.ts:594`, `packages/core/src/generator/LifecycleEmitter.ts:610`). The one you wait on rejects at once with `signal.reason`, the same object (`packages/core/src/generator/LifecycleEmitter.ts:599` to `:604`). The other is the real work. It ends when the factories that were running have returned and the rollback has run. No new step starts after the abort (`packages/core/src/generator/LifecycleEmitter.ts:562`; with `concurrency` above 1, `packages/core/src/generator/LifecycleEmitter.ts:490` and `:500`). `ready` is never published.
+- **A factory that honours the signal.** One that rejects when `ctx.signal` aborts, with `signal.reason` or with an error of its own, ends the work at once: the container is failed with that error as its failure, what was built before is closed once, and the promise you waited on already has `signal.reason`. With `destroy()` the factory sees a `NEO_CONTAINER_DESTROYED` reason, `destroy()` ends as soon as the factory has rejected and the close has run, and the promise of `initialize()` rejects with the factory's error.
+- **A factory that ignores the signal.** It cannot be interrupted. When it finally returns, its owned value is stored and journaled like any other (`packages/core/src/generator/ResolveEmitter.ts:61`), and the rollback disposes it once. Until the work ends the container is not resolvable: `resolve()` throws `NEO_NOT_INITIALIZED`, and `createScope`, `override`, `overrideMany` and `clearOverrides` throw `NEO_CONTAINER_BUSY` (`packages/core/src/generator/LifecycleEmitter.ts:667`, `packages/core/src/generator/LifecycleEmitter.ts:734`, `packages/core/src/generator/LifecycleEmitter.ts:1021`).
+- **Not a signal.** Untyped code that passes an `options.signal` that is `null`, or has no `addEventListener` and `removeEventListener`, gets a rejected `TypeError`, never a throw, and nothing starts (`packages/core/src/generator/LifecycleEmitter.ts:582`).
+- **A ready container ignores a later signal.** `initialize({ signal })` on a ready container resolves, even when the signal is already aborted, and nothing is destroyed (`packages/core/src/generator/LifecycleEmitter.ts:576`). The listener on your signal is removed when the work settles, ok, failed or aborted (`packages/core/src/generator/LifecycleEmitter.ts:613`), so a signal you reuse collects no listener.
+
+### Joining a running initialization
+
+While an initialization runs, and also after its signal aborted while the work is still running, a second `initialize()` with no options, or with the same signal, returns the very promise the first call returned (`===`). A different signal is refused with `NEO_INIT_OPTIONS_CONFLICT`, and so is a signal passed after a first call that had none (`packages/core/src/generator/LifecycleEmitter.ts:573`). The refusal changes nothing: the first call keeps running.
+
+```text
+NEO_INIT_OPTIONS_CONFLICT: [App] initialize() is running with another signal
+```
+
+### What a factory sees
+
+`FactoryContext.signal` is the signal of the initialization the factory runs for (`packages/neosyringe/src/types.ts:229`). It aborts with the same reason as your signal, and with a `NEO_CONTAINER_DESTROYED` error when `destroy()` is called while the factory runs. Pass it to whatever the factory waits on:
+
+```typescript
+{ token: client, useFactory: true, dependencies: [], provider: async (ctx) => {
+  const response = await fetch(url, { signal: ctx.signal });
+  return new Client(await response.json());
+} }
+```
+
+- A factory called outside an initialization (a sync factory resolved after `ready`) gets a signal that never aborts. It is one object, shared by every such call and by every scope of the container class (`packages/core/src/generator/signalEmitter.ts:108-110`): a listener added to it is never called and never removed. Do not add one per call, because with transient or per-scope factories they would pile up. `_neoSignal` answers it (`packages/core/src/generator/signalEmitter.ts:75` for a sync container, `packages/core/src/generator/signalEmitter.ts:114` for an async one).
+- The context expires with the factory call like the rest of it: reading `signal` later throws `NEO_FACTORY_CONTEXT_EXPIRED` (`packages/core/src/generator/factoryLeaseEmitter.ts:85`, and for an opaque factory `packages/core/src/generator/FactoryEmitter.ts:459`).
+- The signal is the signal of one initialization. Do not use it to carry data of a request.
+
+### Destroy during an initialization
+
+`destroy()` marks the container as closing, installs its own promise, and only then aborts the signal the factories hold, so a listener that calls `destroy()` gets the same promise and a `resolve()` from it throws `NEO_CONTAINER_DESTROYED` (`packages/core/src/generator/LifecycleEmitter.ts:1193` to `:1198`). The promise of `destroy()` resolves after the factories that were running have returned and the close has run, so a factory that ignores the signal delays it. With the default sequential initialization (no `concurrency`, or `1`) a destroy does not stop the steps that have not started: they still run and are closed with the rest, as before (`packages/core/tests/generator/t07-initialisation-runtime.test.ts:1013`). With `concurrency` above 1 the scheduler starts no queued job once `destroy()` has begun; the jobs that run are waited for and closed, and the call without options still resolves (`packages/core/src/generator/LifecycleEmitter.ts:490`). The promise of `initialize()` is not rejected early by a destroy: it ends with the work, as before (`packages/core/tests/generator/t07-initialisation-runtime.test.ts:740`).
+
+### The errors
+
+| What happened | `initialize()` rejects with | The container |
+|---------------|-----------------------------|---------------|
+| The signal aborts, and the work then ends by the abort | `signal.reason`, the same object, at the moment of the abort | Failed, with `signal.reason` as its failure |
+| The signal aborts, then a factory throws `E` | `signal.reason` (the caller was already told) | Failed. The failure is `E`, or a wrapper (same message, `cause` `E`, `cleanupErrors`) when a `dispose` threw during the rollback |
+| A factory throws `E` before any abort | `E`, or the wrapper | Failed |
+| `concurrency` above 1 and two factories throw | an `AggregateError`, see above | Failed |
+
+The work keeps the first failure it meets: a factory error that is thrown before the next check wins over the abort reason, and the abort reason is what the check throws when nothing failed first. Cleanup errors keep the wrapper described under [When initialization fails](#when-initialization-fails) (`packages/core/src/generator/LifecycleEmitter.ts:655` to `:660`). No rejection is left unobserved: the work promise is always read, also after the caller stopped waiting (`packages/core/src/generator/LifecycleEmitter.ts:619` to `:622`).
+
+### A deadline is yours
+
+The container has no timeout and never will pick one. A deadline is a signal you build: `AbortSignal.timeout(ms)` where your runtime has it, or an `AbortController` with a timer that you clear in `finally`:
+
+```typescript
+const controller = new AbortController();
+const timer = setTimeout(() => controller.abort(new Error('startup took too long')), 10_000);
+try {
+  await container.initialize({ signal: controller.signal });
+} finally {
+  clearTimeout(timer);
+}
+```
+
+A deadline does not interrupt JavaScript. After it, the promise you waited on is rejected, but a factory that ignores the signal is still running, and its value is still closed when it returns. The container is never reported destroyed, and a dependency a running factory uses is never closed, because of a timeout. Forcing the process to stop is a decision of the process or the server; the container never calls `process.exit`.
+
+### Sync containers
+
+A container with no async work has nothing to cancel while it runs. `initialize({ signal })` with a signal that is already aborted rejects with `signal.reason` before the eager roots run, and leaves the container as it was (`packages/core/src/generator/LifecycleEmitter.ts:706`, `packages/core/src/generator/LifecycleEmitter.ts:718`). A signal that is not aborted changes nothing, and its factories get a signal that never aborts.
+
 ## When initialization fails
 
-`initialize()` first rolls back. The owned instances built during the failed attempt are disposed in reverse order of construction, with the same rules as `destroy()`: `dispose()`, else `[Symbol.asyncDispose]()`, else `[Symbol.dispose]()`, and a promise the method returns is awaited (see [Disposable Services](./disposable.md#standard-protocols)). Borrowed instances are left alone (`packages/core/src/generator/LifecycleEmitter.ts:564` to `:567`). Then it rejects, in one of two ways:
+`initialize()` first rolls back. The owned instances built during the failed attempt are disposed in reverse order of construction, with the same rules as `destroy()`: `dispose()`, else `[Symbol.asyncDispose]()`, else `[Symbol.dispose]()`, and a promise the method returns is awaited (see [Disposable Services](./disposable.md#standard-protocols)). Borrowed instances are left alone (`packages/core/src/generator/LifecycleEmitter.ts:635` to `:638`). Then it rejects, in one of two ways:
 
 - With the factory's own error, when every `dispose` succeeded.
-- With a new `Error` when a `dispose` threw. It has the same message, a `cause` (the factory's error) and `cleanupErrors` (the errors thrown by `dispose`). The rollback does not stop at the first failing `dispose` (`packages/core/src/generator/LifecycleEmitter.ts:569` to `:578`).
+- With a new `Error` when a `dispose` threw. It has the same message, a `cause` (the factory's error) and `cleanupErrors` (the errors thrown by `dispose`). The rollback does not stop at the first failing `dispose` (`packages/core/src/generator/LifecycleEmitter.ts:640` to `:649`).
 
 The container is then failed:
 
 - another `initialize()` rejects with that same error (or wrapper),
 - `resolve()` throws `NEO_CONTAINER_FAILED`,
-- `createScope()` throws `NEO_CONTAINER_FAILED` (`packages/core/src/generator/LifecycleEmitter.ts:650` to `:652` for a container with async work, `:660` to `:662` without),
+- `createScope()` throws `NEO_CONTAINER_FAILED` (`packages/core/src/generator/LifecycleEmitter.ts:730` to `:732` for a container with async work, `:738` to `:740` without),
 - nothing is retried by itself.
 
 A failed container cannot be repaired. To try again, build a new container. Or keep a root container that never ran `initialize()`, take your scopes from it, and drop a scope that failed: the root stays usable. See [States, Scopes and Ownership](./states-and-ownership.md).
@@ -91,7 +175,7 @@ A failed container cannot be repaired. To try again, build a new container. Or k
 An async factory cannot be `lifecycle: 'transient'`. The build fails with `NEO_ASYNC_TRANSIENT`: a transient is created on each `resolve()`, which would have to be async.
 :::
 
-- `AsyncContainer` is a deprecated alias of `CoreContainer` and adds no method (`packages/neosyringe/src/types.ts:555`). Use `CoreContainer`, or let the type come from `defineBuilderConfig`.
+- `AsyncContainer` is a deprecated alias of `CoreContainer` and adds no method (`packages/neosyringe/src/types.ts:597`). Use `CoreContainer`, or let the type come from `defineBuilderConfig`.
 
 ## Overrides are awaited too
 

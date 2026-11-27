@@ -153,9 +153,9 @@ Le dossier précédent cite 129.2 puis 166.5 ns pour `parent10` (`docs/benchmark
 
 **Pourquoi chaque coupe change la sémantique du topic 14** (`docs/benchmarks/topic-01-09-14.md:268`) :
 
-- Retirer `Object.freeze` de la politique (`packages/core/src/generator/factoryLeaseEmitter.ts:51`) enlève l'immutabilité que le test `packages/core/tests/generator/t14-factory-lease.test.ts:665` exige.
-- Fusionner ou raccourcir les messages et les codes d'erreur (`packages/core/src/generator/factoryLeaseEmitter.ts:76`, `packages/core/src/generator/factoryLeaseEmitter.ts:78`) casse les textes attendus (`packages/core/tests/generator/t14-factory-lease.test.ts:402`, `packages/core/tests/generator/t14-factory-lease.test.ts:441`).
-- Partager la méthode `Get` de la politique entre déclarations supprime la politique propre à chaque déclaration et sa reconstruction quand une clé vaut `undefined` (`packages/core/src/generator/factoryLeaseEmitter.ts:122`, test `packages/core/tests/generator/t14-factory-lease.test.ts:601`).
+- Retirer `Object.freeze` de la politique (`packages/core/src/generator/factoryLeaseEmitter.ts:56`) enlève l'immutabilité que le test `packages/core/tests/generator/t14-factory-lease.test.ts:665` exige.
+- Fusionner ou raccourcir les messages et les codes d'erreur (`packages/core/src/generator/factoryLeaseEmitter.ts:82`) casse les textes attendus (`packages/core/tests/generator/t14-factory-lease.test.ts:402`, `packages/core/tests/generator/t14-factory-lease.test.ts:441`).
+- Partager la méthode `Get` de la politique entre déclarations supprime la politique propre à chaque déclaration et sa reconstruction quand une clé vaut `undefined` (`packages/core/src/generator/factoryLeaseEmitter.ts:136`, test `packages/core/tests/generator/t14-factory-lease.test.ts:601`).
 
 Aucune de ces coupes n'a été faite. Le résidu reste de 1.198 pour `optimized-minimal` : il demande sa propre décision sur le topic 14.
 
