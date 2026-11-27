@@ -991,3 +991,31 @@ describe('F19 a factory that honours the signal of its context', () => {
     }
   }
 });
+
+describe('F19 W19k: a sync factory that cancels the initialization and then calls initialize()', () => {
+  for (const cell of MATRIX) {
+    for (const mode of MODES) {
+      it(`Q16 busy-now: the sync factory that aborts the caller's signal and re-enters initialize() is refused as transitioning, not joined (${mode.title}, ${label(cell)})`, async () => {
+        await withoutUnhandled(async () => {
+          await withRun(cell, [{ name: 'T', kind: 'sync' }, { name: 'A', deps: ['T'] }], mode.options, async (run) => {
+            const controller = new AbortController();
+            const answer: { reentered?: Watched } = {};
+            run.ctl.hold('A');
+            run.ctl.onStart('T', () => {
+              controller.abort(REASON);
+              answer.reentered = watch(call(run.box, 'initialize'));
+            });
+            watch(call(run.box, 'initialize', { signal: controller.signal }));
+            await run.settle();
+            const reentered = answer.reentered;
+            if (reentered === undefined) throw new Error('the sync factory did not run');
+            expect(reentered.done).toBe(true);
+            expect(codeOf(reentered.error)).toBe('NEO_CONTAINER_BUSY');
+            run.ctl.openAll();
+            await run.settle();
+          });
+        });
+      });
+    }
+  }
+});

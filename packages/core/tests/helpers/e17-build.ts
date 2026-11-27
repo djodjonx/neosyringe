@@ -3,6 +3,7 @@ import { expect } from 'vitest';
 import { Analyzer } from '../../src/analyzer/Analyzer';
 import type { DependencyGraph } from '../../src/analyzer/types';
 import { Generator } from '../../src/generator/Generator';
+import { ModuleHelpers, NamePool } from '../../src/generator/index';
 import { cacheLibHost, createFastProgram, warmLibCache } from '../fastProgram';
 import { named } from './t00-contract';
 
@@ -45,6 +46,8 @@ export interface BuildOptions {
   testOverrides?: boolean;
   /** Generator `observation` (topic 22): the container has `observe()` and `stateSnapshot()`. Absent: off. */
   observation?: boolean;
+  /** The helpers of the module are written once in front of the file and shared by the containers, as the plugin session does. Absent: every container carries its own. */
+  shared?: boolean;
   /** Modules the container file imports: path from the container file, then the module record `require` answers. */
   modules?: ReadonlyMap<string, string>;
   require?: (id: string) => unknown;
@@ -141,6 +144,8 @@ export function build(source: string, options: BuildOptions = {}): Built {
   const ordered = [...graphs].sort((left, right) => (right.variableStatementStart ?? 0) - (left.variableStatementStart ?? 0));
   let code = source;
   const generated: string[] = [];
+  const names = options.shared === true ? new NamePool([]) : undefined;
+  const shared = names === undefined ? undefined : new ModuleHelpers(names);
   for (const graph of ordered) {
     const name = graph.exportedVariableName;
     const start = graph.variableStatementStart;
@@ -155,7 +160,7 @@ export function build(source: string, options: BuildOptions = {}): Built {
       options.testOverrides === true,
       options.emitter,
       undefined,
-      undefined,
+      names === undefined ? undefined : { names, shared },
       undefined,
       options.observation === true ? { observation: true } : undefined,
     );
@@ -163,6 +168,7 @@ export function build(source: string, options: BuildOptions = {}): Built {
     generated.push(text);
     code = `${code.slice(0, start)}${text}\nexport const ${name} = ${generator.generateInstantiation()};${code.slice(end)}`;
   }
+  if (shared !== undefined) code = `${shared.render()}\n${code}`;
   const js = ts.transpileModule(code.replace(IMPORT_FROM_NEOSYRINGE, ''), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;

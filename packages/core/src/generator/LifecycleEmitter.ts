@@ -1289,11 +1289,7 @@ function destroyMembers(
     ${join}
     ${reconfigBusy}
     this._touchClosed(true);
-    try {
-      ${body}
-    } catch (__neoDestroyError) {${release('\n      ')}
-      return Promise.reject(__neoDestroyError);
-    }${release('\n    ')}
+    ${body}${release('\n    ')}
     return Promise.resolve();
   }`;
   }

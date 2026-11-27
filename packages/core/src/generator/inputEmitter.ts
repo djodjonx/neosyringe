@@ -53,7 +53,7 @@ function schemaOf(inputs: readonly ScopeInput[]): string {
  * each entry in list order (an unknown token, a token twice), then the inputs that are missing, in declared order.
  * `fail` makes the error of the class (`_neoFail`), so the messages and codes are those of every other refusal.
  */
-export function inputMembers(graph: DependencyGraph, className: string): string {
+export function inputMembers(graph: DependencyGraph, className: string, formatToken = `${className}.formatToken`): string {
   const inputs = graph.scopeInputs ?? [];
   if (inputs.length === 0) return '';
   const invalid = "fail('NEO_SCOPE_INPUTS_INVALID', 'createScope() needs { values: [{ token, useValue }] }')";
@@ -64,7 +64,7 @@ export function inputMembers(graph: DependencyGraph, className: string): string 
   private static _createInputPlan(schema: readonly { readonly token: string; readonly slot: number }[]) {
     const slots = new Map<string, number>(schema.map((rule) => [rule.token, rule.slot]));
     return {
-      names: schema.map((rule) => ${className}.formatToken(rule.token)).join(', '),
+      names: schema.map((rule) => ${formatToken}(rule.token)).join(', '),
       bind(options: unknown, fail: (code: string, detail: string) => Error): ReadonlyMap<number, unknown> {
         let list: unknown = [];
         if (options !== undefined) {
@@ -80,11 +80,11 @@ export function inputMembers(graph: DependencyGraph, className: string): string 
         const values = new Map<number, unknown>();
         for (const [token, value] of entries) {
           const slot = typeof token === 'string' ? slots.get(token) : undefined;
-          if (slot === undefined) throw fail('NEO_SCOPE_INPUT_UNKNOWN', "scope input '" + ${className}.formatToken(token) + "' is not declared");
-          if (values.has(slot)) throw fail('NEO_SCOPE_INPUT_DUPLICATE', "scope input '" + ${className}.formatToken(token) + "' is given twice");
+          if (slot === undefined) throw fail('NEO_SCOPE_INPUT_UNKNOWN', "scope input '" + ${formatToken}(token) + "' is not declared");
+          if (values.has(slot)) throw fail('NEO_SCOPE_INPUT_DUPLICATE', "scope input '" + ${formatToken}(token) + "' is given twice");
           values.set(slot, value);
         }
-        const missing = schema.filter((rule) => !values.has(rule.slot)).map((rule) => ${className}.formatToken(rule.token));
+        const missing = schema.filter((rule) => !values.has(rule.slot)).map((rule) => ${formatToken}(rule.token));
         if (missing.length > 0) throw fail('NEO_SCOPE_INPUT_MISSING', 'scope inputs missing: ' + missing.join(', '));
         return values;
       },

@@ -3,7 +3,7 @@ import { TraceMap, decodedMappings, encodedMappings, originalPositionFor, type S
 import * as ts from 'typescript';
 import { Analyzer, CollisionRegistry, formatUnsupportedMarker, resolveNeoMarker, resolveProjectConfig, sourceFileUsesMarker, stableCodeOf, stableSeverityOf } from '@djodjonx/neosyringe-core/analyzer';
 import type { AnalysisError, DependencyGraph, DependencyNode, SourceOrigin, SourceRewrite } from '@djodjonx/neosyringe-core/analyzer';
-import { Generator, GraphValidator, NamePool, reservedNamesOf, snapshotOfFiles, type CopyMapping, type GraphValidationError, type Snapshot } from '@djodjonx/neosyringe-core/generator';
+import { Generator, GraphValidator, ModuleHelpers, NamePool, reservedNamesOf, snapshotOfFiles, type CopyMapping, type GraphValidationError, type Snapshot } from '@djodjonx/neosyringe-core/generator';
 import { TSContext } from '@djodjonx/neosyringe-core/context';
 import { serializeGraph } from '@djodjonx/neosyringe-ui/serialize';
 import type { SerializableGraph } from '@djodjonx/neosyringe-ui/serialize';
@@ -339,6 +339,11 @@ function encodeMappings(
   return groups.map((group) => group.join(',')).join(';');
 }
 
+/** An insertion (`start === end`) comes before a replacement that starts at the same place, so neither hides the other. */
+function zeroLengthFirst(a: MappedEdit, b: MappedEdit): number {
+  return Number(b.end === b.start) - Number(a.end === a.start);
+}
+
 /**
  * Applies edits on the original text and emits one v3 map.
  * Segments sit on line starts, copy boundaries and word starts.
@@ -355,7 +360,7 @@ export function applyMappedEdits(
   const sorted = edits
     .filter((edit) => edit.start >= 0 && edit.end >= edit.start && edit.start <= code.length)
     .map((edit) => ({ ...edit, end: Math.min(edit.end, code.length) }))
-    .sort((a, b) => a.start - b.start || b.end - a.end);
+    .sort((a, b) => a.start - b.start || zeroLengthFirst(a, b) || b.end - a.end);
   const chosen: MappedEdit[] = [];
   let cursor = 0;
   for (const edit of sorted) {
@@ -993,9 +998,16 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
   // One pool per source file and per call: the containers of this file are written into the same
   // scope, so their generated names must not collide with each other or with a name the file declares.
   // The checker holds the bindings of the file (a `var` hoisted out of a block included).
+  // The helpers of the block are read from inside the class a container writes, which can sit in a nested scope: the names
+  // declared in the scopes around each container are reserved too, so a local cannot shadow a helper.
   const names = new NamePool(
-    sourceFile ? reservedNamesOf(sourceFile, checker) : [],
+    sourceFile ? reservedNamesOf(sourceFile, checker, thisFileGraphs.map((graph) => graph.variableStatementStart ?? 0)) : [],
   );
+  // The helpers every container of this file calls (controller factory, lease, context class, policy builder, formatToken)
+  // are written once, in front of the first top-level statement that is neither an import nor a prologue directive, so the
+  // `class` of the block is initialized before any statement of the file runs. Without the file's own statements there is no
+  // such place: every container then carries its helpers, as a unit's `generate()` does.
+  const shared = sourceFile ? new ModuleHelpers(names) : undefined;
   // The texts every container of this file copies from. The first source of the map is this file.
   const snapshot = analysisSnapshot(thisFileGraphs, program);
   const mapFiles: string[] = [sourceFile?.fileName ?? key];
@@ -1009,7 +1021,7 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
       input.testOverrides,
       undefined,
       { collisions: input.state.collisions, hash: input.state.artifactHash },
-      { names, snapshot },
+      { names, snapshot, shared },
       undefined,
       input.observation === true ? { observation: true } : undefined,
     );
@@ -1027,6 +1039,13 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
     }
     edits.push({ start, end, text, copies });
     if (graph.exportedVariableName) input.state.generatedContainerVars.add(graph.exportedVariableName);
+  }
+
+  if (sourceFile && shared?.used) {
+    // Before any statement that can run: a hoisted function that holds a container can be called by the first of them, and a
+    // container in a nested scope reads the block too.
+    const at = firstRuntimeStatementStart(sourceFile);
+    edits.push({ start: at, end: at, text: `${shared.render()}\n`, copies: [] });
   }
 
   if (sourceFile && typeof checker.getSymbolAtLocation === 'function') {
@@ -1065,6 +1084,19 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
   }));
   const edited = applyMappedEdits(input.code, edits, input.id, extras);
   return { code: edited.code, map: edited.map };
+}
+
+/**
+ * Where the first top-level statement of `sourceFile` that is neither an import declaration nor a prologue directive starts:
+ * from there on a statement can run code. Imports are bound before the module body runs, and a statement that is only a string
+ * literal (a prologue directive) runs nothing and must stay at the head of the file. A file with no other statement ends where
+ * its text ends.
+ */
+function firstRuntimeStatementStart(sourceFile: ts.SourceFile): number {
+  const first = sourceFile.statements.find((statement) =>
+    !ts.isImportDeclaration(statement) && !(ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression)));
+  // The doc comment of that statement stays with it: the block goes in front of the comment.
+  return first === undefined ? sourceFile.end : first.getStart(sourceFile, true);
 }
 
 export function runCompilationSession(input: SessionInput): SessionOutput {

@@ -1195,3 +1195,47 @@ describe('F22 the snapshot of a sync container reports its states', () => {
     });
   }
 });
+
+describe('F22 W22q: the destroy of a sync container that waits for nothing lets go of its sink', () => {
+  for (const emitter of ['reference', 'optimized'] as const) {
+    it(`O13 no slot: after destroy() resolves a container with no disposal slot gets no event and its sink is collected (${emitter})`, async () => {
+      const collect = collector();
+      const source = `${HEAD_22}
+export class Svc { readonly n = 1; }
+export const box = defineBuilderConfig({ name: 'F22NoSlot', injections: [{ token: Svc }] });
+`;
+      const built = build(source, { emitter, observation: true });
+      try {
+        const box = built.box();
+        const root = subscribeWeak(box);
+        call(box, 'resolve', built.exports.Svc);
+        expect(root.events).toHaveLength(2);
+        await call(box, 'destroy');
+        await untilCollected(root.reference, collect);
+        expect(root.reference.deref()).toBeUndefined();
+      } finally {
+        await built.close();
+      }
+    });
+
+    it(`O13 sync slot: a destroy that rejects because dispose() threw also lets go of its sink (${emitter})`, async () => {
+      const collect = collector();
+      const source = `${HEAD_22}
+export class Bad { dispose(): void { throw probe.fail; } }
+export const box = defineBuilderConfig({ name: 'F22SyncBad', injections: [{ token: Bad }] });
+`;
+      const built = build(source, { emitter, observation: true });
+      try {
+        built.probe.fail = FACTORY_ERROR;
+        const box = built.box();
+        const root = subscribeWeak(box);
+        call(box, 'resolve', built.exports.Bad);
+        await expect(call(box, 'destroy')).rejects.toBeDefined();
+        await untilCollected(root.reference, collect);
+        expect(root.reference.deref()).toBeUndefined();
+      } finally {
+        await built.close();
+      }
+    });
+  }
+});

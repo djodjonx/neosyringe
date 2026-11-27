@@ -646,7 +646,7 @@ export function generateDirectResolveAll(
  * token's, the caller fires it. The parent answers a token it does not know with `NeoServiceNotFoundError`, which is
  * the one error the loop skips.
  */
-export function parentReadMethod(notFoundErrorClassName: string, className: string): string {
+export function parentReadMethod(notFoundErrorClassName: string, className: string, formatToken = `${className}.formatToken`): string {
   return `private _neoParent(token: unknown): unknown {
     if (this.legacy) {
         for (const legacyContainer of this.legacy) {
@@ -662,7 +662,7 @@ export function parentReadMethod(notFoundErrorClassName: string, className: stri
         }
     }
 
-    throw new ${notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${className}.formatToken(token)}\`);
+    throw new ${notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${formatToken}(token)}\`);
   }`;
 }
 
@@ -687,6 +687,7 @@ export function generateAliasMembers(
   getForeignImport: GetImport,
   className: string,
   notFoundErrorClassName: string,
+  formatToken = `${className}.formatToken`,
 ): { members: string; step: string } | undefined {
   const plan = aliasPlanOf(graph);
   if (plan === undefined) return undefined;
@@ -720,7 +721,7 @@ export function generateAliasMembers(
     }
     ${reads.join('\n    ')}
     ${parent ? 'return this._neoParent(target);' : 'return undefined;'}
-  }${parent ? `\n\n  ${parentReadMethod(notFoundErrorClassName, className)}` : ''}`;
+  }${parent ? `\n\n  ${parentReadMethod(notFoundErrorClassName, className, formatToken)}` : ''}`;
   const step = `// 0b. An alias answers what its target answers. The event is the alias token's, never the target's.
     const __neoCanonical = ${className}.__neoAliases.get(token);
     if (__neoCanonical !== undefined) {

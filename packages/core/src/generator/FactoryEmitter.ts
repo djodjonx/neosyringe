@@ -18,9 +18,9 @@ import {
   emitFactoryPolicy,
   emitFactoryRead,
   emitLeaseOpen,
-  CONTEXT_CLASS,
   type PolicyEntry,
 } from './factoryLeaseEmitter';
+import { inlineRefs, type HelperRefs } from './moduleHelpers';
 import { inputRead } from './inputEmitter';
 import { aliasPlanOf } from '../analyzer/shared/aliasLinks';
 import { DEFAULT_MANY_NAMES, manyContextFunction, type ManyNames } from './manyEmitter';
@@ -396,6 +396,7 @@ function emitFactoryBody(
   factoryId: string,
   declared: string | undefined,
   names: ManyNames = DEFAULT_MANY_NAMES,
+  refs: HelperRefs = inlineRefs(className),
 ): FactoryBody {
   const userFactory = concat(
     service.factorySource === undefined
@@ -456,7 +457,7 @@ function emitFactoryBody(
     ${expireStmt}
     ${failStmt}
     ${manyFunction}
-    const __neoContext = new ${className}.${CONTEXT_CLASS}(
+    const __neoContext = new ${refs.contextClass}(
       (): ${signalTypeName(className)} => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         return this._neoSignal();
@@ -482,9 +483,9 @@ function emitFactoryBody(
   // No declared `all` dependency: the lease refuses every resolveAll, this line is never reached. It still has to be a list.
   const resolveAllTail = direct && !allowed.some(([, isAll]) => isAll) ? 'return [];' : `return ${all('host')}(token);`;
   const entries: PolicyEntry[] = allowed.map(([key, isAll]) => ({ keyExpression: key, mode: isAll ? 'all' : 'simple' }));
-  const members = `\n  ${emitFactoryPolicy(className, factoryId, entries)}\n  ${emitFactoryRead(className, factoryId, `if (all) ${resolveAllTail}\n    ${resolveTail}`)}`;
+  const members = `\n  ${emitFactoryPolicy(className, factoryId, entries, refs)}\n  ${emitFactoryRead(className, factoryId, `if (all) ${resolveAllTail}\n    ${resolveTail}`)}`;
   const declaredBody = fragment`${typedFactory} ${userFactory};
-    ${emitLeaseOpen(className, factoryId, label)}
+    ${emitLeaseOpen(className, factoryId, label, refs)}
     ${holdStart}
     ${emitInvocation(warmup, release, hasAsync)}`;
   return { body: withNeeds(declaredBody, [...needs, 'factoryPolicy', 'factoryLease']), members };
@@ -602,6 +603,7 @@ export function generateFactories(
   inlined: ReadonlySet<TokenId> = new Set(),
   names: ManyNames = DEFAULT_MANY_NAMES,
   observation = false,
+  refs: HelperRefs = inlineRefs(className),
 ): Fragment[] {
   const factories: Fragment[] = [];
 
@@ -628,7 +630,7 @@ export function generateFactories(
     }
 
     if (node.service.type === 'factory' && node.service.factorySource) {
-      const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor, names);
+      const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor, names, refs);
       factories.push(creator(factoryId, emitted.body, emitted.body.needs, 'unknown', emitted.members, observation ? { id: tokenId, settles: true } : undefined));
     } else {
       if (!node.service.implementationSymbol) {
@@ -659,6 +661,7 @@ export function generateMultiFactories(
   className = DEFAULT_CLASS_NAME,
   names: ManyNames = DEFAULT_MANY_NAMES,
   observation = false,
+  refs: HelperRefs = inlineRefs(className),
 ): Fragment[] {
   const factories: Fragment[] = [];
   if (!graph.multiNodes) return factories;
@@ -668,7 +671,7 @@ export function generateMultiFactories(
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
 
       if (node.service.type === 'factory' && node.service.factorySource) {
-        const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor, names);
+        const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor, names, refs);
         factories.push(creator(factoryId, emitted.body, emitted.body.needs, 'unknown', emitted.members, observation ? { id: `multi:${tokenId}:${index}`, settles: true } : undefined));
       } else if (node.service.type === 'value' && node.service.valueSource !== undefined) {
         factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`, [], providerTypes(node).creator));

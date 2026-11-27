@@ -19,12 +19,13 @@ vi.mock('@djodjonx/neosyringe-core/analyzer', async () => {
 });
 
 vi.mock('@djodjonx/neosyringe-core/generator', async () => {
-  // The name pool is plain data the session builds for every file: it is not what this test replaces.
+  // The name pool and the registry of shared helpers are plain data the session builds for every file: they are not what this test replaces.
   const actual = await vi.importActual<typeof import('@djodjonx/neosyringe-core/generator')>(
     '@djodjonx/neosyringe-core/generator',
   );
   return {
     NamePool: actual.NamePool,
+    ModuleHelpers: actual.ModuleHelpers,
     reservedNamesOf: actual.reservedNamesOf,
     snapshotOfFiles: actual.snapshotOfFiles,
     Generator: vi.fn().mockImplementation(() => ({

@@ -21,7 +21,7 @@ import { makeOrder, sampleMinimumNs, summarize, timerResolutionNs } from './lib/
 const root = repoRoot();
 const require = createRequire(path.join(root, 'packages/unplugin/package.json'));
 const { Analyzer } = require('@djodjonx/neosyringe-core/analyzer');
-const { Generator, GraphValidator } = require('@djodjonx/neosyringe-core/generator');
+const { Generator, GraphValidator, ModuleHelpers, NamePool } = require('@djodjonx/neosyringe-core/generator');
 const esbuild = require('esbuild');
 const ts = require('typescript');
 
@@ -353,10 +353,21 @@ function tap(container) {
 }`;
 }
 
-function builtFactories(graphs, spec) {
+/**
+ * The containers of one module are written the way the plugin session writes the containers of one file: one pool of names and,
+ * when the generator has them (a base without `ModuleHelpers` does not), one registry of shared helpers whose block is written once.
+ */
+function moduleProvenance() {
+  if (typeof ModuleHelpers !== 'function') return { provenance: undefined, block: () => '' };
+  const names = new NamePool([]);
+  const shared = new ModuleHelpers(names);
+  return { provenance: { names, shared }, block: () => shared.render() };
+}
+
+function builtFactories(graphs, spec, provenance) {
   return graphs.map((graph) => {
     const dispatch = dispatchLinearMax === undefined ? undefined : { linearMax: dispatchLinearMax };
-    const generator = new Generator(graph, true, undefined, false, false, undefined, undefined, undefined, dispatch, observationOption(spec.observation));
+    const generator = new Generator(graph, true, undefined, false, false, undefined, undefined, provenance, dispatch, observationOption(spec.observation));
     const code = inlineSameFileImports(generator.generate());
     const instantiation = generator.generateInstantiation();
     const found = /class (NeoContainer\w*)/.exec(code);
@@ -716,9 +727,10 @@ function buildModule(spec) {
   if (graphs.length === 0) throw new Error('no container');
   const messages = graphs.flatMap((graph) => graphMessages(graph));
   if (messages.length > 0) throw new Error(messages.join('\n'));
-  const made = builtFactories(graphs, spec);
+  const module = moduleProvenance();
+  const made = builtFactories(graphs, spec, module.provenance);
   const body = withoutConfigs(text, graphs);
-  const tsCode = `${body}\n${made.map((item) => item.code).join('\n')}\n`;
+  const tsCode = `${body}\n${module.block()}\n${made.map((item) => item.code).join('\n')}\n`;
   const js = ts.transpileModule(tsCode, {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText;

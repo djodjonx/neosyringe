@@ -12,6 +12,7 @@ import { emitOptimizedContainer } from './DirectEmitter';
 import { DISPATCH_LINEAR_MAX } from './dispatchEmitter';
 import { boundGuard, boundInitializeGuard, hasScopeInputs, inputConstructor, inputMembers } from './inputEmitter';
 import { linkedFactoryLeaseHelpers } from './factoryLeaseEmitter';
+import { formatTokenText, inlineRefs, isFactoryHelper, type HelperRefs, type ModuleHelpers } from './moduleHelpers';
 import { controllerTypeName, hasFactory, needsSignal, signalMembers, signalTypeName, signalTypes } from './signalEmitter';
 import { observationMembers, observationTypes, type ObservationInput } from './observationEmitter';
 import { providerTypesOf, type GetProviderTypes } from './providerTypes';
@@ -119,6 +120,10 @@ export class Generator {
   private readonly artifactKey: string;
   /** Names of generated top-level bindings. Shared by every Generator of one source file. */
   private readonly names: NamePool;
+  /** The helpers of the module this output is written into, when the plugin session shares them. Absent: the class carries its own. */
+  private readonly shared: ModuleHelpers | undefined;
+  /** What the text of the class calls for the helpers: the names of the module or the members of the class. */
+  private readonly helperRefs: HelperRefs;
 
   /**
    * Creates a new Generator.
@@ -175,11 +180,14 @@ export class Generator {
      * written into: pass the same pool to every Generator of one file so their bindings never
      * collide with each other or with a name the file declares. Absent: a private pool, which is
      * right when the output has a file of its own. `snapshot` is the text user expressions are
-     * copied from. Absent: the files the graph was read from.
+     * copied from. Absent: the files the graph was read from. `shared` is the registry of the helpers every container of
+     * the file calls (see `ModuleHelpers`): the caller writes its block once in the module. Absent: this output carries
+     * its own helpers.
      */
     private provenance?: {
       snapshot?: Snapshot;
       names?: NamePool;
+      shared?: ModuleHelpers;
     },
     /**
      * Internal. `linearMax` is the number of rows up to which a dispatch table of the optimized emitter is the linear
@@ -222,6 +230,8 @@ export class Generator {
     this.containerClassName = this.names.forKey(`class:${artifactKey}`, `NeoContainer${suffix}`);
     this.notFoundErrorClassName = this.names.forKey(`error:${artifactKey}`, `NeoServiceNotFoundError${suffix}`);
     this.legacyParentName = this.names.forKey(`legacy:${artifactKey}`, `NeoLegacyParent${suffix}`);
+    this.shared = provenance?.shared;
+    this.helperRefs = this.shared === undefined ? inlineRefs(this.containerClassName) : this.shared.refs();
     this.manyNames = {
       token: this.names.forKey(`many-token:${artifactKey}`, `__NeoToken${suffix}`),
       values: this.names.forKey(`many-values:${artifactKey}`, `__NeoValues${suffix}`),
@@ -592,10 +602,11 @@ export class Generator {
         dispatchLinearMax: this.dispatch?.linearMax ?? DISPATCH_LINEAR_MAX,
         stateFields: `${state.stateFields}${state.eagerField}`,
         ...rootMembers(emitted, closed, getImport, this.containerClassName),
-        runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync, emitted.runtimeProfile === 'minimal'), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined, observed(emitted.runtimeProfile === 'minimal')),
+        runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync, emitted.runtimeProfile === 'minimal'), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined, observed(emitted.runtimeProfile === 'minimal'), this.shared),
         debugGetters: this.emitDebugGetter(emitted),
         copy,
         observation,
+        shared: this.shared,
       });
       // Imports are read after the class: emitting it is what registers them.
       return fragment`${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
@@ -607,17 +618,23 @@ ${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassN
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     }
 
-    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, undefined, this.manyNames, observation);
+    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, undefined, this.manyNames, observation, this.helperRefs);
     const resolveCases = generateResolveCases(
       emitted,
       sorted,
       getImport,
       hasAsync,
-      `${this.containerClassName}.formatToken`,
+      this.helperRefs.formatToken,
     );
-    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, this.manyNames, observation);
+    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, this.manyNames, observation, this.helperRefs);
     // The policy and the lease of the declared factories: only the helpers a creator asks for.
-    const factoryHelpers = linkedFactoryLeaseHelpers(this.containerClassName, [...factories, ...multiFactories], this.manyNames);
+    const linkedHelpers = linkedFactoryLeaseHelpers(this.containerClassName, [...factories, ...multiFactories], this.manyNames);
+    // Shared, the module holds them: the class only calls them.
+    const factoryHelpers = this.shared === undefined ? linkedHelpers : [];
+    if (this.shared !== undefined) {
+      for (const helper of linkedHelpers) if (isFactoryHelper(helper.id)) this.shared.claim(helper.id);
+      this.shared.claim('formatToken');
+    }
     const resolveAllMethod = generateResolveAllMethod(emitted, getImport, hasAsync, closed);
     const initializeMethod = hasAsync
       ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines, false, this.containerClassName, observation)
@@ -636,11 +653,11 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
                     if (legacyResult != null) this._borrowed.add(legacyResult);`;
     const borrowNotify = '';
     const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines, this.containerClassName);
-    const runtimeHelpersText = runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined, observed(false));
+    const runtimeHelpersText = runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined, observed(false), this.shared);
     const captureLines: Piece[] = [...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)];
     const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
     const assertOne = closed ? 'this._assertRoot(token, false);' : '';
-    const aliases = generateAliasMembers(emitted, getImport, getForeignImport, this.containerClassName, this.notFoundErrorClassName);
+    const aliases = generateAliasMembers(emitted, getImport, getForeignImport, this.containerClassName, this.notFoundErrorClassName, this.helperRefs.formatToken);
     const resolveInterior = `
     ${borrowReset}${parentOpenCheck(hasAsync)}
     ${multiGuard}${multiGuard ? '\n    ' : ''}// 0. An overridden token always wins, even over a cached real instance.
@@ -680,7 +697,7 @@ ${aliases ? `\n    ${aliases.step}` : ''}
         }
     }
 
-    throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${this.containerClassName}.formatToken(token)}\`);`;
+    throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${this.helperRefs.formatToken}(token)}\`);`;
 
     const bound = boundGuard(emitted, 'resolve()');
     const resolveMethod = hasAsync
@@ -734,7 +751,7 @@ class ${this.containerClassName} {
     private name: string = 'NeoContainer'
   ) {}`}
 
-  ${runtimeHelpersText}${assertRootMethod}${hasScopeInputs(emitted) ? `\n\n  ${inputMembers(emitted, this.containerClassName)}` : ''}
+  ${runtimeHelpersText}${assertRootMethod}${hasScopeInputs(emitted) ? `\n\n  ${inputMembers(emitted, this.containerClassName, this.helperRefs.formatToken)}` : ''}
 
   ${initializeMethod}
 
@@ -767,23 +784,7 @@ class ${this.containerClassName} {
 
   ${resolveMethod}
 
-  /**
-   * Formats a token for error messages: a class token becomes its declared
-   * name (not its entire stringified source), and a string token has its
-   * trailing content-hash suffix stripped (not the raw hashed id).
-   */
-  private static formatToken(token: unknown): string {
-    if (typeof token === 'function') return token.name || String(token);
-    if (typeof token !== 'string') return String(token);
-    const parts = token.split('_');
-    const last = parts[parts.length - 1];
-    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
-      return parts.slice(0, -1).join('_');
-    }
-    return token;
-  }
-
-  ${destroyMethod}
+  ${this.shared === undefined ? `${this.formatTokenMember()}\n\n  ` : ''}${destroyMethod}
 
   ${resolveAllMethod}
 
@@ -798,6 +799,20 @@ ${aliases ? `\n  ${aliases.members}\n` : ''}
 }
 ${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync, hasFactory(emitted) ? this.manyNames : undefined)}${observation ? observationTypes(this.containerClassName) : ''}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
+  }
+
+  /**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  private formatTokenMember(): string {
+    return `/**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  ${formatTokenText('private static formatToken')}`;
   }
 
   /**
@@ -946,11 +961,11 @@ function runsJobs(graph: DependencyGraph, sorted: TokenId[], getImport: GetImpor
   return hasAsync && initializationJobs(graph, sorted, getImport, minimal) !== undefined;
 }
 
-function runtimeHelpers(hasAsync: boolean, disposer: boolean, jobs: boolean, signalClass?: string, observation?: ObservationInput): string {
+function runtimeHelpers(hasAsync: boolean, disposer: boolean, jobs: boolean, signalClass?: string, observation?: ObservationInput, shared?: ModuleHelpers): string {
   return `${touchClosedMethod(observation !== undefined)}
 
   ${assertParentsMethod()}
-  ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}${jobs ? `\n\n  ${initSchedulerMember()}` : ''}${signalClass === undefined ? '' : `\n\n  ${signalMembers(signalClass, hasAsync)}`}${observation === undefined ? '' : `\n\n  ${observationMembers(observation)}`}`;
+  ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}${jobs ? `\n\n  ${initSchedulerMember()}` : ''}${signalClass === undefined ? '' : `\n\n  ${signalMembers(signalClass, hasAsync, shared)}`}${observation === undefined ? '' : `\n\n  ${observationMembers(observation)}`}`;
 }
 
 /**

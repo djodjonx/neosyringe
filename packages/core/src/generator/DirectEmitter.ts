@@ -13,6 +13,7 @@ import {
 } from './fragments';
 import { dispatchIsLinear, emitDispatchField, emitDispatchRead, emitLinearRead, type DispatchEntry } from './dispatchEmitter';
 import { factoryLeaseHelpers } from './factoryLeaseEmitter';
+import { formatTokenText, inlineRefs, type HelperRefs, type ModuleHelpers } from './moduleHelpers';
 import { boundGuard, boundInitializeGuard, hasScopeInputs, inputConstructor, inputMembers } from './inputEmitter';
 import { DEFAULT_MANY_NAMES, emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
 import { noProviderTypes, type GetProviderTypes } from './providerTypes';
@@ -87,6 +88,16 @@ export interface OptimizedContainerInput {
   dispatchLinearMax: number;
   /** The build asked for the observation (topic 22): the creators, the steps and the disposals are observed. Absent: off. */
   observation?: boolean;
+  /**
+   * The helpers of the module this class is written into (`ModuleHelpers`). Given, the class calls the module's controller factory, lease,
+   * context class, policy builder and `formatToken`, and does not carry them. Absent: the class carries them, as a unit's `generate()` does.
+   */
+  shared?: ModuleHelpers;
+}
+
+/** What the text of `input` calls for the helpers: the names of the module, or the members of its class. */
+function refsOf(input: OptimizedContainerInput): HelperRefs {
+  return input.shared === undefined ? inlineRefs(input.className) : input.shared.refs();
 }
 
 /**
@@ -153,16 +164,7 @@ function tableFieldsOf(className: string, single: boolean, testOverrides: boolea
 }
 
 function formatTokenMember(): string {
-  return `private static formatToken(token: unknown): string {
-    if (typeof token === 'function') return token.name || String(token);
-    if (typeof token !== 'string') return String(token);
-    const parts = token.split('_');
-    const last = parts[parts.length - 1];
-    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
-      return parts.slice(0, -1).join('_');
-    }
-    return token;
-  }`;
+  return formatTokenText('private static formatToken');
 }
 
 /** Delegation to a useContainer parent, then the not-found error. Shared by both resolvers. */
@@ -182,7 +184,7 @@ function legacyAndNotFound(input: OptimizedContainerInput): string {
         }
     }
 
-    throw new ${input.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${input.className}.formatToken(token)}\`);`;
+    throw new ${input.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${refsOf(input).formatToken}(token)}\`);`;
 }
 
 /**
@@ -334,6 +336,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   // one) and its `_direct_` accessors; the minimal profile has no `_get_`.
   const unified = !minimal && !closed;
   const observation = input.observation === true;
+  const refs = refsOf(input);
   const inlined = new Map<TokenId, string>();
   // The target of an alias is read by `_direct_`, which the unified form does not have: it keeps its creator and its two accessors.
   // An observed build keeps every creator: the construct is observed where it is built, and an inlined one has no method.
@@ -349,11 +352,11 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
     }
   }
   const creators = [
-    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, new Set(inlined.keys()), manyNames, observation),
-    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, manyNames, observation),
+    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, new Set(inlined.keys()), manyNames, observation, refs),
+    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, manyNames, observation, refs),
   ];
   const accessors = [
-    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides, single: unified }, `${input.className}.formatToken`, providerTypes, inlined, aliasReadExpressions(graph, getImport, getForeignImport, providerTypes, honourOverrides)),
+    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides, single: unified }, refs.formatToken, providerTypes, inlined, aliasReadExpressions(graph, getImport, getForeignImport, providerTypes, honourOverrides)),
     ...generateDirectContributions(graph, hasAsync, providerTypes),
   ];
   const needs = factoryContextNeeds(graph);
@@ -399,9 +402,12 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
     generateScopeMethod(graph, input.className, hasAsync, minimal, observation),
   ];
   // The policy and the lease of the declared factories, and the context class every factory shares: only the helpers a creator asks for.
+  // Shared, they are written once for the module, and the class only calls them.
   for (const id of ['factoryPolicy', 'factoryLease', 'factoryContext'] as const) {
     const factoryHelper = linked.get(id);
-    if (factoryHelper) members.push(factoryHelper);
+    if (factoryHelper === undefined) continue;
+    if (input.shared === undefined) members.push(factoryHelper);
+    else input.shared.claim(id);
   }
   if (!minimal) {
     members.push(generateOverrideMethods(graph, sorted, getImport, hasAsync, input.testOverrides, manyNames, observation));
@@ -412,8 +418,10 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   if (resolve.rootsTable !== '') members.push(resolve.rootsTable);
   const single = linked.get('resolveSingle');
   if (single) members.push(single);
-  members.push(formatTokenMember(), destroy, resolveAllPublic);
-  if (readsParentForAlias(graph)) members.push(parentReadMethod(input.notFoundErrorClassName, input.className));
+  if (input.shared === undefined) members.push(formatTokenMember());
+  else input.shared.claim('formatToken');
+  members.push(destroy, resolveAllPublic);
+  if (readsParentForAlias(graph)) members.push(parentReadMethod(input.notFoundErrorClassName, input.className, refs.formatToken));
   // A public member: it loops over the public `resolve`, so a token has the guard, the closed-root check and the events of a single call.
   members.push(emitResolveMany(`${boundGuard(graph, 'resolveMany()')}${manyEntryGuard(hasAsync, minimal)}`, manyNames));
   const many = linked.get('resolveAll');
@@ -442,7 +450,7 @@ class ${input.className} {
   ${accessors.join('\n  ')}
 
   ${hasScopeInputs(graph)
-    ? `${inputConstructor(parentName)}\n\n  ${inputMembers(graph, input.className)}`
+    ? `${inputConstructor(parentName)}\n\n  ${inputMembers(graph, input.className, refs.formatToken)}`
     : `constructor(
     private legacy?: ${parentName}[],
     private name: string = 'NeoContainer'

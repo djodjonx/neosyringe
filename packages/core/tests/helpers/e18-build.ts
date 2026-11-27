@@ -133,11 +133,13 @@ export interface EnvOptions extends SourceOptions {
   testOverrides?: boolean;
   /** Generator `observation` (topic 22): the container has `observe()` and `stateSnapshot()`. Absent: off. */
   observation?: boolean;
+  /** The helpers of the module are written once in front of the file, as the plugin session does (see `BuildOptions.shared`). */
+  shared?: boolean;
 }
 
 /** Builds one cell, runs `scenario`, and always releases the model and the scopes the scenario made. */
 export async function withEnv<T>(cell: Cell, options: EnvOptions, scenario: (env: Env) => Promise<T> | T): Promise<T> {
-  const built = build(sourceFor(cell, options), { emitter: cell.emitter, testOverrides: options.testOverrides ?? false, observation: options.observation === true });
+  const built = build(sourceFor(cell, options), { emitter: cell.emitter, testOverrides: options.testOverrides ?? false, observation: options.observation === true, shared: options.shared === true });
   const opened: object[] = [];
   try {
     const box = built.box();
