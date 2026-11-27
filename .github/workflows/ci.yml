@@ -100,6 +100,9 @@ jobs:
       - name: Positive disposable consumer types
         run: node scripts/ci/consumer-types.mjs tests/consumer-types/positive-disposable
 
+      - name: Positive no-DOM consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/positive-nodom
+
       - name: Negative disposable consumer types
         run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative-disposable --expect-file expected-diagnostic.txt
 
@@ -111,6 +114,9 @@ jobs:
 
       - name: Positive disposable consumer types from the packed archive
         run: node scripts/ci/consumer-types.mjs tests/consumer-types/positive-disposable --pack
+
+      - name: Positive no-DOM consumer types from the packed archive
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/positive-nodom --pack
 
       - name: Negative disposable consumer types from the packed archive
         run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative-disposable --expect-file expected-diagnostic.txt --pack

@@ -50,7 +50,7 @@ const CASE: EmissionCase = {
 };
 
 /** The context type the copied factory is written against: the public shape, generic in what it answers. */
-const CONTEXT = '\\(context: \\{ resolve<T>\\(token: unknown\\): T; resolveAll<T>\\(token: unknown\\): T\\[\\]; resolveMany<const T extends readonly __NeoToken<unknown>\\[\\]>\\(tokens: T\\): __NeoValues<T>; resolveMany<const T extends readonly \\(__NeoToken<unknown> \\| string\\)\\[\\]>\\(tokens: T\\): \\{ -readonly \\[K in keyof T\\]: T\\[K\\] extends infer E \\? E extends string \\? unknown : E extends __NeoToken<infer V> \\? V : never : never \\} \\}\\)';
+const CONTEXT = '\\(context: \\{ readonly signal: \\w+Signal; resolve<T>\\(token: unknown\\): T; resolveAll<T>\\(token: unknown\\): T\\[\\]; resolveMany<const T extends readonly __NeoToken<unknown>\\[\\]>\\(tokens: T\\): __NeoValues<T>; resolveMany<const T extends readonly \\(__NeoToken<unknown> \\| string\\)\\[\\]>\\(tokens: T\\): \\{ -readonly \\[K in keyof T\\]: T\\[K\\] extends infer E \\? E extends string \\? unknown : E extends __NeoToken<infer V> \\? V : never : never \\} \\}\\)';
 
 /**
  * The public `Factory<T>` answers `T | PromiseLike<T>`. The analyzer flags `isAsync` only for an `async` function or a

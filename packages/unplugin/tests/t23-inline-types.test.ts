@@ -30,7 +30,7 @@ const COMMON = [
   'export class Audit { constructor(readonly logger: Logger) {} }',
   'export class Report { constructor(readonly logger: Logger) {} }',
   'export class Later { constructor(readonly logger: Logger) {} }',
-  "const unavailable: FactoryContext = { resolve: () => { throw new Error('no context'); }, resolveAll: () => [], resolveMany: () => { throw new Error('no context'); } };",
+  "const unavailable: FactoryContext = { signal: { aborted: false, addEventListener: () => {}, removeEventListener: () => {} }, resolve: () => { throw new Error('no context'); }, resolveAll: () => [], resolveMany: () => { throw new Error('no context'); } };",
 ].join('\n');
 
 /** The documented factory forms: unannotated context, annotated with the public type, default parameter, async. */

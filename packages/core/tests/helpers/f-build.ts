@@ -44,6 +44,8 @@ export function label(cell: Cell): string {
  * - `dispose`: the value has a `dispose()` that reports `probe.disposed(name)`.
  * - `opaque`: the registration declares no `dependencies` list (the container is analysed in `compatible` mode); its
  *   factory still reads every name of `deps`, so what it resolves is invisible to the graph.
+ * - `cooperative`: an async factory that stops waiting when the signal of its context aborts, and rejects: with the
+ *   signal's reason, or with the error `ctl.cooperateWith(name, error)` set (topic 19, a factory that honours `signal`).
  */
 export interface Spec {
   name: string;
@@ -53,6 +55,7 @@ export interface Spec {
   alias?: string;
   dispose?: boolean;
   opaque?: boolean;
+  cooperative?: boolean;
 }
 
 const HEAD = `
@@ -66,6 +69,8 @@ interface Probe {
   fail(name: string): void;
   built(name: string): void;
   disposed(name: string): void;
+  context(name: string, context: unknown): void;
+  stopping(name: string, signal: { reason?: unknown }): unknown;
 }
 declare const probe: Probe;
 `;
@@ -87,9 +92,18 @@ function injection(spec: Spec): string {
   const value = spec.dispose === true
     ? `{ name: ${JSON.stringify(label)}, dispose() { probe.disposed(${JSON.stringify(label)}); } }`
     : `{ name: ${JSON.stringify(label)} }`;
+  const wait = spec.cooperative === true
+    ? `const signal = ctx.signal;
+        await Promise.race([probe.gate(${JSON.stringify(label)}), new Promise((_, reject) => {
+          const stop = () => reject(probe.stopping(${JSON.stringify(label)}, signal));
+          if (signal.aborted) stop();
+          else signal.addEventListener('abort', stop, { once: true });
+        })]);`
+    : `await probe.gate(${JSON.stringify(label)});`;
   if (spec.kind === 'sync') {
     return `{ token: t${spec.name}, useFactory: true, ${multi}${declared} provider: (ctx) => {
       probe.start(${JSON.stringify(label)});
+      probe.context(${JSON.stringify(label)}, ctx);
       try {
         ${reads(deps)}
         probe.fail(${JSON.stringify(label)});
@@ -100,8 +114,9 @@ function injection(spec: Spec): string {
   }
   return `{ token: t${spec.name}, useFactory: true, ${multi}${declared} provider: async (ctx) => {
       probe.start(${JSON.stringify(label)});
+      probe.context(${JSON.stringify(label)}, ctx);
       try {
-        await probe.gate(${JSON.stringify(label)});
+        ${wait}
         ${reads(deps)}
         probe.fail(${JSON.stringify(label)});
         probe.built(${JSON.stringify(label)});
@@ -119,6 +134,8 @@ export interface SourceOptions {
   name?: string;
   /** Closed cells only: the names of the `eager` roots. */
   eager?: readonly string[];
+  /** Generate the test overrides (`override`, `overrideMany`, `clearOverrides` do real work instead of refusing). */
+  testOverrides?: boolean;
   /** A `useContainer` parent of the container, an open full container named `parent` that holds these registrations. */
   parent?: readonly Spec[];
 }
@@ -181,6 +198,10 @@ export interface Controller {
   readonly started: string[];
   readonly built: Map<string, number>;
   readonly disposed: Map<string, number>;
+  /** The context each factory was called with, by label (the last call wins). */
+  readonly contexts: Map<string, unknown>;
+  /** The `signal` of the context, read when the factory was called (the last call wins), `undefined` when it has none. */
+  readonly signals: Map<string, unknown>;
   /** How many factories are between `start` and `end` right now, and the most there ever were. */
   active(): number;
   peak(): number;
@@ -188,20 +209,31 @@ export interface Controller {
   hold(...names: string[]): void;
   open(...names: string[]): void;
   openAll(): void;
-  /** The factory `name` throws `error` once its gate is open. */
-  failWith(name: string, error: Error): void;
+  /** The factory `name` throws `error` once its gate is open; `undefined` lets it succeed again. */
+  failWith(name: string, error: Error | undefined): void;
+  /** The `dispose()` of the value of `name` reports itself, then throws `error`. */
+  failDisposeWith(name: string, error: Error): void;
+  /** A `cooperative` factory `name` rejects with `error` when its signal aborts; `undefined` restores the signal's reason. */
+  cooperateWith(name: string, error: Error | undefined): void;
+  /** `run` is called, once per call, as the factory `name` starts (before it waits on its gate). */
+  onStart(name: string, run: () => void): void;
 }
 
 /** The controller and the object the module reads as `probe`, made together so they share their state. */
 function wire(): { ctl: Controller; probe: object } {
   const gates = new Map<string, Deferred>();
   const failures = new Map<string, Error>();
+  const disposeFailures = new Map<string, Error>();
+  const cooperation = new Map<string, Error>();
+  const starts = new Map<string, () => void>();
   const state = { active: 0, peak: 0 };
   const ctl: Controller = {
     log: [],
     started: [],
     built: new Map(),
     disposed: new Map(),
+    contexts: new Map(),
+    signals: new Map(),
     active: () => state.active,
     peak: () => state.peak,
     hold(...names) {
@@ -214,7 +246,18 @@ function wire(): { ctl: Controller; probe: object } {
       for (const gate of gates.values()) gate.open();
     },
     failWith(name, error) {
-      failures.set(name, error);
+      if (error === undefined) failures.delete(name);
+      else failures.set(name, error);
+    },
+    failDisposeWith(name, error) {
+      disposeFailures.set(name, error);
+    },
+    cooperateWith(name, error) {
+      if (error === undefined) cooperation.delete(name);
+      else cooperation.set(name, error);
+    },
+    onStart(name, run) {
+      starts.set(name, run);
     },
   };
   const probe = {
@@ -223,6 +266,7 @@ function wire(): { ctl: Controller; probe: object } {
       state.peak = Math.max(state.peak, state.active);
       ctl.log.push(`start:${name}`);
       ctl.started.push(name);
+      starts.get(name)?.();
     },
     end: (name: string): void => {
       state.active -= 1;
@@ -239,6 +283,13 @@ function wire(): { ctl: Controller; probe: object } {
     disposed: (name: string): void => {
       ctl.log.push(`dispose:${name}`);
       ctl.disposed.set(name, (ctl.disposed.get(name) ?? 0) + 1);
+      const error = disposeFailures.get(name);
+      if (error !== undefined) throw error;
+    },
+    stopping: (name: string, signal: { reason?: unknown }): unknown => cooperation.get(name) ?? signal.reason,
+    context: (name: string, context: unknown): void => {
+      ctl.contexts.set(name, context);
+      ctl.signals.set(name, typeof context === 'object' && context !== null ? Reflect.get(context, 'signal') : undefined);
     },
   };
   return { ctl, probe };
@@ -259,8 +310,8 @@ export interface Run {
   text: string;
   /** The runtime key of the token `name` (the `name` of a `Spec`). */
   token: (name: string) => string;
-  /** `box.initialize()`; the rejection is held in `settled`, never left unhandled. */
-  start: () => { promise: Promise<unknown>; settled: Promise<Settled> };
+  /** `box.initialize(options)`; the rejection is held in `settled`, never left unhandled. */
+  start: (options?: { signal?: unknown }) => { promise: Promise<unknown>; settled: Promise<Settled> };
   /** One turn of the event loop: every microtask queued so far has run. No clock. */
   settle: () => Promise<void>;
 }
@@ -300,7 +351,7 @@ export async function withRun<T>(
   ].join('\n');
   Reflect.set(globalThis, PROBE_KEY, probe);
   const parent = options.parent === undefined ? undefined : loaded.open('parent', { emitter: cell.emitter, prelude });
-  const opened = loaded.open('box', { emitter: cell.emitter, prelude, parent: parent?.container });
+  const opened = loaded.open('box', { emitter: cell.emitter, prelude, parent: parent?.container, testOverrides: options.testOverrides === true });
   const box: object = opened.container;
   try {
     return await scenario({
@@ -310,8 +361,8 @@ export async function withRun<T>(
       ctl,
       text: opened.source,
       token: (name) => keyOf(graph, name),
-      start: () => {
-        const promise = opened.container.initialize();
+      start: (options) => {
+        const promise = options === undefined ? opened.container.initialize() : opened.container.initialize(options);
         return { promise, settled: promise.then((): Settled => ({ ok: true, error: undefined }), (error: unknown): Settled => ({ ok: false, error })) };
       },
       settle: () => tick(),
@@ -336,9 +387,9 @@ async function release(ctl: Controller, containers: readonly { destroy: () => Pr
   }
 }
 
-/** The text of `initialize()` and `_runInitialize()` of an emitted container. */
+/** The text of `initialize()` and `_runInitialize()` of an emitted container, whether `initialize` is `async` or not. */
 export function initializeText(code: string): string {
-  const start = code.indexOf('public async initialize()');
+  const start = code.search(/public (?:async )?initialize\(/);
   const end = code.indexOf('private _guardPublic');
   if (start < 0 || end < start) throw new Error('no async initialize in the emitted text');
   return code.slice(start, end);

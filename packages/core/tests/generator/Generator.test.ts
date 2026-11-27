@@ -277,7 +277,7 @@ describe('Generator', () => {
       };
       const code = new Generator(graph).generate();
 
-      expect(code).toContain('public async initialize(): Promise<void> {');
+      expect(code).toMatch(/public initialize\(options\?: \{ readonly signal\?: \w+Signal \}\): Promise<void>/);
       expect(code).toContain(`if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`);
       // The resolve() guard must also activate, or resolve() could run before
       // this container's own (cascade-only) initialize() completes.

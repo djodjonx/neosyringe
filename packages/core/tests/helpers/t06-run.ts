@@ -17,7 +17,7 @@ export type Emitter = 'reference' | 'optimized';
 export const EMITTERS: readonly Emitter[] = ['reference', 'optimized'];
 
 export interface Container {
-  initialize: () => Promise<void>;
+  initialize: (options?: { signal?: unknown }) => Promise<void>;
   resolve: (token: unknown) => unknown;
   destroy: () => Promise<void>;
   createScope: () => Container;

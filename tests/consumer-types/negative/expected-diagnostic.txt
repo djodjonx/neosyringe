@@ -55,3 +55,7 @@ initialization.ts(22,1): error TS2769: No overload matches this call.
 Argument of type '{ name: string; initialization: number;
 Type 'number' has no properties in common with type 'InitializationOptions'.
 initialization.ts(29,3): error TS2353: Object literal may only specify known properties, and 'initialization' does not exist in type 'PartialConfig'.
+signal.ts(15,18): error TS2322: Type 'string' is not assignable to type 'AbortSignalLike'.
+signal.ts(17,18): error TS2353: Object literal may only specify known properties, and 'timeout' does not exist in type 'InitializeOptions'.
+signal.ts(19,16): error TS2559: Type '3' has no properties in common with type 'InitializeOptions'.
+signal.ts(21,14): error TS2741: Property 'signal' is missing in type '{ resolve: () => never; resolveAll: () => never[]; resolveMany: () => never; }' but required in type 'FactoryContext'.

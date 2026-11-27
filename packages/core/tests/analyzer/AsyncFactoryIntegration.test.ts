@@ -46,7 +46,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
 
     const code = new Generator(graph, true).generate();
 
-    expect(code).toContain('public async initialize(): Promise<void>');
+    expect(code).toMatch(/public initialize\(options\?: \{ readonly signal\?: \w+Signal \}\): Promise<void>/);
     expect(code).toContain('await this.create_');
     expect(code).toContain('IDatabase');
     expect(code).toContain('this._guardPublic()');
@@ -95,7 +95,7 @@ describe('Async factories — Analyzer to Generator integration', () => {
 
     // This container has NO async factories of its own — the only reason it
     // needs initialize() at all is to cascade into the async parent.
-    expect(code).toContain('public async initialize(): Promise<void>');
+    expect(code).toMatch(/public initialize\(options\?: \{ readonly signal\?: \w+Signal \}\): Promise<void>/);
     expect(code).toContain(`if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`);
     expect(code).toContain('this._guardPublic()');
     expect(code).toContain('NEO_NOT_INITIALIZED');

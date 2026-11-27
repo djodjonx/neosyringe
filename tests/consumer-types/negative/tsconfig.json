@@ -11,5 +11,5 @@
       "@djodjonx/neosyringe": ["../../../packages/neosyringe"]
     }
   },
-  "files": ["consumer.ts", "many.ts", "override-many.ts", "scope-inputs.ts", "alias.ts", "public-api.ts", "initialization.ts"]
+  "files": ["consumer.ts", "many.ts", "override-many.ts", "scope-inputs.ts", "alias.ts", "public-api.ts", "initialization.ts", "signal.ts"]
 }

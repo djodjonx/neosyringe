@@ -49,7 +49,7 @@ describe('Generator - async factories', () => {
 
     const code = new Generator(graph).generate();
 
-    expect(code).toContain('public async initialize(): Promise<void>');
+    expect(code).toMatch(/public initialize\(options\?: \{ readonly signal\?: \w+Signal \}\): Promise<void>/);
     expect(code).toContain('await this.create_IDatabase_abc()');
     expect(code).toContain('this.instances.set("IDatabase_abc"');
     expect(code).toContain("this._state = 'ready'");
@@ -131,7 +131,7 @@ describe('Generator - async factories', () => {
 
     const code = new Generator(graph, true).generate();
 
-    const initMethod = code.split('async initialize()')[1]?.split('public resolve')[0] ?? '';
+    const initMethod = code.split('public initialize(')[1]?.split('public resolve')[0] ?? '';
     expect(initMethod).toContain('IDatabase_abc');
     expect(initMethod).not.toContain('ILogger_def');
   });
