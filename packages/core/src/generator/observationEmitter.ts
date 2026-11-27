@@ -250,6 +250,11 @@ export function observationMembers(input: ObservationInput): string {
       (value: unknown) => { end('ok'); return value; },
       (error: unknown) => { end('error', error); throw error; },
     );
+  }
+
+  private _neoRest(end: ${name}End, result: unknown): unknown {
+    const settled = this._neoSettle(end, result);
+    return settled === result ? undefined : settled;
   }`;
 }
 

@@ -18,12 +18,13 @@ import {
   emitFactoryPolicy,
   emitFactoryRead,
   emitLeaseOpen,
+  CONTEXT_CLASS,
   type PolicyEntry,
 } from './factoryLeaseEmitter';
 import { inputRead } from './inputEmitter';
 import { aliasPlanOf } from '../analyzer/shared/aliasLinks';
-import { DEFAULT_MANY_NAMES, factoryContextType, manyContextFunction, type ManyNames } from './manyEmitter';
-import { signalTypeName } from './signalEmitter';
+import { DEFAULT_MANY_NAMES, manyContextFunction, type ManyNames } from './manyEmitter';
+import { contextTypeName, signalTypeName } from './signalEmitter';
 import { observeBegin } from './observationEmitter';
 
 /**
@@ -380,7 +381,7 @@ interface FactoryBody {
  */
 function factoryType(declared: string | undefined, names: ManyNames, className: string): string {
   const answer = declared === undefined ? 'unknown' : `${declared} | PromiseLike<${declared}>`;
-  return `(context: ${factoryContextType(names, signalTypeName(className))}) => ${answer}`;
+  return `(context: ${contextTypeName(className)}) => ${answer}`;
 }
 
 function emitFactoryBody(
@@ -455,25 +456,24 @@ function emitFactoryBody(
     ${expireStmt}
     ${failStmt}
     ${manyFunction}
-    const __neoSignal = this._neoSignal();
-    const __neoContext = {
-      get signal() {
+    const __neoContext = new ${className}.${CONTEXT_CLASS}(
+      (): ${signalTypeName(className)} => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-        return __neoSignal;
+        return this._neoSignal();
       },
-      resolve: <T,>(token: unknown): T => {
+      <T,>(token: unknown): T => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         return ${one()}<T>(token);
       },
-      resolveAll: <T,>(token: unknown): T[] => {
+      <T,>(token: unknown): T[] => {
         if (__neoExpired) __neoFail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
         return ${all()}<T>(token);
       },
-      resolveMany: __neoResolveMany,
-    };
+      __neoResolveMany,
+    );
     ${holdStart}
     ${emitInvocation('', release, hasAsync)}`;
-    return { body: withNeeds(opaqueBody, [...needs]), members: '' };
+    return { body: withNeeds(opaqueBody, [...needs, 'factoryContext']), members: '' };
   }
   // The read member answers `unknown` for the token of the call, from the `host` it is given.
   const resolveTail = direct

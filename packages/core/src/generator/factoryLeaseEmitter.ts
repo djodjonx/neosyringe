@@ -1,6 +1,6 @@
 import { generatedText, selectHelpers, type Fragment, type Helper } from './fragments';
-import { DEFAULT_MANY_NAMES, factoryContextType, manyContextFunction, type ManyNames } from './manyEmitter';
-import { signalTypeName } from './signalEmitter';
+import { DEFAULT_MANY_NAMES, manyContextFunction, type ManyNames } from './manyEmitter';
+import { contextTypeName, signalTypeName } from './signalEmitter';
 
 /**
  * Permission policy and lease of a declared factory (topic 14).
@@ -14,9 +14,10 @@ import { signalTypeName } from './signalEmitter';
  * Both helpers are private static members of the generated class, linked only when a declared factory needs them.
  * An opaque factory (no `dependencies` list) keeps its own context: it may ask for any token.
  *
- * The context also has `signal` (topic 19): the signal of the initialization the call belongs to, read when the lease is
- * opened, or a signal that never aborts when the factory is called outside an initialization. A context that has expired
- * refuses `.signal` like every other member.
+ * The context also has `signal` (topic 19): the signal of the initialization the call belongs to, or a signal that never
+ * aborts when the factory is called outside an initialization. It is asked of the `host` when the factory reads it, not when
+ * the lease opens: a factory that never reads it costs no controller. A context that has expired refuses `.signal` like
+ * every other member.
  */
 
 export type PolicyMode = 'simple' | 'all';
@@ -48,6 +49,36 @@ function policyHelper(): string {
   }`;
 }
 
+/** The static member that holds the context class (`factoryContextClass`), shared by every factory of the container. */
+export const CONTEXT_CLASS = '__neoContext';
+
+/**
+ * The class of a factory context, as the text of a private static member, written once per container for the declared
+ * factories (the lease) and the opaque ones alike. Its parameters are typed through the alias of the container
+ * (`contextTypeName`), not through the literal. `signal` is an accessor of the class, not of each context: an object
+ * literal with a `get signal()` costs a closure and a runtime accessor definition on every call (measured: 136 ns against
+ * 17 ns for the same literal without it, tests/bench/runtime-cost.mjs `initialize` of a container with an async factory),
+ * and that was paid by every factory call even though few factories read `signal`. The class has the three resolvers as
+ * own members and reads the signal through `__neoRead`, which the call gives it: that is the expiry check and the ask of
+ * the host. `signal` is therefore on the prototype of a context, not one of its own properties.
+ */
+export function factoryContextClass(className: string): string {
+  const signal = signalTypeName(className);
+  const context = contextTypeName(className);
+  return `private static readonly ${CONTEXT_CLASS} = class {
+    constructor(
+      private readonly __neoRead: () => ${signal},
+      readonly resolve: ${context}['resolve'],
+      readonly resolveAll: ${context}['resolveAll'],
+      readonly resolveMany: ${context}['resolveMany'],
+    ) {}
+
+    get signal(): ${signal} {
+      return this.__neoRead();
+    }
+  };`;
+}
+
 /**
  * `__neoLease`: one context and its `expire` for one call. The context is generic in what it answers, like the public
  * `resolve<T>(token)`: the read answers `unknown` and the one assertion `as T` is the contract of the user's factory text.
@@ -60,8 +91,7 @@ function leaseHelper(className: string, names: ManyNames): string {
     label: string,
     host: ${className},
     read: (host: ${className}, token: unknown, all: boolean) => unknown,
-    signal: ${signalTypeName(className)},
-  ): { readonly context: ${factoryContextType(names, signalTypeName(className))}; readonly expire: () => void } {
+  ): { readonly context: ${contextTypeName(className)}; readonly expire: () => void } {
     let expired = false;
     const fail = (code: string, detail: string): never => {
       const error = new Error(code + ': factory ' + label + ' ' + detail) as Error & { code: string };
@@ -80,16 +110,12 @@ function leaseHelper(className: string, names: ManyNames): string {
       return read(host, token, true) as T[];
     };
     ${manyContextFunction(names, 'resolveMany', 'resolve', expiredCheck)}
+    const readSignal = (): ${signalTypeName(className)} => {
+      ${expiredCheck}
+      return host._neoSignal();
+    };
     return {
-      context: {
-        get signal() {
-          ${expiredCheck}
-          return signal;
-        },
-        resolve,
-        resolveAll,
-        resolveMany,
-      },
+      context: new ${className}.${CONTEXT_CLASS}(readSignal, resolve, resolveAll, resolveMany),
       expire: () => { expired = true; },
     };
   }`;
@@ -102,7 +128,8 @@ function leaseHelper(className: string, names: ManyNames): string {
 export function factoryLeaseHelpers(className: string, names: ManyNames = DEFAULT_MANY_NAMES): Helper[] {
   return [
     { id: 'factoryPolicy', parts: [generatedText(policyHelper())], needs: [] },
-    { id: 'factoryLease', parts: [generatedText(leaseHelper(className, names))], needs: [] },
+    { id: 'factoryLease', parts: [generatedText(leaseHelper(className, names))], needs: ['factoryContext'] },
+    { id: 'factoryContext', parts: [generatedText(factoryContextClass(className))], needs: [] },
   ];
 }
 
@@ -110,7 +137,7 @@ export function factoryLeaseHelpers(className: string, names: ManyNames = DEFAUL
 export function linkedFactoryLeaseHelpers(className: string, roots: readonly Fragment[], names: ManyNames = DEFAULT_MANY_NAMES): Helper[] {
   const own = roots.map((root): Fragment => ({
     parts: root.parts,
-    needs: root.needs.filter((id) => id === 'factoryPolicy' || id === 'factoryLease'),
+    needs: root.needs.filter((id) => id === 'factoryPolicy' || id === 'factoryLease' || id === 'factoryContext'),
   }));
   return selectHelpers(own, factoryLeaseHelpers(className, names));
 }
@@ -156,7 +183,7 @@ export function emitFactoryRead(className: string, factoryId: string, body: stri
 export function emitLeaseOpen(className: string, factoryId: string, label: string): string {
   assertIdentifier(className);
   const { get, read } = names(factoryId);
-  return `const __neoLease = ${className}.__neoLease(${className}.${get}(), ${label}, this, ${className}.${read}, this._neoSignal());
+  return `const __neoLease = ${className}.__neoLease(${className}.${get}(), ${label}, this, ${className}.${read});
     const __neoContext = __neoLease.context;
     const __neoExpire = __neoLease.expire;`;
 }

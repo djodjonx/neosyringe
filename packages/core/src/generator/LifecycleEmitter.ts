@@ -532,6 +532,10 @@ function runJobsLines(plan: { limit: number; jobs: InitJob[] }): string[] {
  * queued job once the container is destroying (`__neoRunJobs`). The listener on the caller's signal is removed when the
  * work settles.
  *
+ * Without a signal from the caller nothing can reject early, so `_initObserved` is `_initWork` itself, and the call costs
+ * what it cost before cancellation existed: no promise, no closure, no controller (`_initObserved` is cleared first: a join made by user code during the synchronous part of `_runInitialize`, an `observe()` sink, waits for the work). The controller the factories' signal
+ * comes from is made by the first read of a signal (`_neoSignal`), and `_neoAbort` is the one place that aborts it.
+ *
  * About `(this._state as string)` below: the cleanup awaits a dispose, and destroy() may set 'destroying'
  * in the meantime. The check above that threw on 'destroying' narrows the property for the compiler, which
  * does not follow state across an await. The assertion widens it back; it adds no runtime code.
@@ -586,7 +590,7 @@ export function generateInitializeMethod(
     const __neoUser = options?.signal;
     if (this._state === 'initializing' || this._state === 'cancelling') {
       if (__neoUser !== undefined && __neoUser !== this._initSignal) return Promise.reject(this._neoFail('NEO_INIT_OPTIONS_CONFLICT', 'initialize() is running with another signal'));
-      return this._initObserved;
+      return this._initObserved ?? Promise.resolve().then((): Promise<void> | undefined => this._initObserved);
     }
     if (this._state === 'ready') return Promise.resolve();
     if (this._state === 'failed') return Promise.reject(this._failure);
@@ -600,10 +604,15 @@ export function generateInitializeMethod(
 
   private _startInitialize(__neoUser: ${signal} | undefined): Promise<void> {
     this._state = 'initializing';
-    const __neoController = ${className}.__neoController();
-    this._initController = __neoController;
     this._initSignal = __neoUser;
     this._initCancel = undefined;
+    this._initAborted = undefined;
+    if (__neoUser === undefined) {
+      this._initObserved = undefined; const __neoRun = this._runInitialize();
+      this._initWork = __neoRun;
+      this._initObserved = __neoRun;
+      return __neoRun;
+    }
     let __neoResolve: () => void = () => {};
     let __neoReject: (reason: unknown) => void = () => {};
     const __neoObserved = new Promise<void>((resolve, reject) => {
@@ -616,20 +625,15 @@ export function generateInitializeMethod(
       this._initCancel = { reason: __neoReason };
       if (this._state === 'initializing') this._state = 'cancelling';
       __neoReject(__neoReason);
-      __neoController.abort(__neoReason);
+      this._neoAbort(__neoReason);
     };
-    if (__neoUser !== undefined) {
-      if (__neoUser.aborted) __neoRelay();
-      else __neoUser.addEventListener('abort', __neoRelay, { once: true });
-    }
+    if (__neoUser.aborted) __neoRelay();
+    else __neoUser.addEventListener('abort', __neoRelay, { once: true });
     const __neoWork = this._runInitialize();
     this._initWork = __neoWork;
     const __neoSettle = (): void => {
       __neoUser?.removeEventListener('abort', __neoRelay);
-      if (this._initController === __neoController) {
-        this._initController = undefined;
-        this._initSignal = undefined;
-      }
+      if (this._initSignal === __neoUser) this._initSignal = undefined;
     };
     void __neoWork.then(
       () => { __neoSettle(); __neoResolve(); },
@@ -675,10 +679,15 @@ export function generateInitializeMethod(
       throw __neoWrapped;
     } finally {
       this._initRunning = false;
+      this._initController = undefined;
     }
   }
 
   private _guardPublic(op: string = 'resolve()'): void {
+    if (this._state !== 'ready') this._neoRefuse(op);
+  }
+
+  private _neoRefuse(op: string): void {
     if (this._state === 'created' || this._state === 'initializing' || this._state === 'cancelling') {
       throw this._neoFail('NEO_NOT_INITIALIZED', 'call await container.initialize() before ' + op);
     }
@@ -978,70 +987,69 @@ function registrationOf(slot: DisposalSlot): string {
 }
 
 /**
- * The observed call of one disposal (topic 22), written once in `_neoDisposeSlot`: `dispose` begins before the disposer
- * runs and ends once, with the settlement of a promise it returns or the error it throws. It assigns the `__neoResult`
- * the member declared, as the plain call does.
+ * The shared members of the disposal slots, written once per class (stage F, docs/benchmarks/stage-f-compile-overhead.md).
+ * The protocol used to be inlined at every slot, which made the generated code, and its transpilation, grow with the number
+ * of disposable services. A first shrink put all of it in one member that every slot called with five arguments; that
+ * made the `.dispose()` call site megamorphic (a hundred classes through one site) and `destroy()` cost 1.75 times what it
+ * did (docs/benchmarks/stage-f-compile-overhead.md, "Runtime cost"). The call of the disposer therefore stays at the slot,
+ * and only what calls no user code is shared:
+ * - `_neoTake` reads the instance of a key from the cache; a borrowed one, one already disposed through another key
+ *   (`__neoSeen`) or a key that was never built is not the slot's to dispose and answers `__neoSeen` itself, which no
+ *   cache holds; a live one is marked seen before its disposer runs. Whatever else it answers, `null` included, is called
+ *   at the slot, so a missing method throws the same TypeError as before;
+ * - `_neoPend` hands a promise the disposer returned to `__neoPending` (an early slot: the caller awaits them together);
+ * - `_neoLateEnd` answers a promise the disposer returned, with its rejection gathered, for the caller to await at once
+ *   (a late slot, whose dependents must wait). It exists only when the graph has a late slot.
+ * A member exists only when a slot of the graph reads it.
  */
-function observedSlotCall(call: string): string {
-  return `const __neoOp = this._neoObs().begin('dispose', this._scopeId, __neoRegistration); try { __neoResult = ${call}; __neoResult = this._neoSettle(__neoOp, __neoResult); } catch (__neoThrown) { __neoOp('error', __neoThrown); throw __neoThrown; }`;
+function disposeSlotMembers(slots: DisposalSlot[]): string {
+  const members = [
+    `private _neoTake(__neoKey: unknown, __neoSeen: Set<unknown>): unknown {
+    if (!this.instances.has(__neoKey)) return __neoSeen;
+    const __neoInst = this.instances.get(__neoKey);
+    if (__neoInst != null) {
+      if (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)) return __neoSeen;
+      __neoSeen.add(__neoInst);
+    }
+    return __neoInst;
+  }`,
+  ];
+  if (slots.some((slot) => !slot.late)) {
+    members.push(`private _neoPend(__neoResult: unknown, __neoPending: unknown[]): void {
+    if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult);
+  }`);
+  }
+  if (slots.some((slot) => slot.late)) {
+    members.push(`private _neoLateEnd(__neoResult: unknown, __neoErrors: unknown[]): Promise<unknown> | undefined {
+    if (!(__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function')) return undefined;
+    return Promise.resolve(__neoResult).then(undefined, (__neoDisposeError: unknown) => { __neoErrors.push(__neoDisposeError); });
+  }`);
+  }
+  return members.join('\n\n  ');
 }
 
 /**
- * The disposal of one slot, written once per class (stage F, docs/benchmarks/stage-f-compile-overhead.md): each slot of
- * `destroy()` and of the reconfiguration is a call of it. The protocols used to be inlined at every slot, which made the
- * generated code, and its transpilation, grow with the number of disposable services.
- * - the instance is read from the cache; a borrowed one, or one already disposed through another key (`__neoSeen`), is left
- *   alone, and a live one is marked seen before its disposer runs;
+ * One slot of `destroy()` and of the reconfiguration. The instance is read by `_neoTake`; the disposer is called here:
  * - a `guarded` slot (the factory may return anything, or the disposer is keyed by a symbol) asks `_neoDisposer` which
- *   method to call and does nothing when there is none; an unguarded one calls `dispose()` as is, so a missing method throws
- *   the same TypeError as before. A graph with no guarded slot has no such parameter and no such branch;
- * - a failure of the call is gathered in `__neoErrors`; a promise it returns is either pushed to `__neoPending`
- *   (an early slot: the caller awaits them together) or answered, with its rejection gathered, for the caller to await
- *   at once (a late slot, whose dependents must wait).
- * The member exists only when the graph has a disposal slot.
+ *   method to call and does nothing when there is none; an unguarded one calls `dispose()` as is. A graph with no guarded
+ *   slot has no such branch;
+ * - observed (topic 22), `dispose` begins before the disposer runs and ends once, with the settlement of a promise it
+ *   returns or the error it throws; `_neoRest` answers what is left to wait on (nothing for a plain value, so the tail never reads `then` again and a failing getter cannot end it twice);
+ * - a failure of the call is gathered in `__neoErrors`; a promise it returns is either handed to `__neoPending` (an early
+ *   slot) or awaited at once (a late slot, through `_neoLateEnd`).
  */
-function disposeSlotMember(slots: DisposalSlot[], observation: boolean): string {
-  const guarded = slots.some((slot) => slot.guarded);
-  // A graph with no guarded slot reads every instance as disposable and calls `dispose()` on it directly.
-  const plain = guarded ? `(__neoInst as ${DISPOSABLE}).dispose()` : '__neoInst.dispose()';
-  const params = [
-    '__neoKey: unknown',
-    '__neoSeen: Set<unknown>',
-    '__neoErrors: unknown[]',
-    ...(guarded ? ['__neoGuarded: boolean'] : []),
-    ...(observation ? ['__neoRegistration: string'] : []),
-    '__neoPending?: unknown[]',
-  ];
-  const run = (call: string): string => (observation ? observedSlotCall(call) : `__neoResult = ${call};`);
-  const invoke = guarded
-    ? `if (__neoGuarded) { const __neoRun = this._neoDisposer(__neoInst); if (!__neoRun) return undefined; ${run('__neoRun()')} } else { ${run(plain)} }`
-    : run(plain);
-  return `private _neoDisposeSlot(${params.join(', ')}): Promise<unknown> | undefined {
-    if (!this.instances.has(__neoKey)) return undefined;
-    const __neoInst = this.instances.get(__neoKey) as ${guarded ? MAYBE_DISPOSABLE : DISPOSABLE};
-    if (__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst))) return undefined;
-    if (__neoInst != null) __neoSeen.add(__neoInst);
-    try {
-      let __neoResult: unknown;
-      ${invoke}
-      if (!(__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function')) return undefined;
-      if (__neoPending) { __neoPending.push(__neoResult); return undefined; }
-      return Promise.resolve(__neoResult).then(undefined, (__neoDisposeError: unknown) => { __neoErrors.push(__neoDisposeError); });
-    } catch (__neoDisposeError) {
-      __neoErrors.push(__neoDisposeError);
-      return undefined;
-    }
-  }`;
-}
-
-/** One slot: a call of `_neoDisposeSlot`. An early slot hands its promise to `__neoPending`, a late one awaits it at once. */
-function disposeSlot(slot: DisposalSlot, immediateAwait: boolean, guarded: boolean, observation: boolean): string {
-  const args = [slot.tokenKey, '__neoSeen', '__neoErrors'];
-  if (guarded) args.push(String(slot.guarded));
-  if (observation) args.push(registrationOf(slot));
-  if (!immediateAwait) args.push('__neoPending');
-  const call = `this._neoDisposeSlot(${args.join(', ')})`;
-  return immediateAwait ? `if (__neoLate = ${call}) await __neoLate;` : `${call};`;
+function disposeSlot(slot: DisposalSlot, immediateAwait: boolean, observation: boolean): string {
+  const tail = (result: string): string => (immediateAwait ? `__neoLate = this._neoLateEnd(${result}, __neoErrors);` : `this._neoPend(${result}, __neoPending);`);
+  // The plain call of `dispose()` is a statement of its own, so the slot reads as the call it has always been.
+  const finish = (call: string, own: boolean): string => {
+    if (!observation) return own ? `const __neoResult = ${call}; ${tail('__neoResult')}` : tail(call);
+    return `const __neoOp = this._neoObs().begin('dispose', this._scopeId, ${registrationOf(slot)}); try { ${tail(`this._neoRest(__neoOp, ${call})`)} } catch (__neoThrown) { __neoOp('error', __neoThrown); throw __neoThrown; }`;
+  };
+  const run = slot.guarded
+    ? `const __neoRun = this._neoDisposer(__neoGot); if (__neoRun) { ${finish('__neoRun()', false)} }`
+    : `const __neoInst = __neoGot as ${DISPOSABLE}; ${finish('__neoInst.dispose()', true)}`;
+  const body = `try { const __neoGot = this._neoTake(${slot.tokenKey}, __neoSeen); if (__neoGot !== __neoSeen) { ${run} } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); }`;
+  return immediateAwait ? `{ let __neoLate: Promise<unknown> | undefined; ${body} if (__neoLate) await __neoLate; }` : body;
 }
 
 /**
@@ -1051,18 +1059,16 @@ function disposeSlot(slot: DisposalSlot, immediateAwait: boolean, guarded: boole
  */
 function sharedDisposalLines(slots: DisposalSlot[], awaitClose: boolean, observation = false): string[] {
   if (slots.length === 0) return ['this.instances.clear();'];
-  const guarded = slots.some((slot) => slot.guarded);
   const lines = ['const __neoSeen = new Set();', 'const __neoErrors: unknown[] = [];'];
   const early = slots.filter((slot) => !slot.late);
   const late = slots.filter((slot) => slot.late);
   const defer = awaitClose && early.length > 0;
   if (defer) lines.push('const __neoPending: unknown[] = [];');
-  if (late.length > 0) lines.push('let __neoLate: Promise<unknown> | undefined;');
-  for (const slot of early) lines.push(disposeSlot(slot, false, guarded, observation));
+  for (const slot of early) lines.push(disposeSlot(slot, false, observation));
   if (defer) {
     lines.push('for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }');
   }
-  for (const slot of late) lines.push(disposeSlot(slot, true, guarded, observation));
+  for (const slot of late) lines.push(disposeSlot(slot, true, observation));
   lines.push('this.instances.clear();');
   return lines;
 }
@@ -1235,7 +1241,7 @@ export function generateDestroyMethod(
 ): string {
   const collected = combinedDisposals(graph, sorted, getImport);
   // The disposal of one slot is written once, and only for a graph that has a slot (`_reconfigure` calls it too).
-  const slotMember = collected.slots.length === 0 ? '' : `\n\n  ${disposeSlotMember(collected.slots, observation)}`;
+  const slotMember = collected.slots.length === 0 ? '' : `\n\n  ${disposeSlotMembers(collected.slots)}`;
   const members = `${destroyMembers(graph, collected, hasAsync, minimal, observation)}${slotMember}\n\n  ${asyncDisposalMember()}`;
   return hasScopeInputs(graph) ? `${inputDestroyMethod()}\n\n  ${members}` : members;
 }
@@ -1321,7 +1327,7 @@ function destroyMembers(
     const __neoClear = () => { if (this._destroyWork === __neoRun) this._destroyWork = undefined; };
     void __neoRun.then(__neoClear, __neoClear);
     // The terminal state and the work are installed: a listener that calls destroy() or resolve() sees both.
-    this._initController?.abort(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
+    if (this._initRunning) this._neoAbort(this._neoFail('NEO_CONTAINER_DESTROYED', 'container is destroyed'));
     return __neoRun;
   }
 

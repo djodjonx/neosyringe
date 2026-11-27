@@ -5,7 +5,7 @@ import type { SourceOrigin, SourceRewrite } from '../analyzer/types';
  * Helpers an emitter can ask for by id. Only the two generic resolvers are named here:
  * every other private helper of the generated class is still decided by a flag of the graph.
  */
-export type HelperId = 'resolveSingle' | 'resolveAll' | 'factoryPolicy' | 'factoryLease';
+export type HelperId = 'resolveSingle' | 'resolveAll' | 'factoryPolicy' | 'factoryLease' | 'factoryContext';
 
 /** Text the generator wrote, or a copy of a range of a source file taken from one snapshot. */
 export type Part =

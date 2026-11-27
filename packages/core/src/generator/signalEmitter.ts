@@ -1,4 +1,5 @@
 import type { DependencyGraph } from '../analyzer/types';
+import { factoryContextType, type ManyNames } from './manyEmitter';
 
 /**
  * The signal of an initialization and of a factory context (topic 19).
@@ -25,9 +26,13 @@ export function controllerTypeName(className: string): string {
   return `${className}Controller`;
 }
 
-/** True when the class reads the signal aliases: it initializes asynchronously, or one of its registrations is a factory. */
-export function needsSignal(graph: DependencyGraph, hasAsync: boolean): boolean {
-  if (hasAsync) return true;
+/** The name of the alias of the factory context of the class `className` (`factoryContextType`, written once). */
+export function contextTypeName(className: string): string {
+  return `${className}FactoryContext`;
+}
+
+/** True when one of the registrations of the graph is a factory: the class has a factory context. */
+export function hasFactory(graph: DependencyGraph): boolean {
   for (const node of graph.nodes.values()) {
     if (node.service.type === 'factory') return true;
   }
@@ -37,15 +42,23 @@ export function needsSignal(graph: DependencyGraph, hasAsync: boolean): boolean 
   return false;
 }
 
+/** True when the class reads the signal aliases: it initializes asynchronously, or one of its registrations is a factory. */
+export function needsSignal(graph: DependencyGraph, hasAsync: boolean): boolean {
+  return hasAsync || hasFactory(graph);
+}
+
 /**
  * The aliases, as top-level declarations, each on a line of its own after a line break. Empty for a class that never names
- * them. The controller alias is for an async class only: a sync class never makes a controller of its own.
+ * them. The controller alias is for an async class only: a sync class never makes a controller of its own. The alias of the
+ * factory context is written when `context` is given (the class has a factory), so the one context class and the type of
+ * every factory name it instead of repeating its literal.
  */
-export function signalTypes(className: string, used: boolean, hasAsync: boolean): string {
+export function signalTypes(className: string, used: boolean, hasAsync: boolean, context?: ManyNames): string {
   if (!used) return '';
   const signal = signalTypeName(className);
+  const alias = context === undefined ? '' : `\ntype ${contextTypeName(className)} = ${factoryContextType(context, signal)};`;
   const text = `\ntype ${signal} = { readonly aborted: boolean; readonly reason?: unknown; addEventListener(type: 'abort', listener: () => void, options?: { once?: boolean }): void; removeEventListener(type: 'abort', listener: () => void): void };`;
-  return hasAsync ? `${text}\ntype ${controllerTypeName(className)} = { readonly signal: ${signal}; abort(reason?: unknown): void };` : text;
+  return `${hasAsync ? `${text}\ntype ${controllerTypeName(className)} = { readonly signal: ${signal}; abort(reason?: unknown): void };` : text}${alias}`;
 }
 
 /**
@@ -62,7 +75,10 @@ export function signalTypes(className: string, used: boolean, hasAsync: boolean)
  *   host as an unhandled rejection, as a native signal reports it).
  * - `__neoIdle` is one signal that never aborts, built on first use and shared by every call and every scope of the class:
  *   a listener added to it is never called and never released, so a factory must not add one per call.
- * - `_neoSignal` is the signal of the initialization that is running (`_initRunning`), the idle one otherwise.
+ * - `_neoSignal` is the signal of the initialization that is running (`_initRunning`), the idle one otherwise. Its controller
+ *   is made by the first read, not by `initialize()`: an initialization that nobody cancels and no factory observes never
+ *   builds one. A controller made after the first abort (the caller's, or `destroy()`) is born aborted with that reason
+ *   (`_initAborted`, written by `_neoAbort`, the one place that aborts), so a signal read late is the signal read at once.
  * - `_neoCheck` throws the reason of an initialization that is cancelling.
  */
 export function signalMembers(className: string, hasAsync: boolean): string {
@@ -111,7 +127,19 @@ export function signalMembers(className: string, hasAsync: boolean): string {
   return `${shared}
 
   private _neoSignal(): ${signal} {
-    return this._initRunning && this._initController !== undefined ? this._initController.signal : ${className}.__neoIdle();
+    if (!this._initRunning) return ${className}.__neoIdle();
+    let __neoController = this._initController;
+    if (__neoController === undefined) {
+      __neoController = ${className}.__neoController();
+      this._initController = __neoController;
+      if (this._initAborted !== undefined) __neoController.abort(this._initAborted.reason);
+    }
+    return __neoController.signal;
+  }
+
+  private _neoAbort(reason: unknown): void {
+    this._initAborted ??= { reason };
+    this._initController?.abort(reason);
   }
 
   private _neoCheck(): void {

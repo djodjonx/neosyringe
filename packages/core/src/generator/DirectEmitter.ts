@@ -398,8 +398,8 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
     initialize,
     generateScopeMethod(graph, input.className, hasAsync, minimal, observation),
   ];
-  // The policy and the lease of the declared factories: only the helpers a creator asks for.
-  for (const id of ['factoryPolicy', 'factoryLease'] as const) {
+  // The policy and the lease of the declared factories, and the context class every factory shares: only the helpers a creator asks for.
+  for (const id of ['factoryPolicy', 'factoryLease', 'factoryContext'] as const) {
     const factoryHelper = linked.get(id);
     if (factoryHelper) members.push(factoryHelper);
   }

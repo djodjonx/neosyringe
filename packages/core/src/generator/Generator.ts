@@ -12,7 +12,7 @@ import { emitOptimizedContainer } from './DirectEmitter';
 import { DISPATCH_LINEAR_MAX } from './dispatchEmitter';
 import { boundGuard, boundInitializeGuard, hasScopeInputs, inputConstructor, inputMembers } from './inputEmitter';
 import { linkedFactoryLeaseHelpers } from './factoryLeaseEmitter';
-import { controllerTypeName, needsSignal, signalMembers, signalTypeName, signalTypes } from './signalEmitter';
+import { controllerTypeName, hasFactory, needsSignal, signalMembers, signalTypeName, signalTypes } from './signalEmitter';
 import { observationMembers, observationTypes, type ObservationInput } from './observationEmitter';
 import { providerTypesOf, type GetProviderTypes } from './providerTypes';
 import {
@@ -603,7 +603,7 @@ ${this.renderImportLines(imports, sourceGraph, typeImports).join('\n')}
 ${concat([...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)], '\n')}
 
 ${containerClass}
-${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync)}${observation ? observationTypes(this.containerClassName) : ''}
+${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync, hasFactory(emitted) ? this.manyNames : undefined)}${observation ? observationTypes(this.containerClassName) : ''}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     }
 
@@ -796,7 +796,7 @@ class ${this.containerClassName} {
 ${aliases ? `\n  ${aliases.members}\n` : ''}
   ${this.emitDebugGetter(emitted)}
 }
-${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync)}${observation ? observationTypes(this.containerClassName) : ''}
+${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync, hasFactory(emitted) ? this.manyNames : undefined)}${observation ? observationTypes(this.containerClassName) : ''}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   }
 
@@ -917,10 +917,11 @@ function containerState(
   const stateFields = hasAsync
     ? `private _state: 'created' | 'initializing' | 'cancelling' ${minimal ? '' : "| 'reconfiguring' "}| 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
   private _initWork?: Promise<void>;
-  private _initObserved: Promise<void> = Promise.resolve();
+  private _initObserved?: Promise<void>;
   private _initController?: ${controllerTypeName(className)};
   private _initSignal?: ${signalTypeName(className)};
   private _initCancel?: { readonly reason: unknown };
+  private _initAborted?: { readonly reason: unknown };
   private _failure: unknown;
   private _initRunning = false;
   private _initJournal: unknown[] = [];

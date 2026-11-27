@@ -300,7 +300,7 @@ export interface FactoryContext {
    * is destroyed while it runs. A factory called outside an initialization (a sync or transient factory resolved later)
    * gets a signal that never aborts: that one is shared by every such call, so a listener added to it is never called and
    * never removed. Do not add one per call. Like the rest of the context it expires with the factory call: reading it later
-   * throws `NEO_FACTORY_CONTEXT_EXPIRED`. It is not a place to carry request data.
+   * throws `NEO_FACTORY_CONTEXT_EXPIRED`. It is not a place to carry request data. It is an accessor of the context's prototype, not an own property: `ctx.signal` and destructuring read it, `{ ...ctx }` does not copy it and `Object.keys(ctx)` does not list it.
    */
   readonly signal: AbortSignalLike;
   resolve<T>(token: Token<T>): T;

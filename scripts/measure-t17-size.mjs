@@ -226,14 +226,14 @@ async function measureBundle(files) {
  */
 const MEMBER_CATEGORIES = [
   ['creators', /^(create_|_neoRaw_create_)/],
-  ['factory-policy', /^__neoPolicy|^__neoRead_|^__neoLease$/],
+  ['factory-policy', /^__neoPolicy|^__neoRead_|^__neoLease$|^__neoContext/],
   ['accessors', /^_direct_|^_get_|^_list_/],
   ['dispatch-tables', /^__neo(Dispatch|Roots|Lists|RootLists)/],
   ['resolve', /^(resolve|resolveAll|resolveMany|_resolveInternal|_resolveAllInternal)$/],
   ['lifecycle', /^(initialize|_startInitialize|_runInitialize|createScope|destroy|_runDestroy|_close|override|overrideMany|clearOverrides|_reconfigure)$/],
   ['events', /^(on|notifyResolve)$/],
-  ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock|_neoDisposer|_neoDisposeSlot|__neoController|__neoIdle|__neoIdleSignal|_neoSignal|_neoCheck)$/],
-  ['observation', /^(observe|stateSnapshot|_neoObs|_neoAdopt|_neoSettle|_neoRegistration|_obs|_scopeId|_scoped)$/],
+  ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock|_neoDisposer|_neoTake|_neoPend|_neoLateEnd|_neoRefuse|__neoController|__neoIdle|__neoIdleSignal|_neoSignal|_neoAbort|_neoCheck)$/],
+  ['observation', /^(observe|stateSnapshot|_neoObs|_neoAdopt|_neoSettle|_neoRest|_neoRegistration|_obs|_scopeId|_scoped)$/],
   ['debug-metadata', /^(_graph|_dependencyGraph)$/],
 ];
 const CATEGORY_IDS = [...MEMBER_CATEGORIES.map(([id]) => id), 'user-code', 'state', 'other-members', 'class-shell', 'imports', 'glue'];
