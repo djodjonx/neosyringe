@@ -27,7 +27,7 @@ features:
     
   - icon: 🛡️
     title: Compile-Time Safety
-    details: Detect circular dependencies, missing bindings, and type mismatches instantly in your IDE.
+    details: Detect circular dependencies, missing bindings, and type mismatches in your IDE with the same analysis as the build.
     
   - icon: 🔄
     title: Gradual Migration

@@ -649,7 +649,31 @@ export interface ErrorContext {
 
   /** Dependency chain (for cycles) */
   chain?: string[];
+
+  /**
+   * Which cause of the error's code this is, set where the analyzer knows it. The fix hint reads it: it is never
+   * read back from the message.
+   */
+  reason?: DiagnosticReason;
 }
+
+/**
+ * Causes of a diagnostic code that need their own fix. A cause without a reason keeps the hint of its code.
+ * - `NEO_CONFIG_UNSUPPORTED`: `value-owned`, `open-mode-roots`, `unsupported-mode`, `eager-alias`,
+ *   `partial-scope-inputs`, `partial-initialization`.
+ * - `NEO_DUPLICATE_PROVIDER`: `parent-override` (a token the parent container already registers).
+ * - `NEO_UNKNOWN_CONTAINER`: `unknown-receiver`, `dynamic-list` (a `resolveMany` list that is not a literal).
+ */
+export type DiagnosticReason =
+  | 'value-owned'
+  | 'open-mode-roots'
+  | 'unsupported-mode'
+  | 'eager-alias'
+  | 'partial-scope-inputs'
+  | 'partial-initialization'
+  | 'parent-override'
+  | 'unknown-receiver'
+  | 'dynamic-list';
 
 /** Machine-readable diagnostic codes this analyzer emits. */
 export type DiagnosticCode =

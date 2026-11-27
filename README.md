@@ -31,7 +31,7 @@
 
 ## ✨ Features
 
-- **IDE Plugin** - Real-time validation with **all errors shown at once**, precise error positioning
+- **IDE Plugin** - The same analysis as the build, with **all errors shown at once**, precise error positioning
 - **Use Interfaces as Tokens** - `useInterface<ILogger>()` without manual Symbols
 - **Generated Containers** - Resolution is decided at build time. Full or minimal profile; sizes are measured, never promised (see the Profiles guide)
 - **Compile-Time Safety** - Missing dependencies, cycles, and duplicates detected in your IDE
@@ -120,7 +120,7 @@ No network access (offline, sandboxed CI, agent environments)? `@djodjonx/neosyr
 | [Alternatives](https://djodjonx.github.io/neosyringe/guide/alternatives) | Documented capabilities, dated and sourced |
 | [Generated Code](https://djodjonx.github.io/neosyringe/guide/generated-code) | What the compiler produces |
 | [CLI Validator](https://djodjonx.github.io/neosyringe/guide/cli) | Validate in CI/CD |
-| [IDE Plugin](https://djodjonx.github.io/neosyringe/guide/ide-plugin) | Real-time error detection |
+| [IDE Plugin](https://djodjonx.github.io/neosyringe/guide/ide-plugin) | The same analysis as the build, in your editor |
 | [API Reference](https://djodjonx.github.io/neosyringe/api/types) | Types and functions |
 
 ## 🔧 Build Plugin Setup
@@ -153,8 +153,10 @@ export default {
 <summary><strong>Webpack</strong></summary>
 
 ```javascript
+const { neoSyringePlugin } = require('@djodjonx/neosyringe-plugin');
+
 module.exports = {
-  plugins: [require('@djodjonx/neosyringe-plugin').webpack()]
+  plugins: [neoSyringePlugin.webpack()]
 };
 ```
 </details>
@@ -207,7 +209,7 @@ Add to `package.json` scripts so ts-patch patches TypeScript on install:
 
 ## 🛡️ IDE Support
 
-Get **comprehensive real-time validation** in your editor:
+Get **the same analysis as the build** in your editor. It runs on each TypeScript program update; no latency is promised: the editor plugin has no latency measurement (the nearest one, of the build plugin's incremental session, is in [the benchmarks](docs/benchmarks/G04-incremental-session.md)):
 
 ```bash
 pnpm add -D @djodjonx/neosyringe-lsp

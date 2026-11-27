@@ -24,7 +24,7 @@ import {
 export interface NeoSyringePluginOptions {
   /**
    * Whether generated containers embed `_graph`/`_dependencyGraph` debug data.
-   * Defaults to `true` outside production. Forced to `false` whenever
+   * Defaults to `false`: only an explicit `true` embeds it. Forced to `false` whenever
    * `process.env.NODE_ENV === 'production'`, with no way to override that —
    * see resolveDebugFlag in @djodjonx/neosyringe-core.
    */

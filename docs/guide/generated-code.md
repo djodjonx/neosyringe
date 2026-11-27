@@ -61,12 +61,12 @@ The generated container exposes a few helpers for `_graph`/`_dependencyGraph`:
 
 ```typescript
 // vite.config.ts / rollup.config.js / webpack.config.js / esbuild build script
-neoSyringePlugin.vite({ debug: false })   // or .rollup(), .webpack(), .esbuild()
+neoSyringePlugin.vite({ debug: true })    // default: false. Or .rollup(), .webpack(), .esbuild()
 ```
 
 ```json
 // tsconfig.json (ts-patch, no bundler)
-{ "transform": "@djodjonx/neosyringe-plugin/transformer", "debug": false }
+{ "transform": "@djodjonx/neosyringe-plugin/transformer", "debug": true }
 ```
 
 This is a **build-time** decision, not a runtime check: when disabled, the token/dependency data is never written into the generated source at all — there's nothing for a bundler to dead-code-eliminate, which matters because ts-patch/plain-`tsc` builds have no bundler or minifier step to do that stripping for you. `container._graph` still exists either way (it just returns `[]` when disabled), so accessing it never breaks.

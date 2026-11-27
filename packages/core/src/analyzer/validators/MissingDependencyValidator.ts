@@ -140,6 +140,7 @@ export class MissingDependencyValidator implements IValidator {
         : 'NEO_UNKNOWN_CONTAINER: resolve receiver is not a known container',
       node,
       sourceFile,
+      context: { reason: dynamicList ? 'dynamic-list' : 'unknown-receiver' },
     };
   }
 

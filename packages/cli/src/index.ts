@@ -13,6 +13,7 @@
  * npx neosyringe-check --json   # machine-readable output for CI
  * npx neosyringe-check --explain UserService   # why is this token kept?
  * npx neosyringe-check --retention-report retention.json
+ * npx neosyringe-check doctor   # versions, tsconfig, package exports and the declared integration
  * ```
  */
 import * as ts from 'typescript';
@@ -20,7 +21,9 @@ import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Analyzer, containerLookupOf, resolveProjectConfig } from '@djodjonx/neosyringe-core/analyzer';
-import { parseArgs, buildJsonReport, buildFatalReport, findUsageError, CLI_USAGE } from './report';
+import { parseArgs, buildJsonReport, buildFatalReport, findUsageError, findDoctorUsageError, isDoctorCommand, CLI_USAGE } from './report';
+import { renderTextReport } from './diagnostics';
+import { buildDoctorReport, renderDoctorText, runDoctor } from './doctor';
 import type { AnalysisError, ContainerLookup, DependencyGraph } from '@djodjonx/neosyringe-core/analyzer';
 import { renderRetentionReport, runExplain, writeRetentionReport } from './explain';
 import { exportGraphHtml, exportMermaid } from './graphExport';
@@ -39,12 +42,34 @@ function lookupFor(errors: AnalysisError[], graphs: () => DependencyGraph[]): Co
   }
 }
 
+/** `doctor`: reads the environment, never the application. Exit 1 when a check is an error, 2 on a usage error. */
+function runDoctorCommand(argv: string[]): never {
+  const args = parseArgs(argv);
+  if (args.help) {
+    console.log(CLI_USAGE);
+    process.exit(0);
+  }
+  const usageError = findDoctorUsageError(argv);
+  if (usageError) {
+    if (args.json) {
+      console.log(JSON.stringify(buildFatalReport(usageError)));
+    } else {
+      console.error(`❌ ${usageError}\n   Run with --help for the flags.`);
+    }
+    process.exit(2);
+  }
+  const result = runDoctor({ cwd: process.cwd(), project: args.project });
+  console.log(args.json ? JSON.stringify(buildDoctorReport(result)) : renderDoctorText(result));
+  process.exit(result.exitCode);
+}
+
 /**
  * CLI entry point.
  * Reads tsconfig.json (or --project override), analyzes all containers,
  * and reports any validation errors.
  */
 function main() {
+  if (isDoctorCommand(process.argv.slice(2))) runDoctorCommand(process.argv.slice(3));
   const args = parseArgs(process.argv.slice(2));
   const { project: projectArg, json, graph, mermaid } = args;
   const cwd = process.cwd();
@@ -171,10 +196,7 @@ function main() {
 
     if (errors.length > 0) {
       console.error(`\n❌ Validation failed — ${errors.length} error(s) found:\n`);
-      for (const err of errors) {
-        const report = buildJsonReport([err], cwd).errors[0];
-        console.error(`  ${report.file}:${report.line}:${report.column}  [${report.type}]  ${report.message}`);
-      }
+      console.error(renderTextReport(errors, cwd, lookupFor(errors, graphsOnce)));
       console.error('');
       process.exit(1);
     }

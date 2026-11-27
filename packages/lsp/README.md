@@ -1,6 +1,8 @@
 # @djodjonx/neosyringe-lsp
 
-TypeScript Language Service Plugin for NeoSyringe. Provides real-time error detection in your IDE.
+TypeScript Language Service Plugin for NeoSyringe. Provides the same analysis as the build in your IDE, on each TypeScript program update. No latency is promised.
+
+Each diagnostic carries the stable `NEO_*` code in its message, and the dependency chain and the targeted fix as related information (`Dependency chain: A -> B`, `Fix: ...`), the same lines the CLI prints. Whether an editor shows related information is up to the editor.
 
 ## Setup
 

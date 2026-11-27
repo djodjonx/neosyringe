@@ -920,14 +920,14 @@ export class ConfigCollector implements IConfigCollector {
   private partialInputErrors(configArg: ts.ObjectLiteralExpression, type: ConfigType, sourceFile: ts.SourceFile): AnalysisError[] {
     const property = type === 'partial' ? this.findProperty(configArg, 'scopeInputs') : undefined;
     if (!property) return [];
-    return [{ type: 'unsupported', code: 'NEO_CONFIG_UNSUPPORTED', message: PARTIAL_SCOPE_INPUTS_MESSAGE, node: property, sourceFile }];
+    return [{ type: 'unsupported', code: 'NEO_CONFIG_UNSUPPORTED', message: PARTIAL_SCOPE_INPUTS_MESSAGE, node: property, sourceFile, context: { reason: 'partial-scope-inputs' } }];
   }
 
   /** `initialization` of a partial. The type refuses it too (`PartialConfig` has no such member): the bound belongs to the builder. */
   private partialInitializationErrors(configArg: ts.ObjectLiteralExpression, type: ConfigType, sourceFile: ts.SourceFile): AnalysisError[] {
     const property = type === 'partial' ? this.findProperty(configArg, 'initialization') : undefined;
     if (!property) return [];
-    return [{ type: 'unsupported', code: 'NEO_CONFIG_UNSUPPORTED', message: PARTIAL_INITIALIZATION_MESSAGE, node: property, sourceFile }];
+    return [{ type: 'unsupported', code: 'NEO_CONFIG_UNSUPPORTED', message: PARTIAL_INITIALIZATION_MESSAGE, node: property, sourceFile, context: { reason: 'partial-initialization' } }];
   }
 
   /** The id of an interface or property token expression, `undefined` for anything else (a class, an object, a call). */

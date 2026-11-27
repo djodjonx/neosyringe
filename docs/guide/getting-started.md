@@ -67,8 +67,10 @@ export default {
 
 ```javascript [Webpack]
 // webpack.config.js
+const { neoSyringePlugin } = require('@djodjonx/neosyringe-plugin');
+
 module.exports = {
-  plugins: [require('@djodjonx/neosyringe-plugin').webpack()]
+  plugins: [neoSyringePlugin.webpack()]
 };
 ```
 
@@ -239,12 +241,12 @@ Import services directly instead of using barrel exports (`index.ts`) for better
 
 ✅ **The plugin works in dev mode** with full HMR support!
 
-The `transform` hook is called on every file change, so your container is regenerated instantly during development.
+The `transform` hook is called on every file change, so your container is regenerated on each change during development.
 
 ## What's Next?
 
 - [Basic Usage](/guide/basic-usage) - Learn all injection types
 - [Lifecycle](/guide/lifecycle) - Singleton vs Transient
 - [Scoped Injections](/guide/scoped-injections) - Override parent tokens
-- [IDE Plugin](/guide/ide-plugin) - Real-time error detection
+- [IDE Plugin](/guide/ide-plugin) - The same analysis as the build, in your editor
 

@@ -15,6 +15,16 @@ export {
   type ContainerLookup,
 } from './stableDiagnostic';
 export {
+  toActionableDiagnostic,
+  formatDiagnostic,
+  chainLineOf,
+  fixLineOf,
+  fixHintOf,
+  fixHintOfError,
+  type ActionableDiagnostic,
+  type ActionableOptions,
+} from './actionableDiagnostic';
+export {
   retentionEntries,
   buildRetentionReport,
   explainRetention,

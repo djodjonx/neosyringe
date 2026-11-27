@@ -100,6 +100,12 @@ const handler = scope.resolve(Handler);   // built with this request, on first u
 await scope.destroy();                    // closes the Handler it built, never the request object
 ```
 
+A scope of a graph with async factories must be initialized: call `await scope.initialize()` before its first `resolve`, or `resolve` throws `NEO_NOT_INITIALIZED`. The example below has no async factory, so it does not call `initialize()`. It is compiled with no cast and run by `tests/e2e/g07-docs-examples.test.ts`:
+
+<<< @/../examples/new-api/scope-inputs.ts#container
+
+<<< @/../examples/new-api/scope-inputs.ts#scopes
+
 - **The builder is a model.** Its type has `createScope` and `destroy` only (`ContainerTemplate`, see [types](/api/types#containertemplate-and-boundcontainer)). Called from untyped code, its `resolve`, `resolveAll`, `resolveMany` and `initialize` throw `NEO_SCOPE_INPUTS_UNBOUND`, which names the missing inputs, before any factory runs. The model stays usable.
 - **Everything is checked first.** Each input is required, in any order, once. An unknown token, a repeated token, a missing input and options of the wrong shape are refused with a stable code before any value is stored and before any factory runs (`NEO_SCOPE_INPUT_UNKNOWN`, `NEO_SCOPE_INPUT_DUPLICATE`, `NEO_SCOPE_INPUT_MISSING`, `NEO_SCOPE_INPUTS_INVALID`; see [errors](/api/errors#thrown-at-run-time-by-the-generated-container)). The list is read once: the entries are copied, so changing the array afterwards changes nothing.
 - **A value is present when you give it.** `{ token, useValue: undefined }` is the value `undefined`. An entry you leave out is missing.

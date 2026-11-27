@@ -101,6 +101,14 @@ While an initialization runs, and also after its signal aborted while the work i
 NEO_INIT_OPTIONS_CONFLICT: [App] initialize() is running with another signal
 ```
 
+### An example that runs
+
+One factory reads `context.signal` and one waits for it. The second container is cancelled with `controller.abort(new Error('stop'))`: `initialize()` rejects with that very error, not a copy: the example tests the rejection with `value === reason` and returns `true`, then runs the same test on a `new Error('stop')` that nobody passed to `abort()` and returns `false`. The factory saw the abort. `tests/e2e/g07-docs-examples.test.ts` compiles and runs `examples/new-api/signal.ts`.
+
+<<< @/../examples/new-api/signal.ts#container
+
+<<< @/../examples/new-api/signal.ts#cancel
+
 ### What a factory sees
 
 `FactoryContext.signal` is the signal of the initialization the factory runs for (`packages/neosyringe/src/types.ts:305`). It aborts with the same reason as your signal, and with a `NEO_CONTAINER_DESTROYED` error when `destroy()` is called while the factory runs. Pass it to whatever the factory waits on:

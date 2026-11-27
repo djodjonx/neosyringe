@@ -9,7 +9,7 @@
     "build": "pnpm --filter './packages/**' run build",
     "test": "pnpm -r run test",
     "test:e2e": "vitest run tests/e2e",
-    "docs:examples": "vitest run tests/e2e/t20-docs-examples.test.ts tests/e2e/t20-migration.test.ts",
+    "docs:examples": "vitest run tests/e2e/t20-docs-examples.test.ts tests/e2e/t20-migration.test.ts tests/e2e/g07-docs-examples.test.ts",
     "dist:consumer": "node scripts/ci/consumer-dist.mjs",
     "migration:historical": "node scripts/ci/historical-migration.mjs",
     "test:ci": "vitest run tests/ci",

@@ -2,32 +2,11 @@
 
 An alias registers a second token for a service that is already registered. `{ token, useExisting }` answers what `useExisting` answers: it builds nothing, caches nothing, owns nothing.
 
-```typescript
-import { defineBuilderConfig, useInterface } from '@djodjonx/neosyringe';
+<<< @/../examples/new-api/alias.ts#container
 
-interface Logger { log(message: string): void }
+<<< @/../examples/new-api/alias.ts#reads
 
-class ConsoleLogger implements Logger {
-  log(message: string): void { console.log(message); }
-}
-class Reporter {
-  constructor(readonly logger: Logger) {}
-}
-
-const logger = useInterface<Logger>();
-
-export const container = defineBuilderConfig({
-  name: 'App',
-  injections: [
-    { token: ConsoleLogger },
-    { token: logger, useExisting: ConsoleLogger },
-    { token: Reporter },
-  ],
-});
-
-// Both tokens answer the same object: it is a singleton.
-container.resolve(logger) === container.resolve(ConsoleLogger); // true
-```
+Every token answers the one singleton of the target: `tests/e2e/g07-docs-examples.test.ts` compiles this file and runs it, and checks that `resolve(ConsoleLogger)`, `resolve(named)`, `resolve(logger)` and the logger of `Reporter` are one object.
 
 Registering the same class under two tokens is not an alias: each registration has its own singleton. The alias is what shares one.
 

@@ -118,6 +118,12 @@ A singleton factory is disposed when its result has a callable `dispose`. Opt ou
 
 Services are disposed in reverse dependency order: if `UserService` depends on `DbConnection`, then `UserService.dispose()` is called before `DbConnection.dispose()`.
 
+This example is compiled and run by `tests/e2e/g07-docs-examples.test.ts`: a scope resolves a `Repo` that needs a `Connection`, and `destroy()` closes the repo, then the connection. A second `destroy()` closes nothing more.
+
+<<< @/../examples/new-api/disposal.ts#container
+
+<<< @/../examples/new-api/disposal.ts#destroy
+
 ## Testing
 
 `destroy()` is terminal. After it, `resolve()` and `initialize()` throw `NEO_CONTAINER_DESTROYED`. A second `destroy()` does nothing.

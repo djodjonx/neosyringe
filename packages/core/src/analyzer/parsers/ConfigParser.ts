@@ -100,6 +100,7 @@ export function readOptimization(
       message: `NEO_CONFIG_UNSUPPORTED: optimization mode '${modeText}' is not supported.`,
       node: modeNode ?? body,
       sourceFile,
+      context: { reason: 'unsupported-mode' },
     });
     return;
   }
@@ -113,6 +114,7 @@ export function readOptimization(
       message: "NEO_CONFIG_UNSUPPORTED: optimization mode 'open' cannot declare roots or eager.",
       node: rootsNode ?? eagerNode ?? body,
       sourceFile,
+      context: { reason: 'open-mode-roots' },
     });
     return;
   }
@@ -397,6 +399,7 @@ function readRootList(
         message: `NEO_CONFIG_UNSUPPORTED: eager root '${getSimpleName(ref.id)}' is an alias (useExisting): an alias builds nothing, so list the target in eager instead.`,
         node: element,
         sourceFile,
+        context: { reason: 'eager-alias' },
       });
       continue;
     }

@@ -252,6 +252,7 @@ export class InjectionParser {
           message: `NEO_CONFIG_UNSUPPORTED: useValue cannot be declared owned. Register a factory with ownership: 'owned', or omit ownership.`,
           node: obj,
           sourceFile,
+          context: { reason: 'value-owned' },
         };
       }
 
