@@ -49,7 +49,7 @@ Registering the same class under two tokens is not an alias: each registration h
 
 Publishing an alias (`roots: [alias]`) keeps its target private: the target stays out of the exported roots, and `resolve(target)` throws `NEO_ROOT_NOT_EXPORTED`. A local alias does not make a private root of a closed parent reachable: an alias to it is `NEO_MISSING_PROVIDER`. An alias cannot be listed in `eager`: list its target (`packages/core/src/analyzer/parsers/ConfigParser.ts:397`).
 
-The roots set of a closed container (`_singleRoots`) stays what refuses a token that is not a root, before the table and the parent are read (`packages/core/src/generator/Generator.ts:968`). It is not redundant with the root table: a token the parent provides has no row in the table of the child.
+The roots set of a closed container (`_singleRoots`) stays what refuses a token that is not a root, before the table and the parent are read (`packages/core/src/generator/Generator.ts:994`). It is not redundant with the root table: a token the parent provides has no row in the table of the child.
 
 ## Overrides
 
