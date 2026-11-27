@@ -274,7 +274,7 @@ export const box = defineBuilderConfig({
         expect(thrown(() => env.read(env.engine)).code, `${name}: the target stays private`).toBe(NOT_EXPORTED);
         expect(thrown(() => env.read(env.logger)).code, `${name}: so does a middle link`).toBe(NOT_EXPORTED);
         const text = containerText(env.built);
-        expect(text.match(/_singleRoots = new Set<unknown>\(\[([^\]]*)\]\)/)?.[1], `${name}: the only root is the alias`).toBe(JSON.stringify(env.sink));
+        expect(text.match(/__neoSets = \[new Set<unknown>\(\[([^\]]*)\]\)/)?.[1], `${name}: the only root is the alias`).toBe(JSON.stringify(env.sink));
       });
     }
   }, 240_000);

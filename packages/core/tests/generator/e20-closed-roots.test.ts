@@ -24,7 +24,7 @@ describe('E20 closed roots', () => {
         capabilityAlias(env.built);
         const name = label(cell);
         const text = containerText(env.built);
-        expect(text.match(/_singleRoots = new Set<unknown>\(\[([^\]]*)\]\)/)?.[1], `${name}: the set holds the alias key`).toBe(JSON.stringify(env.sink));
+        expect(text.match(/__neoSets = \[new Set<unknown>\(\[([^\]]*)\]\)/)?.[1], `${name}: the set holds the alias key`).toBe(JSON.stringify(env.sink));
         expect(text, `${name}: the guard reads the set`).toMatch(/\(all \? this\._multiRoots : this\._singleRoots\)\.has\(token\)/);
         expect(readKey(env.read(env.sink), 'id'), `${name}: the root answers`).toBe('engine');
         expect(thrown(() => env.read(env.engine)).code, `${name}: a token that is not a root is refused`).toBe(NOT_EXPORTED);
