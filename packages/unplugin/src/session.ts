@@ -79,6 +79,8 @@ export interface SessionInput {
   cwd: string;
   emitDebugHelpers: boolean;
   testOverrides: boolean;
+  /** The optional production observation (topic 22). Absent: off. */
+  observation?: boolean;
   devtools: boolean;
   state: SessionState;
   errorPrefix: string;
@@ -789,6 +791,8 @@ function compileWith(input: SessionInput, resolved: ResolvedSessionConfig | unde
       undefined,
       { collisions: input.state.collisions, hash: input.state.artifactHash },
       { names, snapshot },
+      undefined,
+      input.observation === true ? { observation: true } : undefined,
     );
     const rendered = generator.generateRendered();
     const containerClass = rendered.code;

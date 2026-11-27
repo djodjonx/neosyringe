@@ -51,6 +51,68 @@ export interface InitializeOptions {
 }
 
 /**
+ * One event of the optional production observation (build option `observation`). An operation of a container has a
+ * `start` and an `end`. Every field is a scalar: an event holds no service value, no token object, no error message and
+ * no stack.
+ */
+export interface ObservationEvent {
+  /** The opaque id of the container, the artifact key the build gave it. A scope has the id of its container. */
+  readonly containerId: string;
+  /** `root` for the container itself, an opaque id (`s1`, `s2`, ...) for each scope. */
+  readonly scopeId: string;
+  /**
+   * The registration the operation is about: its token id in the build artifact (the `runtimeKey` of the tokens manifest
+   * for an exported token), and `multi:<token id>:<index>` for one contribution of a multi token.
+   */
+  readonly registrationId: string;
+  /**
+   * `construct`: a class or a factory builds a value, and the end comes when a promise it returns settles. `initialize`:
+   * one async step of `initialize()`, its construct included. `dispose`: the disposer of one value.
+   */
+  readonly phase: 'construct' | 'initialize' | 'dispose';
+  readonly kind: 'start' | 'end';
+  /** An `end` only. */
+  readonly outcome?: 'ok' | 'error';
+  /** An `end` only: milliseconds, never negative, from the clock of the subscription; absent when that clock failed at the end. */
+  readonly durationMs?: number;
+  /** An `end` with outcome `error` only, and only when the error carries a code that looks like `NEO_*`. */
+  readonly errorCode?: string;
+}
+
+/**
+ * Receives the events. It runs inside the operation it observes, so it must be quick. What it throws, and what a promise it
+ * returns rejects with, is ignored. A sink must not call back into the container (`resolve`, `initialize`, `destroy`, `observe`).
+ */
+export type ObservationSink = (event: Readonly<ObservationEvent>) => unknown;
+
+/** Options of `observe()`. */
+export interface ObserveOptions {
+  /**
+   * A monotonic clock in milliseconds, the one durations are measured with. Default: `performance.now`, read only while a
+   * sink is subscribed (`Date.now` where there is no `performance`).
+   */
+  readonly now?: () => number;
+}
+
+/** What `stateSnapshot()` answers: scalars only, a new object at each call. */
+export interface ObservationSnapshot {
+  /** The state of the container asked: sync containers are `ready` from the start. */
+  readonly state: 'created' | 'initializing' | 'cancelling' | 'reconfiguring' | 'ready' | 'failed' | 'destroying' | 'destroyed';
+  /** Constructs that ended `ok`, initialize steps that ended `ok`, disposals that ended `ok`. */
+  readonly constructs: number;
+  readonly initializes: number;
+  readonly disposes: number;
+  /** Operations (of any phase) that ended with an error: a step that fails counts its construct and its initialize. */
+  readonly failures: number;
+  /** Initializations cancelled with `initialize({ signal })`. */
+  readonly cancellations: number;
+  /** Operations begun and not ended, per phase. */
+  readonly inFlight: Readonly<{ construct: number; initialize: number; dispose: number }>;
+  /** Scopes made by `createScope()` and not destroyed yet. */
+  readonly activeScopes: number;
+}
+
+/**
  * Capabilities shared by every generated container, including the minimal profile.
  * `Token` is declared below; the methods only mention it.
  */
@@ -112,6 +174,20 @@ export interface CoreContainer extends AsyncDisposalMembers {
 
   /** Returns a child with the same parents and name. It does not copy instances or call initialize(). */
   createScope(): this;
+
+  /**
+   * Subscribes a sink to the events of the whole container tree (the root and every scope), whichever took it; returns the
+   * function that unsubscribes it. The container or scope that took the sink lets go of it once its `destroy()` is over.
+   * Only a build with the `observation` option has this member: `undefined` in any other build, so it is optional here (the
+   * build option is invisible to TypeScript). Both profiles have it when the build asked for it.
+   */
+  observe?(sink: ObservationSink, options?: ObserveOptions): () => void;
+
+  /**
+   * The state and the counters of the container, as scalars: what to read to find a container that is stuck. Only a
+   * build with the `observation` option has this member (`undefined` otherwise).
+   */
+  stateSnapshot?(): ObservationSnapshot;
 }
 
 /**

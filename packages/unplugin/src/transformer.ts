@@ -66,6 +66,7 @@ export default function neoSyringeTransformer(
   // regardless of which one a project uses.
   const emitDebugHelpers = resolveDebugFlag(config.debug);
   const testOverrides = resolveTestOverridesFlag(config.testOverrides);
+  const observation = config.observation === true;
   const project = typeof config.project === 'string' && config.project.length > 0 ? config.project : undefined;
 
   let analysisProgram = program;
@@ -109,6 +110,7 @@ export default function neoSyringeTransformer(
         cwd: process.cwd(),
         emitDebugHelpers,
         testOverrides,
+        observation,
         devtools: false,
         state,
         errorPrefix: '[neosyringe-transformer]',

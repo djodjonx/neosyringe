@@ -42,6 +42,13 @@ export interface NeoSyringePluginOptions {
    * The flag is fixed at build time; generated code does not read process.
    */
   testOverrides?: boolean;
+  /**
+   * Adds the optional production observation to every generated container: `observe(sink)` and `stateSnapshot()`, and a
+   * start and an end event around each construct, initialize step and dispose. Defaults to false: the output then has no
+   * observation code and reads no clock. Unlike `debug` and `testOverrides` it is allowed when NODE_ENV is production,
+   * since production is what it is for. The flag is fixed at build time; generated code does not read process.
+   */
+  observation?: boolean;
 }
 
 /**
@@ -65,6 +72,7 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
   // Per-build registries — scoped to the factory instance, safe for parallel builds
   const emitDebugHelpers = resolveDebugFlag(options.debug);
   const testOverrides = resolveTestOverridesFlag(options.testOverrides);
+  const observation = options.observation === true;
   const project = options.project || undefined;
   const state: SessionState = {
     registeredTokens: new Set(),
@@ -136,6 +144,7 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
         cwd: process.cwd(),
         emitDebugHelpers,
         testOverrides,
+        observation,
         devtools: devtoolsActive(),
         state,
         errorPrefix: '[neosyringe-plugin]',

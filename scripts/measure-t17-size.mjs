@@ -225,7 +225,7 @@ async function measureBundle(files) {
  * container state; any other member is `other-members`: it shows in the report, it is never folded into a neighbour.
  */
 const MEMBER_CATEGORIES = [
-  ['creators', /^create_/],
+  ['creators', /^(create_|_neoRaw_create_)/],
   ['factory-policy', /^__neoPolicy|^__neoRead_|^__neoLease$/],
   ['accessors', /^_direct_|^_get_|^_list_/],
   ['dispatch-tables', /^__neo(Dispatch|Roots|Lists|RootLists)/],
@@ -233,6 +233,7 @@ const MEMBER_CATEGORIES = [
   ['lifecycle', /^(initialize|_startInitialize|_runInitialize|createScope|destroy|_runDestroy|_close|override|overrideMany|clearOverrides|_reconfigure)$/],
   ['events', /^(on|notifyResolve)$/],
   ['runtime-helpers', /^(_touchClosed|_assertParents|_neoFail|_assertRoot|_guardPublic|formatToken|_mock|_neoDisposer|__neoController|__neoIdle|__neoIdleSignal|_neoSignal|_neoCheck)$/],
+  ['observation', /^(observe|stateSnapshot|_neoObs|_neoAdopt|_neoSettle|_neoRegistration|_obs|_scopeId|_scoped)$/],
   ['debug-metadata', /^(_graph|_dependencyGraph)$/],
 ];
 const CATEGORY_IDS = [...MEMBER_CATEGORIES.map(([id]) => id), 'user-code', 'state', 'other-members', 'class-shell', 'imports', 'glue'];

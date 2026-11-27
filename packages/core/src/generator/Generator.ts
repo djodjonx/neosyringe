@@ -13,6 +13,7 @@ import { DISPATCH_LINEAR_MAX } from './dispatchEmitter';
 import { boundGuard, boundInitializeGuard, hasScopeInputs, inputConstructor, inputMembers } from './inputEmitter';
 import { linkedFactoryLeaseHelpers } from './factoryLeaseEmitter';
 import { controllerTypeName, needsSignal, signalMembers, signalTypeName, signalTypes } from './signalEmitter';
+import { observationMembers, observationTypes, type ObservationInput } from './observationEmitter';
 import { providerTypesOf, type GetProviderTypes } from './providerTypes';
 import {
   NamePool,
@@ -185,7 +186,13 @@ export class Generator {
      * `if (token === key)` cases and not the shared table: `0` forces the table, `Infinity` forces the cases. Absent:
      * `DISPATCH_LINEAR_MAX`. The reference emitter has no table and ignores it.
      */
-    private dispatch?: { linearMax?: number }
+    private dispatch?: { linearMax?: number },
+    /**
+     * Optional production observation (topic 22). `observation: true` writes `observe()` and `stateSnapshot()` into the
+     * container and observes its constructs, initialize steps and disposals. Absent or false: none of it is written, and the
+     * output is the output of a build that never heard of the option.
+     */
+    private options?: { observation?: boolean }
   ) {
     // Check for analysis errors and throw the first one for CLI compatibility
     if (graph.errors && graph.errors.length > 0) {
@@ -561,6 +568,9 @@ export class Generator {
     const closed = emitted.optimizationMode === 'closed';
     const resolveGuard = buildAsyncResolveGuard(hasAsync);
     const eagerLines = eagerSyncLines(emitted, getImport, hasAsync);
+    const observation = this.options?.observation === true;
+    const observed = (minimal: boolean): ObservationInput | undefined =>
+      observation ? { className: this.containerClassName, containerId: this.artifactKey, hasAsync, minimal } : undefined;
 
     if (this.useOptimizedEmitter()) {
       const state = containerState(emitted, hasAsync, eagerLines, this.containerClassName, emitted.runtimeProfile === 'minimal');
@@ -582,9 +592,10 @@ export class Generator {
         dispatchLinearMax: this.dispatch?.linearMax ?? DISPATCH_LINEAR_MAX,
         stateFields: `${state.stateFields}${state.eagerField}`,
         ...rootMembers(emitted, closed, getImport),
-        runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync, emitted.runtimeProfile === 'minimal'), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined),
+        runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync, emitted.runtimeProfile === 'minimal'), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined, observed(emitted.runtimeProfile === 'minimal')),
         debugGetters: this.emitDebugGetter(emitted),
         copy,
+        observation,
       });
       // Imports are read after the class: emitting it is what registers them.
       return fragment`${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
@@ -592,11 +603,11 @@ ${this.renderImportLines(imports, sourceGraph, typeImports).join('\n')}
 ${concat([...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)], '\n')}
 
 ${containerClass}
-${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync)}
+${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync)}${observation ? observationTypes(this.containerClassName) : ''}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     }
 
-    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, undefined, this.manyNames);
+    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, undefined, this.manyNames, observation);
     const resolveCases = generateResolveCases(
       emitted,
       sorted,
@@ -604,18 +615,18 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
       hasAsync,
       `${this.containerClassName}.formatToken`,
     );
-    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, this.manyNames);
+    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, this.manyNames, observation);
     // The policy and the lease of the declared factories: only the helpers a creator asks for.
     const factoryHelpers = linkedFactoryLeaseHelpers(this.containerClassName, [...factories, ...multiFactories], this.manyNames);
     const resolveAllMethod = generateResolveAllMethod(emitted, getImport, hasAsync, closed);
     const initializeMethod = hasAsync
-      ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines, false, this.containerClassName)
+      ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines, false, this.containerClassName, observation)
       : eagerLines.length > 0
         ? generateEagerSyncInitialize(eagerLines, false, boundInitializeGuard(emitted))
         : generateSyncInitializeMethod(false, boundInitializeGuard(emitted));
-    const createScopeMethod = generateScopeMethod(emitted, this.containerClassName, hasAsync);
-    const destroyMethod = generateDestroyMethod(emitted, sorted, getImport, hasAsync);
-    const overrideMethods = generateOverrideMethods(emitted, sorted, getImport, hasAsync, this.testOverrides, emitted.runtimeProfile === 'minimal' ? undefined : this.manyNames);
+    const createScopeMethod = generateScopeMethod(emitted, this.containerClassName, hasAsync, false, observation);
+    const destroyMethod = generateDestroyMethod(emitted, sorted, getImport, hasAsync, false, observation);
+    const overrideMethods = generateOverrideMethods(emitted, sorted, getImport, hasAsync, this.testOverrides, emitted.runtimeProfile === 'minimal' ? undefined : this.manyNames, observation);
 
     const importLines = this.renderImportLines(imports, sourceGraph, typeImports);
 
@@ -625,7 +636,7 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
                     if (legacyResult != null) this._borrowed.add(legacyResult);`;
     const borrowNotify = '';
     const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines, this.containerClassName);
-    const runtimeHelpersText = runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined);
+    const runtimeHelpersText = runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined, observed(false));
     const captureLines: Piece[] = [...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)];
     const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
     const assertOne = closed ? 'this._assertRoot(token, false);' : '';
@@ -785,7 +796,7 @@ class ${this.containerClassName} {
 ${aliases ? `\n  ${aliases.members}\n` : ''}
   ${this.emitDebugGetter(emitted)}
 }
-${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync)}
+${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync)}${observation ? observationTypes(this.containerClassName) : ''}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
   }
 
@@ -934,11 +945,11 @@ function runsJobs(graph: DependencyGraph, sorted: TokenId[], getImport: GetImpor
   return hasAsync && initializationJobs(graph, sorted, getImport, minimal) !== undefined;
 }
 
-function runtimeHelpers(hasAsync: boolean, disposer: boolean, jobs: boolean, signalClass?: string): string {
-  return `${touchClosedMethod()}
+function runtimeHelpers(hasAsync: boolean, disposer: boolean, jobs: boolean, signalClass?: string, observation?: ObservationInput): string {
+  return `${touchClosedMethod(observation !== undefined)}
 
   ${assertParentsMethod()}
-  ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}${jobs ? `\n\n  ${initSchedulerMember()}` : ''}${signalClass === undefined ? '' : `\n\n  ${signalMembers(signalClass, hasAsync)}`}`;
+  ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}${jobs ? `\n\n  ${initSchedulerMember()}` : ''}${signalClass === undefined ? '' : `\n\n  ${signalMembers(signalClass, hasAsync)}`}${observation === undefined ? '' : `\n\n  ${observationMembers(observation)}`}`;
 }
 
 /** Exported root sets and their guard. Closed mode only. ADR006 lines 29-33. */

@@ -5,6 +5,10 @@
 // Open mode cannot list roots (packages/core/src/analyzer/parsers/ConfigParser.ts:604-616).
 // NEOSYRINGE_BENCH_DISPATCH_LINEAR_MAX forces the Generator's `dispatch.linearMax`: `0` is the shared table always,
 // `Infinity` the linear cases always, another integer a count of rows. Unset: the default of the Generator.
+// NEOSYRINGE_BENCH_OBSERVATION adds the observation axis (topic 22): a list of `off` (the build option is absent),
+// `on-no-subscriber` (the option is on, nobody listens) and `on-subscriber` (one sink that does nothing is subscribed to
+// the containers). Unset: no axis, the case keys and the report are what they always were. The module sizes of each case
+// (`module.raw`, `module.min`, `module.gzip`) are the size per mode; the build metric is the cost of the build option.
 import { spawnSync, execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -35,6 +39,8 @@ const worker = path.join(root, 'tests/bench/runtime-worker.mjs');
 const knownShapes = new Set(['flat', 'chain', 'diamond', 'multi', 'parent']);
 const knownProfiles = new Set(['full', 'minimal']);
 const knownModes = new Set(['open', 'closed']);
+const knownObservations = new Set(['off', 'on-no-subscriber', 'on-subscriber']);
+const observations = process.env.NEOSYRINGE_BENCH_OBSERVATION ? listEnv('NEOSYRINGE_BENCH_OBSERVATION', '') : [undefined];
 
 function repoRoot() {
   let dir = path.resolve(process.cwd());
@@ -333,10 +339,24 @@ function inlineSameFileImports(code) {
     .replace(/__neo_Import_\d+\./g, '');
 }
 
-function builtFactories(graphs) {
+// The Generator option of an observation mode: `off` and no axis build as they always did.
+function observationOption(observation) {
+  return observation === 'on-no-subscriber' || observation === 'on-subscriber' ? { observation: true } : undefined;
+}
+
+// What the harness does to each container it makes: `on-subscriber` subscribes a sink that does nothing, with the default clock.
+function observationPrelude(spec) {
+  return `const benchObservation = ${JSON.stringify(spec.observation ?? 'off')};
+function tap(container) {
+  if (benchObservation === 'on-subscriber') container.observe(() => undefined);
+  return container;
+}`;
+}
+
+function builtFactories(graphs, spec) {
   return graphs.map((graph) => {
     const dispatch = dispatchLinearMax === undefined ? undefined : { linearMax: dispatchLinearMax };
-    const generator = new Generator(graph, true, undefined, false, false, undefined, undefined, undefined, dispatch);
+    const generator = new Generator(graph, true, undefined, false, false, undefined, undefined, undefined, dispatch, observationOption(spec.observation));
     const code = inlineSameFileImports(generator.generate());
     const instantiation = generator.generateInstantiation();
     const found = /class (NeoContainer\w*)/.exec(code);
@@ -378,8 +398,9 @@ export const benchResolveCount = ${resolveCountFor(spec.shape, spec.size)};
 const childTokens = [${childTokens}];
 const parentTokens = [${parentTokens}];
 const childCount = ${plan.child.length};
-function createParent() { return ${parent.instantiation}; }
-function createChild(parent) { return ${childNew}; }
+${observationPrelude(spec)}
+function createParent() { return tap(${parent.instantiation}); }
+function createChild(parent) { return tap(${childNew}); }
 ${harnessChecks}
 function assertUntouched(instances) {
   if (!Array.isArray(instances) || instances.length === 0 || instances.some((instance) => instance.disposed !== 0)) {
@@ -578,7 +599,8 @@ export async function createHarness() {
   return `
 export const benchResolveCount = ${resolveCountFor(spec.shape, spec.size)};
 ${tokenPrelude}
-function createBox() { return ${box.instantiation}; }
+${observationPrelude(spec)}
+function createBox() { return tap(${box.instantiation}); }
 ${harnessChecks}
 async function openBox() {
   const box = createBox();
@@ -694,7 +716,7 @@ function buildModule(spec) {
   if (graphs.length === 0) throw new Error('no container');
   const messages = graphs.flatMap((graph) => graphMessages(graph));
   if (messages.length > 0) throw new Error(messages.join('\n'));
-  const made = builtFactories(graphs);
+  const made = builtFactories(graphs, spec);
   const body = withoutConfigs(text, graphs);
   const tsCode = `${body}\n${made.map((item) => item.code).join('\n')}\n`;
   const js = ts.transpileModule(tsCode, {
@@ -730,7 +752,8 @@ function runWorker(file, batchK, minimumNs, calibrate) {
 }
 
 function caseKey(spec) {
-  return `${spec.shape}|${spec.profile}|${spec.mode}|${spec.size}`;
+  const base = `${spec.shape}|${spec.profile}|${spec.mode}|${spec.size}`;
+  return spec.observation === undefined ? base : `${base}|${spec.observation}`;
 }
 
 function prescribedTable() {
@@ -764,6 +787,7 @@ function recordRun(item, processIndex, state, keepSchedule) {
     profile: item.spec.profile,
     mode: item.spec.mode,
     size: item.spec.size,
+    ...(item.spec.observation === undefined ? {} : { observation: item.spec.observation }),
   });
 }
 
@@ -835,6 +859,7 @@ function assemble(spec, buildRows, source, runs) {
     profile: spec.profile,
     mode: spec.mode,
     size: spec.size,
+    ...(spec.observation === undefined ? {} : { observation: spec.observation }),
     checksum,
     resolveCount: resolveCountUsed,
     buildMs,
@@ -852,6 +877,9 @@ function assemble(spec, buildRows, source, runs) {
 for (const shape of shapes) if (!knownShapes.has(shape)) throw new Error(`unknown shape: ${shape}`);
 for (const profile of profiles) if (!knownProfiles.has(profile)) throw new Error(`unknown profile: ${profile}`);
 for (const mode of modes) if (!knownModes.has(mode)) throw new Error(`unknown mode: ${mode}`);
+for (const observation of observations) {
+  if (observation !== undefined && !knownObservations.has(observation)) throw new Error(`unknown observation mode: ${observation}`);
+}
 
 const work = mkdtempSync(path.join(os.tmpdir(), 'neosyringe-runtime-'));
 const built = [];
@@ -862,19 +890,21 @@ try {
     for (const shape of shapes) {
       for (const profile of profiles) {
         for (const mode of modes) {
-          const spec = { size, shape, profile, mode };
-          const caseCount = resolveCountFor(shape, size);
-          const checksum = checksumOf(size, caseCount);
-          try {
-            const compiled = buildRepeated(spec);
-            const file = path.join(work, `case-${shape}-${profile}-${mode}-${size}.mjs`);
-            writeFileSync(file, compiled.source);
-            built.push({
-              spec, checksum, caseCount, file, source: compiled.source, buildRows: compiled.rows, runs: [],
-            });
-          } catch (error) {
-            built.push({ spec, checksum, caseCount, error: messageOf(error), runs: [] });
-            console.error(`${shape} ${profile} ${mode} ${size}: ${messageOf(error)}`);
+          for (const observation of observations) {
+            const spec = { size, shape, profile, mode, ...(observation === undefined ? {} : { observation }) };
+            const caseCount = resolveCountFor(shape, size);
+            const checksum = checksumOf(size, caseCount);
+            try {
+              const compiled = buildRepeated(spec);
+              const file = path.join(work, `case-${shape}-${profile}-${mode}-${size}${observation === undefined ? '' : `-${observation}`}.mjs`);
+              writeFileSync(file, compiled.source);
+              built.push({
+                spec, checksum, caseCount, file, source: compiled.source, buildRows: compiled.rows, runs: [],
+              });
+            } catch (error) {
+              built.push({ spec, checksum, caseCount, error: messageOf(error), runs: [] });
+              console.error(`${shape} ${profile} ${mode} ${size}${observation === undefined ? '' : ` ${observation}`}: ${messageOf(error)}`);
+            }
           }
         }
       }
@@ -926,6 +956,7 @@ const cases = built.map((item) => {
       profile: item.spec.profile,
       mode: item.spec.mode,
       size: item.spec.size,
+      ...(item.spec.observation === undefined ? {} : { observation: item.spec.observation }),
       checksum: item.checksum,
       resolveCount: item.caseCount,
       error: item.error,
@@ -940,6 +971,7 @@ const cases = built.map((item) => {
       profile: item.spec.profile,
       mode: item.spec.mode,
       size: item.spec.size,
+      ...(item.spec.observation === undefined ? {} : { observation: item.spec.observation }),
       checksum: item.checksum,
       resolveCount: item.caseCount,
       error: messageOf(error),
@@ -953,7 +985,7 @@ const resolutionNs = clock.resolutionNs ?? timerResolutionNs();
 const minimumNs = clock.minimumNs ?? sampleMinimumNs(resolutionNs);
 const batchK = {};
 for (const item of cases) {
-  if (item.k) batchK[`${item.shape}|${item.profile}|${item.mode}|${item.size}`] = item.k;
+  if (item.k) batchK[caseKey(item)] = item.k;
 }
 const report = {
   environment: {
@@ -973,6 +1005,7 @@ const report = {
     shapes,
     profiles,
     modes,
+    ...(observations[0] === undefined ? {} : { observations }),
     processes,
     samples,
     resolveCount,
@@ -991,6 +1024,7 @@ const report = {
     profile: item.profile,
     mode: item.mode,
     size: item.size,
+    ...(item.observation === undefined ? {} : { observation: item.observation }),
     checksum: item.checksum,
     resolveCount: item.resolveCount,
     ...(item.error

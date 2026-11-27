@@ -6,6 +6,7 @@ import { MinIndexQueue } from './minHeap';
 import { afterStore, isBorrowedInstance, overrideTokenChecks } from './ResolveEmitter';
 import { aliasPlanOf, orderingDependencies } from '../analyzer/shared/aliasLinks';
 import { signalTypeName } from './signalEmitter';
+import { observeBegin } from './observationEmitter';
 
 /**
  * What a cached singleton is read as when it is disposed. The cache holds `unknown`; one assertion
@@ -198,6 +199,7 @@ function collectMultiAsyncLines(
   getImport: GetImport,
   add: (id: string, line: string) => void,
   multiIds: Map<string, string[]>,
+  observation = false,
 ): void {
   if (!graph.multiNodes) return;
   for (const [tokenId, nodes] of graph.multiNodes) {
@@ -207,7 +209,7 @@ function collectMultiAsyncLines(
       const id = `multi:${tokenId}:${index}`;
       const key = multiRegistrationKey(node, tokenId, index);
       const factoryId = `${getFactoryName(tokenId)}_${index}`;
-      add(id, `{ const __neoValue = await this.${factoryId}(); ${afterStore('__neoValue', key, true, isBorrowedInstance(node.service))} }`);
+      add(id, `{ ${observedStep(observation, id, `const __neoValue = await this.${factoryId}(); ${afterStore('__neoValue', key, true, isBorrowedInstance(node.service))}`)} }`);
       ids.push(id);
     });
     multiIds.set(tokenId, ids);
@@ -250,6 +252,7 @@ function asyncSteps(
   sorted: TokenId[],
   getImport: GetImport,
   minimal: boolean,
+  observation = false,
 ): OrderedStep[] {
   const steps: OrderedStep[] = [];
   const ids = new Set<string>();
@@ -265,12 +268,12 @@ function asyncSteps(
     if (!node?.service.isAsync || node.service.lifecycle !== 'singleton') continue;
     const factoryId = getFactoryName(tokenId);
     const tokenKey = resolveTokenKey(node.service, getImport);
-    const create = `const __neoValue = await this.${factoryId}(); ${afterStore('__neoValue', tokenKey, true, isBorrowedInstance(node.service))}`;
+    const create = observedStep(observation, tokenId, `const __neoValue = await this.${factoryId}(); ${afterStore('__neoValue', tokenKey, true, isBorrowedInstance(node.service))}`);
     // The minimal profile has no override table to consult.
     add(`node:${tokenId}`, minimal ? `{ ${create} }` : `if (!this.overrides.has(${tokenKey})) { ${create} }`);
   }
 
-  collectMultiAsyncLines(graph, getImport, add, multiIds);
+  collectMultiAsyncLines(graph, getImport, add, multiIds, observation);
 
   const before = new Map<string, Set<string>>();
   const needs = (id: string, pred: string) => {
@@ -296,8 +299,18 @@ function asyncSteps(
   return stableOrder(steps, before);
 }
 
-function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport: GetImport, minimal = false): string[] {
-  return asyncSteps(graph, sorted, getImport, minimal).map((step) => step.line);
+function orderedAsyncLines(graph: DependencyGraph, sorted: TokenId[], getImport: GetImport, minimal = false, observation = false): string[] {
+  return asyncSteps(graph, sorted, getImport, minimal, observation).map((step) => step.line);
+}
+
+/**
+ * One initialization step, observed when the build asks for it (topic 22): `initialize` begins before the step and ends
+ * once, when its construct and its store have settled, or with the error that stops it. `registration` is the token id of
+ * the graph, or `multi:<id>:<index>` for a contribution.
+ */
+function observedStep(observation: boolean, registration: string, step: string): string {
+  if (!observation) return step;
+  return `const __neoOp = ${observeBegin('initialize', registration)}; try { ${step} __neoOp('ok'); } catch (__neoThrown) { __neoOp('error', __neoThrown); throw __neoThrown; }`;
 }
 
 /** One initialization step as the scheduler runs it: the ranks of the steps it waits for, and the step itself. */
@@ -331,10 +344,11 @@ export function initializationJobs(
   sorted: TokenId[],
   getImport: GetImport,
   minimal = false,
+  observation = false,
 ): { limit: number; jobs: InitJob[] } | undefined {
   const requested = graph.initializationConcurrency ?? 1;
   if (requested <= 1) return undefined;
-  const steps = asyncSteps(graph, sorted, getImport, minimal);
+  const steps = asyncSteps(graph, sorted, getImport, minimal, observation);
   if (steps.length < 2) return undefined;
   const ranks = new Map(steps.map((step, index) => [step.id, index]));
   const plan = aliasPlanOf(graph);
@@ -536,6 +550,7 @@ export function generateInitializeMethod(
   eagerLines: string[] = [],
   minimal = false,
   className = 'NeoContainer',
+  observation = false,
 ): string {
   if (!hasAsync) return generateSyncInitializeMethod(minimal, boundInitializeGuard(graph));
 
@@ -555,11 +570,11 @@ export function generateInitializeMethod(
   // A bounded concurrency above 1 runs the steps as jobs; the default writes the sequential lines it always did. The
   // sequential lines check the signal before each step and once after the last; the scheduler checks before each job
   // it starts and after the join.
-  const plan = initializationJobs(graph, sorted, getImport, minimal);
+  const plan = initializationJobs(graph, sorted, getImport, minimal, observation);
   if (plan) {
     lines.push('this._neoCheck();', ...runJobsLines(plan));
   } else {
-    for (const line of orderedAsyncLines(graph, sorted, getImport, minimal)) lines.push('this._neoCheck();', line);
+    for (const line of orderedAsyncLines(graph, sorted, getImport, minimal, observation)) lines.push('this._neoCheck();', line);
     lines.push('this._neoCheck();');
   }
   lines.push(...eagerLines);
@@ -597,7 +612,7 @@ export function generateInitializeMethod(
     });
     this._initObserved = __neoObserved;
     const __neoRelay = (): void => {
-      const __neoReason: unknown = __neoUser?.reason;
+      ${observation ? 'this._neoObs().cancelled();\n      ' : ''}const __neoReason: unknown = __neoUser?.reason;
       this._initCancel = { reason: __neoReason };
       if (this._state === 'initializing') this._state = 'cancelling';
       __neoReject(__neoReason);
@@ -641,7 +656,7 @@ export function generateInitializeMethod(
         try {
           const __neoRun = this._neoDisposer(__neoInst);
           if (__neoRun) {
-            const __neoResult = __neoRun();
+            ${observation ? observedDisposal(`this._neoRegistration(__neoKey)`, '__neoRun()') : 'const __neoResult = __neoRun();'}
             if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') await __neoResult;
           }
         } catch (__neoDisposeError) {
@@ -684,7 +699,38 @@ export function generateInitializeMethod(
     if (arguments.length >= 3) error.cause = cause;
     return error;
   }`;
-  return initializeOutput;
+  return observation ? `${initializeOutput}\n\n  ${registrationMember(graph, getImport)}` : initializeOutput;
+}
+
+/**
+ * One disposal, observed (topic 22): `dispose` begins before the disposer runs and ends once, with the settlement of a
+ * promise it returns or the error it throws. `registration` is the text of the expression that says which registration it
+ * is; `call` the text of the call. The statements leave `__neoResult` for the code that follows, as the plain call does.
+ */
+function observedDisposal(registration: string, call: string): string {
+  return `const __neoOp = this._neoObs().begin('dispose', this._scopeId, ${registration}); let __neoResult: unknown; try { __neoResult = ${call}; __neoResult = this._neoSettle(__neoOp, __neoResult); } catch (__neoThrown) { __neoOp('error', __neoThrown); throw __neoThrown; }`;
+}
+
+/**
+ * The rollback of a failed initialization closes the values the journal keeps, by their cache key: the registration is
+ * found from the key, in the order of the graph, so the dispose events of a rollback carry the ids of the other events.
+ */
+function registrationMember(graph: DependencyGraph, getImport: GetImport): string {
+  const rows: string[] = [];
+  for (const [tokenId, node] of graph.nodes) {
+    if (node.service.type === 'parent' || node.service.type === 'alias' || node.service.lifecycle === 'transient') continue;
+    rows.push(`if (key === ${resolveTokenKey(node.service, getImport)}) return ${JSON.stringify(tokenId)};`);
+  }
+  for (const [tokenId, nodes] of graph.multiNodes ?? []) {
+    nodes.forEach((node, index) => {
+      if (node.service.lifecycle === 'transient') return;
+      rows.push(`if (key === ${multiRegistrationKey(node, tokenId, index)}) return ${JSON.stringify(`multi:${tokenId}:${index}`)};`);
+    });
+  }
+  return `private _neoRegistration(key: unknown): string {
+    ${rows.join('\n    ')}
+    return '';
+  }`;
 }
 
 /**
@@ -746,10 +792,15 @@ function createScopeGuard(hasAsync: boolean, minimal: boolean): string {
 }
 
 /** A scope shares the parent list and the name. It does not copy caches or call initialize(). */
-export function generateCreateScopeMethod(className: string, hasAsync: boolean, minimal = false): string {
+export function generateCreateScopeMethod(className: string, hasAsync: boolean, minimal = false, observation = false): string {
+  const build = observation
+    ? `const __neoScope = new ${className}(this.legacy, this.name);
+    this._neoAdopt(__neoScope);
+    return __neoScope;`
+    : `return new ${className}(this.legacy, this.name);`;
   return `public createScope(): ${className} {
     ${createScopeGuard(hasAsync, minimal)}
-    return new ${className}(this.legacy, this.name);
+    ${build}
   }`;
 }
 
@@ -757,14 +808,26 @@ export function generateCreateScopeMethod(className: string, hasAsync: boolean, 
  * `createScope` of a container: the plain one, or the one that takes the values of its inputs when the graph
  * declares some. The state checks are the same text.
  */
-export function generateScopeMethod(graph: DependencyGraph, className: string, hasAsync: boolean, minimal = false): string {
+export function generateScopeMethod(graph: DependencyGraph, className: string, hasAsync: boolean, minimal = false, observation = false): string {
   return hasScopeInputs(graph)
-    ? inputCreateScopeMethod(className, createScopeGuard(hasAsync, minimal))
-    : generateCreateScopeMethod(className, hasAsync, minimal);
+    ? inputCreateScopeMethod(className, createScopeGuard(hasAsync, minimal), observation)
+    : generateCreateScopeMethod(className, hasAsync, minimal, observation);
 }
 
-/** Destroy and resolve share this helper so one edit changes both sides. */
-export function touchClosedMethod(): string {
+/**
+ * Destroy and resolve share this helper so one edit changes both sides. Observed (topic 22), the first mark of a scope
+ * releases it from the count of the scopes in use: `_closed` is the one place that says a container is closed.
+ */
+export function touchClosedMethod(observation = false): string {
+  if (observation) {
+    return `private _touchClosed(mark: boolean): boolean {
+    if (mark) {
+      if (!this._closed && this._scoped) this._obs?.scopeClosed();
+      this._closed = true;
+    }
+    return this._closed;
+  }`;
+  }
   return `private _touchClosed(mark: boolean): boolean {
     if (mark) this._closed = true;
     return this._closed;
@@ -909,18 +972,21 @@ function combinedDisposals(
   return { slots: ordered, awaitClose };
 }
 
-function disposeCall(slot: DisposalSlot, immediateAwait: boolean): string {
+function disposeCall(slot: DisposalSlot, immediateAwait: boolean, observation = false): string {
   const follow = immediateAwait
     ? `if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') await __neoResult;`
     : `if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult);`;
+  const registration = JSON.stringify(slot.id.startsWith('node:') ? slot.id.slice('node:'.length) : slot.id);
   if (slot.guarded) {
-    return `const __neoRun = this._neoDisposer(__neoInst); if (__neoRun) { const __neoResult = __neoRun(); ${follow} }`;
+    const run = observation ? observedDisposal(registration, '__neoRun()') : 'const __neoResult = __neoRun();';
+    return `const __neoRun = this._neoDisposer(__neoInst); if (__neoRun) { ${run} ${follow} }`;
   }
-  return `const __neoResult = __neoInst.dispose(); ${follow}`;
+  const run = observation ? observedDisposal(registration, '__neoInst.dispose()') : 'const __neoResult = __neoInst.dispose();';
+  return `${run} ${follow}`;
 }
 
-function disposeSlot(slot: DisposalSlot, immediateAwait: boolean): string {
-  const call = disposeCall(slot, immediateAwait);
+function disposeSlot(slot: DisposalSlot, immediateAwait: boolean, observation = false): string {
+  const call = disposeCall(slot, immediateAwait, observation);
   const read = slot.guarded ? MAYBE_DISPOSABLE : DISPOSABLE;
   return `if (this.instances.has(${slot.tokenKey})) { const __neoInst = this.instances.get(${slot.tokenKey}) as ${read}; if (!(__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)))) { if (__neoInst != null) __neoSeen.add(__neoInst); try { ${call} } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } } }`;
 }
@@ -930,25 +996,25 @@ function disposeSlot(slot: DisposalSlot, immediateAwait: boolean): string {
  * "Floor of the emitted code"). A graph with no disposal slot has nothing to gather: no collector, no throw, no name
  * the output's lib must provide.
  */
-function sharedDisposalLines(slots: DisposalSlot[], awaitClose: boolean): string[] {
+function sharedDisposalLines(slots: DisposalSlot[], awaitClose: boolean, observation = false): string[] {
   if (slots.length === 0) return ['this.instances.clear();'];
   const lines = ['const __neoSeen = new Set();', 'const __neoErrors: unknown[] = [];'];
   const early = slots.filter((slot) => !slot.late);
   const late = slots.filter((slot) => slot.late);
   const defer = awaitClose && early.length > 0;
   if (defer) lines.push('const __neoPending: unknown[] = [];');
-  for (const slot of early) lines.push(disposeSlot(slot, false));
+  for (const slot of early) lines.push(disposeSlot(slot, false, observation));
   if (defer) {
     lines.push('for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }');
   }
-  for (const slot of late) lines.push(disposeSlot(slot, true));
+  for (const slot of late) lines.push(disposeSlot(slot, true, observation));
   lines.push('this.instances.clear();');
   return lines;
 }
 
-function disposalLines(slots: DisposalSlot[], awaitClose: boolean, minimal = false): string[] {
+function disposalLines(slots: DisposalSlot[], awaitClose: boolean, minimal = false, observation = false): string[] {
   return [
-    ...sharedDisposalLines(slots, awaitClose),
+    ...sharedDisposalLines(slots, awaitClose, observation),
     ...(minimal ? [] : ['this.overrides.clear();', 'this.resolveListeners.clear();']),
     ...(slots.length === 0 ? [] : ['if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }']),
   ];
@@ -996,6 +1062,7 @@ export function generateOverrideMethods(
   hasAsync: boolean,
   testOverrides: boolean,
   names: ManyNames | undefined,
+  observation = false,
 ): string {
   const refused = `return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));`;
   // Disabled: the members refuse and nothing else is emitted. No reconfiguration, no disposal of the cache, no AggregateError.
@@ -1013,7 +1080,7 @@ export function generateOverrideMethods(
   }`;
   }
   const collected = combinedDisposals(graph, sorted, getImport);
-  const disposalBody = sharedDisposalLines(collected.slots, collected.awaitClose).join('\n    ');
+  const disposalBody = sharedDisposalLines(collected.slots, collected.awaitClose, observation).join('\n    ');
   // The refusals of the state, in the order the three methods test them: busy, destroyed, failed.
   const gates: Gate[] = [
     {
@@ -1109,8 +1176,9 @@ export function generateDestroyMethod(
   getImport: GetImport,
   hasAsync = false,
   minimal = false,
+  observation = false,
 ): string {
-  const members = `${destroyMembers(graph, sorted, getImport, hasAsync, minimal)}\n\n  ${asyncDisposalMember()}`;
+  const members = `${destroyMembers(graph, sorted, getImport, hasAsync, minimal, observation)}\n\n  ${asyncDisposalMember()}`;
   return hasScopeInputs(graph) ? `${inputDestroyMethod()}\n\n  ${members}` : members;
 }
 
@@ -1120,14 +1188,17 @@ function destroyMembers(
   getImport: GetImport,
   hasAsync = false,
   minimal = false,
+  observation = false,
 ): string {
   const collected = combinedDisposals(graph, sorted, getImport);
-  const lines = disposalLines(collected.slots, collected.awaitClose, minimal);
+  const lines = disposalLines(collected.slots, collected.awaitClose, minimal, observation);
   const body = lines.join('\n    ');
   const join = destroyJoinPrefix();
   // A container with inputs releases its values once its destroy is over: its own destroy has another name.
   const inputs = hasScopeInputs(graph);
   const destroyHead = (async: boolean): string => `${inputs ? 'private' : 'public'} ${async ? 'async ' : ''}${inputs ? '_destroyScope' : 'destroy'}(): Promise<void> {`;
+  // Observed (topic 22), the container lets go of the sinks it took once its destroy is over, the dispose events included.
+  const release = (indent: string): string => (observation ? `${indent}this._neoRelease();` : '');
   const reconfigBusy = minimal
     ? ''
     : `if (${hasAsync ? "this._state === 'reconfiguring'" : "this._reconfiguring"}) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));`;
@@ -1143,7 +1214,7 @@ function destroyMembers(
     try {
       await __neoRun;
     } finally {
-      this._destroyWork = undefined;
+      this._destroyWork = undefined;${release('\n      ')}
     }
   }
 
@@ -1158,9 +1229,9 @@ function destroyMembers(
     this._touchClosed(true);
     try {
       ${body}
-    } catch (__neoDestroyError) {
+    } catch (__neoDestroyError) {${release('\n      ')}
       return Promise.reject(__neoDestroyError);
-    }
+    }${release('\n    ')}
     return Promise.resolve();
   }`;
   }
@@ -1176,7 +1247,7 @@ function destroyMembers(
     this._touchClosed(true);
     if (this._state === 'destroyed') return Promise.resolve();
     if (this._state === 'created') {
-      this._state = 'destroyed';
+      this._state = 'destroyed';${release('\n      ')}
       return Promise.resolve();
     }
     this._state = 'destroying';
@@ -1187,7 +1258,7 @@ function destroyMembers(
       try {
         ${finish}
       } finally {
-        if (this._state === 'destroying') this._state = 'destroyed';
+        if (this._state === 'destroying') this._state = 'destroyed';${release('\n        ')}
       }
     })();
     this._destroyWork = __neoRun;

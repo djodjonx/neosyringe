@@ -120,12 +120,17 @@ export function inputConstructor(legacyParentName: string, defaultName = 'NeoCon
  * (a scope of a destroyed parent is refused, as a resolve is), then the plan reads and checks the values before the
  * one `new`: a refused binding builds nothing. A scope never inherits the values of the one it is made from.
  */
-export function inputCreateScopeMethod(className: string, guard: string): string {
+export function inputCreateScopeMethod(className: string, guard: string, observation = false): string {
+  const build = observation
+    ? `const __neoScope = new ${className}(this.legacy, this.name, __neoValues);
+    this._neoAdopt(__neoScope);
+    return __neoScope;`
+    : `return new ${className}(this.legacy, this.name, __neoValues);`;
   return `public createScope(options: ${OPTIONS_TYPE}): ${className} {
     ${guard}
     this._assertParents();
     const __neoValues = ${className}._inputPlan.bind(options, (code, detail) => this._neoFail(code, detail));
-    return new ${className}(this.legacy, this.name, __neoValues);
+    ${build}
   }`;
 }
 

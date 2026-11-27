@@ -85,6 +85,8 @@ export interface OptimizedContainerInput {
   providerTypes?: GetProviderTypes;
   /** Rows up to which a dispatch table is the linear cases and not the shared table. Each table is counted on its own rows. */
   dispatchLinearMax: number;
+  /** The build asked for the observation (topic 22): the creators, the steps and the disposals are observed. Absent: off. */
+  observation?: boolean;
 }
 
 /**
@@ -331,10 +333,12 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   // accessor builds it in place and its creator is not emitted. Closed mode keeps its creators (an eager root calls
   // one) and its `_direct_` accessors; the minimal profile has no `_get_`.
   const unified = !minimal && !closed;
+  const observation = input.observation === true;
   const inlined = new Map<TokenId, string>();
   // The target of an alias is read by `_direct_`, which the unified form does not have: it keeps its creator and its two accessors.
+  // An observed build keeps every creator: the construct is observed where it is built, and an inlined one has no method.
   const aliases = aliasPlanOf(graph);
-  if (unified) {
+  if (unified && !observation) {
     for (const tokenId of sorted) {
       const node = graph.nodes.get(tokenId);
       // Only a class registration has an implementation symbol (packages/core/src/analyzer/graphAdapter.ts:401-454).
@@ -345,8 +349,8 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
     }
   }
   const creators = [
-    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, new Set(inlined.keys()), manyNames),
-    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, manyNames),
+    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, new Set(inlined.keys()), manyNames, observation),
+    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, manyNames, observation),
   ];
   const accessors = [
     ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides, single: unified }, `${input.className}.formatToken`, providerTypes, inlined, aliasReadExpressions(graph, getImport, getForeignImport, providerTypes, honourOverrides)),
@@ -383,16 +387,16 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
   );
 
   const initialize = hasAsync
-    ? generateInitializeMethod(graph, sorted, getImport, hasAsync, input.eagerLines, minimal, input.className)
+    ? generateInitializeMethod(graph, sorted, getImport, hasAsync, input.eagerLines, minimal, input.className, observation)
     : input.eagerLines.length > 0
       ? generateEagerSyncInitialize(input.eagerLines, minimal, boundInitializeGuard(graph))
       : generateSyncInitializeMethod(minimal, boundInitializeGuard(graph));
-  const destroy = generateDestroyMethod(graph, sorted, getImport, hasAsync, minimal);
+  const destroy = generateDestroyMethod(graph, sorted, getImport, hasAsync, minimal, observation);
   const tableFields = minimal ? '' : tableFieldsOf(input.className, unified, input.testOverrides);
   const members: Piece[] = [
     input.runtimeHelpers + input.assertRootMethod,
     initialize,
-    generateScopeMethod(graph, input.className, hasAsync, minimal),
+    generateScopeMethod(graph, input.className, hasAsync, minimal, observation),
   ];
   // The policy and the lease of the declared factories: only the helpers a creator asks for.
   for (const id of ['factoryPolicy', 'factoryLease'] as const) {
@@ -400,7 +404,7 @@ export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment
     if (factoryHelper) members.push(factoryHelper);
   }
   if (!minimal) {
-    members.push(generateOverrideMethods(graph, sorted, getImport, hasAsync, input.testOverrides, manyNames));
+    members.push(generateOverrideMethods(graph, sorted, getImport, hasAsync, input.testOverrides, manyNames, observation));
     members.push(eventMembers(input.className, unified));
   }
   if (honourOverrides) members.push(mockMethod());

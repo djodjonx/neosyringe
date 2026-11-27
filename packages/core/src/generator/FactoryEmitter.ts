@@ -24,6 +24,7 @@ import { inputRead } from './inputEmitter';
 import { aliasPlanOf } from '../analyzer/shared/aliasLinks';
 import { DEFAULT_MANY_NAMES, factoryContextType, manyContextFunction, type ManyNames } from './manyEmitter';
 import { signalTypeName } from './signalEmitter';
+import { observeBegin } from './observationEmitter';
 
 /**
  * Resolves a TypeScript symbol to a string reference usable in generated code.
@@ -497,13 +498,46 @@ function capturedValue(node: DependencyNode, copy: UserCopy): Piece {
   return 'undefined';
 }
 
+/** What the observation (topic 22) needs of a creator: the id its events carry, and whether its result may be a promise. */
+interface ObservedCreator {
+  /** The registration id: the token id of the graph, `multi:<id>:<index>` for a contribution. */
+  id: string;
+  /** A factory may answer a promise, and its end is the settlement; a class provider builds in place. */
+  settles: boolean;
+}
+
 /**
  * One `private create_X(): <type> { ... }` method, then the static members of its declaration. A creator with no type
  * of its own answers `unknown`: that is every factory's, because the thenable branch of the invocation may return a promise.
+ *
+ * An observed creator (the build asked for the observation) keeps its body in `_neoRaw_create_X` and the method of the
+ * creator wraps it: `begin` before, `end` exactly once, with the settlement of a promise or the error the body throws.
  */
-function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = [], returns = 'unknown', members = ''): Fragment {
+function creator(factoryId: string, body: Piece, needs: readonly HelperId[] = [], returns = 'unknown', members = '', observed?: ObservedCreator): Fragment {
+  if (observed === undefined) {
+    return withNeeds(fragment`
+  private ${factoryId}(): ${returns} {
+    ${body}
+  }${members}`, needs);
+  }
+  const raw = `_neoRaw_${factoryId}`;
+  const run = observed.settles
+    ? `return this._neoSettle(__neoEnd, this.${raw}());`
+    : `const __neoBuilt = this.${raw}();
+      __neoEnd('ok');
+      return __neoBuilt;`;
   return withNeeds(fragment`
   private ${factoryId}(): ${returns} {
+    const __neoEnd = ${observeBegin('construct', observed.id)};
+    try {
+      ${run}
+    } catch (__neoThrown) {
+      __neoEnd('error', __neoThrown);
+      throw __neoThrown;
+    }
+  }
+
+  private ${raw}(): ${returns} {
     ${body}
   }${members}`, needs);
 }
@@ -567,6 +601,7 @@ export function generateFactories(
   className = DEFAULT_CLASS_NAME,
   inlined: ReadonlySet<TokenId> = new Set(),
   names: ManyNames = DEFAULT_MANY_NAMES,
+  observation = false,
 ): Fragment[] {
   const factories: Fragment[] = [];
 
@@ -594,7 +629,7 @@ export function generateFactories(
 
     if (node.service.type === 'factory' && node.service.factorySource) {
       const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor, names);
-      factories.push(creator(factoryId, emitted.body, emitted.body.needs, 'unknown', emitted.members));
+      factories.push(creator(factoryId, emitted.body, emitted.body.needs, 'unknown', emitted.members, observation ? { id: tokenId, settles: true } : undefined));
     } else {
       if (!node.service.implementationSymbol) {
         throw new Error(
@@ -604,7 +639,7 @@ export function generateFactories(
       }
       const className = getImport(node.service.implementationSymbol);
       const built = construction(node, graph, getImport, getForeignImport, hasAsync, closed, direct, className, providerTypes);
-      factories.push(creator(factoryId, built.body, built.needs, providerTypes(node).creator));
+      factories.push(creator(factoryId, built.body, built.needs, providerTypes(node).creator, '', observation ? { id: tokenId, settles: false } : undefined));
     }
   }
 
@@ -623,6 +658,7 @@ export function generateMultiFactories(
   providerTypes: GetProviderTypes = noProviderTypes,
   className = DEFAULT_CLASS_NAME,
   names: ManyNames = DEFAULT_MANY_NAMES,
+  observation = false,
 ): Fragment[] {
   const factories: Fragment[] = [];
   if (!graph.multiNodes) return factories;
@@ -633,14 +669,14 @@ export function generateMultiFactories(
 
       if (node.service.type === 'factory' && node.service.factorySource) {
         const emitted = emitFactoryBody(node.service, graph, getImport, hasAsync, closed, direct, copy, className, factoryId, providerTypes(node).accessor, names);
-        factories.push(creator(factoryId, emitted.body, emitted.body.needs, 'unknown', emitted.members));
+        factories.push(creator(factoryId, emitted.body, emitted.body.needs, 'unknown', emitted.members, observation ? { id: `multi:${tokenId}:${index}`, settles: true } : undefined));
       } else if (node.service.type === 'value' && node.service.valueSource !== undefined) {
         factories.push(creator(factoryId, fragment`return ${capturedValue(node, copy)};`, [], providerTypes(node).creator));
       } else {
         if (!node.service.implementationSymbol) return;
         const className = getImport(node.service.implementationSymbol);
         const built = construction(node, graph, getImport, getForeignImport, hasAsync, closed, direct, className, providerTypes);
-        factories.push(creator(factoryId, built.body, built.needs, providerTypes(node).creator));
+        factories.push(creator(factoryId, built.body, built.needs, providerTypes(node).creator, '', observation ? { id: `multi:${tokenId}:${index}`, settles: false } : undefined));
       }
     });
   }
