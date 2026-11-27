@@ -196,15 +196,21 @@ describe('T20 documentation examples', () => {
   it('T20-A01 every examples/new-api file typechecks against the built packages', () => {
     const files = readdirSync(examplesDir).filter((name) => name.endsWith('.ts')).sort();
     expect(files).toEqual([
+      'alias.ts',
       'async.ts',
       'closed-parent.ts',
       'closed.ts',
+      'disposal.ts',
       'factories.ts',
       'migration-after.ts',
       'migration-before.ts',
       'mock.ts',
       'profiles.ts',
+      'resolve-many.ts',
+      'scope-inputs.ts',
       'scopes.ts',
+      'signal.ts',
+      'usage-recipes.ts',
     ]);
     const dir = scratchDir('t20-types-');
     writeConsumer(dir, Object.fromEntries(files.map((name) => [name, example(name)])));
