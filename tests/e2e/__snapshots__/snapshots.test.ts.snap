@@ -3665,8 +3665,8 @@ class NeoContainer {
   // -- Factories --
   
   private create_PropertyToken_ApiService_apiUrl_8db03951(): unknown {
-    const userFactory: (context: { readonly signal: NeoContainerSignal; resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>; resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never } }) => unknown = () => 'http://localhost';
-    const __neoLease = NeoContainer.__neoLease(NeoContainer.__neoPolicy_create_PropertyToken_ApiService_apiUrl_8db03951Get(), "PropertyToken:ApiService.apiUrl", this, NeoContainer.__neoRead_create_PropertyToken_ApiService_apiUrl_8db03951, this._neoSignal());
+    const userFactory: (context: NeoContainerFactoryContext) => unknown = () => 'http://localhost';
+    const __neoLease = NeoContainer.__neoLease(NeoContainer.__neoPolicy_create_PropertyToken_ApiService_apiUrl_8db03951Get(), "PropertyToken:ApiService.apiUrl", this, NeoContainer.__neoRead_create_PropertyToken_ApiService_apiUrl_8db03951);
     const __neoContext = __neoLease.context;
     const __neoExpire = __neoLease.expire;
     
@@ -3802,8 +3802,7 @@ class NeoContainer {
     label: string,
     host: NeoContainer,
     read: (host: NeoContainer, token: unknown, all: boolean) => unknown,
-    signal: NeoContainerSignal,
-  ): { readonly context: { readonly signal: NeoContainerSignal; resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>; resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never } }; readonly expire: () => void } {
+  ): { readonly context: NeoContainerFactoryContext; readonly expire: () => void } {
     let expired = false;
     const fail = (code: string, detail: string): never => {
       const error = new Error(code + ': factory ' + label + ' ' + detail) as Error & { code: string };
@@ -3829,19 +3828,28 @@ class NeoContainer {
       for (const __neoToken of __neoTokens) __neoValues.push(resolve(__neoToken));
       return __neoValues;
     }
+    const readSignal = (): NeoContainerSignal => {
+      if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
+      return host._neoSignal();
+    };
     return {
-      context: {
-        get signal() {
-          if (expired) fail('NEO_FACTORY_CONTEXT_EXPIRED', 'context used after the factory returned');
-          return signal;
-        },
-        resolve,
-        resolveAll,
-        resolveMany,
-      },
+      context: new NeoContainer.__neoContext(readSignal, resolve, resolveAll, resolveMany),
       expire: () => { expired = true; },
     };
   }
+
+  private static readonly __neoContext = class {
+    constructor(
+      private readonly __neoRead: () => NeoContainerSignal,
+      readonly resolve: NeoContainerFactoryContext['resolve'],
+      readonly resolveAll: NeoContainerFactoryContext['resolveAll'],
+      readonly resolveMany: NeoContainerFactoryContext['resolveMany'],
+    ) {}
+
+    get signal(): NeoContainerSignal {
+      return this.__neoRead();
+    }
+  };
 
   public override(_token: unknown, _factory: () => unknown): Promise<void> {
     return Promise.reject(this._neoFail('NEO_TEST_API_DISABLED', 'test overrides are disabled'));
@@ -3941,7 +3949,7 @@ class NeoContainer {
     const __neoSeen = new Set();
     const __neoErrors: unknown[] = [];
     const __neoPending: unknown[] = [];
-    this._neoDisposeSlot("PropertyToken:ApiService.apiUrl_8db03951", __neoSeen, __neoErrors, true, __neoPending);
+    try { const __neoGot = this._neoTake("PropertyToken:ApiService.apiUrl_8db03951", __neoSeen); if (__neoGot !== __neoSeen) { const __neoRun = this._neoDisposer(__neoGot); if (__neoRun) { this._neoPend(__neoRun(), __neoPending); } } } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); }
     for (const __neoPendingItem of __neoPending) { try { await __neoPendingItem; } catch (__neoDisposeError) { __neoErrors.push(__neoDisposeError); } }
     this.instances.clear();
     this.overrides.clear();
@@ -3949,21 +3957,18 @@ class NeoContainer {
     if (__neoErrors.length > 0) { const __neoDisposeFailure = new AggregateError(__neoErrors); throw __neoDisposeFailure; }
   }
 
-  private _neoDisposeSlot(__neoKey: unknown, __neoSeen: Set<unknown>, __neoErrors: unknown[], __neoGuarded: boolean, __neoPending?: unknown[]): Promise<unknown> | undefined {
-    if (!this.instances.has(__neoKey)) return undefined;
-    const __neoInst = this.instances.get(__neoKey) as { dispose?: () => unknown } | null | undefined;
-    if (__neoInst != null && (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst))) return undefined;
-    if (__neoInst != null) __neoSeen.add(__neoInst);
-    try {
-      let __neoResult: unknown;
-      if (__neoGuarded) { const __neoRun = this._neoDisposer(__neoInst); if (!__neoRun) return undefined; __neoResult = __neoRun(); } else { __neoResult = (__neoInst as { dispose(): unknown }).dispose(); }
-      if (!(__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function')) return undefined;
-      if (__neoPending) { __neoPending.push(__neoResult); return undefined; }
-      return Promise.resolve(__neoResult).then(undefined, (__neoDisposeError: unknown) => { __neoErrors.push(__neoDisposeError); });
-    } catch (__neoDisposeError) {
-      __neoErrors.push(__neoDisposeError);
-      return undefined;
+  private _neoTake(__neoKey: unknown, __neoSeen: Set<unknown>): unknown {
+    if (!this.instances.has(__neoKey)) return __neoSeen;
+    const __neoInst = this.instances.get(__neoKey);
+    if (__neoInst != null) {
+      if (this._borrowed.has(__neoInst) || __neoSeen.has(__neoInst)) return __neoSeen;
+      __neoSeen.add(__neoInst);
     }
+    return __neoInst;
+  }
+
+  private _neoPend(__neoResult: unknown, __neoPending: unknown[]): void {
+    if (__neoResult && typeof (__neoResult as { then?: unknown }).then === 'function') __neoPending.push(__neoResult);
   }
 
   [(Symbol as SymbolConstructor & { asyncDispose?: symbol }).asyncDispose as symbol](): Promise<void> {
@@ -4023,6 +4028,7 @@ class NeoContainer {
 type NeoContainerAsyncDisposal = SymbolConstructor extends { readonly asyncDispose: infer K extends symbol } ? { [P in K]: () => Promise<void> } : Record<never, never>;
 interface NeoContainer extends NeoContainerAsyncDisposal {}
 type NeoContainerSignal = { readonly aborted: boolean; readonly reason?: unknown; addEventListener(type: 'abort', listener: () => void, options?: { once?: boolean }): void; removeEventListener(type: 'abort', listener: () => void): void };
+type NeoContainerFactoryContext = { readonly signal: NeoContainerSignal; resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>; resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never } };
 
 // -- Container Instance --
 export const c = /* @__PURE__ */ new NeoContainer(undefined, "PropertyApp");
