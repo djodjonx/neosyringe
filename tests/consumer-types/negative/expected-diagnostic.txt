@@ -47,3 +47,11 @@ public-api.ts(71,10): error TS2339: Property 'override' does not exist on type '
 public-api.ts(80,19): error TS2345: Argument of type 'readonly BadOverrideUnion[]' is not assignable to parameter of type 'never'.
 public-api.ts(86,24): error TS2322: Type 'readonly BadInputUnion[]' is not assignable to type 'never'.
 public-api.ts(73,14): error TS2322: Type '{ token: typeof Service; useExisting: typeof Other; }' is not assignable to type 'never'.
+initialization.ts(10,1): error TS2769: No overload matches this call.
+Argument of type '{ name: string; initialization: { concurrency: string; };
+initialization.ts(16,1): error TS2769: No overload matches this call.
+Object literal may only specify known properties, and 'parallel' does not exist in type 'InitializationOptions'.
+initialization.ts(22,1): error TS2769: No overload matches this call.
+Argument of type '{ name: string; initialization: number;
+Type 'number' has no properties in common with type 'InitializationOptions'.
+initialization.ts(29,3): error TS2353: Object literal may only specify known properties, and 'initialization' does not exist in type 'PartialConfig'.

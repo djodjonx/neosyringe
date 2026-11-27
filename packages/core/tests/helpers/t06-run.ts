@@ -65,11 +65,13 @@ let fileSeq = 0;
  * Analyzer.extractAll, then `new Generator` with the requested emitter,
  * transpileModule, then new Function. `emitter` undefined keeps the default.
  */
-export function loadSource(source: string): Loaded {
+export function loadSource(source: string, options: { validation?: 'compatible' } = {}): Loaded {
   warmLibCache();
   const fileName = `/virtual/t06/${fileSeq}.ts`;
   fileSeq += 1;
-  const graphs = new Analyzer(programOf(fileName, source)).extractAll();
+  const program = programOf(fileName, source);
+  const analyzer = options.validation === undefined ? new Analyzer(program) : new Analyzer(program, { validation: options.validation });
+  const graphs = analyzer.extractAll();
   return {
     graphs,
     graph(name: string): DependencyGraph {
