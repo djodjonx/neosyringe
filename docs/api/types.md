@@ -87,7 +87,7 @@ interface FactoryContext {
 }
 ```
 
-A function that receives a limited context and returns an instance, or a promise of it. The context has `resolve`, `resolveAll`, `resolveMany` and `signal` only. It is not the container. `signal` aborts when the initialization the factory runs for is cancelled or the container is destroyed, and never aborts for a factory called outside an initialization. That signal is shared by every such call, so a listener added to it is never called and never removed: do not add one per call (`packages/neosyringe/src/types.ts:305`). Declare what it may resolve in `dependencies` (`packages/neosyringe/src/types.ts:297` and `:320`).
+A function that receives a limited context and returns an instance, or a promise of it. The context has `resolve`, `resolveAll`, `resolveMany` and `signal` only. It is not the container. `signal` aborts when the initialization the factory runs for is cancelled or the container is destroyed, and never aborts for a factory called outside an initialization. That signal is shared by every such call, so a listener added to it is never called and never removed: do not add one per call (`packages/neosyringe/src/types.ts:305`). `signal` is an accessor of the prototype of the context, not an own property: `ctx.signal` and `const { signal } = ctx` read it, `{ ...ctx }` does not copy it and `Object.keys(ctx)` does not list it. The generated context has one more own function member, `__neoRead`, which checks that the context has not expired and returns only the signal (`packages/core/src/generator/factoryLeaseEmitter.ts:68-79`). Declare what it may resolve in `dependencies` (`packages/neosyringe/src/types.ts:297` and `:320`).
 
 <<< @/../examples/new-api/factories.ts#typed-factory
 
