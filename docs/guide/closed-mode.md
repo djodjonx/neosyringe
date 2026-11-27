@@ -43,7 +43,7 @@ The five tokens play different parts:
 - A call that the build can see outside the roots fails the build with `NEO_ROOT_NOT_EXPORTED`.
 - A call that the build cannot see (dynamic access, JavaScript) reaches a guard in the generated container. It throws an error whose `code` is `NEO_ROOT_NOT_EXPORTED` (`packages/core/src/generator/Generator.ts:687`, covered by `packages/core/tests/generator/t17-direct-profiles.test.ts:840`).
 - A dependency that a root needs stays in the container but is not public. Factories reach it through the `context`, because it is in their `dependencies`.
-- `override()` of a token that is not a root is accepted in a closed container, and so is `override()` of a token that was pruned. The plan for the next major asked for a refusal. Main has no root check on the override path (`packages/core/src/generator/LifecycleEmitter.ts:1134` to `:1136`). `tests/e2e/t20-docs-examples.test.ts` calls both.
+- `override()` of a token that is not a root is accepted in a closed container, and so is `override()` of a token that was pruned. The plan for the next major asked for a refusal. Main has no root check on the override path (`packages/core/src/generator/LifecycleEmitter.ts:1189` to `:1191`). `tests/e2e/t20-docs-examples.test.ts` calls both.
 
 ### Eager services
 
