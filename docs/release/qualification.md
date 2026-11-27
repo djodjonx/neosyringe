@@ -252,3 +252,24 @@ These commands were run in the foreground, one at a time, from the repo root, on
 | 3 | `pnpm test:e2e` | local | 0 | 24 files, 268 tests passed. 8.88 s. |
 | 4 | `pnpm test:coverage` | local | 0 | The same 852 tests passed. All files, statements: core 88.83 %, lsp 97.89 %, ui 100 %, cli 45.7 %, unplugin 92.06 %, neosyringe 40 %. |
 | 5 | `pnpm typecheck` | local | 0 | `tsc --noEmit` printed no diagnostic. |
+
+## Topic 11: bounded concurrent initialization
+
+`initialization: { concurrency: N }` on a builder lets `initialize()` run up to `N` async steps at once. The default is 1 and writes the same `initialize()` as before. The contract is in [Async Factories](/guide/async-factories#starting-async-services-at-the-same-time); the option is `docs/api/configuration.md`, the failure shape is `docs/api/errors.md`.
+
+| Item | Where | Status |
+|------|-------|--------|
+| The option is read as a positive integer literal; the other shapes are `NEO_CONFIG_UNSUPPORTED` at their position (`packages/core/src/analyzer/parsers/ConfigParser.ts:215`) | `packages/core/tests/analyzer/f11-concurrency-parser.test.ts::P7 3 is accepted: the graph carries it and nothing is reported`, and one test per refused shape in the same file | Local, ran. |
+| A partial that declares it is refused (`packages/core/src/analyzer/collectors/ConfigCollector.ts:927`) | `packages/core/tests/analyzer/f11-concurrency-parser.test.ts::P7 a partial that declares initialization is refused at the member, and the builder keeps the default` | Local, ran. |
+| `N` absent or 1 writes the `initialize()` of the previous commit, and runs in its order | `packages/core/tests/generator/f11-concurrency-runtime.test.ts`, the `P1` tests, which compare with `packages/core/tests/generator/f11-frozen.ts` | Local, ran on both emitters, full and minimal, open and closed. |
+| At most `N` steps at once, a step after every step it reaches (sync factories, `multi`, aliases), one shared dependency once | The `P2`, `P3` and `P4` tests of the same file | Local, ran on the same eight cells. |
+| An opaque factory (no `dependencies` list, open mode only) waits for every step of a lower rank; a later step that does not reach it is not held back | The `P12` tests of the same file | Local, ran on the four open cells. |
+| An all-opaque graph of 200 steps writes at most two dependencies per job (a linear count), and still runs one step after the other | The `P13` tests of the same file (two per cell) | Local, ran on the four open cells. |
+| First failure stops new steps and joins the started ones; one failure is the same error object, two or more are an `AggregateError` with the first as `cause` | The `P5`, `P6` and `P9` tests | Local, ran on the same eight cells. |
+| One progress callback: 1000 short steps pass a blocked one at `N = 2`, with no repeated `Promise.race` registration | The `P8` tests, on the full profile of both emitters, open and closed | Local, ran. |
+| The emitted scheduler type-checks at lib es2021 without dom or node and holds no unsafe type | `packages/core/tests/generator/f11-floor.test.ts` | Local, ran. |
+| `tests/consumer-types/positive/initialization.ts` and `tests/consumer-types/negative/initialization.ts` | `node scripts/ci/consumer-types.mjs tests/consumer-types/positive --pack` and the same with `negative --expect-file expected-diagnostic.txt` | Local, pass (exit 0): the orchestrator gate ran both with and without `--pack`, after `pnpm build`. |
+| Emitted-code snapshots | `pnpm test:e2e` | Local, pass (exit 0): the orchestrator gate ran it after `pnpm build`. No snapshot file changed. |
+| Scheduling time and heap of 10000 async steps | `node tests/bench/init-cost.mjs` (`NEOSYRINGE_BENCH_INIT_CONCURRENCY=1,4,16` by default) | Pending: measured by the orchestrator at the end of stage F. No number is quoted. |
+
+`pnpm test` in `packages/core` passed 1594 tests in 136 files (1 skipped), `pnpm typecheck` printed no diagnostic and `pnpm lint` reported 0 errors, locally. No CI run covers this work yet.

@@ -43,7 +43,7 @@ The five tokens play different parts:
 - A call that the build can see outside the roots fails the build with `NEO_ROOT_NOT_EXPORTED`.
 - A call that the build cannot see (dynamic access, JavaScript) reaches a guard in the generated container. It throws an error whose `code` is `NEO_ROOT_NOT_EXPORTED` (`packages/core/src/generator/Generator.ts:675`, covered by `packages/core/tests/generator/t17-direct-profiles.test.ts:840`).
 - A dependency that a root needs stays in the container but is not public. Factories reach it through the `context`, because it is in their `dependencies`.
-- `override()` of a token that is not a root is accepted in a closed container, and so is `override()` of a token that was pruned. The plan for the next major asked for a refusal. Main has no root check on the override path (`packages/core/src/generator/LifecycleEmitter.ts:769` to `:771`). `tests/e2e/t20-docs-examples.test.ts` calls both.
+- `override()` of a token that is not a root is accepted in a closed container, and so is `override()` of a token that was pruned. The plan for the next major asked for a refusal. Main has no root check on the override path (`packages/core/src/generator/LifecycleEmitter.ts:987` to `:989`). `tests/e2e/t20-docs-examples.test.ts` calls both.
 
 ### Eager services
 
@@ -71,9 +71,9 @@ The registration is absent from the container, but a module-level effect is kept
 
 ## What closed mode requires
 
-- `validation: 'strict'`. Closed mode with `validation: 'compatible'` is `NEO_CLOSED_REQUIRES_STRICT` (`packages/core/src/analyzer/parsers/ConfigParser.ts:391`).
+- `validation: 'strict'`. Closed mode with `validation: 'compatible'` is `NEO_CLOSED_REQUIRES_STRICT` (`packages/core/src/analyzer/parsers/ConfigParser.ts:448`).
 - Every factory declares `dependencies`. An opaque factory in a closed container is `NEO_FACTORY_DEPENDENCIES_REQUIRED`.
-- `mode` written as the string literal `'open'` or `'closed'` (`packages/core/src/analyzer/parsers/ConfigParser.ts:85` to `:90`). `mode: 'open'` with `roots` or `eager` is `NEO_CONFIG_UNSUPPORTED` (`packages/core/src/analyzer/parsers/ConfigParser.ts:108` to `:111`).
+- `mode` written as the string literal `'open'` or `'closed'` (`packages/core/src/analyzer/parsers/ConfigParser.ts:86` to `:91`). `mode: 'open'` with `roots` or `eager` is `NEO_CONFIG_UNSUPPORTED` (`packages/core/src/analyzer/parsers/ConfigParser.ts:109` to `:112`).
 - Validation still covers the registrations that were pruned: a duplicate, a cycle or a missing provider is reported even if the provider is not kept.
 
 ## See why something was kept

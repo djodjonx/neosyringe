@@ -111,7 +111,7 @@ interface Injection<T = any> {
 }
 ```
 
-A single injection definition (`packages/neosyringe/src/types.ts:390`):
+A single injection definition (`packages/neosyringe/src/types.ts:401`):
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -135,7 +135,7 @@ type Alias<T extends Token<unknown>, U extends Token<unknown>> = {
 } & ([ValueOf<U>] extends [ValueOf<T>] ? unknown : never);
 ```
 
-The shape of an alias registration, and the check the `injections` list applies to every `useExisting` (`packages/neosyringe/src/types.ts:348`, `packages/neosyringe/src/types.ts:455`). The pair is valid when the value of the target is assignable to the value of the token: a class instance, the `T` of `useInterface<T>()`. A subtype is accepted, a wrong type is a type error on the registration, and `Alias<typeof Service, typeof Other>` is `never` when `Other` has not the value of `Service`. The build checks the same relation with the checker, because the structure of two interfaces does not tell them apart at run time.
+The shape of an alias registration, and the check the `injections` list applies to every `useExisting` (`packages/neosyringe/src/types.ts:359`, `packages/neosyringe/src/types.ts:466`). The pair is valid when the value of the target is assignable to the value of the token: a class instance, the `T` of `useInterface<T>()`. A subtype is accepted, a wrong type is a type error on the registration, and `Alias<typeof Service, typeof Other>` is `never` when `Other` has not the value of `Service`. The build checks the same relation with the checker, because the structure of two interfaces does not tell them apart at run time.
 
 ## PartialConfig
 
@@ -233,7 +233,7 @@ See [States, Scopes and Ownership](/guide/states-and-ownership) and [Profiles](/
 
 ## ContainerTemplate and BoundContainer
 
-A builder with a literal, non-empty `scopeInputs` is the model of its scopes, not a container that resolves (`ContainerFor`, `packages/neosyringe/src/types.ts:278`). An empty list is no input: the builder is a `Container` or a `CoreContainer` as before (`packages/neosyringe/src/types.ts:267`).
+A builder with a literal, non-empty `scopeInputs` is the model of its scopes, not a container that resolves (`ContainerFor`, `packages/neosyringe/src/types.ts:289`). An empty list is no input: the builder is a `Container` or a `CoreContainer` as before (`packages/neosyringe/src/types.ts:278`).
 
 ```typescript
 type Profile = 'full' | 'minimal';
@@ -248,7 +248,7 @@ type BoundContainer<I extends readonly InputToken[] = readonly [], P extends Pro
   BoundCore<I, P> & (P extends 'full' ? FullMembers : unknown);
 ```
 
-`Profile`, `ContainerTemplate` and `BoundContainer` are at `packages/neosyringe/src/types.ts:231`, `:260` and `:252`. `BoundCore` and `FullMembers` (`packages/neosyringe/src/types.ts:240` and `:234`) are not exported: they only name what the two profiles share.
+`Profile`, `ContainerTemplate` and `BoundContainer` are at `packages/neosyringe/src/types.ts:242`, `:271` and `:263`. `BoundCore` and `FullMembers` (`packages/neosyringe/src/types.ts:251` and `:245`) are not exported: they only name what the two profiles share.
 
 ```typescript
 const requests = defineBuilderConfig({
@@ -267,11 +267,11 @@ requests.resolve(requestToken); // does not compile: the template has no resolve
 
 - **Every input, once.** With a list written inline, a missing, an extra or a wrong-type value does not compile, and neither does a union of pairs one of which is incoherent (`InputGuard` checks each pair as a unit, `packages/neosyringe/src/types.ts:148` and `:157`). A widened `readonly` array is checked pair by pair only: a pair that names a token with the wrong value type does not compile, but the checker does not count the entries, so a missing or a repeated entry compiles and is refused at run time with `NEO_SCOPE_INPUT_MISSING` or `NEO_SCOPE_INPUT_DUPLICATE`.
 - **The checker cannot see identity.** Two interfaces with the same members have the same token type for the checker. Giving one for the other compiles; `createScope` refuses it at run time with `NEO_SCOPE_INPUT_MISSING` or `NEO_SCOPE_INPUT_UNKNOWN`. A token given twice is `NEO_SCOPE_INPUT_DUPLICATE` at run time too. See [errors](./errors.md#thrown-at-run-time-by-the-generated-container).
-- **The list is a literal.** A `scopeInputs` the checker cannot count (`readonly InputToken[]`, or an optional member) is rejected, like a profile that is not a literal (`packages/neosyringe/src/types.ts:324`). A class token is not an `InputToken`.
-- **No partial.** `scopeInputs` is not a member of `PartialConfig` (`packages/neosyringe/src/types.ts:477`): `definePartialConfig({ scopeInputs })` is a type error (TS2353), and the build says `NEO_CONFIG_UNSUPPORTED` if it is reached from untyped code. A builder that extends a partial declares the inputs itself, and a partial that needs one lists it in `expects`.
-- **Not a parent.** `useContainer` takes a `CoreContainer` or a plain record (`packages/neosyringe/src/types.ts:529`). A template or a bound scope is neither, so it is refused as a parent.
+- **The list is a literal.** A `scopeInputs` the checker cannot count (`readonly InputToken[]`, or an optional member) is rejected, like a profile that is not a literal (`packages/neosyringe/src/types.ts:335`). A class token is not an `InputToken`.
+- **No partial.** `scopeInputs` is not a member of `PartialConfig` (`packages/neosyringe/src/types.ts:488`): `definePartialConfig({ scopeInputs })` is a type error (TS2353), and the build says `NEO_CONFIG_UNSUPPORTED` if it is reached from untyped code. A builder that extends a partial declares the inputs itself, and a partial that needs one lists it in `expects`.
+- **Not a parent.** `useContainer` takes a `CoreContainer` or a plain record (`packages/neosyringe/src/types.ts:540`). A template or a bound scope is neither, so it is refused as a parent.
 - **The model, untyped.** Called from JavaScript, the model's `resolve`, `resolveAll`, `resolveMany` and `initialize` throw `NEO_SCOPE_INPUTS_UNBOUND`. On the program the plugin rewrites, the exported container is typed by the generated class, which does have those members: the typed contract holds on the source program, and the run-time refusal holds everywhere.
-- **Values are borrowed.** `destroy()` of a scope disposes the singletons the scope owns, never a value it was given: an input is a borrowed `value` (`packages/core/src/generator/ResolveEmitter.ts:54` to `:54`) and has no disposal slot (`packages/core/src/generator/LifecycleEmitter.ts:536` to `:540`). See [states and ownership](/guide/states-and-ownership#scope-inputs).
+- **Values are borrowed.** `destroy()` of a scope disposes the singletons the scope owns, never a value it was given: an input is a borrowed `value` (`packages/core/src/generator/ResolveEmitter.ts:54` to `:54`) and has no disposal slot (`packages/core/src/generator/LifecycleEmitter.ts:754` to `:758`). See [states and ownership](/guide/states-and-ownership#scope-inputs).
 
 ### resolve\<T\>(token: Token\<T\>): T
 

@@ -1097,7 +1097,7 @@ describe('T20 guide claims that round 1 got wrong', () => {
     const text = guideText('guide/alternatives.md');
     expect(text).not.toContain('generator/tokensManifest.ts:251');
     expect(text).toContain('packages/core/src/analyzer/shared/tokensManifest.ts:66');
-    expect(text).toContain('packages/core/src/analyzer/collectors/ConfigCollector.ts:505');
+    expect(text).toContain('packages/core/src/analyzer/collectors/ConfigCollector.ts:506');
   });
 
   it('the migration table does not tell you to create a scope after destroy', () => {
