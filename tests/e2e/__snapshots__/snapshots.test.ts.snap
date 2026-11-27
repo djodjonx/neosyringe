@@ -238,13 +238,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -519,13 +515,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -762,11 +754,7 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     
     this._touchClosed(true);
-    try {
-      this.instances.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
+    this.instances.clear();
     return Promise.resolve();
   }
 
@@ -983,11 +971,7 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     
     this._touchClosed(true);
-    try {
-      this.instances.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
+    this.instances.clear();
     return Promise.resolve();
   }
 
@@ -1279,13 +1263,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -1592,13 +1572,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -1920,13 +1896,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -2229,13 +2201,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -2575,13 +2543,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -2829,13 +2793,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -3083,13 +3043,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -3344,13 +3300,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -3598,13 +3550,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -4356,13 +4304,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -4693,13 +4637,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -4983,13 +4923,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
@@ -5237,13 +5173,9 @@ class NeoContainer {
     if (this._touchClosed(false)) return Promise.resolve();
     if (this._reconfiguring) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     this._touchClosed(true);
-    try {
-      this.instances.clear();
+    this.instances.clear();
     this.overrides.clear();
     this.resolveListeners.clear();
-    } catch (__neoDestroyError) {
-      return Promise.reject(__neoDestroyError);
-    }
     return Promise.resolve();
   }
 
