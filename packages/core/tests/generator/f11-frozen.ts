@@ -5,13 +5,15 @@
  * touched. Topic 11 froze the text of cd61e36 here; topic 19 changed `initialize` (not `async`, one options argument, the
  * signal checks between the steps) and this literal moved with it, in the same commit. The sequential order of the
  * steps, which is what a concurrency of 1 promises, is pinned by the effect log of P1, a frozen literal of cd61e36.
+ * The perf round of stage F (docs/benchmarks/stage-f-compile-overhead.md, "Runtime cost") moved it once more: without a
+ * signal `_startInitialize` answers the work itself, and the controller is made by the first read of a signal.
  */
 export const FROZEN_INITIALIZE_FULL = `public initialize(options?: { readonly signal?: NeoContainerSignal }): Promise<void> {
     if ((this._state === 'initializing' || this._state === 'cancelling') && this._syncInit > 0) return Promise.reject(this._neoFail('NEO_CONTAINER_BUSY', 'container is transitioning'));
     const __neoUser = options?.signal;
     if (this._state === 'initializing' || this._state === 'cancelling') {
       if (__neoUser !== undefined && __neoUser !== this._initSignal) return Promise.reject(this._neoFail('NEO_INIT_OPTIONS_CONFLICT', 'initialize() is running with another signal'));
-      return this._initObserved;
+      return this._initObserved ?? Promise.resolve().then((): Promise<void> | undefined => this._initObserved);
     }
     if (this._state === 'ready') return Promise.resolve();
     if (this._state === 'failed') return Promise.reject(this._failure);
@@ -25,10 +27,15 @@ export const FROZEN_INITIALIZE_FULL = `public initialize(options?: { readonly si
 
   private _startInitialize(__neoUser: NeoContainerSignal | undefined): Promise<void> {
     this._state = 'initializing';
-    const __neoController = NeoContainer.__neoController();
-    this._initController = __neoController;
     this._initSignal = __neoUser;
     this._initCancel = undefined;
+    this._initAborted = undefined;
+    if (__neoUser === undefined) {
+      this._initObserved = undefined; const __neoRun = this._runInitialize();
+      this._initWork = __neoRun;
+      this._initObserved = __neoRun;
+      return __neoRun;
+    }
     let __neoResolve: () => void = () => {};
     let __neoReject: (reason: unknown) => void = () => {};
     const __neoObserved = new Promise<void>((resolve, reject) => {
@@ -41,20 +48,15 @@ export const FROZEN_INITIALIZE_FULL = `public initialize(options?: { readonly si
       this._initCancel = { reason: __neoReason };
       if (this._state === 'initializing') this._state = 'cancelling';
       __neoReject(__neoReason);
-      __neoController.abort(__neoReason);
+      this._neoAbort(__neoReason);
     };
-    if (__neoUser !== undefined) {
-      if (__neoUser.aborted) __neoRelay();
-      else __neoUser.addEventListener('abort', __neoRelay, { once: true });
-    }
+    if (__neoUser.aborted) __neoRelay();
+    else __neoUser.addEventListener('abort', __neoRelay, { once: true });
     const __neoWork = this._runInitialize();
     this._initWork = __neoWork;
     const __neoSettle = (): void => {
       __neoUser?.removeEventListener('abort', __neoRelay);
-      if (this._initController === __neoController) {
-        this._initController = undefined;
-        this._initSignal = undefined;
-      }
+      if (this._initSignal === __neoUser) this._initSignal = undefined;
     };
     void __neoWork.then(
       () => { __neoSettle(); __neoResolve(); },
@@ -114,6 +116,7 @@ export const FROZEN_INITIALIZE_FULL = `public initialize(options?: { readonly si
       throw __neoWrapped;
     } finally {
       this._initRunning = false;
+      this._initController = undefined;
     }
   }
 
@@ -125,7 +128,7 @@ export const FROZEN_INITIALIZE_MINIMAL = `public initialize(options?: { readonly
     const __neoUser = options?.signal;
     if (this._state === 'initializing' || this._state === 'cancelling') {
       if (__neoUser !== undefined && __neoUser !== this._initSignal) return Promise.reject(this._neoFail('NEO_INIT_OPTIONS_CONFLICT', 'initialize() is running with another signal'));
-      return this._initObserved;
+      return this._initObserved ?? Promise.resolve().then((): Promise<void> | undefined => this._initObserved);
     }
     if (this._state === 'ready') return Promise.resolve();
     if (this._state === 'failed') return Promise.reject(this._failure);
@@ -139,10 +142,15 @@ export const FROZEN_INITIALIZE_MINIMAL = `public initialize(options?: { readonly
 
   private _startInitialize(__neoUser: NeoContainerSignal | undefined): Promise<void> {
     this._state = 'initializing';
-    const __neoController = NeoContainer.__neoController();
-    this._initController = __neoController;
     this._initSignal = __neoUser;
     this._initCancel = undefined;
+    this._initAborted = undefined;
+    if (__neoUser === undefined) {
+      this._initObserved = undefined; const __neoRun = this._runInitialize();
+      this._initWork = __neoRun;
+      this._initObserved = __neoRun;
+      return __neoRun;
+    }
     let __neoResolve: () => void = () => {};
     let __neoReject: (reason: unknown) => void = () => {};
     const __neoObserved = new Promise<void>((resolve, reject) => {
@@ -155,20 +163,15 @@ export const FROZEN_INITIALIZE_MINIMAL = `public initialize(options?: { readonly
       this._initCancel = { reason: __neoReason };
       if (this._state === 'initializing') this._state = 'cancelling';
       __neoReject(__neoReason);
-      __neoController.abort(__neoReason);
+      this._neoAbort(__neoReason);
     };
-    if (__neoUser !== undefined) {
-      if (__neoUser.aborted) __neoRelay();
-      else __neoUser.addEventListener('abort', __neoRelay, { once: true });
-    }
+    if (__neoUser.aborted) __neoRelay();
+    else __neoUser.addEventListener('abort', __neoRelay, { once: true });
     const __neoWork = this._runInitialize();
     this._initWork = __neoWork;
     const __neoSettle = (): void => {
       __neoUser?.removeEventListener('abort', __neoRelay);
-      if (this._initController === __neoController) {
-        this._initController = undefined;
-        this._initSignal = undefined;
-      }
+      if (this._initSignal === __neoUser) this._initSignal = undefined;
     };
     void __neoWork.then(
       () => { __neoSettle(); __neoResolve(); },
@@ -228,6 +231,7 @@ export const FROZEN_INITIALIZE_MINIMAL = `public initialize(options?: { readonly
       throw __neoWrapped;
     } finally {
       this._initRunning = false;
+      this._initController = undefined;
     }
   }
 

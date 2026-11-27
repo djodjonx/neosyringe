@@ -5,10 +5,14 @@ import { checkStrict, emitCase, formatDiagnostic, unsafeTypesMessage, type Emiss
 /**
  * C1 (stage F, compile-time overhead of the disposal slots, docs/benchmarks/stage-f-compile-overhead.md). Each disposal
  * slot of `destroy()` used to inline the whole protocol (the borrowed and seen checks, the choice of the disposer, the
- * observed begin and end), so a graph of 100 disposable services wrote that block 100 times. The protocol is one private
- * member of the generated class, `_neoDisposeSlot`, and a slot is one short call of it. The tests read the emitted text
- * of both emitters, for a sync and an async graph, observed or not, and pin: one declaration of the member, one call per
- * slot, a short call, no member in a graph without a slot.
+ * observed begin and end), so a graph of 100 disposable services wrote that block 100 times. The first shrink moved the
+ * whole protocol into one member that every slot called, and that made the `.dispose()` call site megamorphic: `destroy()`
+ * of a 100-service container cost 1.75 times what it did (measured by the orchestrator, same document). The slot is now
+ * short and keeps its own call: the read of the instance and the borrowed and seen checks are one private member
+ * (`_neoTake`, it calls no user code), the call of `dispose()` stays at the slot, and only the rare tail (a promise the
+ * disposer returned) is a small member. The tests read the emitted text of both emitters, for a sync and an async graph,
+ * observed or not, and pin: the member is declared once, a slot calls `dispose()` itself and stays short, no slot
+ * calls a shared member that holds the `dispose()` call, no member in a graph without a slot.
  */
 
 const SIZE = 100;
@@ -39,27 +43,35 @@ function occurrences(text: string, pattern: RegExp): number {
   return text.match(pattern)?.length ?? 0;
 }
 
-function slotCalls(text: string): string[] {
-  return text.split('\n').filter((line) => line.includes('this._neoDisposeSlot('));
+/** The lines of `destroy()` that write one slot: each reads its instance through `_neoTake`. */
+function slotLines(text: string): string[] {
+  return text.split('\n').filter((line) => line.includes('this._neoTake('));
 }
 
-describe('C1 a disposal slot is a call of one shared member', () => {
+describe('C1 a disposal slot is short and keeps its own dispose() call', () => {
   for (const emitter of EMITTER_LIST) {
     for (const timing of ['sync', 'async'] as const) {
       for (const observation of [false, true]) {
-        it(`C1 ${SIZE} slots write ${SIZE} short calls and one member (${emitter}, ${timing} graph, observation ${observation ? 'on' : 'off'})`, () => {
+        it(`C1 ${SIZE} slots write ${SIZE} short slots that call dispose() themselves, and one _neoTake (${emitter}, ${timing} graph, observation ${observation ? 'on' : 'off'})`, () => {
           const built = build(disposableSource({ async: timing === 'async' }), { emitter, observation });
           const text = built.generated[0] ?? '';
-          expect(occurrences(text, /private _neoDisposeSlot\(/g), 'the member is declared once').toBe(1);
-          const calls = slotCalls(text);
+          expect(text, 'the shared slot member is gone').not.toContain('_neoDisposeSlot');
+          expect(occurrences(text, /private _neoTake\(/g), 'the read of the instance is declared once').toBe(1);
+          const lines = slotLines(text);
           // An async graph has one more slot: its async factory is a guarded one (its value may hold a disposer).
-          expect(occurrences(text, /this\._neoDisposeSlot\(/g), 'one call per slot').toBe(SIZE + (timing === 'async' ? 1 : 0));
-          // A slot is a call and nothing else: the protocol is not written again at the slot.
-          for (const line of calls) {
-            expect(line.trim().length, line.trim()).toBeLessThanOrEqual(observation ? 130 : 100);
-            expect(line).not.toContain('__neoInst');
-            expect(line).not.toContain('.dispose()');
+          expect(lines.length, 'one slot per service').toBe(SIZE + (timing === 'async' ? 1 : 0));
+          let inline = 0;
+          let asking = 0;
+          for (const line of lines) {
+            expect(line.trim().length, line.trim()).toBeLessThanOrEqual(observation ? 480 : 320);
+            // The call is at the slot: a guarded slot asks the container for its disposer, the others call `dispose()`.
+            expect(line.includes('.dispose()') || line.includes('this._neoDisposer('), line.trim()).toBe(true);
+            if (line.includes('.dispose()')) inline += 1;
+            if (line.includes('this._neoDisposer(')) asking += 1;
           }
+          // The even services are classes with `dispose()`, the odd ones factories (and the async graph has one more).
+          expect(inline, 'every class slot calls dispose() itself').toBe(SIZE / 2);
+          expect(asking, 'every factory slot asks for its disposer').toBe(SIZE / 2 + (timing === 'async' ? 1 : 0));
         });
       }
     }
@@ -70,6 +82,7 @@ export class Plain { readonly value = 1; }
 export const box = defineBuilderConfig({ name: 'Plain', injections: [{ token: Plain }] });
 `;
       const text = build(source, { emitter }).generated[0] ?? '';
+      expect(text).not.toContain('_neoTake');
       expect(text).not.toContain('_neoDisposeSlot');
     });
   }
@@ -81,7 +94,7 @@ const STUB = `
   declare function useInterface<T>(): T;
 `;
 
-/** Only `dispose()` classes: no slot may hold a symbol disposer, so the member has no `guarded` parameter. */
+/** Only `dispose()` classes: no slot may hold a symbol disposer, so no slot asks `_neoDisposer`. */
 const UNGUARDED = `${STUB}
   export class C1Leaf { dispose(): void {} }
   export class C1Other { dispose(): void {} }
@@ -116,7 +129,7 @@ function floorCase(name: string, source: string, observation: boolean): Emission
 
 const CONSUMER = `import { box } from './box.out.ts';\nexport const touch = (): unknown => box;\n`;
 
-describe('C1 the shared member type-checks at lib es2021 and holds no unsafe type', () => {
+describe('C1 the shared members type-check at lib es2021 and holds no unsafe type', () => {
   for (const emitter of EMITTER_LIST) {
     for (const observation of [false, true]) {
       const cells: readonly EmissionCase[] = [
@@ -128,8 +141,8 @@ describe('C1 the shared member type-checks at lib es2021 and holds no unsafe typ
         it(`C1-floor ${emitter}, ${item.name}, observation ${observation ? 'on' : 'off'}: the member is there, no diagnostic, no unsafe type`, () => {
           const emitted = emitCase(item, emitter);
           const code = emitted.outputs[0]?.code ?? '';
-          // With test overrides the reconfiguration disposes through the same member: it is still declared once.
-          expect(occurrences(code, /private _neoDisposeSlot\(/g)).toBe(1);
+          // With test overrides the reconfiguration reads its instances through the same member: it is still declared once.
+          expect(occurrences(code, /private _neoTake\(/g)).toBe(1);
           const input = { ...emitted.input, consumer: { file: 'consumer.ts', code: CONSUMER }, lib: ['lib.es2021.d.ts'] as const };
           expect(checkStrict(input).map(formatDiagnostic)).toEqual([]);
           expect(unsafeTypesMessage(code, 'box.out.ts')).toBe('');

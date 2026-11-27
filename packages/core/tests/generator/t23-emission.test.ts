@@ -9,11 +9,16 @@ import { captureRoot, memoryProgram } from '../helpers/memoryModules';
 
 /** The type a generated factory declaration carries: the user text is assigned to it, so it is checked against it. */
 /** The context type a factory is written against, with the names of the two `resolveMany` aliases and of the signal alias. */
-function factoryTypeWith(token: string, values: string, signal = 'NeoContainerSignal'): string {
-  return `(context: { readonly signal: ${signal}; resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly ${token}<unknown>[]>(tokens: T): ${values}<T>; resolveMany<const T extends readonly (${token}<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends ${token}<infer V> ? V : never : never } }) => unknown`;
+function contextLiteral(token: string, values: string, signal = 'NeoContainerSignal'): string {
+  return `{ readonly signal: ${signal}; resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly ${token}<unknown>[]>(tokens: T): ${values}<T>; resolveMany<const T extends readonly (${token}<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends ${token}<infer V> ? V : never : never } }`;
 }
 
-const FACTORY_TYPE = factoryTypeWith('__NeoToken', '__NeoValues');
+/** The factory type names the alias of the container, which is written once: the literal is in `contextLiteral`. */
+function factoryTypeWith(alias = 'NeoContainerFactoryContext'): string {
+  return `(context: ${alias}) => unknown`;
+}
+
+const FACTORY_TYPE = factoryTypeWith();
 
 interface RuntimeContainer {
   resolve: (token: unknown) => unknown;
@@ -284,6 +289,9 @@ describe('T23 user expressions are copies with a source range (B2)', () => {
     factory.factorySource = '() => ({ n: 99 })';
     const rendered = new Generator(graph, false).generateRendered();
     expect(rendered.code).toContain(`const userFactory: ${FACTORY_TYPE} = () => ({ n: 99 });`);
+    expect(rendered.code, 'the alias of the factory context is written once, with the whole literal').toContain(
+      `type NeoContainerFactoryContext = ${contextLiteral('__NeoToken', '__NeoValues')};`,
+    );
     const texts = rendered.copies.map((copy) => SOURCE.slice(copy.sourceStart, copy.sourceStart + copy.length));
     expect(texts).toHaveLength(2);
     expect(texts.sort()).toEqual(['() => ({ n: 1 })', "{ name: 'prod' }"]);
@@ -410,10 +418,13 @@ describe('T23 an origin without a source file to read is generated text (R7)', (
     const token = /^type (__NeoToken\w*)</m.exec(rendered.code)?.[1];
     const values = /^type (__NeoValues\w*)</m.exec(rendered.code)?.[1];
     const signal = /^type (\w+Signal) =/m.exec(rendered.code)?.[1];
+    const alias = /^type (\w+FactoryContext) =/m.exec(rendered.code)?.[1];
     expect(token, 'token alias declared').toBeDefined();
     expect(values, 'values alias declared').toBeDefined();
     expect(signal, 'signal alias declared').toBeDefined();
-    expect(rendered.code).toContain(`const userFactory: ${factoryTypeWith(token ?? '', values ?? '', signal)} = () => ({ n: 5 });`);
+    expect(alias, 'factory context alias declared').toBeDefined();
+    expect(rendered.code).toContain(`type ${alias ?? ''} = ${contextLiteral(token ?? '', values ?? '', signal)};`);
+    expect(rendered.code).toContain(`const userFactory: ${factoryTypeWith(alias)} = () => ({ n: 5 });`);
     expect(rendered.code).toBe(new Generator(graph, true).generate());
   });
 });

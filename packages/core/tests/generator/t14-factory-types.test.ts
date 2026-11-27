@@ -50,7 +50,9 @@ const CASE: EmissionCase = {
 };
 
 /** The context type the copied factory is written against: the public shape, generic in what it answers. */
-const CONTEXT = '\\(context: \\{ readonly signal: \\w+Signal; resolve<T>\\(token: unknown\\): T; resolveAll<T>\\(token: unknown\\): T\\[\\]; resolveMany<const T extends readonly __NeoToken<unknown>\\[\\]>\\(tokens: T\\): __NeoValues<T>; resolveMany<const T extends readonly \\(__NeoToken<unknown> \\| string\\)\\[\\]>\\(tokens: T\\): \\{ -readonly \\[K in keyof T\\]: T\\[K\\] extends infer E \\? E extends string \\? unknown : E extends __NeoToken<infer V> \\? V : never : never \\} \\}\\)';
+/** The factory type names the alias of the container; the alias holds the literal once (`CONTEXT_LITERAL`). */
+const CONTEXT = '\\(context: \\w+FactoryContext\\)';
+const CONTEXT_LITERAL = '\\{ readonly signal: \\w+Signal; resolve<T>\\(token: unknown\\): T; resolveAll<T>\\(token: unknown\\): T\\[\\]; resolveMany<const T extends readonly __NeoToken<unknown>\\[\\]>\\(tokens: T\\): __NeoValues<T>; resolveMany<const T extends readonly \\(__NeoToken<unknown> \\| string\\)\\[\\]>\\(tokens: T\\): \\{ -readonly \\[K in keyof T\\]: T\\[K\\] extends infer E \\? E extends string \\? unknown : E extends __NeoToken<infer V> \\? V : never : never \\} \\}';
 
 /**
  * The public `Factory<T>` answers `T | PromiseLike<T>`. The analyzer flags `isAsync` only for an `async` function or a
@@ -109,6 +111,10 @@ describe('T14 factory types', () => {
     for (const emitter of EMITTERS) {
       const emitted = emitCase(CASE, emitter);
       const code = emitted.outputs.map((output) => output.code).join('\n');
+      expect(code, `${emitter}: the factory context alias is written once, with the whole literal`).toMatch(
+        new RegExp(`\\ntype \\w+FactoryContext = ${CONTEXT_LITERAL};`),
+      );
+      expect((code.match(/\ntype \w+FactoryContext = /g) ?? []).length, `${emitter}: one alias`).toBe(1);
       // Every factory answers the public `Factory<T>` return: the declared type or a promise of it.
       expect(code, `${emitter}: sync factory typed`).toMatch(
         new RegExp(`const userFactory: ${CONTEXT} => (\\S*T14Made) \\| PromiseLike<\\1> = `),

@@ -673,7 +673,7 @@ export const box = defineBuilderConfig({
     expect(emitFactoryPolicy('Container', 'create_X', entries)).toContain('Container.__neoPolicy_create_X');
     expect(() => emitFactoryPolicy('Bad Name', 'create_X', entries)).toThrow('invalid generated identifier');
     expect(() => emitFactoryPolicy('Container', 'create X', entries)).toThrow('invalid generated identifier');
-    expect(factoryLeaseHelpers('Container').map((helper) => helper.id)).toEqual(['factoryPolicy', 'factoryLease']);
+    expect(factoryLeaseHelpers('Container').map((helper) => helper.id)).toEqual(['factoryPolicy', 'factoryLease', 'factoryContext']);
   });
 });
 

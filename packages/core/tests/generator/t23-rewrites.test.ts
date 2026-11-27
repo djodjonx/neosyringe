@@ -13,7 +13,7 @@ import type { DependencyGraph, DependencyNode, SourceOrigin, SourceRewrite } fro
 import { createVirtualProgram } from '../helpers/createVirtualProgram';
 
 /** The type a generated factory declaration carries: the user text is assigned to it, so it is checked against it. */
-const FACTORY_TYPE = '(context: { readonly signal: NeoContainerSignal; resolve<T>(token: unknown): T; resolveAll<T>(token: unknown): T[]; resolveMany<const T extends readonly __NeoToken<unknown>[]>(tokens: T): __NeoValues<T>; resolveMany<const T extends readonly (__NeoToken<unknown> | string)[]>(tokens: T): { -readonly [K in keyof T]: T[K] extends infer E ? E extends string ? unknown : E extends __NeoToken<infer V> ? V : never : never } }) => unknown';
+const FACTORY_TYPE = '(context: NeoContainerFactoryContext) => unknown';
 
 interface RuntimeContainer {
   resolve: (token: unknown) => unknown;

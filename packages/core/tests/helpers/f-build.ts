@@ -56,6 +56,11 @@ export interface Spec {
   dispose?: boolean;
   /** `dispose()` reports itself, then answers the gate `<name>:dispose` of the controller: an async disposer a test holds. */
   disposeGate?: boolean;
+  /**
+   * `dispose()` reports itself, then answers an object whose `then` is `undefined` the first time it is read and throws on
+   * every later read (`probe.twoFaced()`): a runtime that reads `then` twice sees a plain value, then a failure.
+   */
+  disposeTwoFaced?: boolean;
   opaque?: boolean;
   cooperative?: boolean;
 }
@@ -71,6 +76,7 @@ interface Probe {
   fail(name: string): void;
   built(name: string): void;
   disposed(name: string): void;
+  twoFaced(): unknown;
   context(name: string, context: unknown): void;
   stopping(name: string, signal: { reason?: unknown }): unknown;
 }
@@ -91,7 +97,9 @@ function injection(spec: Spec): string {
   const deps = spec.deps ?? [];
   const multi = spec.part === undefined ? '' : 'multi: true,';
   const declared = spec.opaque === true ? '' : ` dependencies: [${dependencyList(deps)}],`;
-  const value = spec.disposeGate === true
+  const value = spec.disposeTwoFaced === true
+    ? `{ name: ${JSON.stringify(label)}, dispose() { probe.disposed(${JSON.stringify(label)}); return probe.twoFaced(); } }`
+    : spec.disposeGate === true
     ? `{ name: ${JSON.stringify(label)}, dispose() { probe.disposed(${JSON.stringify(label)}); return probe.gate(${JSON.stringify(`${label}:dispose`)}); } }`
     : spec.dispose === true
       ? `{ name: ${JSON.stringify(label)}, dispose() { probe.disposed(${JSON.stringify(label)}); } }`
@@ -208,6 +216,11 @@ export interface Controller {
   readonly contexts: Map<string, unknown>;
   /** The `signal` of the context, read when the factory was called (the last call wins), `undefined` when it has none. */
   readonly signals: Map<string, unknown>;
+  /**
+   * Whether the factory reads `context.signal` when it is called (default: it does). A test that sets it to `false` keeps
+   * the context in `contexts` and reads the signal itself, later, or never.
+   */
+  readSignal: boolean;
   /** How many factories are between `start` and `end` right now, and the most there ever were. */
   active(): number;
   peak(): number;
@@ -240,6 +253,7 @@ function wire(): { ctl: Controller; probe: object } {
     disposed: new Map(),
     contexts: new Map(),
     signals: new Map(),
+    readSignal: true,
     active: () => state.active,
     peak: () => state.peak,
     hold(...names) {
@@ -292,10 +306,20 @@ function wire(): { ctl: Controller; probe: object } {
       const error = disposeFailures.get(name);
       if (error !== undefined) throw error;
     },
+    twoFaced: (): unknown => {
+      let reads = 0;
+      return {
+        get then(): unknown {
+          reads += 1;
+          if (reads > 1) throw new Error('then read twice');
+          return undefined;
+        },
+      };
+    },
     stopping: (name: string, signal: { reason?: unknown }): unknown => cooperation.get(name) ?? signal.reason,
     context: (name: string, context: unknown): void => {
       ctl.contexts.set(name, context);
-      ctl.signals.set(name, typeof context === 'object' && context !== null ? Reflect.get(context, 'signal') : undefined);
+      ctl.signals.set(name, ctl.readSignal && typeof context === 'object' && context !== null ? Reflect.get(context, 'signal') : undefined);
     },
   };
   return { ctl, probe };
