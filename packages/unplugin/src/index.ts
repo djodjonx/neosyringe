@@ -6,7 +6,19 @@ import { releaseGraphCache } from './analysisCache';
 import { usageErrorsAtBuildEnd } from './buildEndUsages';
 import { callsCanReachNeoSyringe, hasNeoSyringeMarkers } from './markerUtils';
 import { createDevtoolsMiddleware } from './devtools';
-import { moduleExtension, programFileName, runCompilationSession, sessionStateKey, shouldTransformId, type SessionState } from './session';
+import {
+  applyWatchChange,
+  closeProjectSession,
+  moduleExtension,
+  normalizeModuleId,
+  programFileName,
+  revalidateSessions,
+  runCompilationSession,
+  sessionStateKey,
+  shouldTransformId,
+  trackSourceText,
+  type SessionState,
+} from './session';
 
 /** Options accepted by every bundler entry point (`.vite()`, `.rollup()`, `.webpack()`, `.esbuild()`). */
 export interface NeoSyringePluginOptions {
@@ -49,6 +61,22 @@ export interface NeoSyringePluginOptions {
    * since production is what it is for. The flag is fixed at build time; generated code does not read process.
    */
   observation?: boolean;
+}
+
+/** True when the hook context says the build is a watch build (Rollup and Vite: `this.meta.watchMode`). */
+function isWatchBuild(context: object | undefined): boolean {
+  if (typeof context !== 'object' || context === null || !('meta' in context)) return false;
+  const meta = context.meta;
+  return typeof meta === 'object' && meta !== null && 'watchMode' in meta && meta.watchMode === true;
+}
+
+/** The Vite 6+ environment name of a hook context, when there is one. */
+function environmentName(context: object | undefined): string | undefined {
+  if (typeof context !== 'object' || context === null || !('environment' in context)) return undefined;
+  const environment = context.environment;
+  return typeof environment === 'object' && environment !== null && 'name' in environment && typeof environment.name === 'string'
+    ? environment.name
+    : undefined;
 }
 
 /**
@@ -97,8 +125,23 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
   const clearCollisions = (): void => {
     state.collisions?.clear();
   };
-  // session.ts createProgram keeps only the last transformed root. buildEnd needs every file.
-  const sourceTexts = new Map<string, string>();
+  // The files that carry a marker or a resolve call, with their text, per bundler environment: buildEnd checks
+  // these. The text of every transformed file is kept by the project session of its environment (session.ts).
+  const sourceTexts = new Map<string, Map<string, string>>();
+  const textsOf = (environment: string | undefined): Map<string, string> => {
+    const name = environment ?? '';
+    const known = sourceTexts.get(name);
+    if (known) return known;
+    const created = new Map<string, string>();
+    sourceTexts.set(name, created);
+    return created;
+  };
+  // A watch build keeps the usage files between builds: a changed dependency can break a file nobody touched.
+  let watching = false;
+  const closeSession = (declarations: 'keep' | 'free'): void => {
+    closeProjectSession(state, declarations);
+    sourceTexts.clear();
+  };
 
   const plugin: UnpluginOptions = {
     name: 'neosyringe-plugin',
@@ -112,6 +155,12 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       return shouldTransformId(id);
     },
 
+    buildStart() {
+      if (isWatchBuild(this)) watching = true;
+      // One revalidation of every file per build: the watcher events are not trusted alone.
+      revalidateSessions(state);
+    },
+
     transform(code, id) {
       const extension = moduleExtension(id);
       if (extension === '.mts' || extension === '.cts') {
@@ -122,8 +171,13 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       }
       if (extension !== '.ts' && extension !== '.tsx') return undefined;
       if (devtoolsActive()) forgetDevtoolsFile(id);
+      const environment = environmentName(this);
+      trackSourceText(state, process.cwd(), programFileName(id), code, environment);
+      // A file that stops matching leaves the check: a text kept from an earlier build of a watch would be judged.
       if (hasNeoSyringeMarkers(code) || textCallsResolve(code)) {
-        sourceTexts.set(programFileName(id), code);
+        textsOf(environment).set(programFileName(id), code);
+      } else {
+        textsOf(environment).delete(programFileName(id));
       }
       if (!hasNeoSyringeMarkers(code)) return;
 
@@ -148,6 +202,12 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
         devtools: devtoolsActive(),
         state,
         errorPrefix: '[neosyringe-plugin]',
+        environment,
+        warn: (message) => {
+          const host = this as { warn?: (message: string) => void } | undefined;
+          if (typeof host?.warn === 'function') host.warn(message);
+          else console.warn(message);
+        },
       });
       if (output.code === code && output.map == null) return undefined;
       return output;
@@ -161,16 +221,27 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
       let warnings: string[] = [];
       let analysisErrors: AnalysisError[] = [];
       try {
-        const report = usageErrorsAtBuildEnd(sourceTexts, state, options?.validation ?? 'strict');
-        errors = report.errors;
-        warnings = report.warnings;
-        analysisErrors = report.analysisErrors;
+        // Each environment is checked on its own session and its own texts. The same finding is reported once.
+        const seen = new Set<string>();
+        for (const [name, texts] of sourceTexts) {
+          const report = usageErrorsAtBuildEnd(texts, state, options?.validation ?? 'strict', name === '' ? undefined : name);
+          for (const text of report.errors) if (!errors.includes(text)) errors.push(text);
+          for (const text of report.warnings) if (!warnings.includes(text)) warnings.push(text);
+          for (const error of report.analysisErrors) {
+            const key = `${error.code ?? error.type}\0${error.sourceFile.fileName}\0${error.node.getStart(error.sourceFile)}\0${error.message}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            analysisErrors.push(error);
+          }
+        }
       } finally {
         releaseGraphCache(state);
         state.registeredTokens.clear();
         state.usedTokens.clear();
         state.generatedContainerVars.clear();
-        sourceTexts.clear();
+        // A build that is not a watch build is over once buildEnd has run: webpack and esbuild have no
+        // closeBundle, so the session would otherwise live as long as the process.
+        if (!watching) closeSession('keep');
       }
 
       const host = this as { warn?: (message: string) => void } | undefined;
@@ -193,29 +264,40 @@ export const neoSyringePlugin = createUnplugin((options: NeoSyringePluginOptions
     },
 
     watchChange(id, change) {
+      watching = true;
       if (change.event === 'delete') {
         forgetDevtoolsFile(id);
         releaseGraphCache(state);
         // bind drops this file's keys. The published class has no public release yet.
         state.collisions?.bind(programFileName(id));
+        for (const texts of sourceTexts.values()) texts.delete(programFileName(id));
       }
+      applyWatchChange(state, normalizeModuleId(id), change.event, process.cwd(), project);
     },
 
     rollup: {
       closeBundle() {
-        if (!this.meta.watchMode) clearCollisions();
+        if (!this.meta.watchMode) {
+          clearCollisions();
+          closeSession('keep');
+        }
       },
       closeWatcher() {
         clearCollisions();
+        closeSession('free');
       },
     },
 
     vite: {
       closeBundle() {
-        if (!this.meta.watchMode) clearCollisions();
+        if (!this.meta.watchMode) {
+          clearCollisions();
+          closeSession('keep');
+        }
       },
       closeWatcher() {
         clearCollisions();
+        closeSession('free');
       },
       configureServer(server) {
         if (process.env.NODE_ENV === 'production') return;

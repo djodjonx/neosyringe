@@ -26,6 +26,7 @@
     "verdaccio:invalidate": "bash scripts/verdaccio/invalidate.sh",
     "examples:update": "node scripts/update-examples.mjs",
     "bench:compile": "node tests/bench/compile-cost.mjs",
+    "bench:g04": "node --expose-gc tests/bench/g04-soak.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
