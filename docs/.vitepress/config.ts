@@ -104,6 +104,7 @@ export default withMermaid(defineConfig({
             { text: 'Async Factories', link: '/guide/async-factories' },
             { text: 'From Open to Closed', link: '/guide/closed-mode' },
             { text: 'Profiles and Capabilities', link: '/guide/profiles' },
+            { text: 'Observability', link: '/guide/observability' },
             { text: 'Disposable Services', link: '/guide/disposable' },
             { text: 'How It Works', link: '/guide/generated-code' },
           ]

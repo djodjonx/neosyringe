@@ -87,7 +87,7 @@ interface FactoryContext {
 }
 ```
 
-A function that receives a limited context and returns an instance, or a promise of it. The context has `resolve`, `resolveAll`, `resolveMany` and `signal` only. It is not the container. `signal` aborts when the initialization the factory runs for is cancelled or the container is destroyed, and never aborts for a factory called outside an initialization. That signal is shared by every such call, so a listener added to it is never called and never removed: do not add one per call (`packages/neosyringe/src/types.ts:229`). Declare what it may resolve in `dependencies` (`packages/neosyringe/src/types.ts:221` and `:244`).
+A function that receives a limited context and returns an instance, or a promise of it. The context has `resolve`, `resolveAll`, `resolveMany` and `signal` only. It is not the container. `signal` aborts when the initialization the factory runs for is cancelled or the container is destroyed, and never aborts for a factory called outside an initialization. That signal is shared by every such call, so a listener added to it is never called and never removed: do not add one per call (`packages/neosyringe/src/types.ts:305`). Declare what it may resolve in `dependencies` (`packages/neosyringe/src/types.ts:297` and `:320`).
 
 <<< @/../examples/new-api/factories.ts#typed-factory
 
@@ -112,7 +112,7 @@ interface Injection<T = any> {
 }
 ```
 
-A single injection definition (`packages/neosyringe/src/types.ts:443`):
+A single injection definition (`packages/neosyringe/src/types.ts:519`):
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -136,7 +136,7 @@ type Alias<T extends Token<unknown>, U extends Token<unknown>> = {
 } & ([ValueOf<U>] extends [ValueOf<T>] ? unknown : never);
 ```
 
-The shape of an alias registration, and the check the `injections` list applies to every `useExisting` (`packages/neosyringe/src/types.ts:401`, `packages/neosyringe/src/types.ts:508`). The pair is valid when the value of the target is assignable to the value of the token: a class instance, the `T` of `useInterface<T>()`. A subtype is accepted, a wrong type is a type error on the registration, and `Alias<typeof Service, typeof Other>` is `never` when `Other` has not the value of `Service`. The build checks the same relation with the checker, because the structure of two interfaces does not tell them apart at run time.
+The shape of an alias registration, and the check the `injections` list applies to every `useExisting` (`packages/neosyringe/src/types.ts:477`, `packages/neosyringe/src/types.ts:584`). The pair is valid when the value of the target is assignable to the value of the token: a class instance, the `T` of `useInterface<T>()`. A subtype is accepted, a wrong type is a type error on the registration, and `Alias<typeof Service, typeof Other>` is `never` when `Other` has not the value of `Service`. The build checks the same relation with the checker, because the structure of two interfaces does not tell them apart at run time.
 
 ## PartialConfig
 
@@ -190,7 +190,7 @@ Main configuration for a container:
 
 ## CoreContainer and Container
 
-Two profiles, two types (`packages/neosyringe/src/types.ts:57` and `:120`):
+Two profiles, two types (`packages/neosyringe/src/types.ts:119` and `:196`):
 
 ```typescript
 interface CoreContainer {
@@ -200,6 +200,9 @@ interface CoreContainer {
   initialize(options?: InitializeOptions): Promise<void>;
   destroy(): Promise<void>;
   createScope(): this;
+  // Present only in a build with the `observation` option, hence optional here.
+  observe?(sink: ObservationSink, options?: ObserveOptions): () => void;
+  stateSnapshot?(): ObservationSnapshot;
 }
 
 interface Container extends CoreContainer {
@@ -222,13 +225,14 @@ type ContainerFor<C> = C extends { runtime: { profile: 'minimal' } } ? CoreConta
 | `resolve` | One instance. Throws `NEO_NOT_INITIALIZED` before `initialize()` when the graph has async work. |
 | `resolveAll` | A new array with every `multi: true` contribution. |
 | `resolveMany` | The values of several tokens as a tuple, in the order of the tokens, resolved one by one like `resolve`. The first error stops the batch. |
-| `initialize` | Brings async singletons to ready. Immediate when there is nothing to start. `initialize({ signal })` can be cancelled (`packages/neosyringe/src/types.ts:101`), see [InitializeOptions](#initializeoptions-and-abortsignallike). |
+| `initialize` | Brings async singletons to ready. Immediate when there is nothing to start. `initialize({ signal })` can be cancelled (`packages/neosyringe/src/types.ts:163`), see [InitializeOptions](#initializeoptions-and-abortsignallike). |
 | `destroy` | Final and idempotent. Closes the singletons this container owns. |
 | `[Symbol.asyncDispose]` | Calls `destroy()`, so a container and a scope are `await using` resources. Typed only when the consumer's lib declares `Symbol.asyncDispose` (`AsyncDisposalMembers`, `packages/neosyringe/src/types.ts:21-23`); it is on `CoreContainer`, `Container`, `ContainerTemplate` and every scope. See [Disposable Services](/guide/disposable#await-using). |
 | `createScope` | A new container with empty caches and the same parents. |
 | `override`, `clearOverrides` | Full profile, `testOverrides: true` builds only. Awaited. Reset all caches. |
-| `overrideMany` | Full profile, `testOverrides: true` builds only. Awaited. The whole batch is checked first, then one transition (one cleanup pass) installs every mock. A refused batch changes nothing. Refusals: `NEO_OVERRIDE_DUPLICATE`, `NEO_OVERRIDE_INVALID`, `NEO_OVERRIDE_MULTI_UNSUPPORTED`, `NEO_CONTAINER_BUSY`, `NEO_CONTAINER_DESTROYED`, `NEO_CONTAINER_FAILED`, `NEO_TEST_API_DISABLED`. A factory that returns another type than its token is a compile error (`OverrideGuard`, `packages/neosyringe/src/types.ts:207`). |
+| `overrideMany` | Full profile, `testOverrides: true` builds only. Awaited. The whole batch is checked first, then one transition (one cleanup pass) installs every mock. A refused batch changes nothing. Refusals: `NEO_OVERRIDE_DUPLICATE`, `NEO_OVERRIDE_INVALID`, `NEO_OVERRIDE_MULTI_UNSUPPORTED`, `NEO_CONTAINER_BUSY`, `NEO_CONTAINER_DESTROYED`, `NEO_CONTAINER_FAILED`, `NEO_TEST_API_DISABLED`. A factory that returns another type than its token is a compile error (`OverrideGuard`, `packages/neosyringe/src/types.ts:283`). |
 | `on` | Full profile. Fires on every successful single `resolve`. Returns an unsubscribe function. |
+| `observe`, `stateSnapshot` | Both profiles, `observation: true` builds only: `undefined` in any other build, so both are optional on the type (`packages/neosyringe/src/types.ts:184` and `:190`). See [Observation events and the state snapshot](#observation-events-and-the-state-snapshot). |
 
 See [States, Scopes and Ownership](/guide/states-and-ownership) and [Profiles](/guide/profiles).
 
@@ -251,9 +255,52 @@ interface InitializeOptions {
 
 `InitializeOptions` has one optional member (`packages/neosyringe/src/types.ts:41`, `packages/neosyringe/src/types.ts:50`). What `signal` does, how a join behaves and which error a cancelled initialization ends with are in [Async Factories](/guide/async-factories#cancelling-an-initialization).
 
+## Observation events and the state snapshot
+
+```typescript
+interface ObservationEvent {
+  readonly containerId: string;
+  readonly scopeId: string;
+  readonly registrationId: string;
+  readonly phase: 'construct' | 'initialize' | 'dispose';
+  readonly kind: 'start' | 'end';
+  readonly outcome?: 'ok' | 'error';     // an end only
+  readonly durationMs?: number;          // an end only, never negative; absent if the clock failed at the end
+  readonly errorCode?: string;           // an error end only, and only a NEO_* code
+}
+
+type ObservationSink = (event: Readonly<ObservationEvent>) => unknown;
+
+interface ObserveOptions {
+  readonly now?: () => number;           // a monotonic clock in milliseconds
+}
+
+interface ObservationSnapshot {
+  readonly state: 'created' | 'initializing' | 'cancelling' | 'reconfiguring' | 'ready' | 'failed' | 'destroying' | 'destroyed';
+  readonly constructs: number;
+  readonly initializes: number;
+  readonly disposes: number;
+  readonly failures: number;
+  readonly cancellations: number;
+  readonly inFlight: Readonly<{ construct: number; initialize: number; dispose: number }>;
+  readonly activeScopes: number;
+}
+
+interface ObservationChannel {
+  publish(message: unknown): void;
+  readonly hasSubscribers?: boolean;
+}
+
+function observationChannel(channel: ObservationChannel): ObservationSink;
+```
+
+The types are at `packages/neosyringe/src/types.ts:58` (`ObservationEvent`), `:86` (`ObservationSink`), `:89` (`ObserveOptions`) and `:98` (`ObservationSnapshot`); the adapter and its channel type are at `packages/neosyringe/src/observation.ts:23` and `:8`. Every field is a scalar: an event holds no service, token object, error message or stack. What each field means, when events are published and what the counters count are in [Observability](/guide/observability).
+
+`observationChannel` takes anything with `publish(message)`, a Node `diagnostics_channel` channel included. The package imports nothing from Node, so the types need no `@types/node` (`tests/consumer-types/positive-nodom/observation.ts`). A sink that is not a function, a clock that is not a function, a channel with no `publish`, and an event field that does not exist (`event.value`, `event.message`) are compile errors (`tests/consumer-types/negative/observation.ts`). The minimal profile has `observe` and `stateSnapshot` and still has no `on` and no `override` (`tests/consumer-types/negative/observation.ts`).
+
 ## ContainerTemplate and BoundContainer
 
-A builder with a literal, non-empty `scopeInputs` is the model of its scopes, not a container that resolves (`ContainerFor`, `packages/neosyringe/src/types.ts:331`). An empty list is no input: the builder is a `Container` or a `CoreContainer` as before (`packages/neosyringe/src/types.ts:320`).
+A builder with a literal, non-empty `scopeInputs` is the model of its scopes, not a container that resolves (`ContainerFor`, `packages/neosyringe/src/types.ts:407`). An empty list is no input: the builder is a `Container` or a `CoreContainer` as before (`packages/neosyringe/src/types.ts:396`).
 
 ```typescript
 type Profile = 'full' | 'minimal';
@@ -268,7 +315,7 @@ type BoundContainer<I extends readonly InputToken[] = readonly [], P extends Pro
   BoundCore<I, P> & (P extends 'full' ? FullMembers : unknown);
 ```
 
-`Profile`, `ContainerTemplate` and `BoundContainer` are at `packages/neosyringe/src/types.ts:284`, `:313` and `:305`. `BoundCore` and `FullMembers` (`packages/neosyringe/src/types.ts:293` and `:287`) are not exported: they only name what the two profiles share.
+`Profile`, `ContainerTemplate` and `BoundContainer` are at `packages/neosyringe/src/types.ts:360`, `:389` and `:381`. `BoundCore` and `FullMembers` (`packages/neosyringe/src/types.ts:369` and `:363`) are not exported: they only name what the two profiles share.
 
 ```typescript
 const requests = defineBuilderConfig({
@@ -285,13 +332,13 @@ scope.resolve(requestToken);    // the object you gave, not a copy
 requests.resolve(requestToken); // does not compile: the template has no resolve
 ```
 
-- **Every input, once.** With a list written inline, a missing, an extra or a wrong-type value does not compile, and neither does a union of pairs one of which is incoherent (`InputGuard` checks each pair as a unit, `packages/neosyringe/src/types.ts:182` and `:191`). A widened `readonly` array is checked pair by pair only: a pair that names a token with the wrong value type does not compile, but the checker does not count the entries, so a missing or a repeated entry compiles and is refused at run time with `NEO_SCOPE_INPUT_MISSING` or `NEO_SCOPE_INPUT_DUPLICATE`.
+- **Every input, once.** With a list written inline, a missing, an extra or a wrong-type value does not compile, and neither does a union of pairs one of which is incoherent (`InputGuard` checks each pair as a unit, `packages/neosyringe/src/types.ts:258` and `:267`). A widened `readonly` array is checked pair by pair only: a pair that names a token with the wrong value type does not compile, but the checker does not count the entries, so a missing or a repeated entry compiles and is refused at run time with `NEO_SCOPE_INPUT_MISSING` or `NEO_SCOPE_INPUT_DUPLICATE`.
 - **The checker cannot see identity.** Two interfaces with the same members have the same token type for the checker. Giving one for the other compiles; `createScope` refuses it at run time with `NEO_SCOPE_INPUT_MISSING` or `NEO_SCOPE_INPUT_UNKNOWN`. A token given twice is `NEO_SCOPE_INPUT_DUPLICATE` at run time too. See [errors](./errors.md#thrown-at-run-time-by-the-generated-container).
-- **The list is a literal.** A `scopeInputs` the checker cannot count (`readonly InputToken[]`, or an optional member) is rejected, like a profile that is not a literal (`packages/neosyringe/src/types.ts:377`). A class token is not an `InputToken`.
-- **No partial.** `scopeInputs` is not a member of `PartialConfig` (`packages/neosyringe/src/types.ts:530`): `definePartialConfig({ scopeInputs })` is a type error (TS2353), and the build says `NEO_CONFIG_UNSUPPORTED` if it is reached from untyped code. A builder that extends a partial declares the inputs itself, and a partial that needs one lists it in `expects`.
-- **Not a parent.** `useContainer` takes a `CoreContainer` or a plain record (`packages/neosyringe/src/types.ts:582`). A template or a bound scope is neither, so it is refused as a parent.
+- **The list is a literal.** A `scopeInputs` the checker cannot count (`readonly InputToken[]`, or an optional member) is rejected, like a profile that is not a literal (`packages/neosyringe/src/types.ts:453`). A class token is not an `InputToken`.
+- **No partial.** `scopeInputs` is not a member of `PartialConfig` (`packages/neosyringe/src/types.ts:606`): `definePartialConfig({ scopeInputs })` is a type error (TS2353), and the build says `NEO_CONFIG_UNSUPPORTED` if it is reached from untyped code. A builder that extends a partial declares the inputs itself, and a partial that needs one lists it in `expects`.
+- **Not a parent.** `useContainer` takes a `CoreContainer` or a plain record (`packages/neosyringe/src/types.ts:658`). A template or a bound scope is neither, so it is refused as a parent.
 - **The model, untyped.** Called from JavaScript, the model's `resolve`, `resolveAll`, `resolveMany` and `initialize` throw `NEO_SCOPE_INPUTS_UNBOUND`. On the program the plugin rewrites, the exported container is typed by the generated class, which does have those members: the typed contract holds on the source program, and the run-time refusal holds everywhere.
-- **Values are borrowed.** `destroy()` of a scope disposes the singletons the scope owns, never a value it was given: an input is a borrowed `value` (`packages/core/src/generator/ResolveEmitter.ts:54` to `:54`) and has no disposal slot (`packages/core/src/generator/LifecycleEmitter.ts:834` to `:838`). See [states and ownership](/guide/states-and-ownership#scope-inputs).
+- **Values are borrowed.** `destroy()` of a scope disposes the singletons the scope owns, never a value it was given: an input is a borrowed `value` (`packages/core/src/generator/ResolveEmitter.ts:54` to `:54`) and has no disposal slot (`packages/core/src/generator/LifecycleEmitter.ts:897` to `:901`). See [states and ownership](/guide/states-and-ownership#scope-inputs).
 
 ### resolve\<T\>(token: Token\<T\>): T
 
