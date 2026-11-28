@@ -631,8 +631,8 @@ describe.skipIf(typeof Symbol.asyncDispose !== 'symbol')('T21-P12 D4 await using
 });
 
 describe('T21-P13 D6 only a slot that may hold a symbol disposer carries the selector', () => {
-  it('T21-P13 a symbol-only class gets _neoDisposer, a dispose()-typed class keeps its direct call and names no symbol', () => {
-    for (const cell of MATRIX) {
+  for (const cell of MATRIX) {
+    it(`T21-P13 ${label(cell)}: a symbol-only class gets _neoDisposer, a dispose()-typed class keeps its direct call and names no symbol`, () => {
       const symbolOnly = buildCell(cell, { declarations: 'export class Sym { [Symbol.dispose](): void {} }', injections: '{ token: Sym },', roots: '[Sym]' });
       const legacyOnly = buildCell(cell, { declarations: 'export class Old { dispose(): void {} }', injections: '{ token: Old },', roots: '[Old]' });
       expect(symbolOnly.generated.join('\n'), `${label(cell)} symbol-only`).toContain('_neoDisposer');
@@ -640,8 +640,8 @@ describe('T21-P13 D6 only a slot that may hold a symbol disposer carries the sel
       expect(legacy, `${label(cell)} dispose-only calls dispose directly`).toContain('__neoInst.dispose();');
       expect(legacy, `${label(cell)} dispose-only has no selector`).not.toContain('_neoDisposer');
       expect(legacy, `${label(cell)} dispose-only reads no symbol`).not.toMatch(/Symbol\.(dispose|for)/);
-    }
-  });
+    });
+  }
 });
 
 /**
