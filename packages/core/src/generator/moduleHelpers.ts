@@ -42,7 +42,8 @@ export interface HelperRefs {
   readonly formatToken: string;
   /**
    * What follows the `read` argument of a lease call: nothing for the lease of the class, which reads the signal of its host
-   * itself; for the lease of the module, the reader `() => this._neoSignal()`, written where the private member is reachable.
+   * itself; for the lease of the module, the member `this._neoSignal`, written where the private member is reachable. It is
+   * the method, not a function that calls it: a call makes no closure.
    */
   readonly leaseSignal: string;
 }
@@ -122,7 +123,7 @@ export class ModuleHelpers {
       policyOf: this.nameOf('factoryPolicy'),
       policyType: this.aliases.policy,
       formatToken: this.nameOf('formatToken'),
-      leaseSignal: ', () => this._neoSignal()',
+      leaseSignal: ', this._neoSignal',
     };
   }
 

@@ -145,9 +145,11 @@ function leaseHelper(className: string, names: ManyNames): string {
 
 /**
  * The lease as a function of the module (shared form). It is generic in the host: the read member and the host are typed
- * against each other at the call. The one thing it needs of the host, the signal of the initialization, comes as a reader
- * the call site gives it from inside the class (`() => this._neoSignal()`, see {@link emitLeaseOpen}), where the private
- * member is reachable: the function needs no assertion on the host.
+ * against each other at the call. The one thing it needs of the host, the signal of the initialization, comes as a method
+ * the call site hands it from inside the class (`this._neoSignal`, see {@link emitLeaseOpen}), where the private member is
+ * reachable, and the lease calls it on the host: the function needs no assertion on the host. The call site writes the member
+ * itself, never an arrow function around it: a function made for each call added about 157 ns to the 219 ns of an
+ * `initialize()` that makes one factory call (docs/benchmarks/stage-f-compile-overhead.md, "Round 6").
  */
 export function leaseFunction(name: string, contextClass: string, form: LeaseForm): string {
   return leaseText(
@@ -156,10 +158,10 @@ export function leaseFunction(name: string, contextClass: string, form: LeaseFor
     label: string,
     host: H,
     read: (host: H, token: unknown, all: boolean) => unknown,
-    hostSignal: () => ${form.signal},
+    hostSignal: (this: H) => ${form.signal},
   )`,
     form,
-    'hostSignal()',
+    'hostSignal.call(host)',
     contextClass,
   );
 }
