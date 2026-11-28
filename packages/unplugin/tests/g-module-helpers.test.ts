@@ -142,7 +142,7 @@ interface Loaded {
 }
 
 /** Runs the transformed module with a probe the test owns: the factories report their signal and wait on gates the test opens. */
-function load(code: string): Loaded {
+function load(code: string, leases?: unknown[][]): Loaded {
   const js = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const seen = new Map<string, unknown>();
   const pending = new Map<string, { promise: Promise<void>; open: () => void }>();
@@ -171,6 +171,9 @@ function load(code: string): Loaded {
     },
     gate(name: string): Promise<void> {
       return gateOf(name).promise;
+    },
+    lease(args: unknown[]): void {
+      leases?.push(args);
     },
   };
   const record: { exports: Record<string, unknown> } = { exports: {} };
@@ -345,6 +348,43 @@ describe('G two containers of one file share text and no state (P2, P3)', () => 
         await call(boxA, 'destroy');
         await call(boxB, 'destroy');
       }
+    });
+  }
+});
+
+/**
+ * The module with its lease wrapped by a function that records the arguments of every call and then runs the lease itself:
+ * the factories, the policy, the context class and the signal are the real ones.
+ */
+function withRecordedLeases(code: string): string {
+  const head = /function __neoSharedLease<H>\(/;
+  if (!head.test(code)) throw new Error('the module has no shared lease');
+  return `${code.replace(head, 'function __neoSharedLeaseReal<H>(')}
+function __neoSharedLease(...args) { probe.lease(args); return __neoSharedLeaseReal(...args); }
+`;
+}
+
+describe('G a call of the shared lease allocates nothing to read the signal (P10)', () => {
+  for (const cell of CELLS) {
+    it(`P10 every lease call of a class hands the lease the same signal reader, never a function made for that call (${label(cell)})`, async () => {
+      const leases: unknown[][] = [];
+      const loaded = load(withRecordedLeases(transformed(source(cell))), leases);
+      for (const name of ['boxA', 'boxB']) {
+        const box = boxOf(loaded, name);
+        try {
+          loaded.gates.openAll();
+          await call(box, 'initialize');
+          for (let index = 0; index < 3; index += 1) call(box, 'resolve', loaded.exports.tT);
+        } finally {
+          await call(box, 'destroy');
+        }
+      }
+      // two containers: the declared factory of `tC`, of `tX` and three transient `tT` each
+      expect(leases).toHaveLength(10);
+      const readers = new Set(leases.map((args) => args[4]));
+      for (const reader of readers) expect(typeof reader).toBe('function');
+      // one reader per class (the two containers are two classes), not one per call
+      expect(readers.size).toBeLessThanOrEqual(2);
     });
   }
 });
