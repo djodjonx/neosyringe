@@ -245,3 +245,27 @@ Chaque passe transforme les 100 fichiers du projet (`tests/bench/compile-cost.mj
 - `pnpm test:e2e` : la porte de l'orchestrateur du round 2 l'a lancé (297 tests verts, snapshots inchangés ; pas de numéro de run cité) ; ce round ne l'a pas relancé (pas de `pnpm build` : le `dist` est celui du round 2).
 - Les références de projets ne sont pas suivies. Le workspace-consumer est à l'étage H.
 - La reprise des `SourceFile` du projet entre deux builds d'esbuild (105 fichiers reparsés par rebuild) n'est pas faite : elle demande de garder la session après `buildEnd` hors watch, ce que le plugin ne fait pas (`packages/unplugin/src/index.ts:244`).
+## Orchestrator's compile run, size 100 (base `60cdc30` against `2a64e2d`)
+
+Run alone on the machine with `NEOSYRINGE_BENCH_SIZES=100 node tests/bench/compile-cost.mjs` in a built checkout of `60cdc30`, then in the candidate tree at `2a64e2d` (the compile path is the same at `50ff410`: round 6 of stage F changes one emitted argument). Node v22.23.2, TypeScript 5.9.3, Apple M4 Max x16, 5 repetitions after 1 warm-up, medians. Load averages (1, 5, 15 min): 2.54 2.57 3.14 at the start, 2.30 2.50 3.08 at the end. `rss` is the peak of the process that runs every cell, in MiB (not a per-cell figure).
+
+| size 100: shape profile mode tool | first_ms | leaf_ms | rss (MiB) |
+| --- | --- | --- | --- |
+| diamond full closed transformer | 105.8 → 105.4 | 109.1 → 102.1 | 598 → 494 |
+| diamond full closed unplugin | 132.0 → 88.7 | 118.5 → 71.2 | 581 → 494 |
+| diamond full open transformer | 100.0 → 95.5 | 101.1 → 96.2 | 544 → 493 |
+| diamond full open unplugin | 127.4 → 83.1 | 114.1 → 66.6 | 544 → 492 |
+| diamond minimal closed transformer | 96.7 → 91.2 | 93.9 → 90.1 | 621 → 524 |
+| diamond minimal closed unplugin | 128.4 → 87.2 | 115.6 → 71.3 | 621 → 524 |
+| diamond minimal open transformer | 89.5 → 84.6 | 89.2 → 85.8 | 621 → 524 |
+| diamond minimal open unplugin | 123.6 → 82.1 | 114.4 → 66.0 | 621 → 524 |
+| linear full closed transformer | 79.7 → 80.0 | 79.7 → 78.0 | 539 → 456 |
+| linear full closed unplugin | 99.3 → 63.4 | 84.9 → 49.5 | 486 → 456 |
+| linear full open transformer | 82.2 → 80.8 | 79.2 → 77.0 | 431 → 450 |
+| linear full open unplugin | 114.8 → 74.1 | 98.8 → 56.4 | 339 → 236 |
+| linear minimal closed transformer | 69.4 → 66.4 | 68.6 → 66.7 | 542 → 492 |
+| linear minimal closed unplugin | 84.8 → 56.0 | 74.9 → 42.4 | 541 → 491 |
+| linear minimal open transformer | 63.7 → 62.6 | 63.3 → 61.2 | 540 → 491 |
+| linear minimal open unplugin | 85.6 → 54.8 | 74.2 → 41.0 | 540 → 458 |
+
+The plugin (`unplugin`) is 0.55 to 0.68 of the base on every cell (one Program over the roots instead of one per transform). The ts-patch transformer (`transformer`), which does not run the session, stays at 0.94 to 1.00. This fixture has one container per project; the large-tsconfig cost measured above (`bigroots`) still holds for a project with many roots and a small closure.

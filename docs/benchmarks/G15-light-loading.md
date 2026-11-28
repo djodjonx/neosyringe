@@ -80,22 +80,24 @@ Published files, candidate, scratch build (raw / gzip 9, bytes):
 
 In the candidate, `packages/ui/dist/index.mjs` imports `./serialize.mjs` (`import { serializeGraph, serializeGraphWithErrors } from "./serialize.mjs"`), so the root entry carries the serializers once.
 
-### To fill in by the orchestrator (base against candidate)
+### Base against candidate (orchestrator's run)
 
-Replace every `TODO` with the figure from the real build of each side. Same machine, same Node, same `--runs`, `uptime` before and after.
+Run by the orchestrator, alone on the machine: `node scripts/measure-cold-import.mjs --root <checkout of 60cdc30, built> --runs 15 --json`, then the same command on the candidate tree at `2a64e2d` (built). Node v22.23.2, Darwin 27.2.0, Apple M4 Max x16. Load averages (1, 5, 15 min): 2.30 2.50 3.08 before the base, 2.18 2.47 3.06 after the candidate.
 
-| What | Base `60cdc30` | Candidate (real build) |
+| What | Base `60cdc30` | Candidate `2a64e2d` |
 | --- | --- | --- |
-| A: import, median / min / p90 (ms) | TODO | TODO |
-| B: import, median / min / p90 (ms) | TODO | TODO |
-| B: `configureServer`, median (ms) | TODO | TODO |
-| RSS after import, median (MB), A | TODO | TODO |
-| Files of `packages/` loaded, count / bytes | TODO | TODO |
-| Loaded files that hold `buildStandaloneHtml` | TODO | TODO |
-| `packages/ui/dist/index.mjs` raw / gzip | TODO | TODO |
-| `packages/ui/dist/serialize.mjs` raw / gzip | absent | TODO |
-| `packages/unplugin/dist/index.mjs` raw / gzip | TODO | TODO |
-| `packages/unplugin/dist/devtools-*.mjs` raw / gzip | absent | TODO |
+| A: import, median / min / p90 (ms) | 164.0 / 159.2 / 166.0 | 163.0 / 156.6 / 166.6 |
+| B: import, median / min / p90 (ms) | 161.5 / 159.4 / 165.7 | 164.8 / 158.3 / 167.2 |
+| B: `configureServer`, median (ms) | 0.17 | 0.60 |
+| RSS after import, median (MB), A | 114.2 | 115.1 |
+| Files of `packages/` loaded, count / bytes | 8 / 633,561 | 8 / 657,789 |
+| Loaded files that hold `buildStandaloneHtml` | `packages/ui/dist/index.mjs`, `packages/unplugin/dist/index.mjs` | none |
+| `packages/ui/dist/index.mjs` raw / gzip | 27,749 / 8,697 | 23,820 / 7,574 |
+| `packages/ui/dist/serialize.mjs` raw / gzip | absent | 4,058 / 1,393 |
+| `packages/unplugin/dist/index.mjs` raw / gzip | 6,256 / 2,334 | 9,368 / 3,330 |
+| `packages/unplugin/dist/devtools-*.mjs` raw / gzip | absent | 891 / 463 |
+
+The import time does not move (within the spread of 15 runs). The renderer is no longer on the cold path. The loaded bytes grow by 24,228: the candidate also carries the incremental session of topic 04 and the actionable diagnostics of topic 07 in the core and plugin files it loads, so this column does not isolate topic 15. `configureServer` with devtools on now awaits the lazy chunk (0.60 ms against 0.17 ms).
 
 ## Reading
 
@@ -107,9 +109,6 @@ What the candidate numbers show without a base:
 
 ## Recommendation
 
-Pending the base `60cdc30` against candidate table above. The structural claim stands now. The byte and time claims wait for that table.
-
-- Structural, measured on the candidate: the import loads no module that holds the renderer (table above, last row of the candidate column). The tests in the Tests table guard it in ESM and CJS.
-- Bytes and time: no figure here. They come only from the base `60cdc30` against candidate table. Do not claim a gain in import time or in loaded bytes until that table is filled and shows one.
+Adopted for the structural reason only. The base against candidate table shows no gain in import time (164.0 against 163.0 ms, within the spread) and no gain in loaded bytes on this tree (the column also carries topics 04 and 07). What the change buys is measured and tested: the cold path of the plugin loads no module that holds the HTML renderer (ESM and CJS tests in the Tests table), the light entry is 4,058 bytes raw against 23,820 for the root entry, and the devtools code sits in its own chunk loaded only when devtools are active. Do not claim a time or size gain for applications from this measure.
 
 Costs of the change: `configureServer` is now asynchronous (Vite awaits it), one more published file group, and a second UI export to keep in step with the root entry.
