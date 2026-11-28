@@ -6,29 +6,37 @@ A generated container comes in two profiles. The profile is chosen in the config
 
 | Profile | Type | Methods |
 |---------|------|---------|
-| `full` (default) | `Container` | `resolve`, `resolveAll`, `initialize`, `destroy`, `createScope`, `override`, `clearOverrides`, `on` |
-| `minimal` (opt-in) | `CoreContainer` | `resolve`, `resolveAll`, `initialize`, `destroy`, `createScope` |
+| `full` (default) | `Container` | `resolve`, `resolveAll`, `resolveMany`, `initialize`, `destroy`, `createScope`, `override`, `overrideMany`, `clearOverrides`, `on` |
+| `minimal` (opt-in) | `CoreContainer` | `resolve`, `resolveAll`, `resolveMany`, `initialize`, `destroy`, `createScope` |
 
-Types: `CoreContainer` at `packages/neosyringe/src/types.ts:18`, `Container` at `packages/neosyringe/src/types.ts:53`, `ContainerFor` at `packages/neosyringe/src/types.ts:135`.
+Types: `CoreContainer` at `packages/neosyringe/src/types.ts:119`, `Container` at `packages/neosyringe/src/types.ts:196`, `ContainerFor` at `packages/neosyringe/src/types.ts:407`.
 
 <<< @/../examples/new-api/profiles.ts#profiles
 
 - Minimal drops the test overrides and the `resolve` event. It does not drop resource handling: `initialize`, `destroy` and the isolation of scopes stay.
-- `override` and `on` are **absent from the minimal type**: `minimal.override(...)` does not compile (`Property 'override' does not exist on type 'CoreContainer'`), and at run time `override` is `undefined`. Both are checked in `tests/e2e/t20-docs-examples.test.ts`.
+- `override`, `overrideMany` and `on` are **absent from the minimal type**: `minimal.override(...)` does not compile (`Property 'override' does not exist on type 'CoreContainer'`), and at run time `override` is `undefined`. The absence of `override` and `on` is checked in `tests/e2e/t20-docs-examples.test.ts`. The absence of `overrideMany` is checked in `tests/consumer-types/negative/override-many.ts` (type) and by E16-P6b in `packages/core/tests/generator/e16-override-many-runtime.test.ts` (run time).
 - `createScope()` returns the same profile (`this`).
 - Pick `full` when you need events or overrides.
+
+### With scope inputs
+
+A builder with `scopeInputs` returns a `ContainerTemplate` of its profile, and each scope is a `BoundContainer` of that profile: `full` has `override`, `overrideMany`, `clearOverrides` and `on` on the scope, `minimal` has the `CoreContainer` members only (`packages/neosyringe/src/types.ts:381`). The template has `createScope` and `destroy` in both. See [ContainerTemplate and BoundContainer](/api/types#containertemplate-and-boundcontainer).
 
 ### The profile must be a literal
 
 `runtime: { profile: 'minimal' }` is read by the build and by the type. If the profile is not a literal the build can decide (a variable, a call), the build fails with `NEO_CONFIG_UNSUPPORTED` instead of guessing.
 
+## Observation
+
+A build with the `observation` option gives both profiles the same two members, `observe()` and `stateSnapshot()`. The minimal profile gets these two and nothing else of the full profile: it still has no `on('resolve')`, no `override` and no `overrideMany`. The full profile keeps `on('resolve')` as it was, and the resolve event is not changed by the observation (`packages/core/tests/generator/f22-observation-runtime.test.ts`, the `O9` tests). The members are `undefined` in a build without the option, so the types declare them optional. See [Observability](/guide/observability).
+
 ## Test overrides
 
-`override` and `clearOverrides` exist in the type of the full profile, but they work only if the build enabled them:
+`override`, `overrideMany` and `clearOverrides` exist in the type of the full profile, but they work only if the build enabled them:
 
 | Plugin option | Effect |
 |---------------|--------|
-| `testOverrides` omitted or `false` | `override()` and `clearOverrides()` reject with `NEO_TEST_API_DISABLED`. |
+| `testOverrides` omitted or `false` | `override()`, `overrideMany()` and `clearOverrides()` reject with `NEO_TEST_API_DISABLED`. |
 | `testOverrides: true` | They work. |
 | `testOverrides: true` and `NODE_ENV=production` | The build refuses (`packages/core/src/generator/DebugConfig.ts:35`). |
 
@@ -43,6 +51,10 @@ await container.clearOverrides();
 ```
 
 Every override and every `clearOverrides()` resets all caches of that container. Objects you resolved before keep pointing at the old dependencies: drop them. The mock is borrowed and is never disposed by the container. `override` of a `multi` token rejects with `NEO_OVERRIDE_MULTI_UNSUPPORTED`.
+
+`overrideMany([[tokenA, factoryA], [tokenB, factoryB]])` replaces several tokens in one transition. The whole batch is checked first: a token twice (`NEO_OVERRIDE_DUPLICATE`), a factory that is not a function (`NEO_OVERRIDE_INVALID`) or a `multi` token refuses it, and then no factory is invoked, nothing is disposed and nothing changes. A valid batch runs one cleanup pass, so each owned singleton is disposed once, then installs every mock together. The mocks are borrowed. An async container needs `initialize()` again, as after `override`. An empty batch is checked against the state of the container and changes nothing. While one transition runs, a second `override`, `overrideMany` or `clearOverrides` rejects with `NEO_CONTAINER_BUSY`, and so do `destroy()` and `resolve()`.
+
+A factory that returns another type than its token is a compile error, with the public `Container` type and with the Program the ts-patch transformer builds (`tests/consumer-types/negative/override-many.ts`, E16-P17 and E16-P18 in `packages/unplugin/tests/t23-inline-types.test.ts`). One limit: with `testOverrides` off, the generated member is `overrideMany(_entries: unknown)`, as `override(_token: unknown, _factory)` is. On the transformed Program of such a build, a wrong factory return compiles, and the call still rejects with `NEO_TEST_API_DISABLED` at run time.
 
 ## What the numbers say, and what they do not
 
@@ -78,9 +90,9 @@ The application is `tests/e2e/fixtures/t21-closed/app.ts`. The closed bundle use
 | closed | 30566 | 15706 | 3241 | 2842 | no |
 | open - closed | 29140 | 21940 | 9412 | 7066 | |
 
-The heavy provider is **synthetic**: the script generates a class with 500 methods that return seeded literals, and registers it so that no root reaches it. It is built to make the pruning visible. A real unused provider can be smaller or larger, and its content changes how well it compresses. The `open - closed` row is the open bundle minus the closed bundle. It mixes two changes: the heavy provider that the closed mode removes, and the emitter that the closed mode switches to (the optimized emitter is used when the mode is `closed`, `packages/core/src/generator/Generator.ts:201-203`; the open bundle uses the reference emitter). The container table above shows that the emitter alone moves the sizes (+662 raw, +1303 minified for the full profile). So the delta is not the size of the sentinel alone, and it is not what the closed mode removes from your application. Initial and deferred chunks of this cjs bundle are not split. The esbuild ESM split is measured in [Initial and deferred chunks](#initial-and-deferred-chunks).
+The heavy provider is **synthetic**: the script generates a class with 500 methods that return seeded literals, and registers it so that no root reaches it. It is built to make the pruning visible. A real unused provider can be smaller or larger, and its content changes how well it compresses. The `open - closed` row is the open bundle minus the closed bundle. It mixes two changes: the heavy provider that the closed mode removes, and the emitter that the closed mode switches to (the optimized emitter is used when the mode is `closed`, `packages/core/src/generator/Generator.ts:210-212`; the open bundle uses the reference emitter). The container table above shows that the emitter alone moves the sizes (+662 raw, +1303 minified for the full profile). So the delta is not the size of the sentinel alone, and it is not what the closed mode removes from your application. Initial and deferred chunks of this cjs bundle are not split. The esbuild ESM split is measured in [Initial and deferred chunks](#initial-and-deferred-chunks).
 
-The bundle byte counts depend on the absolute path of the build: the file name is hashed into the container id (`packages/core/src/analyzer/shared/HashUtils.ts:158-160`) and into the generated class suffix (`packages/core/src/generator/Generator.ts:150-154`). The script builds in a fixed directory per checkout, so one checkout prints the same bytes at every run. Another checkout or a CI machine can print other bytes: on 2026-11-06, changing the build directory name from `t17-size-bundle` to `t17-size-bundle-<10 hex>` moved the raw size of both bundles by +110 bytes (open 59596 to 59706, closed 30456 to 30566). The test of the script asserts no exact byte count.
+The bundle byte counts depend on the absolute path of the build: the file name is hashed into the container id (`packages/core/src/analyzer/shared/HashUtils.ts:158-160`) and into the generated class suffix (`packages/core/src/generator/Generator.ts:153-157`). The script builds in a fixed directory per checkout, so one checkout prints the same bytes at every run. Another checkout or a CI machine can print other bytes: on 2026-11-06, changing the build directory name from `t17-size-bundle` to `t17-size-bundle-<10 hex>` moved the raw size of both bundles by +110 bytes (open 59596 to 59706, closed 30456 to 30566). The test of the script asserts no exact byte count.
 
 The script reads `packages/core/dist` and `packages/unplugin/dist`, so run it after a fresh `pnpm build`. Its header documents the same limit (`scripts/measure-t17-size.mjs:7`).
 
@@ -110,4 +122,4 @@ The container stays in the initial chunk. One synthetic heavy provider (500 gene
 | `closed-minimal` | deferred | 29546 | 22481 | 8698 | 7072 |
 | `control-static` | initial | 42658 | 28605 | 11115 | 8713 |
 
-The deferred row is the same in the four split cells: that provider does not change with the profile or the mode. `closed-full` is 16397 raw against `open-full` 16814 raw, and 8260 minified against 8237 minified. No gain is claimed. Minimal is a different feature set. The optimized emitter is used when the profile is minimal or the mode is closed (`packages/core/src/generator/Generator.ts:201-203`). The bytes depend on the absolute build path (`packages/core/src/analyzer/shared/HashUtils.ts:157-160`, `packages/core/src/generator/Generator.ts:150-154`) and on the Node zlib version (gzip). One synthetic provider, one machine, no threshold. The method is in [the chunk-split note](../benchmarks/chunk-split-size.md).
+The deferred row is the same in the four split cells: that provider does not change with the profile or the mode. `closed-full` is 16397 raw against `open-full` 16814 raw, and 8260 minified against 8237 minified. No gain is claimed. Minimal is a different feature set. The optimized emitter is used when the profile is minimal or the mode is closed (`packages/core/src/generator/Generator.ts:210-212`). The bytes depend on the absolute build path (`packages/core/src/analyzer/shared/HashUtils.ts:157-160`, `packages/core/src/generator/Generator.ts:153-157`) and on the Node zlib version (gzip). One synthetic provider, one machine, no threshold. The method is in [the chunk-split note](../benchmarks/chunk-split-size.md).

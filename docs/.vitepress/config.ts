@@ -88,6 +88,7 @@ export default withMermaid(defineConfig({
           items: [
             { text: 'Basic Usage', link: '/guide/basic-usage' },
             { text: 'Injection Types', link: '/guide/injection-types' },
+            { text: 'Aliases (useExisting)', link: '/guide/aliases' },
             { text: 'Lifecycle', link: '/guide/lifecycle' },
             { text: 'Scoped Injections', link: '/guide/scoped-injections' },
             { text: 'States, Scopes and Ownership', link: '/guide/states-and-ownership' },
@@ -103,6 +104,7 @@ export default withMermaid(defineConfig({
             { text: 'Async Factories', link: '/guide/async-factories' },
             { text: 'From Open to Closed', link: '/guide/closed-mode' },
             { text: 'Profiles and Capabilities', link: '/guide/profiles' },
+            { text: 'Observability', link: '/guide/observability' },
             { text: 'Disposable Services', link: '/guide/disposable' },
             { text: 'How It Works', link: '/guide/generated-code' },
           ]

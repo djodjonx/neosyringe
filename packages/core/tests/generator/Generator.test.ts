@@ -40,7 +40,7 @@ describe('Generator', () => {
       roots: ['UserService'],
     };
 
-    const generator = new Generator(graph, false, '/src');
+    const generator = new Generator(graph, false, '/src', true, false, 'reference');
     const code = generator.generate();
 
     // Verify Imports — paths are relative to outputDir ('/src')
@@ -49,11 +49,11 @@ describe('Generator', () => {
 
     // Verify Factory Functions
     // C depends on nothing -> new Import_0.ConsoleLogger()
-    expect(code).toContain('private create_ILogger(): any {');
+    expect(code).toContain('private create_ILogger(): InstanceType<typeof Import_0.ConsoleLogger> {');
     expect(code).toContain('return new Import_0.ConsoleLogger();');
 
     // B depends on C -> new Import_1.UserService(this.resolve(Import_0.ConsoleLogger))
-    expect(code).toContain('private create_UserService(): any {');
+    expect(code).toContain('private create_UserService(): InstanceType<typeof Import_1.UserService> {');
     expect(code).toContain('return new Import_1.UserService(this.resolve(Import_0.ConsoleLogger));');
 
     // Verify Container Class
@@ -123,7 +123,7 @@ describe('Generator', () => {
       roots: [],
     };
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, undefined, true, false, 'reference');
     const code = generator.generate();
 
     // Singleton Logic: Check cache
@@ -147,7 +147,8 @@ describe('Generator', () => {
       const generator = new Generator(graph);
       const code = generator.generate();
 
-      expect(code).toContain('private create__scope_Package(): any');
+      expect(code).toContain('private _get__scope_Package(): InstanceType<typeof Import_0.Pkg>');
+      expect(code).not.toContain('create__scope_Package');
   });
 
   it('should respect export modifiers for container variable', () => {
@@ -253,7 +254,7 @@ describe('Generator', () => {
       const code = new Generator(graph).generate();
 
       expect(code).toContain('throw new NeoServiceNotFoundError(`[${this.name}] Service not found or token not registered: ${NeoContainer.formatToken(token)}`);');
-      expect(code).toContain('private static formatToken(token: any): string {');
+      expect(code).toContain('private static formatToken(token: unknown): string {');
       // Class tokens: use the declared name, not the whole stringified class body.
       expect(code).toContain(`if (typeof token === 'function') return token.name || String(token);`);
       // String tokens: strip the trailing content-hash suffix, same convention as
@@ -276,7 +277,7 @@ describe('Generator', () => {
       };
       const code = new Generator(graph).generate();
 
-      expect(code).toContain('public async initialize(): Promise<void> {');
+      expect(code).toMatch(/public initialize\(options\?: \{ readonly signal\?: \w+Signal \}\): Promise<void>/);
       expect(code).toContain(`if (this.legacy) { for (const c of this.legacy) { if (typeof c?.initialize === 'function') { await c.initialize(); } } }`);
       // The resolve() guard must also activate, or resolve() could run before
       // this container's own (cascade-only) initialize() completes.

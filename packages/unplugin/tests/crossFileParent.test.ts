@@ -54,7 +54,7 @@ describe('Plugin — cross-file useContainer wiring', () => {
     const result = transform(childCode, CHILD_FILE) ?? childCode;
 
     expect(result).not.toContain('new ConsumerA(undefined)');
-    expect(result).toMatch(/new ConsumerA\(this\.resolve\("Logger_[a-f0-9]+"\)\)/);
+    expect(result).toMatch(/new ConsumerA\(this\._resolveInternal\("Logger_[a-f0-9]+"\)\)/);
   });
 
   it('does not throw a build error for the cross-file parent scenario (matches the working direct-resolve case)', () => {

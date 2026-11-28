@@ -1,15 +1,41 @@
 import type * as ts from 'typescript';
 import { relative, isAbsolute, dirname } from 'node:path';
-import { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
+import { DependencyGraph, DependencyNode, SourceRewrite, TokenId, TypeReference } from '../analyzer/types';
 import { DuplicateRegistrationError, TypeMismatchError } from '../analyzer/Analyzer';
 import { topologicalSort } from './TopologicalSorter';
 import { generateFactories, generateMultiFactories, getFactoryName, resolveTokenKey, type GetImport } from './FactoryEmitter';
-import { generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, parentOpenCheck, isBorrowedInstance, afterStore } from './ResolveEmitter';
-import { hasAsyncFactories, generateInitializeMethod, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateCreateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod } from './LifecycleEmitter';
+import { generateAliasMembers, generateResolveCases, generateResolveAllMethod, generateMultiResolveGuard, buildAsyncResolveGuard, legacyParentInterface, manyEntryGuard, parentOpenCheck, resolveListenerOverload, singleOverload, isBorrowedInstance, afterStore } from './ResolveEmitter';
+import { emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
+import { hasAsyncFactories, generateInitializeMethod, initSchedulerMember, initializationJobs, generateSyncInitializeMethod, generateEagerSyncInitialize, generateDestroyMethod, generateScopeMethod, generateOverrideMethods, touchClosedMethod, assertParentsMethod, syncNeoFailMethod, disposerMember, needsDisposer, asyncDisposalTypes } from './LifecycleEmitter';
 import { exportedRootIds } from '../analyzer/parsers/ConfigParser';
 import { emitOptimizedContainer } from './DirectEmitter';
+import { DISPATCH_LINEAR_MAX } from './dispatchEmitter';
+import { boundGuard, boundInitializeGuard, hasScopeInputs, inputConstructor, inputMembers } from './inputEmitter';
+import { linkedFactoryLeaseHelpers } from './factoryLeaseEmitter';
+import { formatTokenText, inlineRefs, isFactoryHelper, type HelperRefs, type ModuleHelpers } from './moduleHelpers';
+import { controllerTypeName, hasFactory, needsSignal, signalMembers, signalTypeName, signalTypes } from './signalEmitter';
+import { observationMembers, observationTypes, type ObservationInput } from './observationEmitter';
+import { providerTypesOf, type GetProviderTypes } from './providerTypes';
+import {
+  NamePool,
+  concat,
+  copyFromSnapshot,
+  fragment,
+  render,
+  snapshotOfFiles,
+  type CopyMapping,
+  type Fragment,
+  type Piece,
+  type Snapshot,
+  type UserCopy,
+} from './fragments';
 import { TSContext } from '../TSContext';
-import { HashUtils } from '../analyzer/shared/HashUtils';
+import {
+  artifactDescriptor,
+  hashArtifactDescriptor,
+  resolveArtifactIdentity,
+  type CollisionRegistry,
+} from '../analyzer/shared/artifactIdentity';
 
 /**
  * Returns a usable identifier name for a symbol in the context of direct symbol names
@@ -53,6 +79,21 @@ function resolveDefaultExportName(symbol: ts.Symbol, localName?: string): string
   return name;
 }
 
+/** A file name as one spelling, so two names of one file compare equal. `undefined` stays `undefined`. */
+function normalizeFile(fileName: string | undefined): string | undefined {
+  return fileName?.replace(/\\/g, '/');
+}
+
+/**
+ * One `import type { <exportName> as <alias> } from '<file>'` the output asks for, or, with no `exportName`,
+ * `import type * as <alias> from '<file>'`. Erased: the output gains no runtime dependency.
+ */
+interface TypeImport {
+  file: string;
+  exportName?: string;
+  alias: string;
+}
+
 /**
  * Generates TypeScript code for the dependency injection container.
  *
@@ -71,6 +112,18 @@ export class Generator {
   private readonly containerClassName: string;
   /** Name of the generated "not found" error class — see {@link getGeneratedClassSuffix}. */
   private readonly notFoundErrorClassName: string;
+  /** Interface that types the `useContainer` parents the class reads. */
+  private readonly legacyParentName: string;
+  /** Names of the two type aliases `resolveMany` and the factory contexts are written with. */
+  private readonly manyNames: ManyNames;
+  /** Identity of this container among the artifacts of the build. Keys the names it takes from the pool. */
+  private readonly artifactKey: string;
+  /** Names of generated top-level bindings. Shared by every Generator of one source file. */
+  private readonly names: NamePool;
+  /** The helpers of the module this output is written into, when the plugin session shares them. Absent: the class carries its own. */
+  private readonly shared: ModuleHelpers | undefined;
+  /** What the text of the class calls for the helpers: the names of the module or the members of the class. */
+  private readonly helperRefs: HelperRefs;
 
   /**
    * Creates a new Generator.
@@ -110,10 +163,44 @@ export class Generator {
     /**
      * Which container emitter to use. `reference` is the generic resolver, kept as the
      * witness; `optimized` emits one direct accessor per registration (DirectEmitter).
-     * Undefined picks `optimized` for the minimal profile and for closed mode, and
-     * `reference` otherwise, so an open full container keeps today's text.
+     * Undefined picks `optimized`, for every profile and mode.
      */
-    private emitter?: 'reference' | 'optimized'
+    private emitter?: 'reference' | 'optimized',
+    /**
+     * Shared collision registry for this build, and an optional hash used by tests
+     * to force two descriptors onto one key. The suffix is an artifact id, never
+     * a public token id.
+     */
+    private identityOptions?: {
+      collisions?: CollisionRegistry;
+      hash?: (descriptor: string) => string;
+    },
+    /**
+     * Where the output comes from. `names` is the pool of the source file this output is
+     * written into: pass the same pool to every Generator of one file so their bindings never
+     * collide with each other or with a name the file declares. Absent: a private pool, which is
+     * right when the output has a file of its own. `snapshot` is the text user expressions are
+     * copied from. Absent: the files the graph was read from. `shared` is the registry of the helpers every container of
+     * the file calls (see `ModuleHelpers`): the caller writes its block once in the module. Absent: this output carries
+     * its own helpers.
+     */
+    private provenance?: {
+      snapshot?: Snapshot;
+      names?: NamePool;
+      shared?: ModuleHelpers;
+    },
+    /**
+     * Internal. `linearMax` is the number of rows up to which a dispatch table of the optimized emitter is the linear
+     * `if (token === key)` cases and not the shared table: `0` forces the table, `Infinity` forces the cases. Absent:
+     * `DISPATCH_LINEAR_MAX`. The reference emitter has no table and ignores it.
+     */
+    private dispatch?: { linearMax?: number },
+    /**
+     * Optional production observation (topic 22). `observation: true` writes `observe()` and `stateSnapshot()` into the
+     * container and observes its constructs, initialize steps and disposals. Absent or false: none of it is written, and the
+     * output is the output of a build that never heard of the option.
+     */
+    private options?: { observation?: boolean }
   ) {
     // Check for analysis errors and throw the first one for CLI compatibility
     if (graph.errors && graph.errors.length > 0) {
@@ -134,31 +221,57 @@ export class Generator {
     //
     // In separate-output-file mode (useDirectSymbolNames=false), each container
     // already lives alone in its own generated file, so no suffix is needed —
-    // keep names stable there for backward compatibility.
-    const suffix = this.useDirectSymbolNames ? `_${this.getGeneratedClassSuffix()}` : '';
-    this.containerClassName = `NeoContainer${suffix}`;
-    this.notFoundErrorClassName = `NeoServiceNotFoundError${suffix}`;
+    // keep names stable there for backward compatibility. The identity is still
+    // registered, so two containers that collapse to one key fail in either mode.
+    const artifactKey = this.getGeneratedClassSuffix();
+    this.artifactKey = artifactKey;
+    this.names = provenance?.names ?? new NamePool([]);
+    const suffix = this.useDirectSymbolNames ? `_${artifactKey}` : '';
+    this.containerClassName = this.names.forKey(`class:${artifactKey}`, `NeoContainer${suffix}`);
+    this.notFoundErrorClassName = this.names.forKey(`error:${artifactKey}`, `NeoServiceNotFoundError${suffix}`);
+    this.legacyParentName = this.names.forKey(`legacy:${artifactKey}`, `NeoLegacyParent${suffix}`);
+    this.shared = provenance?.shared;
+    this.helperRefs = this.shared === undefined ? inlineRefs(this.containerClassName) : this.shared.refs();
+    this.manyNames = {
+      token: this.names.forKey(`many-token:${artifactKey}`, `__NeoToken${suffix}`),
+      values: this.names.forKey(`many-values:${artifactKey}`, `__NeoValues${suffix}`),
+      overrideEntry: this.names.forKey(`many-override-entry:${artifactKey}`, `__NeoOverrideEntry${suffix}`),
+      overrideInvalid: this.names.forKey(`many-override-invalid:${artifactKey}`, `__NeoOverrideInvalid${suffix}`),
+      overrideGuard: this.names.forKey(`many-override-guard:${artifactKey}`, `__NeoOverrideGuard${suffix}`),
+    };
   }
 
   /**
-   * Computes a short, deterministic, per-call-site hash used to uniquify the
-   * generated class names (see constructor). Prefers the source file + AST
-   * position of the `defineBuilderConfig` call (unique per call site); falls
-   * back to `containerId` when positions aren't available (e.g. hand-built
-   * graphs in unit tests).
+   * Artifact id for this container. The class suffix uses it in direct mode.
+   * Registration runs in both modes: a second, different descriptor on the same
+   * key throws `identity collision`.
    */
   private getGeneratedClassSuffix(): string {
-    const key = this.graph.sourceFileName !== undefined && this.graph.defineBuilderConfigStart !== undefined
-      ? `${this.graph.sourceFileName}:${this.graph.defineBuilderConfigStart}`
-      : this.graph.containerId;
-    return HashUtils.hashString(key);
+    const identity = resolveArtifactIdentity({
+      sourceFileName: this.graph.sourceFileName,
+      defineBuilderConfigStart: this.graph.defineBuilderConfigStart,
+      containerId: this.graph.containerId,
+    });
+    const descriptor = artifactDescriptor(identity);
+    const key = hashArtifactDescriptor(descriptor, this.identityOptions?.hash);
+    this.identityOptions?.collisions?.register(key, descriptor);
+    return key;
+  }
+
+  /** The namespace alias of an import of `filePath`. One per file for this container, kept free of every other name of the source file. */
+  private importAlias(filePath: string, preferred: string): string {
+    return this.names.forKey(`import:${this.artifactKey}:${filePath}`, preferred);
   }
 
   /**
    * Import lines for the symbols registered in `imports`. Must run after every emitter
    * has called getImport: that call is what registers an import.
    */
-  private renderImportLines(imports: Map<string, string>, sourceGraph: DependencyGraph): string[] {
+  private renderImportLines(
+    imports: Map<string, string>,
+    sourceGraph: DependencyGraph,
+    typeImports: ReadonlyMap<string, TypeImport>,
+  ): string[] {
     const importLines: string[] = [];
     // Base directory for relative import paths:
     // - useDirectSymbolNames=true: relative to the container source file (so the injected
@@ -189,6 +302,12 @@ export class Generator {
         importLines.push(`import * as ${alias} from '${specifierFor(filePath)}';`);
       }
     }
+    // Types the getters name. `import type` is erased: the output gains no runtime dependency.
+    for (const { file, exportName, alias } of typeImports.values()) {
+      importLines.push(exportName === undefined
+        ? `import type * as ${alias} from '${specifierFor(file)}';`
+        : `import type { ${exportName} as ${alias} } from '${specifierFor(file)}';`);
+    }
     // A pruned provider's module still runs when it has a top-level effect. ADR006 lines 35-38.
     for (const filePath of loadEffectFiles(sourceGraph)) {
       if (imports.has(filePath)) continue;
@@ -198,9 +317,9 @@ export class Generator {
     return importLines;
   }
 
-  private useOptimizedEmitter(graph: DependencyGraph): boolean {
-    if (this.emitter) return this.emitter === 'optimized';
-    return graph.runtimeProfile === 'minimal' || graph.optimizationMode === 'closed';
+  /** The optimized emitter is the default of every profile and mode. The reference emitter is asked for by name. */
+  private useOptimizedEmitter(): boolean {
+    return this.emitter !== 'reference';
   }
 
   /**
@@ -208,9 +327,62 @@ export class Generator {
    * @returns TypeScript source code for the generated container.
    */
   public generate(): string {
-    const sourceGraph = this.graph;
-    const emitted = dropUnreachable(sourceGraph);
-    const sorted = topologicalSort(emitted.nodes);
+    return this.generateRendered().code;
+  }
+
+  /**
+   * The container code, and where each user expression in it was copied from.
+   * `copies` lists a range of `code` and the range of the source file it is a copy of, both in
+   * UTF-16 units. An expression the plugin rewrote is generated text and has no entry.
+   */
+  public generateRendered(): { code: string; copies: readonly CopyMapping[] } {
+    const snapshot = this.snapshotOfGraph();
+    return render(this.build(copyFromSnapshot(snapshot)).parts, snapshot);
+  }
+
+  /** The files the graph's user expressions were read from, as the analysis saw them. */
+  private snapshotOfGraph(): Snapshot {
+    if (this.provenance?.snapshot) return this.provenance.snapshot;
+    const files = new Map<string, string>();
+    visitServices(this.graph, (node) => {
+      for (const origin of [node.service.factoryOrigin, node.service.valueOrigin]) {
+        if (!origin || files.has(origin.file)) continue;
+        // A registration is parsed from the file its origin names, so the node's file holds that text.
+        const file = node.service.registrationNode.getSourceFile?.();
+        if (file) files.set(origin.file, file.text);
+      }
+    });
+    return snapshotOfFiles(files);
+  }
+
+  /**
+   * Hoisted useValue consts get their name from the pool, so a name the file declares is never
+   * taken twice. A name nobody else wants stays as the analysis wrote it.
+   */
+  private withPooledCaptures(graph: DependencyGraph): DependencyGraph {
+    let changed = false;
+    const pooled = (node: DependencyNode): DependencyNode => {
+      const capture = node.service.valueCapture;
+      if (!capture || node.service.valueCaptureRead) return node;
+      const name = this.names.forKey(`capture:${this.artifactKey}:${capture}`, capture);
+      if (name === capture) return node;
+      changed = true;
+      return { ...node, service: { ...node.service, valueCapture: name } };
+    };
+    const nodes = new Map<TokenId, DependencyNode>();
+    for (const [tokenId, node] of graph.nodes) nodes.set(tokenId, pooled(node));
+    let multiNodes = graph.multiNodes;
+    if (graph.multiNodes) {
+      multiNodes = new Map();
+      for (const [tokenId, list] of graph.multiNodes) multiNodes.set(tokenId, list.map(pooled));
+    }
+    return changed ? { ...graph, nodes, multiNodes } : graph;
+  }
+
+  private build(copy: UserCopy): Fragment {
+    const sourceGraph = this.withPooledCaptures(this.graph);
+    const retained = dropUnreachable(sourceGraph);
+    const sorted = topologicalSort(retained.nodes);
     const imports = new Map<string, string>(); // filePath -> importAliasPrefix
 
     // Build a map from resolved symbol → local identifier name for default exports.
@@ -222,9 +394,9 @@ export class Generator {
       if (implementationSymbol && implementationLocalName) localNameBySymbol.set(implementationSymbol, implementationLocalName);
       if (tokenSymbol && tokenLocalName) localNameBySymbol.set(tokenSymbol, tokenLocalName);
     };
-    for (const node of emitted.nodes.values()) indexLocalNames(node);
-    if (emitted.multiNodes) {
-      for (const nodes of emitted.multiNodes.values()) nodes.forEach(indexLocalNames);
+    for (const node of retained.nodes.values()) indexLocalNames(node);
+    if (retained.multiNodes) {
+      for (const nodes of retained.multiNodes.values()) nodes.forEach(indexLocalNames);
     }
 
     // For default exports in useDirectSymbolNames=true mode, pre-register their source file
@@ -247,10 +419,40 @@ export class Generator {
           if (!imports.has(filePath)) {
             // Use __neo_ prefix to avoid collisions with any existing identifier in the
             // user's file (code is injected inline, not in a separate generated file).
-            imports.set(filePath, `__neo_Import_${imports.size}`);
+            imports.set(filePath, this.importAlias(filePath, `__neo_Import_${imports.size}`));
           }
         }
       }
+    }
+
+    // The container's own file, and what it binds. The generated code is written into this file, so a bare
+    // identifier is right only for a name this file owns: the local binding the registration wrote
+    // (`import { Logger as Renamed }` is `Renamed`, never `Logger`). A class that a partial of another file
+    // registers, or that a registration reaches through a namespace import (`deps.Logger`), has no binding
+    // here: the output imports its file and reads the export from the namespace.
+    const containerFile = normalizeFile(sourceGraph.sourceFileName);
+    const bindingBySymbol = new Map<ts.Symbol, string>();
+    const unboundSymbols = new Set<ts.Symbol>();
+    const indexBindings = (node: DependencyNode) => {
+      const { implementationSymbol, implementationBinding, tokenSymbol, tokenBinding } = node.service;
+      const registeredIn = normalizeFile(node.service.registrationNode?.getSourceFile?.()?.fileName);
+      // A hand-built graph has no tree to read: its names are taken as written.
+      const readable = registeredIn !== undefined;
+      const here = !readable || containerFile === undefined || registeredIn === containerFile;
+      const note = (symbol: ts.Symbol | undefined, binding: string | undefined) => {
+        if (!symbol) return;
+        if (here && binding !== undefined) {
+          if (!bindingBySymbol.has(symbol)) bindingBySymbol.set(symbol, binding);
+        } else if (readable) {
+          unboundSymbols.add(symbol);
+        }
+      };
+      note(implementationSymbol, implementationBinding);
+      note(tokenSymbol, tokenBinding);
+    };
+    for (const node of retained.nodes.values()) indexBindings(node);
+    if (retained.multiNodes) {
+      for (const nodes of retained.multiNodes.values()) nodes.forEach(indexBindings);
     }
 
     const getImport: GetImport = (symbol: ts.Symbol): string => {
@@ -264,7 +466,13 @@ export class Generator {
             if (alias) return `${alias}.default`;
           }
         }
-        // Named exports: direct identifier is stable — bundlers correctly rename all references.
+        // Named exports: the local binding of the registration is stable — bundlers correctly rename all references.
+        const bound = bindingBySymbol.get(symbol);
+        if (bound !== undefined) return bound;
+        const declared = normalizeFile(symbol.declarations?.[0]?.getSourceFile().fileName);
+        if (unboundSymbols.has(symbol) && declared !== undefined && declared !== containerFile) {
+          return getForeignImport(symbol);
+        }
         return resolveDefaultExportName(symbol);
       }
       const decl = symbol.declarations?.[0];
@@ -276,13 +484,24 @@ export class Generator {
       }
       const filePath = decl.getSourceFile().fileName;
       if (!imports.has(filePath)) {
-        imports.set(filePath, `Import_${imports.size}`);
+        imports.set(filePath, this.importAlias(filePath, `Import_${imports.size}`));
       }
       return `${imports.get(filePath)}.${symbol.getName()}`;
     };
 
-    // Like getImport, but always emits an explicit namespace import — used only
+    /** The namespace alias of an import of `filePath`, registered on first use. */
+    const namespaceOf = (filePath: string): string => {
+      const existing = imports.get(filePath);
+      if (existing !== undefined) return existing;
+      const prefix = this.useDirectSymbolNames ? '__neo_Import_' : 'Import_';
+      const alias = this.importAlias(filePath, `${prefix}${imports.size}`);
+      imports.set(filePath, alias);
+      return alias;
+    };
+
+    // Like getImport, but emits an explicit namespace import — used only
     // for a parent-provided class token (see FactoryEmitter.resolveConstructorArgs).
+    // The one exception is a class the container's own file declares: it is read by its own name.
     // Unlike the container's own local dependencies (necessarily already imported
     // into this file, since the user wrote `{ token: X }` here themselves), a
     // class living in a useContainer parent's file is not guaranteed to be in
@@ -296,13 +515,59 @@ export class Generator {
           `no declaration found.`
         );
       }
-      const filePath = decl.getSourceFile().fileName;
-      const prefix = this.useDirectSymbolNames ? '__neo_Import_' : 'Import_';
-      if (!imports.has(filePath)) {
-        imports.set(filePath, `${prefix}${imports.size}`);
+      // Inline, a class the container file itself declares is in scope under its own name: the file never imports itself.
+      if (this.useDirectSymbolNames && containerFile !== undefined && normalizeFile(decl.getSourceFile().fileName) === containerFile) {
+        return resolveDefaultExportName(symbol);
       }
-      return `${imports.get(filePath)}.${symbol.getName()}`;
+      return `${namespaceOf(decl.getSourceFile().fileName)}.${symbol.getName()}`;
     };
+
+    // A type in another file is named through an `import type`, kept in `typeImports` until the import lines
+    // are written (after every emitter ran). `exportName` undefined is the whole module (`import type * as`).
+    const typeImports = new Map<string, TypeImport>();
+    const typeAliasOf = (file: string, exportName: string | undefined, preferred: string): string => {
+      const key = `${file}\0${exportName ?? ''}`;
+      let entry = typeImports.get(key);
+      if (!entry) {
+        const alias = this.names.forKey(`type:${this.artifactKey}:${key}`, `__neo_Type_${preferred}`);
+        entry = { file, exportName, alias };
+        typeImports.set(key, entry);
+      }
+      return entry.alias;
+    };
+
+    // A factory of another file is copied into this one: the names its text reads are bound there, not here.
+    // Each read becomes a member of a namespace import of the module that exports it (inline layout only: a
+    // separate output file binds none of the user's names). A name read only in type positions is imported
+    // with `import type`, so the copy adds no runtime dependency the user did not write.
+    const emitted = this.useDirectSymbolNames
+      ? withBindingRewrites(retained, containerFile, namespaceOf, typeAliasOf)
+      : retained;
+
+    // The type of each getter. A type the output cannot name has no text: that getter answers `unknown`
+    // (providerTypes.ts).
+    const nameType = (reference: TypeReference): string | undefined => {
+      if (reference.global) return reference.name;
+      // Inline, the output is written into the file that declares the type: its own name is in scope.
+      if (this.useDirectSymbolNames && normalizeFile(reference.file) === containerFile) return reference.name;
+      // A declaration file has no module specifier this output can write.
+      if (reference.exportName === undefined || /\.d\.[cm]?ts$/.test(reference.file)) return undefined;
+      return typeAliasOf(reference.file, reference.exportName, reference.name);
+    };
+    const providerTypes: GetProviderTypes = (node) => providerTypesOf(node.service, getImport, nameType);
+
+    // A hoisted useValue constant carries the type its registration is declared under: the user's own
+    // `Injection` typed the expression with it, and a bare `const` would widen its literals. Resolved here,
+    // before the import lines are written, because naming a type may add an `import type`.
+    const hoistTypes = new Map<string, string>();
+    visitServices(sourceGraph, (node) => {
+      const capture = node.service.valueCapture;
+      if (!capture || node.service.valueCaptureRead) return;
+      // A pruned value is evaluated once for its effect (ADR006): nothing reads it, so its type is not named, and no `import type` is written for it.
+      if (isUnreachable(sourceGraph, node)) return;
+      const type = providerTypes(node).creator;
+      if (type !== undefined) hoistTypes.set(capture, type);
+    });
 
     // A container with no async factories of its own still needs initialize()
     // (and the guard below) if its useContainer parent/legacy chain has them —
@@ -313,9 +578,12 @@ export class Generator {
     const closed = emitted.optimizationMode === 'closed';
     const resolveGuard = buildAsyncResolveGuard(hasAsync);
     const eagerLines = eagerSyncLines(emitted, getImport, hasAsync);
+    const observation = this.options?.observation === true;
+    const observed = (minimal: boolean): ObservationInput | undefined =>
+      observation ? { className: this.containerClassName, containerId: this.artifactKey, hasAsync, minimal } : undefined;
 
-    if (this.useOptimizedEmitter(emitted)) {
-      const state = containerState(emitted, hasAsync, eagerLines, emitted.runtimeProfile === 'minimal');
+    if (this.useOptimizedEmitter()) {
+      const state = containerState(emitted, hasAsync, eagerLines, this.containerClassName, emitted.runtimeProfile === 'minimal');
       const containerClass = emitOptimizedContainer({
         graph: emitted,
         sorted,
@@ -327,53 +595,69 @@ export class Generator {
         testOverrides: this.testOverrides,
         className: this.containerClassName,
         notFoundErrorClassName: this.notFoundErrorClassName,
+        legacyParentName: this.legacyParentName,
+        manyNames: this.manyNames,
         eagerLines,
+        providerTypes,
+        dispatchLinearMax: this.dispatch?.linearMax ?? DISPATCH_LINEAR_MAX,
         stateFields: `${state.stateFields}${state.eagerField}`,
-        ...rootMembers(emitted, closed, getImport),
-        runtimeHelpers: runtimeHelpers(hasAsync),
+        ...rootMembers(emitted, closed, getImport, this.containerClassName),
+        runtimeHelpers: runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync, emitted.runtimeProfile === 'minimal'), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined, observed(emitted.runtimeProfile === 'minimal'), this.shared),
         debugGetters: this.emitDebugGetter(emitted),
+        copy,
+        observation,
+        shared: this.shared,
       });
       // Imports are read after the class: emitting it is what registers them.
-      return `${openModeMark(sourceGraph.optimizationMode)}
-${this.renderImportLines(imports, sourceGraph).join('\n')}
-${[...captureHoists(sourceGraph), ...residualValueReads(sourceGraph)].join('\n')}
+      return fragment`${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
+${this.renderImportLines(imports, sourceGraph, typeImports).join('\n')}
+${concat([...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)], '\n')}
 
 ${containerClass}
+${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync, hasFactory(emitted) ? this.manyNames : undefined)}${observation ? observationTypes(this.containerClassName) : ''}
 ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
     }
 
-    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed);
+    const factories = generateFactories(emitted, sorted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, undefined, this.manyNames, observation, this.helperRefs);
     const resolveCases = generateResolveCases(
       emitted,
       sorted,
       getImport,
       hasAsync,
-      `${this.containerClassName}.formatToken`,
+      this.helperRefs.formatToken,
     );
-    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed);
+    const multiFactories = generateMultiFactories(emitted, getImport, getForeignImport, hasAsync, closed, undefined, copy, providerTypes, this.containerClassName, this.manyNames, observation, this.helperRefs);
+    // The policy and the lease of the declared factories: only the helpers a creator asks for.
+    const linkedHelpers = linkedFactoryLeaseHelpers(this.containerClassName, [...factories, ...multiFactories], this.manyNames);
+    // Shared, the module holds them: the class only calls them.
+    const factoryHelpers = this.shared === undefined ? linkedHelpers : [];
+    if (this.shared !== undefined) {
+      for (const helper of linkedHelpers) if (isFactoryHelper(helper.id)) this.shared.claim(helper.id);
+      this.shared.claim('formatToken');
+    }
     const resolveAllMethod = generateResolveAllMethod(emitted, getImport, hasAsync, closed);
     const initializeMethod = hasAsync
-      ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines)
+      ? generateInitializeMethod(emitted, sorted, getImport, hasAsync, eagerLines, false, this.containerClassName, observation)
       : eagerLines.length > 0
-        ? generateEagerSyncInitialize(eagerLines)
-        : generateSyncInitializeMethod();
-    const createScopeMethod = generateCreateScopeMethod(this.containerClassName, hasAsync);
-    const destroyMethod = generateDestroyMethod(emitted, sorted, getImport, hasAsync);
-    const overrideMethods = generateOverrideMethods(emitted, sorted, getImport, hasAsync, this.testOverrides);
+        ? generateEagerSyncInitialize(eagerLines, false, boundInitializeGuard(emitted))
+        : generateSyncInitializeMethod(false, boundInitializeGuard(emitted));
+    const createScopeMethod = generateScopeMethod(emitted, this.containerClassName, hasAsync, false, observation);
+    const destroyMethod = generateDestroyMethod(emitted, sorted, getImport, hasAsync, false, observation);
+    const overrideMethods = generateOverrideMethods(emitted, sorted, getImport, hasAsync, this.testOverrides, emitted.runtimeProfile === 'minimal' ? undefined : this.manyNames, observation);
 
-    const importLines = this.renderImportLines(imports, sourceGraph);
+    const importLines = this.renderImportLines(imports, sourceGraph, typeImports);
 
     // A successful legacy resolve borrows that instance. A throw must not mark the caller's own result.
     const borrowReset = '';
     const borrowBefore = `const legacyResult = legacyContainer.resolve(token);
                     if (legacyResult != null) this._borrowed.add(legacyResult);`;
     const borrowNotify = '';
-    const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines);
-    const runtimeHelpersText = runtimeHelpers(hasAsync);
-    const captureLines = captureHoists(sourceGraph);
-    for (const line of residualValueReads(sourceGraph)) captureLines.push(line);
+    const { stateFields, eagerField } = containerState(emitted, hasAsync, eagerLines, this.containerClassName);
+    const runtimeHelpersText = runtimeHelpers(hasAsync, needsDisposer(emitted, hasAsync), runsJobs(emitted, sorted, getImport, hasAsync), needsSignal(emitted, hasAsync) ? this.containerClassName : undefined, observed(false), this.shared);
+    const captureLines: Piece[] = [...captureHoists(sourceGraph, copy, hoistTypes), ...residualValueReads(sourceGraph)];
     const multiGuard = generateMultiResolveGuard(emitted, getImport, hasAsync);
     const assertOne = closed ? 'this._assertRoot(token, false);' : '';
+    const aliases = generateAliasMembers(emitted, getImport, getForeignImport, this.containerClassName, this.notFoundErrorClassName, this.helperRefs.formatToken);
     const resolveInterior = `
     ${borrowReset}${parentOpenCheck(hasAsync)}
     ${multiGuard}${multiGuard ? '\n    ' : ''}// 0. An overridden token always wins, even over a cached real instance.
@@ -387,10 +671,11 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
       this.notifyResolve(token, overridden);
       return overridden;
     }
-
+${aliases ? `\n    ${aliases.step}` : ''}
     // 1. Try to resolve locally (or create if singleton)
     const result = this.resolveLocal(token);
-    if (result !== undefined) {
+    // A stored undefined is a value. A missing token still falls through.
+    if (result !== undefined || this.instances.has(token)) {
       this.notifyResolve(token, result);
       return result;
     }
@@ -406,39 +691,44 @@ ${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
                     this.notifyResolve(token, legacyResult);
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
 
-    throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${this.containerClassName}.formatToken(token)}\`);`;
+    throw new ${this.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${this.helperRefs.formatToken}(token)}\`);`;
 
+    const bound = boundGuard(emitted, 'resolve()');
     const resolveMethod = hasAsync
-      ? `public resolve<T>(token: any): T {
-    this._guardPublic();
-    ${closed ? assertOne + '\n    ' : ''}return this._resolveInternal<T>(token);
+      ? `${singleOverload('public', 'resolve')}
+    ${bound}this._guardPublic();
+    ${closed ? assertOne + '\n    ' : ''}return this._resolveInternal(token);
   }
 
-  private _resolveInternal<T>(token: any): T {${resolveInterior}
+  ${singleOverload('private', '_resolveInternal')}${resolveInterior}
   }`
       : closed
-        ? `public resolve<T>(token: any): T {
-    ${assertOne}
-    return this._resolveInternal<T>(token);
+        ? `${singleOverload('public', 'resolve')}
+    ${bound}${assertOne}
+    return this._resolveInternal(token);
   }
 
-  private _resolveInternal<T>(token: any): T {${resolveInterior}
+  ${singleOverload('private', '_resolveInternal')}${resolveInterior}
   }`
-        : `public resolve<T>(token: any): T {
-    ${resolveGuard}${resolveInterior}
+        : `${singleOverload('public', 'resolve')}
+    ${bound}${resolveGuard}${resolveInterior}
   }`;
 
-    const { rootFields, assertRootMethod } = rootMembers(emitted, closed, getImport);
+    const { rootFields, assertRootMethod } = rootMembers(emitted, closed, getImport, this.containerClassName);
 
-    return `${openModeMark(sourceGraph.optimizationMode)}
+    return fragment`${generatedContainerHeader()}${openModeMark(sourceGraph.optimizationMode)}
 ${importLines.join('\n')}
-${captureLines.join('\n')}
+${concat(captureLines, '\n')}
+
+${emitManyAliases(this.manyNames)}
+${this.testOverrides && emitted.runtimeProfile !== 'minimal' ? `${emitOverrideAliases(this.manyNames)}\n` : ''}
+${legacyParentInterface(this.legacyParentName)}
 
 class ${this.notFoundErrorClassName} extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
@@ -446,20 +736,22 @@ class ${this.notFoundErrorClassName} extends Error {
 
 // -- Container --
 class ${this.containerClassName} {
-  private instances = new Map<any, any>();
-  private overrides = new Map<any, () => any>();
-  private resolveListeners = new Set<(token: any, instance: any) => void>();
+  private instances = new Map<unknown, unknown>();
+  private overrides = new Map<unknown, () => unknown>();
+  private resolveListeners = new Set<(token: unknown, instance: unknown) => void>();
   ${stateFields}${eagerField}${rootFields}
 
   // -- Factories --
-  ${[...factories, ...multiFactories].join('\n  ')}
+  ${concat([...factories, ...multiFactories], '\n  ')}${factoryHelpers.length > 0 ? fragment`\n\n  ${concat(factoryHelpers, '\n\n  ')}` : ''}
 
-  constructor(
-    private legacy?: any[],
+  ${hasScopeInputs(emitted)
+    ? inputConstructor(this.legacyParentName)
+    : `constructor(
+    private legacy?: ${this.legacyParentName}[],
     private name: string = 'NeoContainer'
-  ) {}
+  ) {}`}
 
-  ${runtimeHelpersText}${assertRootMethod}
+  ${runtimeHelpersText}${assertRootMethod}${hasScopeInputs(emitted) ? `\n\n  ${inputMembers(emitted, this.containerClassName, this.helperRefs.formatToken)}` : ''}
 
   ${initializeMethod}
 
@@ -475,12 +767,12 @@ class ${this.containerClassName} {
    * caught and ignored — a bug in an observability hook must never break the
    * actual resolution it's observing.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
+  ${resolveListenerOverload()}
     this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     ${borrowNotify}for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -492,34 +784,35 @@ class ${this.containerClassName} {
 
   ${resolveMethod}
 
+  ${this.shared === undefined ? `${this.formatTokenMember()}\n\n  ` : ''}${destroyMethod}
+
+  ${resolveAllMethod}
+
+  ${emitResolveMany(`${boundGuard(emitted, 'resolveMany()')}${manyEntryGuard(hasAsync, false)}`, this.manyNames)}
+
+  private resolveLocal(token: unknown): unknown {
+    ${resolveCases.join('\n    ')}
+    return undefined;
+  }
+${aliases ? `\n  ${aliases.members}\n` : ''}
+  ${this.emitDebugGetter(emitted)}
+}
+${asyncDisposalTypes(this.containerClassName)}${signalTypes(this.containerClassName, needsSignal(emitted, hasAsync), hasAsync, hasFactory(emitted) ? this.manyNames : undefined)}${observation ? observationTypes(this.containerClassName) : ''}
+${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
+  }
+
   /**
    * Formats a token for error messages: a class token becomes its declared
    * name (not its entire stringified source), and a string token has its
    * trailing content-hash suffix stripped (not the raw hashed id).
    */
-  private static formatToken(token: any): string {
-    if (typeof token === 'function') return token.name || String(token);
-    if (typeof token !== 'string') return String(token);
-    const parts = token.split('_');
-    const last = parts[parts.length - 1];
-    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
-      return parts.slice(0, -1).join('_');
-    }
-    return token;
-  }
-
-  ${destroyMethod}
-
-  ${resolveAllMethod}
-
-  private resolveLocal(token: any): any {
-    ${resolveCases.join('\n    ')}
-    return undefined;
-  }
-
-  ${this.emitDebugGetter(emitted)}
-}
-${this.useDirectSymbolNames ? '' : this.generateContainerVariable()}`;
+  private formatTokenMember(): string {
+    return `/**
+   * Formats a token for error messages: a class token becomes its declared
+   * name (not its entire stringified source), and a string token has its
+   * trailing content-hash suffix stripped (not the raw hashed id).
+   */
+  ${formatTokenText('private static formatToken')}`;
   }
 
   /**
@@ -628,45 +921,92 @@ function containerState(
   graph: DependencyGraph,
   hasAsync: boolean,
   eagerLines: string[],
+  className: string,
   minimal = false,
 ): { stateFields: string; eagerField: string } {
   const borrowedList = borrowedSeeds(graph).join(', ');
   const scopeFields = `private _closed = false;
-  private _borrowed = new Set<any>([${borrowedList}]);
+  private _borrowed = new Set<unknown>([${borrowedList}]);
   private _destroyWork?: Promise<void>;`;
   const eagerField = !hasAsync && eagerLines.length > 0 ? '\n  private _eagerOnce = false;' : '';
   const stateFields = hasAsync
-    ? `private _state: 'created' | 'initializing' ${minimal ? '' : "| 'reconfiguring' "}| 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
+    ? `private _state: 'created' | 'initializing' | 'cancelling' ${minimal ? '' : "| 'reconfiguring' "}| 'ready' | 'failed' | 'destroying' | 'destroyed' = 'created';
   private _initWork?: Promise<void>;
+  private _initObserved?: Promise<void>;
+  private _initController?: ${controllerTypeName(className)};
+  private _initSignal?: ${signalTypeName(className)};
+  private _initCancel?: { readonly reason: unknown };
+  private _initAborted?: { readonly reason: unknown };
   private _failure: unknown;
   private _initRunning = false;
-  private _initJournal: any[] = [];
-  ${scopeFields}`
+  private _initJournal: unknown[] = [];
+  ${scopeFields}
+  private _syncInit = 0;`
     : `${minimal ? '' : 'private _reconfiguring = false;\n  '}private _failure?: unknown;
   ${scopeFields}`;
   return { stateFields, eagerField };
 }
 
-function runtimeHelpers(hasAsync: boolean): string {
-  return `${touchClosedMethod()}
-
-  ${assertParentsMethod()}
-  ${hasAsync ? '' : syncNeoFailMethod()}`;
+/** Leading text of every generated container. Empty: the container imports nothing from Node. */
+function generatedContainerHeader(): string {
+  return '';
 }
 
-/** Exported root sets and their guard. Closed mode only. ADR006 lines 29-33. */
+/**
+ * True when `initialize()` runs its steps as jobs: the container has async steps of its own and a bounded concurrency
+ * above 1 meets at least two of them. Only then is `__neoRunJobs` a member. `minimal` is the profile `initialize()` is
+ * emitted for: it changes the text of a step, never how many there are.
+ */
+function runsJobs(graph: DependencyGraph, sorted: TokenId[], getImport: GetImport, hasAsync: boolean, minimal = false): boolean {
+  return hasAsync && initializationJobs(graph, sorted, getImport, minimal) !== undefined;
+}
+
+function runtimeHelpers(hasAsync: boolean, disposer: boolean, jobs: boolean, signalClass?: string, observation?: ObservationInput, shared?: ModuleHelpers): string {
+  return `${touchClosedMethod(observation !== undefined)}
+
+  ${assertParentsMethod()}
+  ${hasAsync ? '' : syncNeoFailMethod()}${disposer ? `\n\n  ${disposerMember()}` : ''}${jobs ? `\n\n  ${initSchedulerMember()}` : ''}${signalClass === undefined ? '' : `\n\n  ${signalMembers(signalClass, hasAsync, shared)}`}${observation === undefined ? '' : `\n\n  ${observationMembers(observation)}`}`;
+}
+
+/**
+ * Exported root sets and their guard. Closed mode only. ADR006 lines 29-33.
+ *
+ * The two sets are the same for every container of the class, so the class builds them once (`__neoReadRootSets`, on the first
+ * container, not when the class is defined: a root is an expression of the user's file, and one that is declared further down
+ * or comes from an import cycle may not be bound yet) and a container keeps a reference. A container that was made with a root
+ * that still read `undefined` does not store them: the next one builds them again. Before, each container built its own two
+ * sets, and a closed `create` kept them alive with it (docs/benchmarks/stage-f-compile-overhead.md, "Runtime cost").
+ *
+ * The sets are shared by every container of the class, so their type is `ReadonlySet`: the generated code only reads them, and
+ * a later change that adds or deletes a token fails the strict typecheck of the emitted program.
+ * The two fields read the pair one after the other, so a construction made while a root reads `undefined` builds the pair twice
+ * (four sets, nothing kept). This is left as it is: a single read would need a third field and would change the names the
+ * guard and its tests read, for a case that lasts only until the root is bound.
+ */
 function rootMembers(
   graph: DependencyGraph,
   closed: boolean,
   getImport: GetImport,
+  className: string,
 ): { rootFields: string; assertRootMethod: string } {
   const exported = closed ? exportedRootIds(graph) : undefined;
   const rootFields = exported
-    ? `\n  private _singleRoots = new Set<any>([${rootKeyExprs(exported.single, graph, getImport)}]);\n  private _multiRoots = new Set<any>([${rootKeyExprs(exported.multi, graph, getImport)}]);`
+    ? `\n  private readonly _singleRoots: ReadonlySet<unknown> = ${className}.__neoReadRootSets()[0];\n  private readonly _multiRoots: ReadonlySet<unknown> = ${className}.__neoReadRootSets()[1];`
     : '';
-  const assertRootMethod = closed ? `
+  const assertRootMethod = exported ? `
 
-  private _assertRoot(token: any, all: boolean): void {
+  private static __neoRootSets?: readonly [ReadonlySet<unknown>, ReadonlySet<unknown>];
+
+  private static __neoReadRootSets(): readonly [ReadonlySet<unknown>, ReadonlySet<unknown>] {
+    let __neoSets = ${className}.__neoRootSets;
+    if (__neoSets === undefined) {
+      __neoSets = [new Set<unknown>([${rootKeyExprs(exported.single, graph, getImport)}]), new Set<unknown>([${rootKeyExprs(exported.multi, graph, getImport)}])];
+      if (!__neoSets[0].has(undefined) && !__neoSets[1].has(undefined)) ${className}.__neoRootSets = __neoSets;
+    }
+    return __neoSets;
+  }
+
+  private _assertRoot(token: unknown, all: boolean): void {
     if ((all ? this._multiRoots : this._singleRoots).has(token)) return;
     const error = new Error('NEO_ROOT_NOT_EXPORTED: [' + this.name + '] token is not an exported root') as Error & { code: string };
     error.code = 'NEO_ROOT_NOT_EXPORTED';
@@ -681,14 +1021,81 @@ function visitServices(graph: DependencyGraph, visit: (node: DependencyNode) => 
   for (const nodes of graph.multiNodes.values()) nodes.forEach(visit);
 }
 
-/** Direct useValue consts. Partial captures are property reads and stay at `new`. */
-function captureHoists(graph: DependencyGraph): string[] {
-  const lines: string[] = [];
+/**
+ * The graph with the reads of a copied factory bound. A factory written in another file (a partial reached
+ * through `extends`) is copied into the container's file, where the names its text reads mean nothing: each
+ * read of a name its own file binds becomes a member of a namespace import of the module that exports it
+ * (`new Remote()` is `new __neo_Import_0.Remote()`). A rewrite the plugin already made keeps its range:
+ * the two never edit the same text. An import is registered only for a read that is kept.
+ *
+ * - A name the container's own file exports is read by the name that file gives it (`Tag`): the file never
+ *   imports itself.
+ * - A name read only in type positions is imported with `import type`: the copy adds no runtime dependency.
+ */
+function withBindingRewrites(
+  graph: DependencyGraph,
+  containerFile: string | undefined,
+  namespaceOf: (filePath: string) => string,
+  typeAliasOf: (file: string, exportName: string | undefined, preferred: string) => string,
+): DependencyGraph {
+  let changed = false;
+  const bound = (node: DependencyNode): DependencyNode => {
+    const { factoryBindings, factoryOrigin, factoryRewrites } = node.service;
+    if (!factoryBindings || !factoryOrigin || normalizeFile(factoryOrigin.file) === containerFile) return node;
+    const plugin = factoryRewrites ?? [];
+    const free: SourceRewrite[] = [];
+    for (const binding of factoryBindings) {
+      const kept = binding.ranges.filter((range) =>
+        range.start >= factoryOrigin.start
+        && range.end <= factoryOrigin.start + factoryOrigin.length
+        && !plugin.some((other) => range.start < other.end && other.start < range.end));
+      if (kept.length === 0) continue;
+      // What stands where the name was read.
+      const own = containerFile !== undefined && normalizeFile(binding.file) === containerFile ? binding.localName : undefined;
+      let member: string;
+      if (own !== undefined) {
+        member = own;
+      } else if (kept.every((range) => range.type === true)) {
+        member = typeAliasOf(binding.file, binding.exportName, binding.exportName ?? 'Module');
+      } else {
+        const reads = namespaceOf(binding.file);
+        member = binding.exportName === undefined ? reads : `${reads}.${binding.exportName}`;
+      }
+      for (const range of kept) {
+        // `{ Remote }` is `{ Remote: ns.Remote }`: a member access cannot stand where a shorthand name stands.
+        const text = range.shorthand === undefined ? member : `${range.shorthand}: ${member}`;
+        free.push({ start: range.start, end: range.end, text });
+      }
+    }
+    if (free.length === 0) return node;
+    changed = true;
+    const rewrites = [...plugin, ...free].sort((left, right) => left.start - right.start || left.end - right.end);
+    return { ...node, service: { ...node.service, factoryRewrites: rewrites } };
+  };
+  const nodes = new Map<TokenId, DependencyNode>();
+  for (const [tokenId, node] of graph.nodes) nodes.set(tokenId, bound(node));
+  let multiNodes = graph.multiNodes;
+  if (graph.multiNodes) {
+    multiNodes = new Map();
+    for (const [tokenId, list] of graph.multiNodes) multiNodes.set(tokenId, list.map(bound));
+  }
+  return changed ? { ...graph, nodes, multiNodes } : graph;
+}
+
+/**
+ * Direct useValue consts. Partial captures are property reads and stay at `new`. A const the registration's
+ * declared type is known for is annotated with it, so the expression keeps the contextual type it had in the
+ * user's file (`{ kind: 'a' }` stays assignable to `{ kind: 'a' | 'b' }`).
+ */
+function captureHoists(graph: DependencyGraph, copy: UserCopy, types: ReadonlyMap<string, string>): Fragment[] {
+  const lines: Fragment[] = [];
   visitServices(graph, (node) => {
     const name = node.service.valueCapture;
     const expr = node.service.valueSource;
-    if (!name || !expr || !name.startsWith('__neoCapture_')) return;
-    lines.push(`const ${name} = ${expr};`);
+    if (!name || !expr || node.service.valueCaptureRead) return;
+    const type = types.get(name);
+    const annotation = type === undefined ? '' : `: ${type}`;
+    lines.push(fragment`const ${name}${annotation} = ${concat(copy(expr, node.service.valueOrigin, node.service.valueRewrites))};`);
   });
   return lines;
 }
@@ -742,7 +1149,7 @@ function residualValueReads(graph: DependencyGraph): string[] {
   visitServices(graph, (node) => {
     if (!isUnreachable(graph, node)) return;
     const capture = node.service.valueCapture;
-    if (!capture || capture.startsWith('__neoCapture_')) return;
+    if (!capture || !node.service.valueCaptureRead) return;
     lines.push(`void ${capture};`);
   });
   return lines;
@@ -757,7 +1164,8 @@ function eagerSyncLines(graph: DependencyGraph, getImport: GetImport, hasAsync: 
   if (graph.optimizationMode !== 'closed') return [];
   const lines: string[] = [];
   const pushNode = (node: DependencyNode, factoryId: string) => {
-    if (node.service.isAsync) return;
+    // An alias builds nothing (the analyzer refuses it as an eager root): its target is what an eager list names.
+    if (node.service.isAsync || node.service.type === 'alias') return;
     const tokenKey = resolveTokenKey(node.service, getImport);
     if (node.service.lifecycle === 'transient') {
       lines.push(`{ this.${factoryId}(); }`);

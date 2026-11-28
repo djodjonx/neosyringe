@@ -1,0 +1,39 @@
+{
+  "resolve-many": {
+    "sent": "mail to ana",
+    "at": 1700,
+    "tries": 3,
+    "sameInstance": true,
+    "empty": 0,
+    "scopesIsolated": true,
+    "scopedOnce": true
+  },
+  "scope-inputs": {
+    "first": "acme/r1",
+    "second": "globex/r2",
+    "isolated": true,
+    "stable": true,
+    "tenant": "acme"
+  },
+  "alias": {
+    "sameInstance": true,
+    "reporterSharesIt": true,
+    "answer": "console: hello",
+    "lines": ["from the reporter", "hello"]
+  },
+  "signal": {
+    "size": 4,
+    "rejectedWithReason": true,
+    "lookalikeIsReason": false,
+    "factoryObservedAbort": true
+  },
+  "disposal": {
+    "afterFirstDestroy": ["repo", "connection"],
+    "afterSecondDestroy": ["repo", "connection"]
+  },
+  "usage-recipes": {
+    "prebuilt": "prebuilt",
+    "sameObject": true,
+    "endpoint": "/api"
+  }
+}

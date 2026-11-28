@@ -36,7 +36,7 @@ describe('E2E - Scoped Injections', () => {
     const validator = new GraphValidator();
     validator.validate(graph);
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, undefined, true, false, 'reference');
     return generator.generate();
   };
 

@@ -23,11 +23,29 @@ See [Documentation](https://djodjonx.github.io/neosyringe/guide/cli).
 - `--retention-report [path]`: write the retention report to `path`, or print it to stdout.
 - `--help`: print the usage.
 
+## Diagnostics in text
+
+Each error is one block: `<file>:<line>:<column> <severity> <code>`, the message, `Dependency chain: A -> B` when the analyzer recorded one,
+and `Fix: <hint>` when the error has a code. The position is the registration in your source. The text used to be one line per error
+(`<file>:<line>:<column>  [<type>]  <message>`): read the first line of a block, or use `--json`.
+
+## Doctor
+
+```bash
+npx neosyringe-check doctor [--json] [-p <path>]
+```
+
+Checks `typescript` against the range the plugin declares, the versions of the NeoSyringe packages (each dependency is read from the real path of the package that declares it, as Node resolves it), their package exports, the tsconfig used,
+and whether a known bundler config file declares the plugin. It is read-only, resolves no application service and prints no config value,
+secret or factory source. A fact it cannot prove is `unknown`, never `ok`. `integration: ok` means "declared in `<file>`": the file is read, not run.
+Exit 1 when a check is an `error`; `warning` and `unknown` are printed and exit 0. A flag it does not take is a usage error (exit 2).
+
 ## Diagnostics in JSON
 
 `--json` prints `schemaVersion: 1`. Each error carries a stable `code` (for example `NEO_MISSING_PROVIDER`)
 and a `severity` (`error` or `warning`). The `message` is for humans and may be reworded: match on `code`.
-`token`, `chain` and `containerId` are present when the analyzer knows them. When `containerId` is set,
+`token`, `chain` and `containerId` are present when the analyzer knows them. `hint` is the targeted fix the text prints after `Fix:`;
+it was added without removing a field, so `schemaVersion` stays 1. When `containerId` is set,
 `containerName` and `containerFile` (relative to the working directory) name that container and its source file,
 for example for a constructor dependency that no registration of the container provides.
 The LSP and the devtools graph (`serializeGraph`) report the same `code` and `severity`.

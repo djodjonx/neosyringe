@@ -174,7 +174,7 @@ describe('Plugin — multi-container per file', () => {
 
     // Bug 2: ConsumerA's Logger dependency must be wired to the parent, not undefined
     expect(result).not.toContain('new ConsumerA(undefined)');
-    expect(result).toMatch(/new ConsumerA\(this\.resolve\("Logger_[a-f0-9]+"\)\)/);
+    expect(result).toMatch(/new ConsumerA\(this\._resolveInternal\("Logger_[a-f0-9]+"\)\)/);
   });
 
   it('buildEnd does not throw when a parent token is used at an injection site', () => {

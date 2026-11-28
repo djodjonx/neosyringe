@@ -1,6 +1,7 @@
 import type { Node, SourceFile } from 'typescript';
 import { DependencyGraph, DependencyNode, TokenId } from '../analyzer/types';
 import { getSimpleName } from '../analyzer/utils/TokenUtils';
+import { cycleEdges, cycleGroups, type CycleMember } from './cycleSearch';
 
 /**
  * Represents a validation error found in the dependency graph.
@@ -46,8 +47,6 @@ export class GraphValidator {
    */
   public validateAll(graph: DependencyGraph): GraphValidationResult {
     const errors: GraphValidationError[] = [];
-    const visited = new Set<TokenId>();
-    const recursionStack = new Set<TokenId>();
 
     // Get tokens provided by parent container (if any)
     const parentTokens = graph.parentProvidedTokens ?? new Set<TokenId>();
@@ -115,14 +114,7 @@ export class GraphValidator {
       }
     }
 
-    // 3. Check for Cycles (only in local nodes, parent is assumed valid)
-    // TODO: cycle detection does not yet walk multi-node deps; cycles involving
-    // multi-registered tokens (A → multiToken → A) will not be detected.
-    for (const nodeId of this.registrationNodes(graph).keys()) {
-      if (!visited.has(nodeId)) {
-        this.detectCycleCollect(nodeId, graph, visited, recursionStack, parentTokens, errors);
-      }
-    }
+    this.collectCycles(graph, parentTokens, errors);
 
     return {
       valid: errors.length === 0,
@@ -147,45 +139,51 @@ export class GraphValidator {
     }
   }
 
-  /**
-   * Recursive Helper for Cycle Detection that collects errors.
-   */
-  private detectCycleCollect(
-    nodeId: TokenId,
+  private collectCycles(
     graph: DependencyGraph,
-    visited: Set<TokenId>,
-    stack: Set<TokenId>,
     parentTokens: Set<TokenId>,
-    errors: GraphValidationError[]
+    errors: GraphValidationError[],
   ): void {
-    visited.add(nodeId);
-    stack.add(nodeId);
-
-    const node = graph.nodes.get(nodeId);
-    if (node) {
-      for (const depId of node.dependencies) {
-        // Skip parent-provided tokens (they're external, no cycle possible with local graph)
-        if (parentTokens.has(depId)) continue;
-
-        if (!visited.has(depId)) {
-          this.detectCycleCollect(depId, graph, visited, stack, parentTokens, errors);
-        } else if (stack.has(depId)) {
-          const stackArr = [...stack];
-          const cycle = [...stackArr.slice(stackArr.indexOf(depId)), depId];
-          const readableCycle = cycle.map(id => getSimpleName(id));
-          errors.push({
-            type: 'cycle',
-            code: 'NEO_CYCLE',
-            message: `Circular dependency detected: ${readableCycle.join(' -> ')}`,
-            node: node.service.registrationNode,
-            sourceFile: node.service.registrationNode.getSourceFile(),
-            tokenId: nodeId,
-          });
-        }
+    const located = new Map<string, { tokenId: string; name: string; node: Node; sourceFile: SourceFile }>();
+    const members: CycleMember[] = [];
+    const multiTokens = new Set<string>();
+    const add = (tokenId: string, node: DependencyNode, multiIndex?: number): void => {
+      const stamped = node.service.registrationId;
+      const id = stamped && stamped.length > 0
+        ? stamped
+        : multiIndex === undefined ? tokenId : `multi:${tokenId}:${multiIndex}`;
+      members.push({ id, tokenId, dependencies: node.dependencies });
+      located.set(id, {
+        tokenId,
+        name: getSimpleName(tokenId),
+        node: node.service.registrationNode,
+        sourceFile: node.service.registrationNode.getSourceFile(),
+      });
+      if (multiIndex !== undefined) multiTokens.add(tokenId);
+    };
+    for (const [tokenId, node] of graph.nodes) add(tokenId, node);
+    if (graph.multiNodes) {
+      for (const [tokenId, nodes] of graph.multiNodes) {
+        nodes.forEach((node, index) => add(tokenId, node, index));
       }
     }
-
-    stack.delete(nodeId);
+    const edges = cycleEdges(members, parentTokens);
+    const { reports } = cycleGroups(edges, (id) => located.get(id)?.tokenId ?? id, multiTokens);
+    for (const report of reports) {
+      // The anchor is the back-edge source: the last id before the repeated start.
+      const anchorId = report.ids[report.ids.length - 2];
+      const anchor = anchorId === undefined ? undefined : located.get(anchorId);
+      if (!anchor) continue;
+      const names = report.ids.map((id) => located.get(id)?.name ?? getSimpleName(id));
+      errors.push({
+        type: 'cycle',
+        code: 'NEO_CYCLE',
+        message: `Circular dependency detected: ${names.join(' -> ')}`,
+        node: anchor.node,
+        sourceFile: anchor.sourceFile,
+        tokenId: anchor.tokenId,
+      });
+    }
   }
 
 }

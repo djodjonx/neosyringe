@@ -10,6 +10,9 @@ export interface ValidationContext {
   /** Inherited tokens (resolved by TokenResolver) - for builders only */
   inheritedTokens?: Map<TokenId, InheritedToken>;
 
+  /** Multi tokens a builder reaches through `{ all }` from its parents and partials (TokenResolver) */
+  inheritedMultiTokens?: Set<TokenId>;
+
   /** Already visited configs (for cycle detection) */
   visited?: Set<string>;
 }

@@ -1,9 +1,5 @@
-import type * as ts from 'typescript';
-import { TSContext } from '../../TSContext';
-import type { BorrowedRegistration, DependencyGraph, DependencyNode, TokenId } from '../types';
+import type { BorrowedRegistration, ConfigGraph, DependencyGraph, DependencyNode, TokenId } from '../types';
 import { exportedRootIds } from '../parsers/ConfigParser';
-import { TokenResolverService } from '../shared/TokenResolverService';
-import { CallExpressionUtils } from '../utils/CallExpressionUtils';
 
 
 /**
@@ -18,19 +14,18 @@ import { CallExpressionUtils } from '../utils/CallExpressionUtils';
  *
  * @example
  * ```typescript
- * const resolver = new ParentContainerResolver(checker, tokenResolverService, parseCallback);
+ * const resolver = new ParentContainerResolver((parent) => buildParentGraph(parent));
  *
  * const graph: DependencyGraph = { ... };
- * resolver.extractParentContainerTokens(containerIdentifier, graph);
+ * resolver.extractFromConfig(parentConfig, graph);
  *
  * // graph.parentProvidedTokens now contains all tokens from the parent
  * ```
  */
 export class ParentContainerResolver {
   constructor(
-    private checker: ts.TypeChecker,
-    private tokenResolverService: TokenResolverService,
-    private parseBuilderConfigCallback: (node: ts.CallExpression, graph: DependencyGraph) => void,
+    /** Builds the unresolved graph of a parent config from the snapshot. The same parent may be asked for many times. */
+    private parentGraphOf: (parent: ConfigGraph) => DependencyGraph,
     private resolveParentGraph?: (graph: DependencyGraph) => void,
   ) {}
 
@@ -65,90 +60,20 @@ export class ParentContainerResolver {
   }
 
   /**
-   * Extracts tokens provided by a parent container.
+   * Takes the tokens of a NeoSyringe parent (defineBuilderConfig/definePartialConfig), found by
+   * configuration identity, then those of its own parent (transitive inheritance).
    *
-   * Handles:
-   * 1. NeoSyringe containers (defineBuilderConfig/definePartialConfig)
-   * 2. Legacy containers (declareContainerTokens)
-   * 3. Transitive parent tokens (parent's parent)
-   *
-   * @param containerIdentifier - Identifier of the parent container
+   * @param parent - The collected config named by `useContainer`
    * @param graph - The dependency graph to populate with parent tokens
-   * @param parentContainerNames - Set to mark this container as a parent
-   *
-   * @example
-   * ```typescript
-   * const identifier = ...; // reference to parent container
-   * resolver.extractParentContainerTokens(identifier, graph, parentContainerNames);
-   * // graph.parentProvidedTokens now contains parent's tokens
-   * ```
    */
-  extractParentContainerTokens(
-    containerIdentifier: ts.Identifier,
-    graph: DependencyGraph,
-    parentContainerNames: Set<string>
-  ): void {
-    const symbol = this.checker.getSymbolAtLocation(containerIdentifier);
-    if (!symbol) return;
-
-    // Mark this container as a parent
-    parentContainerNames.add(containerIdentifier.text);
-
+  extractFromConfig(parent: ConfigGraph, graph: DependencyGraph): void {
     // Ensure parentProvidedTokens is initialized before any sub-call populates it
     if (!graph.parentProvidedTokens) {
       graph.parentProvidedTokens = new Set();
     }
 
-    const resolvedSymbol = this.tokenResolverService.resolveSymbol(symbol);
-    const declaration = resolvedSymbol.valueDeclaration ?? resolvedSymbol.declarations?.[0];
-    if (!declaration) return;
-
-    // Case 1: NeoSyringe container (defineBuilderConfig or definePartialConfig)
-    if (TSContext.ts.isVariableDeclaration(declaration) && declaration.initializer) {
-      const init = declaration.initializer;
-
-      if (TSContext.ts.isCallExpression(init)) {
-        // Check if it's a NeoSyringe config call
-        if (CallExpressionUtils.isDefineBuilderConfig(init, this.checker) ||
-            CallExpressionUtils.isDefinePartialConfig(init, this.checker)) {
-          this.extractFromNeoSyringeContainer(init, containerIdentifier.text, graph);
-          return;
-        }
-
-        // Check if it's declareContainerTokens<{...}>()
-        if (CallExpressionUtils.isDeclareContainerTokens(init, this.checker)) {
-          this.extractFromDeclaredTokens(init, graph);
-          return;
-        }
-      }
-    }
-  }
-
-  /**
-   * Extracts tokens from a NeoSyringe container (defineBuilderConfig/definePartialConfig).
-   *
-   * Creates a temporary graph to parse the parent config, then extracts all tokens
-   * including transitive parent tokens.
-   *
-   * @param init - The defineBuilderConfig/definePartialConfig call expression
-   * @param containerName - Name of the parent container
-   * @param graph - The child graph to populate with parent tokens
-   */
-  private extractFromNeoSyringeContainer(
-    init: ts.CallExpression,
-    containerName: string,
-    graph: DependencyGraph
-  ): void {
-    // Parse the parent config to extract its tokens
-    const parentGraph: DependencyGraph = {
-      containerId: containerName,
-      nodes: new Map(),
-      roots: []
-    };
-
-    // Use callback to parse (avoids circular dependency).
     // Constructor edges stay unresolved until a capture walk needs them.
-    this.parseBuilderConfigCallback(init, parentGraph);
+    const parentGraph = this.parentGraphOf(parent);
 
     graph.parentProvidedTokens ??= new Set();
     graph.parentResolvableTokens ??= new Set();
@@ -166,6 +91,8 @@ export class ParentContainerResolver {
     // symbol needed to reference that class from the child's own generated code
     // is captured separately in parentClassTokenSymbols (see field doc).
     for (const [tokenId, node] of parentGraph.nodes) {
+      // A scope input is the value of one scope, never a service a child can read from its parent.
+      if (node.service.inputSlot !== undefined) continue;
       graph.parentProvidedTokens.add(tokenId);
       if (node.service.isInterfaceToken) {
         graph.parentResolvableTokens.add(tokenId);
@@ -299,40 +226,22 @@ export class ParentContainerResolver {
   }
 
   /**
-   * Extracts tokens from declareContainerTokens<{ Token: Type }>().
+   * Takes the tokens of a legacy container declared with declareContainerTokens<{ Token: Type }>().
    *
-   * The type argument contains token declarations for a legacy container.
-   * Each property in the type object represents a token.
+   * declareContainerTokens() bridges to a legacy container that is always resolved
+   * by string key (that's the whole point of the shim), regardless of whether the
+   * declared type is a class or an interface, so every entry is resolvable.
    *
-   * @param node - The declareContainerTokens call expression
+   * @param tokens - Token ids read from the declared type by the collector
    * @param graph - The graph to populate with declared tokens
-   *
-   * @example
-   * ```typescript
-   * // Given: declareContainerTokens<{ ILogger: ILogger, IDatabase: IDatabase }>()
-   * // Extracts: ["ILogger_hash", "IDatabase_hash"]
-   * ```
    */
-  private extractFromDeclaredTokens(node: ts.CallExpression, graph: DependencyGraph): void {
-    if (!node.typeArguments || node.typeArguments.length === 0) return;
-
-    const typeArg = node.typeArguments[0];
-    const type = this.checker.getTypeFromTypeNode(typeArg);
+  extractFromDeclaredTokens(tokens: ReadonlySet<TokenId> | undefined, graph: DependencyGraph): void {
+    if (!tokens) return;
 
     graph.parentProvidedTokens ??= new Set();
     graph.parentResolvableTokens ??= new Set();
 
-    // Get properties of the type (e.g., { AuthService: AuthService, UserRepo: UserRepo })
-    // declareContainerTokens() bridges to a legacy container that is always resolved
-    // by string key (that's the whole point of the shim), regardless of whether the
-    // declared type is a class or an interface — so every entry is resolvable.
-    const properties = type.getProperties();
-    for (const prop of properties) {
-      const propType = this.checker.getTypeOfSymbol(prop);
-      const tokenId = propType
-        ? this.tokenResolverService.getTypeId(propType)
-        // Fallback to property name if type not available
-        : prop.getName();
+    for (const tokenId of tokens) {
       graph.parentProvidedTokens.add(tokenId);
       graph.parentResolvableTokens.add(tokenId);
     }

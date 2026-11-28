@@ -42,18 +42,31 @@ Transient services skip the cache and return a fresh instance on every `resolve(
 
 The plugin replaces the `defineBuilderConfig(...)` call with a generated container class, in the same file. The size of that class depends on your graph and on the [profile](./profiles.md). This page promises no size. A measured example, with its command, date and feature sets, is in the [profiles guide](./profiles.md#what-the-numbers-say-and-what-they-do-not).
 
+## Scope inputs
+
+A container that declares `scopeInputs` gets a few more members in its class. A container without them gets none: its output is the one it always had.
+
+- A plan of the declared inputs, built once when the class is defined (`private static readonly _inputPlan`, `packages/core/src/generator/inputEmitter.ts:62`). It lives in the class, so the output adds no top-level name that could collide with one of yours.
+- A third constructor parameter, the values of the scope. The model is built without it, which is what makes it the unbound model (`packages/core/src/generator/inputEmitter.ts:108` to `:116`).
+- `createScope(options)`: the same state checks as every `createScope`, then the check of the parents, then the plan reads and validates the values, then one `new` that holds them (`packages/core/src/generator/inputEmitter.ts:123` to `:135`).
+- A first line `this._assertBound('resolve()')` (or `resolveAll()`, `resolveMany()`) in each public member, and a rejection in `initialize()`, that refuse the model with `NEO_SCOPE_INPUTS_UNBOUND` (`packages/core/src/generator/inputEmitter.ts:33`).
+- An input has a creator that reads its slot from the values of the scope (`packages/core/src/generator/FactoryEmitter.ts:620`). It is a borrowed singleton with no provider and no disposal slot, so the container never disposes it.
+- A `destroy()` that, once the container is closed, releases the values of the scope and the borrowed marks set for them (`packages/core/src/generator/inputEmitter.ts:144` to `:155`). A destroy refused with `NEO_CONTAINER_BUSY` releases nothing.
+
+Both emitters write the same members, in the four combinations of profile and mode. On the program the plugin rewrites, the exported container is typed by this class: `createScope` takes `{ values: readonly { token, useValue }[] }` there, with the tokens as string ids, so the types of the values are checked on the source program and not on the rewritten one. See [types](/api/types#containertemplate-and-boundcontainer).
+
 ## Debugging
 
 The generated container exposes a few helpers for `_graph`/`_dependencyGraph`:
 
 ```typescript
 // vite.config.ts / rollup.config.js / webpack.config.js / esbuild build script
-neoSyringePlugin.vite({ debug: false })   // or .rollup(), .webpack(), .esbuild()
+neoSyringePlugin.vite({ debug: true })    // default: false. Or .rollup(), .webpack(), .esbuild()
 ```
 
 ```json
 // tsconfig.json (ts-patch, no bundler)
-{ "transform": "@djodjonx/neosyringe-plugin/transformer", "debug": false }
+{ "transform": "@djodjonx/neosyringe-plugin/transformer", "debug": true }
 ```
 
 This is a **build-time** decision, not a runtime check: when disabled, the token/dependency data is never written into the generated source at all — there's nothing for a bundler to dead-code-eliminate, which matters because ts-patch/plain-`tsc` builds have no bundler or minifier step to do that stripping for you. `container._graph` still exists either way (it just returns `[]` when disabled), so accessing it never breaks.
@@ -83,7 +96,7 @@ console.log(container._dependencyGraph);
 
 ### Overriding a registration in tests
 
-The full profile has `override()` / `clearOverrides()`, meant for tests, not for production wiring. They work only in a build made with the plugin option `testOverrides: true`. Without it they reject with `NEO_TEST_API_DISABLED`. Both return promises: await them.
+The full profile has `override()` / `overrideMany()` / `clearOverrides()`, meant for tests, not for production wiring. They work only in a build made with the plugin option `testOverrides: true`. Without it they reject with `NEO_TEST_API_DISABLED`. All three return promises: await them. See [Profiles](./profiles.md) for `overrideMany`.
 
 ```typescript
 await container.override(useInterface<ILogger>(), () => mockLogger);

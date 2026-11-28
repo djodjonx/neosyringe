@@ -55,6 +55,7 @@ export class ErrorFormatter implements IErrorFormatter {
       context: {
         tokenText: injection.tokenText,
         conflictSource: source.name,
+        ...(source.type === 'parent' ? { reason: 'parent-override' as const } : {}),
       },
     };
   }

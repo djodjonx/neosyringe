@@ -1,511 +1,13 @@
 import type * as ts from 'typescript';
-import { basename } from 'node:path';
 import { TSContext } from '../../TSContext';
-import type { AnalysisError, DependencyGraph, DependencyNode, RetentionReason, ServiceDefinition, TokenId, ValidationMode } from '../types';
+import type { AnalysisError, DependencyGraph, DependencyNode, RetentionReason, ScopeInput, TokenId, ValidationMode } from '../types';
 import { getSimpleName } from '../utils/TokenUtils';
-import { resolveNeoMarker } from '../shared/markerProvenance';
-import { extendsCaptureText } from '../shared/extendsReference';
-import { containerKeyFor, declaredFactoryEdges, partialInjectionsSpreadError, stampRegistration, valueCaptureFor as captureExpression } from '../shared/registrationGraph';
-import { TokenResolverService } from '../shared/TokenResolverService';
-import { HashUtils } from '../shared/HashUtils';
-import { InjectionParser, type ParsedInjection } from './InjectionParser';
 
-/**
- * Service responsible for parsing defineBuilderConfig and definePartialConfig calls.
- *
- * This parser extracts configuration information from AST nodes and populates
- * the dependency graph. It handles:
- * - Container name and ID extraction
- * - Injection array parsing
- * - Extends array parsing (partial configs)
- * - Parent container references (useContainer)
- *
- * @example
- * ```typescript
- * const parser = new ConfigParser(checker, tokenResolverService);
- * const graph: DependencyGraph = { nodes: new Map(), roots: [], errors: [] };
- *
- * parser.parseBuilderConfig(configCallNode, graph);
- * // graph is now populated with services
- * ```
+/*
+ * Reading of the literal `optimization` and `runtime` blocks, and retention.
+ * Discovery of builders and partials lives in ConfigCollector; the graph is built from its output
+ * by graphAdapter.ts.
  */
-export class ConfigParser {
-  private readonly injectionParser: InjectionParser;
-
-  constructor(
-    private checker: ts.TypeChecker,
-    private tokenResolverService: TokenResolverService,
-    private validation: ValidationMode = 'strict',
-  ) {
-    this.injectionParser = new InjectionParser(checker, tokenResolverService, validation);
-  }
-
-  /**
-   * Parses a defineBuilderConfig or definePartialConfig call expression.
-   *
-   * Extracts all configuration properties and populates the dependency graph.
-   *
-   * @param node - The defineBuilderConfig/definePartialConfig call expression
-   * @param graph - The dependency graph to populate
-   * @param parentContainerNames - Set of parent container names for reference
-   *
-   * @example
-   * ```typescript
-   * const callExpr = ...; // defineBuilderConfig({ name: 'App', injections: [...] })
-   * parser.parseBuilderConfig(callExpr, graph, parentContainerNames);
-   * ```
-   */
-  parseBuilderConfig(
-    node: ts.CallExpression,
-    graph: DependencyGraph,
-    parentContainerNames: Set<string>,
-    merge = false,
-    partialBinding?: string,
-  ): void {
-    const args = node.arguments;
-    if (args.length < 1) return;
-
-    const configObj = args[0];
-    if (!TSContext.ts.isObjectLiteralExpression(configObj)) return;
-
-    // A merged partial keeps the host container's name, id and key.
-    if (!merge) {
-      // Parse 'name' property for containerName and containerId
-      const nameProp = configObj.properties.find(p =>
-        p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'name'
-      );
-
-      if (nameProp && TSContext.ts.isPropertyAssignment(nameProp) && TSContext.ts.isStringLiteral(nameProp.initializer)) {
-        graph.containerName = nameProp.initializer.text;
-        graph.containerId = nameProp.initializer.text;
-      } else {
-        // Generate hash-based containerId if no name field
-        graph.containerId = this.generateHashBasedContainerId(node);
-      }
-      graph.containerKey = containerKeyFor(node);
-    }
-
-    // Parse 'extends' before local injections so partial multi order is stable.
-    const extendsProp = configObj.properties.find(p =>
-      p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'extends'
-    );
-
-    if (extendsProp && TSContext.ts.isPropertyAssignment(extendsProp) && TSContext.ts.isArrayLiteralExpression(extendsProp.initializer)) {
-      this.parseExtendsArray(extendsProp.initializer, graph, parentContainerNames);
-    }
-
-    // Parse 'injections' property
-    const injectionsProp = configObj.properties.find(p =>
-      p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'injections'
-    );
-
-    if (injectionsProp && TSContext.ts.isPropertyAssignment(injectionsProp) && TSContext.ts.isArrayLiteralExpression(injectionsProp.initializer)) {
-      this.parseInjectionsArray(injectionsProp.initializer, graph, partialBinding, merge);
-    }
-
-    // Parse 'useContainer' property
-    const useContainerProp = configObj.properties.find(p =>
-      p.name && TSContext.ts.isIdentifier(p.name) && p.name.text === 'useContainer'
-    );
-
-    if (useContainerProp && TSContext.ts.isPropertyAssignment(useContainerProp)) {
-      if (!graph.legacyContainers) graph.legacyContainers = [];
-      if (!graph.parentProvidedTokens) graph.parentProvidedTokens = new Set();
-
-      const containerExpr = useContainerProp.initializer;
-
-      if (TSContext.ts.isIdentifier(containerExpr)) {
-        graph.legacyContainers.push(containerExpr.text);
-        // Mark as parent container
-        parentContainerNames.add(containerExpr.text);
-      }
-    }
-
-    // A merged partial keeps the host optimization. ADR006 lines 9-14.
-    if (!merge) {
-      const known = new Set<TokenId>(graph.nodes.keys());
-      if (graph.multiNodes) {
-        for (const id of graph.multiNodes.keys()) known.add(id);
-      }
-      readOptimization(configObj, graph, known, (expr) => this.tokenResolverService.resolveTokenId(expr));
-      readRuntimeProfile(configObj, graph);
-      const diagnostics = closedModeDiagnostics(
-        graph.optimizationMode,
-        this.validation,
-        opaqueFactoryNames(graph),
-        configObj,
-        configObj.getSourceFile(),
-      );
-      if (diagnostics.length > 0) {
-        if (!graph.errors) graph.errors = [];
-        graph.errors.push(...diagnostics);
-      }
-    }
-  }
-
-  /**
-   * Parses an array of injection objects.
-   *
-   * @param arrayLiteral - The injections array literal
-   * @param graph - The dependency graph to populate
-   */
-  private parseInjectionsArray(
-    arrayLiteral: ts.ArrayLiteralExpression,
-    graph: DependencyGraph,
-    partialBinding?: string,
-    merge = false,
-  ): void {
-    if (partialBinding) {
-      const spread = partialInjectionsSpreadError(arrayLiteral.elements);
-      if (spread) {
-        if (!graph.errors) graph.errors = [];
-        graph.errors.push({
-          type: 'unsupported',
-          code: spread.code,
-          message: spread.message,
-          node: spread.node,
-          sourceFile: arrayLiteral.getSourceFile(),
-        });
-        return;
-      }
-    }
-    for (let index = 0; index < arrayLiteral.elements.length; index++) {
-      const element = arrayLiteral.elements[index];
-      if (TSContext.ts.isObjectLiteralExpression(element)) {
-        this.parseInjectionObject(element, graph, partialBinding, index, merge);
-      }
-    }
-  }
-
-  /**
-   * Parses a single injection object.
-   *
-   * Extracts token, provider, lifecycle, factory configuration, etc.
-   * and creates a ServiceDefinition in the graph.
-   *
-   * @param obj - The injection object literal
-   * @param graph - The dependency graph to populate
-   */
-  parseInjectionObject(
-    obj: ts.ObjectLiteralExpression,
-    graph: DependencyGraph,
-    partialBinding?: string,
-    index = 0,
-    merge = false,
-  ): void {
-    const sourceFile = obj.getSourceFile();
-    const result = this.injectionParser.parse(obj, sourceFile);
-
-    if (result === null) return;
-
-    if (this.isAnalysisError(result)) {
-      if (!graph.errors) graph.errors = [];
-      graph.errors.push(result);
-      return;
-    }
-
-    const parsed = result;
-    const { tokenId, tokenNode, tokenSymbol, isInterfaceToken, isValueToken,
-            isMulti, isScoped, lifecycle, valueSource, factorySource, isAsync,
-            implementationSymbol, registrationType } = parsed;
-    const tokenText = parsed.tokenText;
-
-    if (registrationType === 'value') {
-      if (this.emitMixedMultiError(isMulti, tokenId, tokenText, obj, graph)) return;
-      const definition: ServiceDefinition = {
-        tokenId,
-        registrationNode: obj,
-        type: 'value',
-        lifecycle: 'singleton',
-        isInterfaceToken,
-        valueSource: valueSource!,
-        valueCapture: this.valueCaptureFor(graph, partialBinding, index, merge),
-        ownership: parsed.ownership,
-        isScoped,
-      };
-      this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
-      return;
-    }
-
-    if (registrationType === 'factory') {
-      if (this.emitMixedMultiError(isMulti, tokenId, tokenText, obj, graph)) return;
-      if (graph.nodes.has(tokenId) && !isScoped) {
-        if (!graph.errors) graph.errors = [];
-        graph.errors.push({
-          type: 'duplicate',
-          message: `Duplicate registration: '${tokenText}' is already registered.`,
-          node: obj,
-          sourceFile,
-        });
-        return;
-      }
-      const definition: ServiceDefinition = {
-        tokenId,
-        tokenSymbol: tokenSymbol ? this.resolveSymbol(tokenSymbol) : undefined,
-        registrationNode: obj,
-        type: 'factory',
-        lifecycle,
-        isInterfaceToken,
-        isValueToken,
-        factorySource: factorySource!,
-        isScoped,
-        isAsync: isAsync || undefined,
-        isDisposable: parsed.isDisposable || undefined,
-        isAsyncDisposable: parsed.isAsyncDisposable || undefined,
-        factoryDependencies: parsed.factoryDependencies,
-        opaque: parsed.opaque,
-        ownership: parsed.ownership,
-      };
-      if (parsed.dependenciesWarning) {
-        if (!graph.errors) graph.errors = [];
-        graph.errors.push(parsed.dependenciesWarning);
-      }
-      this.addToGraph(isMulti, tokenId, { service: definition, dependencies: declaredFactoryEdges(definition) }, graph);
-      return;
-    }
-
-    // explicit / autowire
-    if (!implementationSymbol) return;
-    if (this.emitMixedMultiError(isMulti, tokenId, tokenText, obj, graph)) return;
-    if (graph.nodes.has(tokenId) && !isScoped) {
-      if (!graph.errors) graph.errors = [];
-      graph.errors.push({
-        type: 'duplicate',
-        message: `Duplicate registration: '${tokenText}' is already registered.`,
-        node: obj,
-        sourceFile,
-      });
-      return;
-    }
-
-    if (registrationType === 'explicit' && isInterfaceToken && parsed.providerNode) {
-      this.validateTypeCompatibility(tokenNode, parsed.providerNode, obj, graph);
-    }
-
-    const resolvedImpl = this.resolveSymbol(implementationSymbol);
-    const definition: ServiceDefinition = {
-      tokenId,
-      implementationSymbol: resolvedImpl,
-      tokenSymbol: tokenSymbol ? this.resolveSymbol(tokenSymbol) : undefined,
-      registrationNode: obj,
-      type: registrationType,
-      lifecycle,
-      isInterfaceToken,
-      isScoped,
-      isDisposable: parsed.isDisposable || undefined,
-      isAsyncDisposable: parsed.isAsyncDisposable || undefined,
-      implementationLocalName: parsed.implementationLocalName,
-      tokenLocalName: parsed.tokenLocalName,
-    };
-    this.addToGraph(isMulti, tokenId, { service: definition, dependencies: [] }, graph);
-  }
-
-  /** Direct useValue is hoisted once. A partial reads the property; it does not re-run the expression. */
-  private valueCaptureFor(
-    graph: DependencyGraph,
-    partialBinding: string | undefined,
-    index: number,
-    merge: boolean,
-  ): string | undefined {
-    if (!partialBinding && merge) return undefined;
-    return captureExpression(graph.containerKey, index, partialBinding);
-  }
-
-  private addToGraph(
-    isMulti: boolean,
-    tokenId: TokenId,
-    node: DependencyNode,
-    graph: DependencyGraph
-  ): void {
-    stampRegistration(node.service, node.service.registrationNode, graph.containerKey);
-    if (isMulti) {
-      if (!graph.multiNodes) graph.multiNodes = new Map();
-      const existing = graph.multiNodes.get(tokenId) ?? [];
-      existing.push(node);
-      graph.multiNodes.set(tokenId, existing);
-    } else {
-      graph.nodes.set(tokenId, node);
-    }
-  }
-
-  private isAnalysisError(result: ParsedInjection | AnalysisError): result is AnalysisError {
-    return !('__kind' in result);
-  }
-
-  /**
-   * Emits an error if a token is registered both with and without `multi: true`.
-   *
-   * @returns true if an error was emitted (caller should return early), false otherwise.
-   */
-  private emitMixedMultiError(
-    isMulti: boolean,
-    tokenId: TokenId,
-    tokenText: string,
-    obj: ts.ObjectLiteralExpression,
-    graph: DependencyGraph
-  ): boolean {
-    const sourceFile = obj.getSourceFile();
-    const msg = `Token '${tokenText}' is registered both with and without 'multi: true'. All registrations for a token must consistently use multi: true or not at all.`;
-    if (isMulti && graph.nodes.has(tokenId)) {
-      if (!graph.errors) graph.errors = [];
-      graph.errors.push({ type: 'duplicate', message: msg, node: obj, sourceFile });
-      return true;
-    }
-    if (!isMulti && graph.multiNodes?.has(tokenId)) {
-      if (!graph.errors) graph.errors = [];
-      graph.errors.push({ type: 'duplicate', message: msg, node: obj, sourceFile });
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Validates type compatibility between token and provider.
-   *
-   * @param tokenNode - The token expression
-   * @param providerNode - The provider expression
-   * @param registrationNode - The registration object for error reporting
-   * @param graph - The dependency graph to collect errors
-   */
-  private validateTypeCompatibility(
-    tokenNode: ts.Node,
-    providerNode: ts.Node,
-    registrationNode: ts.Node,
-    graph: DependencyGraph
-  ): void {
-    let tokenType: ts.Type | undefined;
-
-    // Resolve tokenNode to the actual call expression
-    let resolvedTokenNode = tokenNode;
-    if (TSContext.ts.isExpression(tokenNode)) {
-      const resolved = this.tokenResolverService.resolveToInitializer(tokenNode);
-      if (resolved) {
-        resolvedTokenNode = resolved;
-      }
-    }
-
-    if (TSContext.ts.isExpression(resolvedTokenNode) && this.tokenResolverService.isUseInterfaceCall(resolvedTokenNode)) {
-      const typeArgs = resolvedTokenNode.typeArguments;
-      if (typeArgs && typeArgs.length > 0) {
-        tokenType = this.checker.getTypeFromTypeNode(typeArgs[0]);
-      }
-    }
-
-    if (!tokenType) return;
-
-    // Get provider type
-    const providerType = this.checker.getTypeAtLocation(providerNode);
-
-    // Get instance type
-    let providerInstanceType: ts.Type | undefined;
-    const constructSignatures = providerType.getConstructSignatures();
-    if (constructSignatures.length > 0) {
-      providerInstanceType = constructSignatures[0].getReturnType();
-    } else {
-      providerInstanceType = providerType;
-    }
-
-    if (!providerInstanceType) return;
-
-    // Check assignability
-    const isAssignable = this.checker.isTypeAssignableTo(providerInstanceType, tokenType);
-
-    if (!isAssignable) {
-      const sourceFile = registrationNode.getSourceFile();
-      const tokenTypeName = this.checker.typeToString(tokenType);
-      const providerTypeName = this.checker.typeToString(providerInstanceType);
-
-      if (!graph.errors) graph.errors = [];
-      graph.errors.push({
-        type: 'type-mismatch',
-        message: `Type mismatch: Provider '${providerTypeName}' is not assignable to token type '${tokenTypeName}'.`,
-        node: registrationNode,
-        sourceFile: sourceFile
-      });
-    }
-  }
-
-  /**
-   * Parses the extends array to incorporate partial configurations.
-   *
-   * @param arrayLiteral - The extends array literal
-   * @param graph - The dependency graph to populate
-   * @param parentContainerNames - Set of parent container names
-   */
-  private parseExtendsArray(
-    arrayLiteral: ts.ArrayLiteralExpression,
-    graph: DependencyGraph,
-    parentContainerNames: Set<string>
-  ): void {
-    for (const element of arrayLiteral.elements) {
-      if (TSContext.ts.isIdentifier(element) || TSContext.ts.isPropertyAccessExpression(element)) {
-        this.parsePartialConfig(element, graph, parentContainerNames);
-      }
-    }
-  }
-
-  /**
-   * Parses a partial config referenced by identifier or by a namespace property (`P.part`).
-   * The property name is resolved with the checker, the same way a plain identifier is.
-   *
-   * @param element - The extends element
-   * @param graph - The dependency graph to populate
-   * @param parentContainerNames - Set of parent container names
-   */
-  private parsePartialConfig(
-    element: ts.Identifier | ts.PropertyAccessExpression,
-    graph: DependencyGraph,
-    parentContainerNames: Set<string>
-  ): void {
-    const located = TSContext.ts.isPropertyAccessExpression(element) ? element.name : element;
-    const symbol = this.checker.getSymbolAtLocation(located);
-    if (!symbol) return;
-
-    const resolvedSymbol = this.resolveSymbol(symbol);
-    const declaration = resolvedSymbol.valueDeclaration ?? resolvedSymbol.declarations?.[0];
-
-    if (!declaration) return;
-
-    // Expect: const config = definePartialConfig({...})
-    if (TSContext.ts.isVariableDeclaration(declaration) &&
-        declaration.initializer &&
-        TSContext.ts.isCallExpression(declaration.initializer)) {
-      const callExpr = declaration.initializer;
-
-      if (this.isDefinePartialConfigCall(callExpr)) {
-        // The binding is the expression written in `extends`, not the declaration name.
-        const partialBinding = extendsCaptureText(element);
-        this.parseBuilderConfig(callExpr, graph, parentContainerNames, true, partialBinding);
-      }
-    }
-  }
-
-  /**
-   * Checks if a call expression is definePartialConfig.
-   */
-  private isDefinePartialConfigCall(node: ts.CallExpression): boolean {
-    return resolveNeoMarker(this.checker, node) === 'definePartialConfig';
-  }
-
-  /**
-   * Generates a hash-based container ID when no name is provided.
-   */
-  private generateHashBasedContainerId(node: ts.CallExpression): string {
-    const sourceFile = node.getSourceFile();
-    const fileName = basename(sourceFile.fileName, '.ts');
-    const position = node.getStart();
-    const configText = node.getText();
-
-    return HashUtils.generateContainerId(fileName, position, configText);
-  }
-
-  /**
-   * Resolves a symbol, following aliases. Delegates to the shared TokenResolverService.
-   */
-  private resolveSymbol(symbol: ts.Symbol): ts.Symbol {
-    return this.tokenResolverService.resolveSymbol(symbol);
-  }
-}
 
 const RETENTION_RANK: Record<RetentionReason['kind'], number> = {
   root: 5,
@@ -522,6 +24,8 @@ export interface OptimizationTarget {
   publicMultiRoots?: TokenId[];
   eagerRoots?: TokenId[];
   runtimeProfile?: 'full' | 'minimal';
+  initializationConcurrency?: number;
+  scopeInputs?: ScopeInput[];
   errors?: AnalysisError[];
 }
 
@@ -560,6 +64,7 @@ export function readOptimization(
   target: OptimizationTarget,
   known: ReadonlySet<TokenId>,
   resolve: (expr: ts.Expression) => TokenId | null,
+  aliases: ReadonlySet<TokenId> = new Set(),
 ): void {
   const optimization = namedInitializer(configObj, 'optimization');
   if (!optimization) return;
@@ -595,6 +100,7 @@ export function readOptimization(
       message: `NEO_CONFIG_UNSUPPORTED: optimization mode '${modeText}' is not supported.`,
       node: modeNode ?? body,
       sourceFile,
+      context: { reason: 'unsupported-mode' },
     });
     return;
   }
@@ -608,6 +114,7 @@ export function readOptimization(
       message: "NEO_CONFIG_UNSUPPORTED: optimization mode 'open' cannot declare roots or eager.",
       node: rootsNode ?? eagerNode ?? body,
       sourceFile,
+      context: { reason: 'open-mode-roots' },
     });
     return;
   }
@@ -616,7 +123,7 @@ export function readOptimization(
     return;
   }
   const roots = readRootList(rootsNode, known, resolve, sourceFile, target);
-  const eager = readRootList(eagerNode, known, resolve, sourceFile, target);
+  const eager = readRootList(eagerNode, known, resolve, sourceFile, target, aliases);
   if (!roots) return;
   target.optimizationMode = 'closed';
   target.publicRoots = roots.filter((item) => !item.all).map((item) => item.id);
@@ -694,12 +201,150 @@ export function readRuntimeProfile(
   target.runtimeProfile = profile.text;
 }
 
+const INITIALIZATION_MESSAGE = 'NEO_CONFIG_UNSUPPORTED: initialization.concurrency must be a positive integer literal';
+
+/** `initialization` of a partial. The type refuses it too (`PartialConfig` has no such member). */
+export const PARTIAL_INITIALIZATION_MESSAGE =
+  'NEO_CONFIG_UNSUPPORTED: initialization is not supported in a partial config: declare it on the builder.';
+
+/**
+ * Literal `initialization.concurrency` only: a positive integer literal, in an object literal with no spread or computed
+ * member. Absent, or `undefined` (for `initialization` or `concurrency`), is the sequential default. Anything else is
+ * `NEO_CONFIG_UNSUPPORTED` at the position of what is wrong: zero, a negative number (a prefix expression), a number
+ * with a fraction or beyond the safe integers, a variable, a string, a spread or computed member, an `initialization` that
+ * is not an object literal. The value is read at build time: it is never an argument of `initialize()`.
+ */
+export function readInitialization(
+  configObj: ts.ObjectLiteralExpression,
+  target: OptimizationTarget,
+): void {
+  const initialization = literalMember(configObj, 'initialization').initializer;
+  if (!initialization) return;
+  const sourceFile = configObj.getSourceFile();
+  const unsupported = (node: ts.Node, reason: string): void => {
+    pushConfigError(target, {
+      type: 'unsupported',
+      code: 'NEO_CONFIG_UNSUPPORTED',
+      message: `${INITIALIZATION_MESSAGE}: ${reason}.`,
+      node,
+      sourceFile,
+    });
+  };
+  const body = unwrapExpression(initialization);
+  if (TSContext.ts.isIdentifier(body) && body.text === 'undefined') return;
+  if (!TSContext.ts.isObjectLiteralExpression(body)) {
+    unsupported(initialization, 'initialization must be an object literal');
+    return;
+  }
+  const member = literalMember(body, 'concurrency');
+  if (member.opaque) {
+    unsupported(member.opaque, 'initialization must be an object literal without spread or computed members');
+    return;
+  }
+  const valueNode = member.initializer;
+  if (!valueNode) return;
+  const value = unwrapExpression(valueNode);
+  if (TSContext.ts.isIdentifier(value) && value.text === 'undefined') return;
+  if (!TSContext.ts.isNumericLiteral(value)) {
+    unsupported(valueNode, 'a number literal is required');
+    return;
+  }
+  const count = Number(value.text);
+  if (!Number.isSafeInteger(count) || count < 1) {
+    unsupported(valueNode, 'the number must be an integer of at least 1');
+    return;
+  }
+  target.initializationConcurrency = count;
+}
+
+const SCOPE_INPUTS_MESSAGE =
+  'NEO_CONFIG_UNSUPPORTED: scopeInputs must be a literal list of useInterface<T>() or useProperty(...) tokens.';
+
+/** The message of an input that is an object: `{ token, multi }` is the form of a registration, not of an input. */
+const SCOPE_INPUT_OBJECT_MESSAGE =
+  'NEO_CONFIG_UNSUPPORTED: a scope input is a token, not an object: an input is never multi and has no option.';
+
+/** `scopeInputs` of a partial. The type refuses it too (`PartialConfig` has no such member). */
+export const PARTIAL_SCOPE_INPUTS_MESSAGE =
+  'NEO_CONFIG_UNSUPPORTED: scopeInputs is not supported in a partial config in this version: declare it on the builder.';
+
+/**
+ * Literal `scopeInputs` only: an array literal with no spread whose elements are `useInterface<T>()` or
+ * `useProperty(...)` tokens. A list that is not literal, a class token and an object element (`{ token, multi }`)
+ * are `NEO_CONFIG_UNSUPPORTED`, each at its own position. A token listed twice, and a token a local or a folded
+ * registration also provides, are duplicates: the second input, or the registration, is the position. The entries
+ * that are refused are not inputs. `classify` answers the token id of an interface or property token, `undefined`
+ * for anything else. `registered` maps each token a registration provides to the registration.
+ */
+export function readScopeInputs(
+  configObj: ts.ObjectLiteralExpression,
+  target: OptimizationTarget,
+  classify: (expr: ts.Expression) => TokenId | undefined,
+  registered: ReadonlyMap<TokenId, ts.Node>,
+): void {
+  const initializer = literalMember(configObj, 'scopeInputs').initializer;
+  if (!initializer) return;
+  const sourceFile = configObj.getSourceFile();
+  const list = unwrapExpression(initializer);
+  if (!TSContext.ts.isArrayLiteralExpression(list) || list.elements.some((element) => TSContext.ts.isSpreadElement(element))) {
+    pushConfigError(target, {
+      type: 'unsupported',
+      code: 'NEO_CONFIG_UNSUPPORTED',
+      message: SCOPE_INPUTS_MESSAGE,
+      node: initializer,
+      sourceFile,
+    });
+    return;
+  }
+  const inputs: ScopeInput[] = [];
+  const seen = new Set<TokenId>();
+  for (const element of list.elements) {
+    const expr = unwrapExpression(element);
+    const tokenId = classify(expr);
+    if (tokenId === undefined) {
+      pushConfigError(target, {
+        type: 'unsupported',
+        code: 'NEO_CONFIG_UNSUPPORTED',
+        message: TSContext.ts.isObjectLiteralExpression(expr) ? SCOPE_INPUT_OBJECT_MESSAGE : SCOPE_INPUTS_MESSAGE,
+        node: element,
+        sourceFile,
+      });
+      continue;
+    }
+    if (seen.has(tokenId)) {
+      pushConfigError(target, {
+        type: 'duplicate',
+        code: 'NEO_DUPLICATE_PROVIDER',
+        message: `Duplicate scope input: '${getSimpleName(tokenId)}' is already declared in scopeInputs.`,
+        node: element,
+        sourceFile,
+      });
+      continue;
+    }
+    seen.add(tokenId);
+    const registration = registered.get(tokenId);
+    if (registration) {
+      pushConfigError(target, {
+        type: 'duplicate',
+        code: 'NEO_DUPLICATE_PROVIDER',
+        message: `Duplicate registration: '${getSimpleName(tokenId)}' is a scope input, and this registration provides it too.`,
+        node: registration,
+        sourceFile: registration.getSourceFile(),
+      });
+      continue;
+    }
+    inputs.push({ tokenId, slot: inputs.length, node: element });
+  }
+  if (inputs.length > 0) target.scopeInputs = inputs;
+}
+
 function readRootList(
   node: ts.Expression | undefined,
   known: ReadonlySet<TokenId>,
   resolve: (expr: ts.Expression) => TokenId | null,
   sourceFile: ts.SourceFile,
   target: OptimizationTarget,
+  aliases: ReadonlySet<TokenId> = new Set(),
 ): Array<{ id: TokenId; all: boolean }> | undefined {
   if (!node) return undefined;
   const list = unwrapExpression(node);
@@ -746,6 +391,18 @@ function readRootList(
       });
       continue;
     }
+    // An alias is not built by the container: it has no provider an eager root could construct. List its target.
+    if (!ref.all && aliases.has(ref.id)) {
+      pushConfigError(target, {
+        type: 'unsupported',
+        code: 'NEO_CONFIG_UNSUPPORTED',
+        message: `NEO_CONFIG_UNSUPPORTED: eager root '${getSimpleName(ref.id)}' is an alias (useExisting): an alias builds nothing, so list the target in eager instead.`,
+        node: element,
+        sourceFile,
+        context: { reason: 'eager-alias' },
+      });
+      continue;
+    }
     refs.push(ref);
   }
   return refs;
@@ -766,7 +423,7 @@ function readOneRoot(
   return id ? { id, all: false } : undefined;
 }
 
-function opaqueFactoryNames(graph: DependencyGraph): string[] {
+export function opaqueFactoryNames(graph: DependencyGraph): string[] {
   const names: string[] = [];
   const visit = (node: DependencyNode) => {
     if (node.service.opaque === true) names.push(getSimpleName(node.service.tokenId));

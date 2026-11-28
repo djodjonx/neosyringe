@@ -11,7 +11,7 @@ import { GraphValidator } from '../../packages/core/src/generator/index';
 import { Generator } from '../../packages/core/src/generator/index';
 
 describe('Generated Code Snapshots', () => {
-  const generateCode = (fileContent: string) => {
+  const generateCode = (fileContent: string, emitter?: 'reference' | 'optimized') => {
     const fileName = 'snapshot-test.ts';
 
     const fullContent = `
@@ -36,7 +36,7 @@ describe('Generated Code Snapshots', () => {
     const validator = new GraphValidator();
     validator.validate(graph);
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, undefined, true, false, emitter);
     return generator.generate();
   };
 
@@ -229,5 +229,74 @@ describe('Generated Code Snapshots', () => {
 
     expect(code).toMatchSnapshot();
   });
+
+  // A container with scope inputs (topic 18): the model, its plan, the bound guards and the releasing destroy.
+  const SCOPE_INPUTS = `
+      function defineBuilderConfig(config: any) { return config; }
+      function useInterface<T>(): any { return null; }
+      function useProperty<T>(cls: any, name: string): any { return null; }
+
+      interface IRequest { id: string; }
+      class Handler {
+        constructor(private request: IRequest, private retries: number) {}
+      }
+
+      export const c = defineBuilderConfig({
+        name: 'ScopeInputsApp',
+        scopeInputs: [useInterface<IRequest>(), useProperty<number>(Handler, 'retries')],
+        injections: [{ token: Handler }]
+      });
+    `;
+
+  it('should match snapshot for scope inputs, reference emitter', () => {
+    expect(generateCode(SCOPE_INPUTS, 'reference')).toMatchSnapshot();
+  });
+
+  it('should match snapshot for scope inputs, optimized emitter', () => {
+    expect(generateCode(SCOPE_INPUTS, 'optimized')).toMatchSnapshot();
+  });
+  // A container with aliases (topic 20): a target, an alias of it, an alias of that alias, and a consumer of the alias
+  // token. Both emitters, both profiles, open and closed: an alias has an accessor and no creator, no state, no disposal.
+  const aliasSource = (options: string) => `
+      function defineBuilderConfig(config: any) { return config; }
+      function useInterface<T>(): any { return null; }
+
+      interface ILogger { id: string; }
+      interface IAudit { id: string; }
+      class ConsoleLogger { id = 'console'; }
+      class Reader {
+        constructor(private logger: ILogger) {}
+      }
+
+      export const c = defineBuilderConfig({
+        name: 'AliasApp',
+        ${options}
+        injections: [
+          { token: ConsoleLogger },
+          { token: useInterface<ILogger>(), useExisting: ConsoleLogger },
+          { token: useInterface<IAudit>(), useExisting: useInterface<ILogger>() },
+          { token: Reader }
+        ]
+      });
+    `;
+
+  const ALIAS_PROFILES: ReadonlyArray<readonly [string, string]> = [
+    ['full', ''],
+    ['minimal', "runtime: { profile: 'minimal' },"],
+  ];
+  const ALIAS_MODES: ReadonlyArray<readonly [string, string]> = [
+    ['open', ''],
+    ['closed', "optimization: { mode: 'closed', roots: [Reader, useInterface<IAudit>()] },"],
+  ];
+
+  for (const emitter of ['reference', 'optimized'] as const) {
+    for (const [profile, runtime] of ALIAS_PROFILES) {
+      for (const [mode, optimization] of ALIAS_MODES) {
+        it(`should match snapshot for aliases, ${emitter} emitter, ${profile} ${mode}`, () => {
+          expect(generateCode(aliasSource(`${runtime} ${optimization}`), emitter)).toMatchSnapshot();
+        });
+      }
+    }
+  }
 });
 

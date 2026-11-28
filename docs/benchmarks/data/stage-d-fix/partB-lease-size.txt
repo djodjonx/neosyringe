@@ -1,0 +1,6 @@
+$ node docs/benchmarks/data/stage-d-fix/partB-lease-size.mjs   (run from the repo root, tree of the correction)
+helper factoryPolicy	raw 417	minified 144	gzip 142
+helper factoryLease	raw 1359	minified 583	gzip 317
+both helpers	raw 1765	minified 717	gzip 395
+one declaration (policy + read)	raw 650	minified 267	gzip 178
+both helpers + one declaration	raw 2404	minified 974	gzip 491

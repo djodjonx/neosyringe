@@ -109,7 +109,7 @@ describe('Optional dependencies (build path — Analyzer.extract()/GraphValidato
     const graph = new Analyzer(createProgram(fileName, fileContent)).extract();
     expect(() => new GraphValidator().validate(graph)).not.toThrow();
 
-    const code = new Generator(graph, true).generate();
+    const code = new Generator(graph, true, undefined, true, false, 'reference').generate();
     expect(code).toMatch(/new UserService\(this\.resolve\("ITelemetry_[a-f0-9]+"\)\)/);
   });
 });

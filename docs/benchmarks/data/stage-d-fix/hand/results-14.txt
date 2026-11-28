@@ -1,0 +1,6 @@
+{"file":"base-chain100.mjs","metric":"cold-resolve","median":24389.590000000113,"perProcess":[27173.3,13132.1,24389.6]}
+{"file":"D-chain100.mjs","metric":"cold-resolve","median":21907.919999999875,"perProcess":[21907.9,21980.4,18476.7]}
+{"file":"G2-chain100.mjs","metric":"cold-resolve","median":18028.329999999925,"perProcess":[17808.3,19927.9,18028.3]}
+{"file":"base-chain100.mjs","metric":"cold-resolve","median":9703.583000000037,"perProcess":[9590.5,9703.6,9850]}
+{"file":"D-chain100.mjs","metric":"cold-resolve","median":5666.999999999973,"perProcess":[5674.8,5667,5148]}
+{"file":"G2-chain100.mjs","metric":"cold-resolve","median":5547.665999999993,"perProcess":[5930.1,5547.7,5204.4]}

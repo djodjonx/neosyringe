@@ -1,0 +1,56 @@
+name: Benchmark
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Informative. A shared runner is too noisy for a certified performance claim.
+jobs:
+  runtime:
+    name: Runtime benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 22
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Runtime bench
+        env:
+          NEOSYRINGE_BENCH_SIZES: '10'
+          NEOSYRINGE_BENCH_SHAPES: flat
+          NEOSYRINGE_BENCH_PROFILES: full
+          NEOSYRINGE_BENCH_MODES: open
+          NEOSYRINGE_BENCH_RESOLVE_COUNT: '1000'
+          NEOSYRINGE_BENCH_REPORT: runtime-report.json
+        run: |
+          if [ -f tests/bench/baselines/runtime-report.json ]; then
+            export NEOSYRINGE_BENCH_K_FROM=tests/bench/baselines/runtime-report.json
+          fi
+          node tests/bench/runtime-cost.mjs
+
+      # Informative only. pipefail keeps a budget failure visible; continue-on-error does not certify it.
+      - name: Compare
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          if [ -f tests/bench/baselines/runtime-report.json ]; then
+            node scripts/ci/performance-budget.mjs --baseline tests/bench/baselines/runtime-report.json --candidate runtime-report.json | tee comparison.txt
+          else
+            printf '%s\n' 'no baseline; comparison skipped' | tee comparison.txt
+          fi
+
+      - name: Upload benchmark
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-benchmark
+          if-no-files-found: warn
+          path: |
+            runtime-report.json
+            comparison.txt

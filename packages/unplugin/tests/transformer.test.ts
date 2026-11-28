@@ -3,26 +3,42 @@ import * as ts from 'typescript';
 import { Analyzer } from '@djodjonx/neosyringe-core/analyzer';
 import { Generator, GraphValidator } from '@djodjonx/neosyringe-core/generator';
 
-vi.mock('@djodjonx/neosyringe-core/analyzer', () => ({
-  Analyzer: vi.fn().mockImplementation(() => ({
-    extract: vi.fn().mockReturnValue({ nodes: new Map(), errors: [] }),
-  })),
-  HashUtils: {
-    generateTokenId: vi.fn().mockReturnValue('IService_abc123'),
-  },
-}));
+vi.mock('@djodjonx/neosyringe-core/analyzer', async () => {
+  const actual = await vi.importActual<typeof import('@djodjonx/neosyringe-core/analyzer')>(
+    '@djodjonx/neosyringe-core/analyzer',
+  );
+  return {
+    ...actual,
+    Analyzer: vi.fn().mockImplementation(() => ({
+      extract: vi.fn().mockReturnValue({ nodes: new Map(), errors: [] }),
+    })),
+    HashUtils: {
+      generateTokenId: vi.fn().mockReturnValue('IService_abc123'),
+    },
+  };
+});
 
-vi.mock('@djodjonx/neosyringe-core/generator', () => ({
-  Generator: vi.fn().mockImplementation(() => ({
-    generate: vi.fn().mockReturnValue('class __CatsContainer__ {}'),
-    generateInstantiation: vi.fn().mockReturnValue('new __CatsContainer__()'),
-  })),
-  GraphValidator: vi.fn().mockImplementation(() => ({
-    validateAll: vi.fn().mockReturnValue({ valid: true, errors: [] }),
-  })),
-  resolveDebugFlag: vi.fn().mockReturnValue(true),
-  resolveTestOverridesFlag: vi.fn().mockReturnValue(false),
-}));
+vi.mock('@djodjonx/neosyringe-core/generator', async () => {
+  // The name pool and the registry of shared helpers are plain data the session builds for every file: they are not what this test replaces.
+  const actual = await vi.importActual<typeof import('@djodjonx/neosyringe-core/generator')>(
+    '@djodjonx/neosyringe-core/generator',
+  );
+  return {
+    NamePool: actual.NamePool,
+    ModuleHelpers: actual.ModuleHelpers,
+    reservedNamesOf: actual.reservedNamesOf,
+    snapshotOfFiles: actual.snapshotOfFiles,
+    Generator: vi.fn().mockImplementation(() => ({
+      generateRendered: vi.fn().mockReturnValue({ code: 'class __CatsContainer__ {}', copies: [] }),
+      generateInstantiation: vi.fn().mockReturnValue('new __CatsContainer__()'),
+    })),
+    GraphValidator: vi.fn().mockImplementation(() => ({
+      validateAll: vi.fn().mockReturnValue({ valid: true, errors: [] }),
+    })),
+    resolveDebugFlag: vi.fn().mockReturnValue(true),
+    resolveTestOverridesFlag: vi.fn().mockReturnValue(false),
+  };
+});
 
 vi.mock('typescript', async (importOriginal) => {
   const actual = await importOriginal<typeof import('typescript')>();
@@ -36,11 +52,17 @@ function makeSourceFile(text: string, fileName = '/test/container.ts'): ts.Sourc
   return ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2021, true, ts.ScriptKind.TS);
 }
 
+/**
+ * The session reads the bindings of a file from `getSymbolsInScope`; the only thing these tests
+ * need from it is that it exists. The real checker path is proven through the real plugin in t23-names.test.ts.
+ */
+const checkerDouble = { getSymbolsInScope: () => [] } as Partial<ts.TypeChecker> as ts.TypeChecker;
+
 function makeProgram(sourceFiles: ts.SourceFile[] = []): ts.Program {
   return {
     getCompilerOptions: () => ({ target: ts.ScriptTarget.ES2021 }),
     getSourceFiles: () => sourceFiles,
-    getTypeChecker: () => ({} as ts.TypeChecker),
+    getTypeChecker: () => checkerDouble,
     getRootFileNames: () => sourceFiles.map(sf => sf.fileName),
     emit: vi.fn(),
   } as unknown as ts.Program;
@@ -68,6 +90,7 @@ describe('neoSyringeTransformer', () => {
       return {
         extract: vi.fn().mockReturnValue({ nodes: new Map(), errors: [] }),
         extractAll: vi.fn().mockReturnValue([]),
+        extractForFile: vi.fn().mockReturnValue({ configs: new Map(), errors: [] }),
       };
     } as any);
 
@@ -77,7 +100,7 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(Generator).mockImplementation(function () {
       return {
-        generate: vi.fn().mockReturnValue('class __CatsContainer__ {}'),
+        generateRendered: vi.fn().mockReturnValue({ code: 'class __CatsContainer__ {}', copies: [] }),
         generateInstantiation: vi.fn().mockReturnValue('new __CatsContainer__()'),
       };
     } as any);
@@ -111,6 +134,7 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(Analyzer).mockImplementation(function () {
       return {
+        extractForFile: vi.fn().mockReturnValue({ configs: new Map(), errors: [] }),
         extractAll: vi.fn().mockReturnValue([{
           nodes: new Map([['MyService_abc', {}]]),
           errors: [],
@@ -136,6 +160,7 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(Analyzer).mockImplementation(function () {
       return {
+        extractForFile: vi.fn().mockReturnValue({ configs: new Map(), errors: [] }),
         extractAll: vi.fn().mockReturnValue([{
           nodes: new Map([['MyService_abc', {}]]),
           errors: [],
@@ -150,7 +175,7 @@ describe('neoSyringeTransformer', () => {
     const program = {
       getCompilerOptions: () => ({ target: ts.ScriptTarget.ES2021 }),
       getSourceFiles: () => [sf, sf],
-      getTypeChecker: () => ({} as ts.TypeChecker),
+      getTypeChecker: () => checkerDouble,
       getRootFileNames: () => [sf.fileName],
       emit: vi.fn(),
     } as unknown as ts.Program;
@@ -169,6 +194,7 @@ describe('neoSyringeTransformer', () => {
 
     vi.mocked(Analyzer).mockImplementation(function () {
       return {
+        extractForFile: vi.fn().mockReturnValue({ configs: new Map(), errors: [] }),
         extractAll: vi.fn().mockReturnValue([{
           nodes: new Map([['MyService_abc', {}]]),
           errors: [],

@@ -1,0 +1,1 @@
+size base: run in the ba192b4 checkout (<run>/t3o-ab/base-src, its own built packages): node scripts/measure-t17-size.mjs --json > size-base-ba192b4.json. The a3562b1 harness + unplugin dist cannot load the ba192b4 core dist (CollisionRegistry is not a constructor, first attempt exit 1, log line 'size base-ba192b4 exit 1').

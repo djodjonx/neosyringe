@@ -427,7 +427,7 @@ function showDetail(n) {
   const badge = document.getElementById('d-badge');
   const cls = n.type === 'factory' ? 'factory' : n.type === 'value' ? 'usevalue' : n.lifecycle;
   badge.className = 'detail-badge badge-' + cls;
-  badge.textContent = cls;
+  badge.textContent = n.type === 'alias' ? 'alias \u00B7 ' + cls : cls;
   const outgoing = cy.edges('[source = "' + n.id + '"]').length;
   const incoming = cy.edges('[target = "' + n.id + '"]').length;
   document.getElementById('d-deps').textContent = outgoing + ' dependenc' + (outgoing !== 1 ? 'ies' : 'y') + ' \u00B7 required by ' + incoming;

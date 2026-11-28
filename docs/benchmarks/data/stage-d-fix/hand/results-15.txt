@@ -1,0 +1,4 @@
+{"file":"base-flat10.mjs","metric":"cold-resolve","median":54.077910000000884,"perProcess":[54.1,55.5,54]}
+{"file":"Bx1-base-no-override-guard.mjs","metric":"cold-resolve","median":103.67208000000005,"perProcess":[98.2,103.7,103.7]}
+{"file":"D-flat10.mjs","metric":"cold-resolve","median":92.31791999999928,"perProcess":[90.4,92.3,107.2]}
+{"file":"G2-has-throw.mjs","metric":"cold-resolve","median":52.55708000000027,"perProcess":[52.5,52.6,53.2]}

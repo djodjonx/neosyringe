@@ -1,0 +1,24 @@
+# Methods per service in the harness module of chain100, full/open, default emitter. Modules: <scratch>/dump/{base,D,proto2}-chain100.mjs (not copied, 5 MB of dumps); each module has 100 services S0..S99 (S0..S99 = size 100).
+== base-chain100.mjs
+grep -c '^    create_S' base-chain100.mjs -> 100
+grep -c '^    _direct_S' base-chain100.mjs -> 0
+grep -c '^    _get_S' base-chain100.mjs -> 0
+grep -c '_direct_S' base-chain100.mjs -> 0
+== D-chain100.mjs
+grep -c '^    create_S' D-chain100.mjs -> 100
+grep -c '^    _direct_S' D-chain100.mjs -> 100
+grep -c '^    _get_S' D-chain100.mjs -> 100
+grep -c '_direct_S' D-chain100.mjs -> 200
+== proto2-chain100.mjs
+grep -c '^    create_S' proto2-chain100.mjs -> 0
+grep -c '^    _direct_S' proto2-chain100.mjs -> 0
+grep -c '^    _get_S' proto2-chain100.mjs -> 100
+grep -c '_direct_S' proto2-chain100.mjs -> 0
+== D-chain100.mjs, service S50 (lines of the three methods and the one call of _direct_)
+D-chain100.mjs:1074:    create_S50_bb329d57() {
+D-chain100.mjs:1078:        return new S51(this._get_S50_bb329d57());
+D-chain100.mjs:1965:    _direct_S50_bb329d57() {
+D-chain100.mjs:1968:        const instance = this.create_S50_bb329d57();
+D-chain100.mjs:1974:    _get_S50_bb329d57() {
+D-chain100.mjs:1975:        const __neoValue = this._direct_S50_bb329d57();
+D-chain100.mjs:2966:            return this._get_S50_bb329d57();

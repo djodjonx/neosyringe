@@ -1,5 +1,26 @@
 import type { DependencyGraph, TokenId } from '../analyzer/types';
 import {
+  concat,
+  fragment,
+  generatedCopy,
+  generatedText,
+  selectHelpers,
+  withNeeds,
+  type Fragment,
+  type Helper,
+  type Piece,
+  type UserCopy,
+} from './fragments';
+import { dispatchIsLinear, emitDispatchField, emitDispatchRead, emitLinearRead, type DispatchEntry } from './dispatchEmitter';
+import { factoryLeaseHelpers } from './factoryLeaseEmitter';
+import { formatTokenText, inlineRefs, type HelperRefs, type ModuleHelpers } from './moduleHelpers';
+import { boundGuard, boundInitializeGuard, hasScopeInputs, inputConstructor, inputMembers } from './inputEmitter';
+import { DEFAULT_MANY_NAMES, emitManyAliases, emitOverrideAliases, emitResolveMany, type ManyNames } from './manyEmitter';
+import { noProviderTypes, type GetProviderTypes } from './providerTypes';
+import { aliasPlanOf } from '../analyzer/shared/aliasLinks';
+import {
+  aliasReadExpressions,
+  constructionExpression,
   generateFactories,
   generateMultiFactories,
   getReadName,
@@ -14,10 +35,17 @@ import {
   generateDirectContributions,
   generateDirectResolveAll,
   generateMultiResolveGuard,
+  legacyParentInterface,
+  type ListReader,
+  manyEntryGuard,
   parentOpenCheck,
+  parentReadMethod,
+  readsParentForAlias,
+  resolveListenerOverload,
+  singleOverload,
 } from './ResolveEmitter';
 import {
-  generateCreateScopeMethod,
+  generateScopeMethod,
   generateDestroyMethod,
   generateEagerSyncInitialize,
   generateInitializeMethod,
@@ -48,10 +76,37 @@ export interface OptimizedContainerInput {
   runtimeHelpers: string;
   assertRootMethod: string;
   debugGetters: string;
+  /** How a user expression enters the output. Absent: generated text, no copy. */
+  copy?: UserCopy;
+  /** Name of the generated interface that types the `useContainer` parents. Absent: `NeoLegacyParent`. */
+  legacyParentName?: string;
+  /** Names of the type aliases `resolveMany` and the factory contexts are written with. Absent: the plain names. */
+  manyNames?: ManyNames;
+  /** The type of each getter, from the provider. Absent: every getter answers `unknown`. */
+  providerTypes?: GetProviderTypes;
+  /** Rows up to which a dispatch table is the linear cases and not the shared table. Each table is counted on its own rows. */
+  dispatchLinearMax: number;
+  /** The build asked for the observation (topic 22): the creators, the steps and the disposals are observed. Absent: off. */
+  observation?: boolean;
+  /**
+   * The helpers of the module this class is written into (`ModuleHelpers`). Given, the class calls the module's controller factory, lease,
+   * context class, policy builder and `formatToken`, and does not carry them. Absent: the class carries them, as a unit's `generate()` does.
+   */
+  shared?: ModuleHelpers;
 }
 
+/** What the text of `input` calls for the helpers: the names of the module, or the members of its class. */
+function refsOf(input: OptimizedContainerInput): HelperRefs {
+  return input.shared === undefined ? inlineRefs(input.className) : input.shared.refs();
+}
+
+/**
+ * An override is a test double that stands for the registered type, so a typed accessor reads it as that type:
+ * `_mock<T>` is an overload over an `unknown` body, the same contract as `resolve<T>`.
+ */
 function mockMethod(): string {
-  return `private _mock(token: any): any {
+  return `private _mock<T>(token: unknown): T;
+  private _mock(token: unknown): unknown {
     if (!this.instances.has(token)) {
       const __neoMock = this.overrides.get(token)!();
       this.instances.set(token, __neoMock);
@@ -61,7 +116,14 @@ function mockMethod(): string {
   }`;
 }
 
-function eventMembers(): string {
+/**
+ * `on()` of the full profile. In open mode a box starts on a listener set shared by every box of the class, which stays
+ * empty: `on()` gives the box a set of its own before it adds the first listener.
+ */
+function eventMembers(className: string, sharedListeners: boolean): string {
+  const own = sharedListeners
+    ? `if (this.resolveListeners === ${className}.__neoNoListeners) this.resolveListeners = new Set();\n    `
+    : '';
   return `/**
    * Subscribes to container events — currently only 'resolve', fired with the
    * token and the resolved instance every time resolve() succeeds (whether
@@ -69,12 +131,12 @@ function eventMembers(): string {
    * container). Returns an unsubscribe function. A listener that throws is
    * caught and ignored.
    */
-  public on(event: 'resolve', listener: (token: any, instance: any) => void): () => void {
-    this.resolveListeners.add(listener);
+  ${resolveListenerOverload()}
+    ${own}this.resolveListeners.add(listener);
     return () => { this.resolveListeners.delete(listener); };
   }
 
-  private notifyResolve(token: any, instance: any): void {
+  private notifyResolve(token: unknown, instance: unknown): void {
     for (const listener of this.resolveListeners) {
       try {
         listener(token, instance);
@@ -85,17 +147,24 @@ function eventMembers(): string {
   }`;
 }
 
+/**
+ * The override table and the resolve listeners of a box. In open mode a box that has no test overrides and no listener
+ * holds no table of its own: it points at an empty one shared by the class. Nothing writes the shared tables:
+ * `on()` replaces the listener set before it adds, and `override()` is refused when test overrides are off.
+ */
+function tableFieldsOf(className: string, single: boolean, testOverrides: boolean): string {
+  const listeners = 'Set<(token: unknown, instance: unknown) => void>';
+  const overrides = 'Map<unknown, () => unknown>';
+  if (!single) return `\n  private overrides = new ${overrides}();\n  private resolveListeners = new ${listeners}();`;
+  const sharedOverrides = testOverrides ? '' : `\n  private static readonly __neoNoOverrides = new ${overrides}();`;
+  const own = testOverrides ? `new ${overrides}()` : `${className}.__neoNoOverrides`;
+  return `\n  private static readonly __neoNoListeners = new ${listeners}();${sharedOverrides}
+  private overrides: ${overrides} = ${own};
+  private resolveListeners: ${listeners} = ${className}.__neoNoListeners;`;
+}
+
 function formatTokenMember(): string {
-  return `private static formatToken(token: any): string {
-    if (typeof token === 'function') return token.name || String(token);
-    if (typeof token !== 'string') return String(token);
-    const parts = token.split('_');
-    const last = parts[parts.length - 1];
-    if (parts.length > 1 && /^[a-f0-9]{6,12}$/i.test(last)) {
-      return parts.slice(0, -1).join('_');
-    }
-    return token;
-  }`;
+  return formatTokenText('private static formatToken');
 }
 
 /** Delegation to a useContainer parent, then the not-found error. Shared by both resolvers. */
@@ -109,25 +178,30 @@ function legacyAndNotFound(input: OptimizedContainerInput): string {
                     if (legacyResult != null) this._borrowed.add(legacyResult);${notify}
                     return legacyResult;
                 }
-            } catch (e: any) {
+            } catch (e) {
                 if (!(e instanceof Error && e.name === 'NeoServiceNotFoundError')) throw e;
             }
         }
     }
 
-    throw new ${input.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${input.className}.formatToken(token)}\`);`;
+    throw new ${input.notFoundErrorClassName}(\`[\${this.name}] Service not found or token not registered: \${${refsOf(input).formatToken}(token)}\`);`;
 }
 
-/** One case per retained provider. A pruned provider has no case, no accessor, no key. */
-function resolveCases(input: OptimizedContainerInput, ids: Iterable<TokenId>): string {
-  const cases: string[] = [];
+/**
+ * One row per retained provider: its token, and the accessor that answers it. A pruned provider has no row, no
+ * accessor, no key. Two providers never share a token: the analyzer refuses a duplicate registration.
+ */
+function dispatchEntries(input: OptimizedContainerInput, ids: Iterable<TokenId>): DispatchEntry[] {
+  const entries: DispatchEntry[] = [];
   for (const tokenId of ids) {
     const node = input.graph.nodes.get(tokenId);
     if (!node || node.service.type === 'parent') continue;
-    const access = input.minimal ? getDirectName(tokenId) : getReadName(tokenId);
-    cases.push(`if (token === ${resolveTokenKey(node.service, input.getImport)}) return this.${access}();`);
+    entries.push({
+      keyExpression: resolveTokenKey(node.service, input.getImport),
+      accessor: input.minimal ? getDirectName(tokenId) : getReadName(tokenId),
+    });
   }
-  return cases.join('\n    ');
+  return entries;
 }
 
 function overrideBlock(input: OptimizedContainerInput): string {
@@ -140,43 +214,103 @@ function overrideBlock(input: OptimizedContainerInput): string {
     }`;
 }
 
-function resolveInterior(input: OptimizedContainerInput, cases: string, multiGuard: string): string {
+/**
+ * The guards come before the table read: state, parents, the refused multi token, the override that wins over a
+ * cached instance. A table miss falls through to the parent containers and to the not-found error.
+ */
+function resolveInterior(input: OptimizedContainerInput, read: string, multiGuard: string): string {
   return `${parentOpenCheck(input.hasAsync, input.minimal)}
     ${multiGuard}
     ${overrideBlock(input)}
-    ${cases}
+    ${read}
     ${legacyAndNotFound(input)}`;
 }
 
 /**
- * Public resolve plus the internal dispatcher.
- * Open: `_resolveInternal` lists every local provider.
- * Closed: `resolve` lists the exported roots only and never reaches the generic dispatcher.
- * The dispatcher lists a local provider only when an opaque factory may ask for any token;
- * otherwise it serves parent tokens alone, a declared local dependency has its own accessor.
+ * A table is declared only when a row can be served from it, and only when it has more than `dispatchLinearMax` rows:
+ * a smaller one is the linear cases, read in place and declared nowhere.
  */
-function resolveMethods(input: OptimizedContainerInput, listLocals: boolean): { publicMethod: string; internalMethod: string } {
-  const guard = input.hasAsync ? 'this._guardPublic();\n    ' : '';
+function tableRead(input: OptimizedContainerInput, field: string, entries: readonly DispatchEntry[]): string {
+  if (entries.length === 0) return '';
+  return dispatchIsLinear(entries, input.dispatchLinearMax) ? emitLinearRead(entries, 'single') : emitDispatchRead(input.className, field);
+}
+
+function tableField(input: OptimizedContainerInput, field: string, entries: readonly DispatchEntry[]): string {
+  if (entries.length === 0 || dispatchIsLinear(entries, input.dispatchLinearMax)) return '';
+  return emitDispatchField(input.className, field, entries);
+}
+
+/**
+ * Public resolve plus the internal dispatcher.
+ * Open: `_resolveInternal` reads `__neoDispatch`, one row per local provider.
+ * Closed: `resolve` reads `__neoRoots`, one row per exported root, and never reaches the generic dispatcher.
+ * The dispatcher has rows for the local providers only when an opaque factory may ask for any token;
+ * otherwise it serves parent tokens alone, a declared local dependency has its own accessor.
+ * `internalTable` is declared with `_resolveInternal`, `rootsTable` with the closed `resolve`.
+ */
+function resolveMethods(
+  input: OptimizedContainerInput,
+  listLocals: boolean,
+): { publicMethod: Fragment; internalMethod: string; internalTable: string; rootsTable: string } {
+  const guard = `${boundGuard(input.graph, 'resolve()')}${input.hasAsync ? 'this._guardPublic();\n    ' : ''}`;
   const multiGuard = generateMultiResolveGuard(input.graph, input.getImport, input.hasAsync);
-  const internalMethod = `private _resolveInternal<T>(token: any): T {
-    ${resolveInterior(input, resolveCases(input, listLocals ? input.sorted : []), multiGuard)}
+  const local = dispatchEntries(input, listLocals ? input.sorted : []);
+  const internalMethod = `${singleOverload('private', '_resolveInternal')}
+    ${resolveInterior(input, tableRead(input, '__neoDispatch', local), multiGuard)}
   }`;
+  const internalTable = tableField(input, '__neoDispatch', local);
   if (!input.closed) {
+    // The open public method calls the dispatcher, so it asks for it.
     return {
-      publicMethod: `public resolve<T>(token: any): T {
-    ${guard}return this._resolveInternal<T>(token);
-  }`,
+      publicMethod: withNeeds(fragment`${singleOverload('public', 'resolve')}
+    ${guard}return this._resolveInternal(token);
+  }`, ['resolveSingle']),
       internalMethod,
+      internalTable,
+      rootsTable: '',
     };
   }
-  const roots = input.graph.publicRoots ?? [];
+  const roots = dispatchEntries(input, input.graph.publicRoots ?? []);
   return {
-    publicMethod: `public resolve<T>(token: any): T {
+    publicMethod: fragment`${singleOverload('public', 'resolve')}
     ${guard}this._assertRoot(token, false);
-    ${resolveInterior(input, resolveCases(input, roots), '')}
+    ${resolveInterior(input, tableRead(input, '__neoRoots', roots), '')}
   }`,
     internalMethod,
+    internalTable,
+    rootsTable: tableField(input, '__neoRoots', roots),
   };
+}
+
+function joined(members: readonly string[]): string {
+  return members.filter((member) => member !== '').join('\n\n  ');
+}
+
+/**
+ * The readers of the multi tokens, and the two tables over them: `__neoRootLists` over the exported roots
+ * (closed), `__neoLists` over the internal tokens when `_resolveAllInternal` is emitted. A token that is both
+ * has one reader and a row in each table. Each table is decided on its own rows; a reader is a member only for a table
+ * that is read from the `Map`, a linear table has the body inline.
+ */
+function listMembers(
+  input: OptimizedContainerInput,
+  publicLists: readonly ListReader[],
+  internalLists: readonly ListReader[],
+): string[] {
+  const rows = (lists: readonly ListReader[]): DispatchEntry[] => lists.map((reader) => reader.entry);
+  const isTable = (lists: readonly ListReader[]): boolean =>
+    lists.length > 0 && !dispatchIsLinear(rows(lists), input.dispatchLinearMax);
+  const rootsAsTable = isTable(publicLists);
+  const internalAsTable = isTable(internalLists);
+  const readers = new Map<TokenId, ListReader>();
+  for (const reader of [...(internalAsTable ? internalLists : []), ...(rootsAsTable ? publicLists : [])]) {
+    if (!readers.has(reader.tokenId)) readers.set(reader.tokenId, reader);
+  }
+  return [
+    ...[...readers.values()].map((reader) => reader.method),
+    ...(rootsAsTable ? [emitDispatchField(input.className, '__neoRootLists', rows(publicLists), 'list')] : []),
+    ...(internalAsTable ? [emitDispatchField(input.className, '__neoLists', rows(internalLists), 'list')] : []),
+  ];
 }
 
 /**
@@ -189,74 +323,141 @@ function resolveMethods(input: OptimizedContainerInput, listLocals: boolean): { 
  * Minimal profile: CoreContainer only. No on/override/clearOverrides, no overrides map,
  * no listeners, no notify branch. Destroy, initialize and createScope are unchanged.
  */
-export function emitOptimizedContainer(input: OptimizedContainerInput): string {
+export function emitOptimizedContainer(input: OptimizedContainerInput): Fragment {
   const { graph, sorted, getImport, getForeignImport, hasAsync, closed, minimal } = input;
+  const copy = input.copy ?? generatedCopy;
+  const parentName = input.legacyParentName ?? 'NeoLegacyParent';
+  const manyNames = input.manyNames ?? DEFAULT_MANY_NAMES;
+  const providerTypes = input.providerTypes ?? noProviderTypes;
   const direct: DirectReads = { notify: !minimal };
   const honourOverrides = !minimal && input.testOverrides;
+  // Full profile, open mode: one `_get_` accessor per registration. A sync class provider has no other reader, so its
+  // accessor builds it in place and its creator is not emitted. Closed mode keeps its creators (an eager root calls
+  // one) and its `_direct_` accessors; the minimal profile has no `_get_`.
+  const unified = !minimal && !closed;
+  const observation = input.observation === true;
+  const refs = refsOf(input);
+  const inlined = new Map<TokenId, string>();
+  // The target of an alias is read by `_direct_`, which the unified form does not have: it keeps its creator and its two accessors.
+  // An observed build keeps every creator: the construct is observed where it is built, and an inlined one has no method.
+  const aliases = aliasPlanOf(graph);
+  if (unified && !observation) {
+    for (const tokenId of sorted) {
+      const node = graph.nodes.get(tokenId);
+      // Only a class registration has an implementation symbol (packages/core/src/analyzer/graphAdapter.ts:401-454).
+      const symbol = node?.service.implementationSymbol;
+      if (!node || !symbol) continue;
+      if (aliases?.localTargets.has(tokenId)) continue;
+      inlined.set(tokenId, constructionExpression(node, symbol, graph, getImport, getForeignImport, hasAsync, closed, direct, providerTypes));
+    }
+  }
   const creators = [
-    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct),
-    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct),
+    ...generateFactories(graph, sorted, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, new Set(inlined.keys()), manyNames, observation, refs),
+    ...generateMultiFactories(graph, getImport, getForeignImport, hasAsync, closed, direct, copy, providerTypes, input.className, manyNames, observation, refs),
   ];
   const accessors = [
-    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides }, `${input.className}.formatToken`),
-    ...generateDirectContributions(graph, hasAsync),
+    ...generateDirectAccessors(graph, sorted, getImport, hasAsync, { minimal, honourOverrides, single: unified }, refs.formatToken, providerTypes, inlined, aliasReadExpressions(graph, getImport, getForeignImport, providerTypes, honourOverrides)),
+    ...generateDirectContributions(graph, hasAsync, providerTypes),
   ];
   const needs = factoryContextNeeds(graph);
   const listLocals = !closed || needs.opaque;
   const resolve = resolveMethods(input, listLocals);
-  const resolveAll = generateDirectResolveAll(graph, getImport, hasAsync, closed, minimal, listLocals ? undefined : needs.multiAll);
+  const resolveAll = generateDirectResolveAll(
+    graph,
+    getImport,
+    hasAsync,
+    closed,
+    minimal,
+    input.className,
+    input.dispatchLinearMax,
+    listLocals ? undefined : needs.multiAll,
+  );
+  const resolveAllPublic = withNeeds(fragment`${resolveAll.publicMethod}`, closed ? [] : ['resolveAll']);
 
-  // Closed: a generic dispatcher exists only when a parent token, a declared multi token or an
-  // opaque factory still has to be reached by token. A factory with no such need has none.
-  const creatorText = creators.join('\n');
-  const needsInternalResolve = !closed || creatorText.includes('this._resolveInternal(');
-  const needsInternalResolveAll = !closed || creatorText.includes('this._resolveAllInternal(');
+  // Each generic resolver is declared only when a fragment asks for it. Open: the public methods
+  // call it. Closed: only a factory that reads a parent token, a declared multi token or any token
+  // (opaque) does. The emitters declare that; no text, user text included, is searched.
+  const catalog: Helper[] = [
+    { id: 'resolveSingle', parts: [generatedText(joined([resolve.internalMethod, resolve.internalTable]))], needs: [] },
+    { id: 'resolveAll', parts: [generatedText(resolveAll.internalMethod)], needs: [] },
+    ...factoryLeaseHelpers(input.className, manyNames),
+  ];
+  // Deviation from the spec's `linkHelpers`: the helpers are kept in their slots (after `resolve`,
+  // after `resolveAll`) and not put before every root, because moving them would change the
+  // emitted class. `selectHelpers` is the first half of `linkHelpers`: same catalog, same needs.
+  const linked = new Map(
+    selectHelpers([...creators, resolve.publicMethod, resolveAllPublic], catalog).map((helper) => [helper.id, helper]),
+  );
 
   const initialize = hasAsync
-    ? generateInitializeMethod(graph, sorted, getImport, hasAsync, input.eagerLines, minimal)
+    ? generateInitializeMethod(graph, sorted, getImport, hasAsync, input.eagerLines, minimal, input.className, observation)
     : input.eagerLines.length > 0
-      ? generateEagerSyncInitialize(input.eagerLines, minimal)
-      : generateSyncInitializeMethod(minimal);
-  const destroy = generateDestroyMethod(graph, sorted, getImport, hasAsync, minimal);
-  const tableFields = minimal
-    ? ''
-    : `\n  private overrides = new Map<any, () => any>();\n  private resolveListeners = new Set<(token: any, instance: any) => void>();`;
-  const members: string[] = [
+      ? generateEagerSyncInitialize(input.eagerLines, minimal, boundInitializeGuard(graph))
+      : generateSyncInitializeMethod(minimal, boundInitializeGuard(graph));
+  const destroy = generateDestroyMethod(graph, sorted, getImport, hasAsync, minimal, observation);
+  const tableFields = minimal ? '' : tableFieldsOf(input.className, unified, input.testOverrides);
+  const members: Piece[] = [
     input.runtimeHelpers + input.assertRootMethod,
     initialize,
-    generateCreateScopeMethod(input.className, hasAsync, minimal),
+    generateScopeMethod(graph, input.className, hasAsync, minimal, observation),
   ];
+  // The policy and the lease of the declared factories, and the context class every factory shares: only the helpers a creator asks for.
+  // Shared, they are written once for the module, and the class only calls them.
+  for (const id of ['factoryPolicy', 'factoryLease', 'factoryContext'] as const) {
+    const factoryHelper = linked.get(id);
+    if (factoryHelper === undefined) continue;
+    if (input.shared === undefined) members.push(factoryHelper);
+    else input.shared.claim(id);
+  }
   if (!minimal) {
-    members.push(generateOverrideMethods(graph, sorted, getImport, hasAsync, input.testOverrides));
-    members.push(eventMembers());
+    members.push(generateOverrideMethods(graph, sorted, getImport, hasAsync, input.testOverrides, manyNames, observation));
+    members.push(eventMembers(input.className, unified));
   }
   if (honourOverrides) members.push(mockMethod());
   members.push(resolve.publicMethod);
-  if (needsInternalResolve) members.push(resolve.internalMethod);
-  members.push(formatTokenMember(), destroy, resolveAll.publicMethod);
-  if (needsInternalResolveAll) members.push(resolveAll.internalMethod);
+  if (resolve.rootsTable !== '') members.push(resolve.rootsTable);
+  const single = linked.get('resolveSingle');
+  if (single) members.push(single);
+  if (input.shared === undefined) members.push(formatTokenMember());
+  else input.shared.claim('formatToken');
+  members.push(destroy, resolveAllPublic);
+  if (readsParentForAlias(graph)) members.push(parentReadMethod(input.notFoundErrorClassName, input.className, refs.formatToken));
+  // A public member: it loops over the public `resolve`, so a token has the guard, the closed-root check and the events of a single call.
+  members.push(emitResolveMany(`${boundGuard(graph, 'resolveMany()')}${manyEntryGuard(hasAsync, minimal)}`, manyNames));
+  const many = linked.get('resolveAll');
+  if (many) members.push(many);
+  members.push(...listMembers(input, resolveAll.publicLists, many ? resolveAll.internalLists : []));
   members.push(input.debugGetters);
 
-  return `class ${input.notFoundErrorClassName} extends Error {
+  const overrideAliases = !minimal && input.testOverrides ? `\n${emitOverrideAliases(manyNames)}` : '';
+  const container = fragment`${emitManyAliases(manyNames)}${overrideAliases}
+
+${legacyParentInterface(parentName)}
+
+class ${input.notFoundErrorClassName} extends Error {
   constructor(msg: string) { super(msg); this.name = 'NeoServiceNotFoundError'; }
 }
 
 // -- Container --
 class ${input.className} {
-  private instances = new Map<any, any>();${tableFields}
+  private instances = new Map<unknown, unknown>();${tableFields}
   ${input.stateFields}${input.rootFields}
 
   // -- Factories --
-  ${creators.join('\n  ')}
+  ${concat(creators, '\n  ')}
 
   // -- Accessors --
   ${accessors.join('\n  ')}
 
-  constructor(
-    private legacy?: any[],
+  ${hasScopeInputs(graph)
+    ? `${inputConstructor(parentName)}\n\n  ${inputMembers(graph, input.className, refs.formatToken)}`
+    : `constructor(
+    private legacy?: ${parentName}[],
     private name: string = 'NeoContainer'
-  ) {}
+  ) {}`}
 
-  ${members.join('\n\n  ')}
+  ${concat(members, '\n\n  ')}
 }`;
+  // Every need is met by a helper above: what leaves here asks for nothing.
+  return { parts: container.parts, needs: [] };
 }

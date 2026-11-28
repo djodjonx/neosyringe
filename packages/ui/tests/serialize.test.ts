@@ -323,6 +323,59 @@ describe('T19 serializeGraph retention and diagnostics', () => {
   });
 });
 
+function makeAlias(tokenId: string, target: string): DependencyNode {
+  return {
+    service: {
+      tokenId,
+      // The filler every alias carries: what the node shows is the registration its chain ends at.
+      lifecycle: 'singleton',
+      type: 'alias',
+      aliasTarget: { tokenId: target },
+      registrationNode: {} as never,
+    },
+    dependencies: [target],
+  };
+}
+
+describe('serializeGraph aliases', () => {
+  const lifecycleOf = (graph: DependencyGraph, token: string): unknown => serializeGraph(graph).nodes.find((node) => node.tokenId === token)?.lifecycle;
+
+  it('E20-F6 an alias shows the lifecycle and the ownership of the registration its chain ends at', () => {
+    const target = makeNode('Engine');
+    target.service.lifecycle = 'transient';
+    target.service.ownership = 'borrowed';
+    const nodes = new Map([
+      ['Engine', target],
+      ['Logger', makeAlias('Logger', 'Engine')],
+      ['Audit', makeAlias('Audit', 'Logger')],
+    ]);
+    const result = serializeGraph(makeGraph({ nodes }));
+    const logger = result.nodes.find((node) => node.tokenId === 'Logger');
+    const audit = result.nodes.find((node) => node.tokenId === 'Audit');
+    expect(logger, 'one link').toMatchObject({ type: 'alias', lifecycle: 'transient', ownership: 'borrowed', dependencies: ['Engine'] });
+    expect(audit, 'two links').toMatchObject({ type: 'alias', lifecycle: 'transient', ownership: 'borrowed', dependencies: ['Logger'] });
+  });
+
+  it('E20-F6 an alias of a token a parent provides, and an alias in a cycle, show singleton and borrowed', () => {
+    const parent = makeGraph({ nodes: new Map([['Logger', makeAlias('Logger', 'FromParent')]]) });
+    expect(serializeGraph(parent).nodes[0], 'the target is not a node of this graph').toMatchObject({ lifecycle: 'singleton', ownership: 'borrowed' });
+    const cycle = makeGraph({ nodes: new Map([['A', makeAlias('A', 'B')], ['B', makeAlias('B', 'A')]]) });
+    expect(serializeGraph(cycle).nodes.map((node) => node.ownership), 'a cycle has no target').toEqual(['borrowed', 'borrowed']);
+  });
+
+  it('E20-F6 every link of a chain of 20000 aliases shows the lifecycle of the target', () => {
+    const target = makeNode('T');
+    target.service.lifecycle = 'transient';
+    const nodes = new Map<string, DependencyNode>([['T', target]]);
+    for (let index = 0; index < 20_000; index += 1) {
+      nodes.set(`A_${index}`, makeAlias(`A_${index}`, index === 0 ? 'T' : `A_${index - 1}`));
+    }
+    const graph = makeGraph({ nodes });
+    expect(lifecycleOf(graph, 'A_19999'), 'the last link reads the target').toBe('transient');
+    expect(lifecycleOf(graph, 'A_0'), 'the first link too').toBe('transient');
+  });
+});
+
 function createProgram(fileName: string, source: string): ts.Program {
   const options: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2020,

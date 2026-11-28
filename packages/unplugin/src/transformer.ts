@@ -1,8 +1,9 @@
 import * as ts from 'typescript';
 import type { PluginConfig, ProgramTransformerExtras } from 'ts-patch';
-import { resolveProjectConfig } from '@djodjonx/neosyringe-core/analyzer';
+import { Analyzer, resolveProjectConfig, textCallsResolve, type AnalysisError } from '@djodjonx/neosyringe-core/analyzer';
 import { resolveDebugFlag, resolveTestOverridesFlag } from '@djodjonx/neosyringe-core/generator';
 import { hasNeoSyringeMarkers } from './markerUtils';
+import { isResolutionUsageError } from './buildEndUsages';
 import { blockingConfigMessage, rewriteEmittedOutput, runCompilationSession, type SessionFileMap, type SessionState } from './session';
 
 /**
@@ -65,6 +66,7 @@ export default function neoSyringeTransformer(
   // regardless of which one a project uses.
   const emitDebugHelpers = resolveDebugFlag(config.debug);
   const testOverrides = resolveTestOverridesFlag(config.testOverrides);
+  const observation = config.observation === true;
   const project = typeof config.project === 'string' && config.project.length > 0 ? config.project : undefined;
 
   let analysisProgram = program;
@@ -92,26 +94,43 @@ export default function neoSyringeTransformer(
     declarationSources: new Map(),
   };
 
+  // A program in which no file has a marker or a resolve call has nothing to analyse: it is returned as it came.
+  let canReachNeoSyringe = false;
   for (const sourceFile of analysisProgram.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue;
+    if (textCallsResolve(sourceFile.text)) canReachNeoSyringe = true;
     if (!hasNeoSyringeMarkers(sourceFile.text)) continue;
-    const output = runCompilationSession({
-      code: sourceFile.text,
-      id: sourceFile.fileName,
-      project,
-      cwd: process.cwd(),
-      emitDebugHelpers,
-      testOverrides,
-      devtools: false,
-      state,
-      errorPrefix: '[neosyringe-transformer]',
-      hostProgram: analysisProgram,
-      hostSource: sourceFile,
-    });
+    canReachNeoSyringe = true;
+    let output: ReturnType<typeof runCompilationSession>;
+    try {
+      output = runCompilationSession({
+        code: sourceFile.text,
+        id: sourceFile.fileName,
+        project,
+        cwd: process.cwd(),
+        emitDebugHelpers,
+        testOverrides,
+        observation,
+        devtools: false,
+        state,
+        errorPrefix: '[neosyringe-transformer]',
+        hostProgram: analysisProgram,
+        hostSource: sourceFile,
+      });
+    } catch (error: unknown) {
+      throw withResolutionUsages(error, analysisProgram);
+    }
     if (output.map) {
       sessionMaps.set(sourceFile.fileName, { map: output.map, originalText: sourceFile.text });
     }
     if (output.code !== sourceFile.text) transformedSources.set(sourceFile.fileName, output.code);
+  }
+
+  // A resolve / resolveAll / resolveMany call is checked against its container once every file is known,
+  // as the bundler plugin does at buildEnd. The same snapshot answers for the whole program.
+  const usageErrors = canReachNeoSyringe ? resolutionUsageErrors(analysisProgram) : [];
+  if (usageErrors.length > 0) {
+    throw usageFailure(usageErrors);
   }
 
   if (transformedSources.size === 0) {
@@ -153,6 +172,47 @@ export default function neoSyringeTransformer(
   const rootFileNames = program.getRootFileNames();
   const created = tsInstance.createProgram(rootFileNames, compilerOptions, customHost);
   return withComposedEmit(created, sessionMaps, customHost);
+}
+
+function resolutionUsageErrors(program: ts.Program): AnalysisError[] {
+  const analyzer = new Analyzer(program);
+  const errors: AnalysisError[] = [];
+  for (const sourceFile of program.getSourceFiles()) {
+    if (sourceFile.isDeclarationFile) continue;
+    for (const error of analyzer.extractForFile(sourceFile.fileName).errors) {
+      if (isResolutionUsageError(error)) errors.push(error);
+    }
+  }
+  return errors;
+}
+
+type AnalysisFailure = Error & { analysisErrors?: AnalysisError[] };
+
+function usageFailure(usageErrors: readonly AnalysisError[]): AnalysisFailure {
+  const failure: AnalysisFailure = new Error(
+    `[neosyringe-transformer]\n  ${usageErrors.map((error) => locatedMessage(error)).join('\n  ')}`,
+  );
+  failure.analysisErrors = [...usageErrors];
+  return failure;
+}
+
+/**
+ * A file that fails to transform still gets its resolve calls checked, so the build reports
+ * the same set the CLI and the IDE report instead of the first failure only.
+ */
+function withResolutionUsages(error: unknown, program: ts.Program): unknown {
+  if (!(error instanceof Error)) return error;
+  const failure: AnalysisFailure = error;
+  const usageErrors = resolutionUsageErrors(program);
+  if (usageErrors.length === 0) return failure;
+  failure.analysisErrors = [...(failure.analysisErrors ?? []), ...usageErrors];
+  failure.message = `${failure.message}\n  ${usageErrors.map((item) => locatedMessage(item)).join('\n  ')}`;
+  return failure;
+}
+
+function locatedMessage(error: AnalysisError): string {
+  const position = error.sourceFile.getLineAndCharacterOfPosition(error.node.getStart(error.sourceFile));
+  return `${error.message} at ${error.sourceFile.fileName}:${position.line + 1}:${position.character + 1}`;
 }
 
 function withComposedEmit(

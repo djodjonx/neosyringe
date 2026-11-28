@@ -79,7 +79,8 @@ Every entry point (`.vite()`, `.rollup()`, `.webpack()`, `.esbuild()`) takes `Ne
 | `debug` | `false` | Embeds `_graph` data. Forced off when `NODE_ENV=production`. |
 | `devtools` | `false` | Graph page on the Vite dev server only. |
 | `validation` | `'strict'` | **Drives only the usage check at the end of the build.** The analyzer that transforms each file stays strict, so `'compatible'` does not make a factory without `dependencies` legal (`packages/unplugin/src/index.ts:34` to `:37`). See the [migration guide](/guide/migration#validation-compatible-does-not-rescue-it-in-the-plugin). |
-| `testOverrides` | `false` | Turns on `override()` and `clearOverrides()`. Refused when `NODE_ENV=production`. |
+| `testOverrides` | `false` | Turns on `override()`, `overrideMany()` and `clearOverrides()`. Refused when `NODE_ENV=production`. |
+| `observation` | `false` | Adds `observe()` and `stateSnapshot()` to every container, and events around each construct, initialize step and dispose (`packages/unplugin/src/index.ts:51`). Allowed when `NODE_ENV=production`: it is meant for production. Off, the output is the output of a build without the option. See [Observability](/guide/observability). |
 
 ## TypeScript LSP Plugin
 
@@ -120,7 +121,10 @@ defineBuilderConfig({
 
   // Open is the default and keeps every registration.
   // Closed keeps roots, eager services, and what they need.
-  optimization: { mode: 'closed', roots: [UserService], eager: [Warmup] }
+  optimization: { mode: 'closed', roots: [UserService], eager: [Warmup] },
+
+  // Values each scope is given by createScope({ values }): see scopeInputs below.
+  scopeInputs: [requestToken]
 });
 ```
 
@@ -140,7 +144,27 @@ A closed container requires `validation: 'strict'`.
 
 Type: `{ profile?: 'full' | 'minimal' }`
 
-`'full'` (default) gives a `Container`. `'minimal'` gives a `CoreContainer` without `override`, `clearOverrides` and `on`. The profile must be a literal the build can read; anything else is `NEO_CONFIG_UNSUPPORTED`. See [Profiles](/guide/profiles).
+`'full'` (default) gives a `Container`. `'minimal'` gives a `CoreContainer` without `override`, `overrideMany`, `clearOverrides` and `on`. The profile must be a literal the build can read; anything else is `NEO_CONFIG_UNSUPPORTED`. See [Profiles](/guide/profiles).
+
+### initialization
+
+Type: `{ concurrency?: number }` (`packages/neosyringe/src/types.ts:350`)
+
+How many async singletons `initialize()` builds at once. Default `1`: one after the other, in dependency order. A larger value is a positive integer literal. `0`, a negative number, a fraction, a variable, a string, a spread or computed member and an `initialization` that is not an object literal are `NEO_CONFIG_UNSUPPORTED` at the value (`packages/core/src/analyzer/parsers/ConfigParser.ts:215`). It belongs to the builder: a partial cannot declare it, and `initialize()` takes no option for it. With a value above 1, independent services may start in any order, and two failures at once reject with an `AggregateError`. See [Async Factories](/guide/async-factories#starting-async-services-at-the-same-time).
+
+```typescript
+export const container = defineBuilderConfig({
+  name: 'App',
+  initialization: { concurrency: 4 },
+  injections: [/* ... */],
+});
+```
+
+### scopeInputs
+
+Type: `readonly InputToken[]` (`packages/neosyringe/src/types.ts:651`)
+
+The values each scope is given by `createScope({ values })`: a literal list of `useInterface<T>()` and `useProperty(...)` tokens. Every input is required and borrowed. The builder then returns a model that creates scopes and is destroyed, and does not resolve. A partial cannot declare it, and a class token is not an input. See [ContainerTemplate and BoundContainer](/api/types#containertemplate-and-boundcontainer) for the types and [states and ownership](/guide/states-and-ownership#scope-inputs) for the lifetime of the values.
 
 ### name
 
@@ -224,6 +248,9 @@ defineBuilderConfig({
     
     // Pre-built value
     { token: useInterface<AppConfig>(), useValue: { apiUrl: '...', timeout: 5000 } },
+
+    // A second token for a registered service
+    { token: useInterface<IAuditLogger>(), useExisting: ConsoleLogger },
     
     // With lifecycle
     { token: RequestContext, lifecycle: 'transient' },
@@ -315,6 +342,7 @@ interface Injection<T> {
   provider?: Provider<T>;
   useFactory?: boolean;
   useValue?: T;
+  useExisting?: Token<T>;
   lifecycle?: 'singleton' | 'transient';
   scoped?: boolean;
   multi?: boolean;
@@ -323,7 +351,7 @@ interface Injection<T> {
 }
 ```
 
-The real type is a union of four disjoint shapes (`packages/neosyringe/src/types.ts:202`).
+The real type is a union of five disjoint shapes (`packages/neosyringe/src/types.ts:519`).
 
 ### token
 
@@ -342,7 +370,7 @@ Type: `Provider<T>`
 What provides the instance. Can be:
 
 - Class constructor: `ConsoleLogger`
-- Factory function: `(context) => new Service()` with `useFactory: true` and a `dependencies` list. `context` has `resolve` and `resolveAll` for the declared tokens only.
+- Factory function: `(context) => new Service()` with `useFactory: true` and a `dependencies` list. `context` has `resolve`, `resolveAll` and `resolveMany` for the declared tokens only.
 
 If omitted, the token itself is used (autowiring).
 
@@ -359,6 +387,23 @@ Register a pre-built value directly. The value is embedded in the generated cont
 
 - Always singleton — `resolve()` always returns the same object
 - Cannot be used with primitive types (string, number, boolean) — use `useProperty` instead
+
+### useExisting
+
+Type: `Token<T>`
+
+Register `token` as an alias of another registered token. The alias answers what the target answers: a singleton target gives one object, a transient target a new one at every read, and the target keeps its owner. The alias builds nothing and caches nothing.
+
+```typescript
+{ token: useInterface<ILogger>(), useExisting: ConsoleLogger }
+```
+
+- The target is a class or an interface token registered in this container, in a partial it extends, or provided by a `useContainer` parent. It may be an alias itself.
+- The value of the target must be assignable to the value of the token.
+- No `provider`, `useFactory`, `useValue`, `lifecycle`, `ownership`, `dependencies` or `multi` next to it (`NEO_CONFIG_UNSUPPORTED`). `scoped` is allowed. The token is a class or an interface token, not a property token.
+- `override` targets the target; an override of the alias is `NEO_OVERRIDE_ALIAS_UNSUPPORTED`.
+
+See [aliases](../guide/aliases.md).
 
 ### multi
 
@@ -380,7 +425,7 @@ const plugins = container.resolveAll(useInterface<IPlugin>());
 
 Type: `true`
 
-Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:222`).
+Marks the provider as a factory function. The `Injection` type requires it for a factory (`packages/neosyringe/src/types.ts:539`).
 
 <<< @/../examples/new-api/factories.ts#arrow
 
@@ -388,11 +433,11 @@ Marks the provider as a factory function. The `Injection` type requires it for a
 
 Type: `readonly DependencyRef[]`. A `DependencyRef` is a token, or `{ all: token }` for `resolveAll`.
 
-Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:223`), so the type does not catch the omission.
+Every token the factory resolves. Required by strict validation, even as `[]`: a factory without it fails the build with `NEO_FACTORY_DEPENDENCIES_REQUIRED`. The type marks the field optional (`packages/neosyringe/src/types.ts:540`), so the type does not catch the omission.
 
 <<< @/../examples/new-api/factories.ts#all-dependency
 
-The factory receives a `FactoryContext` (`resolve`, `resolveAll`). Asking for an undeclared token throws `NEO_UNDECLARED_FACTORY_DEP`. Using the context after the factory returned throws `NEO_FACTORY_CONTEXT_EXPIRED`.
+The factory receives a `FactoryContext` (`resolve`, `resolveAll`, `resolveMany`, `signal`). Asking for an undeclared token throws `NEO_UNDECLARED_FACTORY_DEP`. Using the context, or reading its `signal`, after the factory returned throws `NEO_FACTORY_CONTEXT_EXPIRED`.
 
 ### ownership
 

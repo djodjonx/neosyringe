@@ -198,3 +198,49 @@ describe('T21 dossier', () => {
     expect(text).not.toContain('PENDING');
   });
 });
+
+const readinessPath = path.join(root, 'docs/production-readiness.md');
+const matrixPath = 'packages/core/tests/generator/t00-contract-matrix.test.ts';
+const BASE_SHA = 'ba192b457f0efa13149cc7f64a647c7d9b5c86b3';
+const AXES = {
+  profile: ['full', 'minimal'],
+  mode: ['open', 'closed'],
+  timing: ['sync', 'async'],
+  owner: ['root', 'scope', 'parent'],
+} as const;
+
+function contractKeys(): string[] {
+  const keys: string[] = [];
+  for (const profile of AXES.profile) {
+    for (const mode of AXES.mode) {
+      for (const timing of AXES.timing) {
+        for (const owner of AXES.owner) keys.push(`${profile} ${mode} ${timing} ${owner}`);
+      }
+    }
+  }
+  return keys;
+}
+
+describe('T00 production readiness', () => {
+  it('T00 production-readiness table covers every contract cell once', () => {
+    const text = readFileSync(readinessPath, 'utf8');
+    expect(text).toContain(BASE_SHA);
+    expect(text).toContain('missing, stale or failing evidence');
+    const rows = tableRows(text);
+    const keys = rows.map((cells) => `${cells[0] ?? ''} ${cells[1] ?? ''} ${cells[2] ?? ''} ${cells[3] ?? ''}`);
+    expect(keys).toHaveLength(24);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect([...keys].sort()).toEqual([...contractKeys()].sort());
+    const matrix = readFileSync(path.join(root, matrixPath), 'utf8');
+    const problems: string[] = [];
+    for (const cells of rows) {
+      const key = `${cells[0] ?? ''} ${cells[1] ?? ''} ${cells[2] ?? ''} ${cells[3] ?? ''}`;
+      const ref = (cells[4] ?? '').replace(/`/g, '');
+      const title = `T00 ${key}`;
+      if (ref !== `${matrixPath}::${title}`) problems.push(`${key}: ${ref}`);
+      const named = new RegExp(`\\bit\\(\\s*(['"\`])${escapeRegExp(title)}\\1`);
+      if (!named.test(matrix)) problems.push(`${matrixPath}: no test is titled "${title}"`);
+    }
+    expect(problems).toEqual([]);
+  });
+});

@@ -1,1 +1,69 @@
 TS2322
+many.ts(15,18): error TS2322: Type 'number' is not assignable to type 'Token<unknown>'.
+many.ts(17,14): error TS2322: Type '[Mail, Clock]' is not assignable to type '[number, Clock]'.
+override-many.ts(24,18): error TS2345: Argument of type '(typeof Mail | (() => number))[][]' is not assignable to parameter of type 'never'.
+override-many.ts(27,18): error TS2345: Argument of type 'readonly (readonly [typeof Mail, () => Mail] | readonly [Token<Clock>, () => Mail])[]' is not assignable to parameter of type 'never'.
+override-many.ts(29,20): error TS2322: Type 'number' is not assignable to type 'Token<unknown>'.
+override-many.ts(31,9): error TS2339: Property 'overrideMany' does not exist on type 'CoreContainer'.
+scope-inputs.ts(30,24): error TS2322: Type '{ token: InterfaceToken<Request>; useValue: { id: string; }; }[]' is not assignable to type 'never'.
+scope-inputs.ts(33,3): error TS2322: Type '({ token: InterfaceToken<Request>; useValue: { id: string; }; } | { token: PropertyToken<number, unknown>; useValue: number; } | { token: InterfaceToken<Other>; useValue: { ...; }; })[]' is not assignable to type 'never'.
+scope-inputs.ts(40,24): error TS2322: Type '({ token: InterfaceToken<Request>; useValue: number; } | { token: PropertyToken<number, unknown>; useValue: number; })[]' is not assignable to type 'never'.
+scope-inputs.ts(45,24): error TS2322: Type 'readonly ({ readonly token: InterfaceToken<Request>; readonly useValue: Request; } | { readonly token: PropertyToken<number, unknown>; readonly useValue: Request; })[]' is not assignable to type 'never'.
+scope-inputs.ts(47,10): error TS2339: Property 'resolve' does not exist on type 'ContainerTemplate<readonly [InterfaceToken<Request>, PropertyToken<number, unknown>], "full">'.
+scope-inputs.ts(49,75): error TS2339: Property 'override' does not exist on type 'BoundCore<readonly [InterfaceToken<Request>], "minimal">'.
+scope-inputs.ts(51,112): error TS2554: Expected 1 arguments, but got 0.
+scope-inputs.ts(54,21): error TS2769: No overload matches this call.
+scope-inputs.ts(56,1): error TS2769: No overload matches this call.
+scope-inputs.ts(58,23): error TS2353: Object literal may only specify known properties, and 'scopeInputs' does not exist in type 'PartialConfig'.
+alias.ts(22,26): error TS2769: No overload matches this call.
+alias.ts(30,29): error TS2769: No overload matches this call.
+alias.ts(37,28): error TS2769: No overload matches this call.
+alias.ts(44,26): error TS2769: No overload matches this call.
+alias.ts(51,30): error TS2769: No overload matches this call.
+alias.ts(58,30): error TS2769: No overload matches this call.
+alias.ts(65,33): error TS2769: No overload matches this call.
+alias.ts(72,26): error TS2769: No overload matches this call.
+alias.ts(80,14): error TS2322: Type '{ token: InterfaceToken<Other>; useExisting: typeof Console; }' is not assignable to type 'never'.
+alias.ts(82,25): error TS2769: No overload matches this call.
+Type '{ token: InterfaceToken<Other>; useExisting: typeof Console; }' is not assignable to type 'never'.
+Type '{ token: InterfaceToken<Logger>; useExisting: typeof Console; provider: typeof Console; }' is not assignable to type 'never'.
+Type '{ token: InterfaceToken<Logger>; useExisting: typeof Console; useFactory: true; provider: () => Console; }' is not assignable to type 'never'.
+Type '{ token: InterfaceToken<Logger>; useExisting: typeof Console; useValue: { id: string; }; }' is not assignable to type 'never'.
+Type '{ token: PropertyToken<number, unknown>; useExisting: typeof Console; }' is not assignable to type 'never'.
+Argument of type '{ name: string; injections: ({ token: typeof Console; } | { token: InterfaceToken<Logger>; useExisting: typeof Console; lifecycle: string; })[]; }' is not assignable to parameter of type 'never'.
+Argument of type '{ name: string; injections: ({ token: typeof Console; } | { token: InterfaceToken<Logger>; useExisting: typeof Console; ownership: string; })[]; }' is not assignable to parameter of type 'never'.
+Argument of type '{ name: string; injections: ({ token: typeof Console; } | { token: InterfaceToken<Logger>; useExisting: typeof Console; dependencies: never[]; })[]; }' is not assignable to parameter of type 'never'.
+Argument of type '{ name: string; injections: ({ token: typeof Console; } | { token: InterfaceToken<Logger>; useExisting: typeof Console; multi: boolean; })[]; }' is not assignable to parameter of type 'never'.
+Object literal may only specify known properties, and 'useExisting' does not exist in type '{ token: Constructor<unknown>; lifecycle?: Lifecycle | undefined; scoped?: boolean | undefined; multi?: boolean | undefined; provider?: undefined; useValue?: undefined; } | { ...; } | { ...; } | { ...; }'.
+public-api.ts(44,19): error TS2345: Argument of type '(PropertyToken<number> | (() => string))[][]' is not assignable to parameter of type 'never'.
+public-api.ts(46,9): error TS2339: Property 'overrideMany' does not exist on type 'BoundCore<readonly [], "minimal">'.
+public-api.ts(48,19): error TS2322: Type 'number' is not assignable to type 'Token<unknown>'.
+public-api.ts(50,10): error TS2339: Property 'resolve' does not exist on type 'ContainerTemplate<readonly [InterfaceToken<{ requestId: string; }>, PropertyToken<number>]
+public-api.ts(52,7): error TS2554: Expected 1 arguments, but got 0.
+public-api.ts(54,24): error TS2322: Type '{ token: PropertyToken<number>; useValue: number; }[]' is not assignable to type 'never'.
+public-api.ts(57,3): error TS2322: Type '({ token: PropertyToken<number>; useValue: string; } | { token: InterfaceToken<{ requestId: string; }>; useValue: { requestId: string; }; })[]' is not assignable to type 'never'. 
+public-api.ts(64,3): error TS2322: Type '({ token: PropertyToken<number>; useValue: number; } | { token: InterfaceToken<{ requestId: string; }>; useValue: { requestId: string; }; } | { token: InterfaceToken<{ tenant: string; }>; useValue: { ...; }; })[]' is not assignable to type 'never'.
+public-api.ts(71,10): error TS2339: Property 'override' does not exist on type 'BoundCore<readonly [InterfaceToken<{ requestId: string; }>, PropertyToken<number>], "minimal">'.
+public-api.ts(80,19): error TS2345: Argument of type 'readonly BadOverrideUnion[]' is not assignable to parameter of type 'never'.
+public-api.ts(86,24): error TS2322: Type 'readonly BadInputUnion[]' is not assignable to type 'never'.
+public-api.ts(73,14): error TS2322: Type '{ token: typeof Service; useExisting: typeof Other; }' is not assignable to type 'never'.
+initialization.ts(10,1): error TS2769: No overload matches this call.
+Argument of type '{ name: string; initialization: { concurrency: string; };
+initialization.ts(16,1): error TS2769: No overload matches this call.
+Object literal may only specify known properties, and 'parallel' does not exist in type 'InitializationOptions'.
+initialization.ts(22,1): error TS2769: No overload matches this call.
+Argument of type '{ name: string; initialization: number;
+Type 'number' has no properties in common with type 'InitializationOptions'.
+initialization.ts(29,3): error TS2353: Object literal may only specify known properties, and 'initialization' does not exist in type 'PartialConfig'.
+signal.ts(15,18): error TS2322: Type 'string' is not assignable to type 'AbortSignalLike'.
+signal.ts(17,18): error TS2353: Object literal may only specify known properties, and 'timeout' does not exist in type 'InitializeOptions'.
+signal.ts(19,16): error TS2559: Type '3' has no properties in common with type 'InitializeOptions'.
+signal.ts(21,14): error TS2741: Property 'signal' is missing in type '{ resolve: () => never; resolveAll: () => never[]; resolveMany: () => never; }' but required in type 'FactoryContext'.
+observation.ts(21,9): error TS2339: Property 'on' does not exist on type 'CoreContainer'.
+observation.ts(22,9): error TS2339: Property 'override' does not exist on type 'CoreContainer'.
+observation.ts(24,33): error TS2339: Property 'value' does not exist on type 'Readonly<ObservationEvent>'.
+observation.ts(25,33): error TS2339: Property 'error' does not exist on type 'Readonly<ObservationEvent>'.
+observation.ts(26,33): error TS2339: Property 'message' does not exist on type 'Readonly<ObservationEvent>'.
+observation.ts(28,16): error TS2345: Argument of type 'string' is not assignable to parameter of type 'ObservationSink'.
+observation.ts(30,35): error TS2322: Type 'number' is not assignable to type '() => number'.
+observation.ts(32,22): error TS2353: Object literal may only specify known properties, and 'send' does not exist in type 'ObservationChannel'.

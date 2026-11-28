@@ -16,6 +16,7 @@ function nodeClass(node: SerializableNode): string {
  *
  * Node styles:
  *   singleton → green   transient → blue   factory → orange   value → grey
+ * An alias is drawn with the lifecycle of its target and labelled `[alias, <lifecycle>]`.
  * Solid arrows = required deps, dashed = optional deps.
  */
 export function graphToMermaid(graph: SerializableGraph): string {
@@ -29,7 +30,7 @@ export function graphToMermaid(graph: SerializableGraph): string {
 
   for (const node of graph.nodes) {
     const sid = sanitizeId(node.tokenId);
-    const label = `${node.tokenId}\\n[${node.lifecycle}]`;
+    const label = `${node.tokenId}\\n[${node.type === 'alias' ? 'alias, ' : ''}${node.lifecycle}]`;
     lines.push(`  ${sid}["${label}"]:::${nodeClass(node)}`);
   }
 

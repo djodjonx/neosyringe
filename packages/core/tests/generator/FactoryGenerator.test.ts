@@ -29,12 +29,12 @@ describe('Generator - Factory Support', () => {
       roots: ['IConfig']
     };
 
-    const generator = new Generator(graph);
+    const generator = new Generator(graph, false, undefined, true, false, 'reference');
     const code = generator.generate();
 
     // Should contain the factory wrapper
-    expect(code).toContain('private create_IConfig(): any');
-    expect(code).toContain('const userFactory =');
+    expect(code).toContain('private create_IConfig(): unknown');
+    expect(code).toContain('const userFactory: (context:');
     expect(code).toContain('apiUrl');
     expect(code).toContain('const __neoResult = userFactory(__neoContext)');
     expect(code).not.toContain('userFactory(this)');
@@ -94,7 +94,7 @@ describe('Generator - Factory Support', () => {
     const code = generator.generate();
 
     // Transient should not use instances Map
-    expect(code).toContain('return this.create_IRequest()');
+    expect(code).toMatch(/private _get_IRequest\w*\(\): unknown \{\s*const __neoValue: unknown = this\.create_IRequest\(\);/);
     expect(code).not.toContain('this.instances.has("IRequest")');
   });
 
@@ -155,12 +155,12 @@ describe('Generator - Factory Support', () => {
       roots: ['AppService']
     };
 
-const generator = new Generator(graph);
+const generator = new Generator(graph, false, undefined, true, false, 'reference');
     const code = generator.generate();
 
     // Should have factory for IConfig
     expect(code).toContain('private create_IConfig');
-    expect(code).toContain('const userFactory =');
+    expect(code).toContain('const userFactory: (context:');
 
     // Should have class instantiation for AppService
     expect(code).toContain('private create_AppService');

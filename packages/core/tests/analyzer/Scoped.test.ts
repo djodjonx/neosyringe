@@ -229,9 +229,9 @@ describe('Scoped Injection', () => {
       const generator = new Generator(graph);
       const code = generator.generate();
 
-      // Should have a factory for ILogger (locally) - may have filename prefix
-      expect(code).toMatch(/create_.*ILogger/);
-      expect(code).toContain('FileLogger');
+      // Should have an accessor for ILogger (locally) that builds the local class - may have filename prefix
+      expect(code).toMatch(/_get_.*ILogger/);
+      expect(code).toMatch(/private _get_\w*ILogger\w*\([^)]*\)[^{]*\{[^}]*new \w+\.FileLogger\(\)/);
     });
 
     it('should resolve scoped token locally before parent', () => {
@@ -268,8 +268,9 @@ describe('Scoped Injection', () => {
       const code = generator.generate();
 
       // UserService should resolve ILogger from local container
-      expect(code).toContain('create_UserService');
+      expect(code).toContain('_get_UserService');
       expect(code).toContain('this.resolve');
+      expect(code).toMatch(/new \w+\.UserService\(this\._get_\w*ILogger\w*\(\)\)/);
     });
   });
 
@@ -342,7 +343,7 @@ describe('Scoped Injection', () => {
 
       const analyzer = new Analyzer(program);
       const graph = analyzer.extract();
-      const generator = new Generator(graph);
+      const generator = new Generator(graph, false, undefined, true, false, 'reference');
       const code = generator.generate();
 
       // Should have factory

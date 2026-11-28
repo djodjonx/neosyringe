@@ -1,0 +1,11 @@
+consumer.ts(13,17): error TS2850: The initializer of a 'using' declaration must be either an object with a '[Symbol.dispose]()' method, or be 'null' or 'undefined'.
+Property '[Symbol.dispose]' is missing in type 'Container' but required in type 'Disposable'.
+consumer.ts(14,21): error TS2850: The initializer of a 'using' declaration must be either an object with a '[Symbol.dispose]()' method, or be 'null' or 'undefined'.
+Property '[Symbol.dispose]' is missing in type 'CoreContainer' but required in type 'Disposable'.
+consumer.ts(15,16): error TS2850: The initializer of a 'using' declaration must be either an object with a '[Symbol.dispose]()' method, or be 'null' or 'undefined'.
+consumer.ts(22,23): error TS2851: The initializer of an 'await using' declaration must be either an object with a '[Symbol.asyncDispose]()' or '[Symbol.dispose]()' method, or be 'null' or 'undefined'.
+consumer.ts(34,14): error TS2741: Property '[SymbolConstructor.asyncDispose]' is missing in type 'WithoutAsyncDispose<CoreContainer>' but required in type 'CoreContainer'.
+consumer.ts(35,14): error TS2741: Property '[SymbolConstructor.asyncDispose]' is missing in type 'WithoutAsyncDispose<Container>' but required in type 'Container'.
+consumer.ts(36,14): error TS2741: Property '[SymbolConstructor.asyncDispose]' is missing in type 'WithoutAsyncDispose<ContainerTemplate<readonly [], "full">>' but required in type 'ContainerTemplate<readonly [], "full">'.
+consumer.ts(37,14): error TS2322: Type 'WithoutAsyncDispose<BoundContainer>' is not assignable to type 'BoundContainer'.
+Property '[SymbolConstructor.asyncDispose]' is missing in type 'WithoutAsyncDispose<BoundContainer>' but required in type 'BoundCore<readonly [], "full">'.

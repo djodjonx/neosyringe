@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "@djodjonx/neosyringe-ui/serialize": ["../../../../packages/ui/src/serialize.ts"]
+    }
+  },
+  "files": ["consumer.ts"]
+}

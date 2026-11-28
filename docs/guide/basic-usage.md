@@ -190,6 +190,16 @@ const service = container.resolve(UserService);
 Your IDE will provide full auto-completion for resolved services. No more guessing what methods are available!
 :::
 
+### Several Tokens at Once: `resolveMany`
+
+`resolveMany([a, b, c])` resolves several tokens in one call and returns a tuple typed position by position. The list must be a literal: the build reads it. A scope has the same method.
+
+<<< @/../examples/new-api/resolve-many.ts#container
+
+<<< @/../examples/new-api/resolve-many.ts#resolve-many
+
+`tests/e2e/g07-docs-examples.test.ts` compiles this file and runs it with the built plugin in strict mode.
+
 ## Partials (Modular Configuration)
 
 Split configuration into reusable modules:

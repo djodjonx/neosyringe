@@ -187,6 +187,19 @@ const d = child.resolve(useInterface<ILogger>());
 console.log(c === d); // false
 ```
 
+## Cancelling an initialization
+
+A container with async factories becomes ready after `await container.initialize()`. That call can be cancelled with a signal:
+
+```typescript
+const controller = new AbortController();
+const ready = container.initialize({ signal: controller.signal });
+controller.abort(new Error('startup cancelled'));
+await ready.catch((reason) => console.log(reason.message)); // startup cancelled
+```
+
+The promise rejects with the reason of the signal at once. The container then finishes what its running factories were doing, disposes the owned values they produce, and ends failed. A factory sees the signal as `ctx.signal`, so it can stop its own work. A deadline is a signal you build, for example with `AbortSignal.timeout(ms)`. The container has no timeout of its own. The whole contract, with the states, the joins and the errors, is in [Async Factories](./async-factories.md#cancelling-an-initialization) and [States, Scopes and Ownership](./states-and-ownership.md#states).
+
 ## Best Practices
 
 ### 1. Default to Singleton

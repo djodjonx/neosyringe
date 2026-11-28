@@ -1,0 +1,6 @@
+shape	profile	mode	size	metric	baseline	candidate	ratio	noise	verdict
+flat	full	open	5000	-	-	-	-	-	fail
+flat	full	closed	5000	-	-	-	-	-	fail
+flat	minimal	open	5000	-	-	-	-	-	fail
+flat	minimal	closed	5000	-	-	-	-	-	fail
+verdict fail

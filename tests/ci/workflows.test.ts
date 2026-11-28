@@ -161,6 +161,45 @@ describe('CI workflows', () => {
     expect(closedAt).toBeGreaterThan(ownershipAt);
   });
 
+  it('E17-P12 consumer-types job checks the positive and negative fixtures on the packed archive after the paths run', () => {
+    const commands = runs(loadJobs('.github/workflows/ci.yml')['consumer-types']!);
+    const positive = 'node scripts/ci/consumer-types.mjs tests/consumer-types/positive';
+    const negative = 'node scripts/ci/consumer-types.mjs tests/consumer-types/negative --expect-file expected-diagnostic.txt';
+    const positivePacked = `${positive} --pack`;
+    const negativePacked = `${negative} --pack`;
+    expect(commands.indexOf(positivePacked), 'positive on the archive').toBeGreaterThan(commands.indexOf(positive));
+    expect(commands.indexOf(negativePacked), 'negative on the archive').toBeGreaterThan(commands.indexOf(negative));
+    expect(commands.filter((command) => command === positivePacked)).toHaveLength(1);
+    expect(commands.filter((command) => command === negativePacked)).toHaveLength(1);
+  });
+
+  it('T21-P22 the disposable consumers run from the source and from the packed archive in ci, and from the source before a release', () => {
+    const positive = 'node scripts/ci/consumer-types.mjs tests/consumer-types/positive-disposable';
+    const negative = 'node scripts/ci/consumer-types.mjs tests/consumer-types/negative-disposable --expect-file expected-diagnostic.txt';
+    const commands = runs(loadJobs('.github/workflows/ci.yml')['consumer-types']!);
+    for (const command of [positive, `${positive} --pack`, negative, `${negative} --pack`]) {
+      expect(commands.filter((candidate) => candidate === command), command).toHaveLength(1);
+    }
+    expect(commands.indexOf(`${positive} --pack`), 'positive-disposable on the archive').toBeGreaterThan(commands.indexOf(positive));
+    expect(commands.indexOf(`${negative} --pack`), 'negative-disposable on the archive').toBeGreaterThan(commands.indexOf(negative));
+    const release = runs(loadJobs('.github/workflows/release.yml').verify!);
+    expect(release).toContain(positive);
+    expect(release).toContain(negative);
+  });
+
+  it('G15-M2 the UI serialize consumers run from the source and from the packed archive in ci, and from the source before a release', () => {
+    const positive = 'node scripts/ci/consumer-types.mjs tests/consumer-types/ui-serialize/positive --package ui';
+    const negative = 'node scripts/ci/consumer-types.mjs tests/consumer-types/ui-serialize/negative --package ui --expect-file expected-diagnostic.txt';
+    const commands = runs(loadJobs('.github/workflows/ci.yml')['consumer-types']!);
+    for (const command of [positive, `${positive} --pack`, negative, `${negative} --pack`]) {
+      expect(commands.filter((candidate) => candidate === command), command).toHaveLength(1);
+    }
+    const release = runs(loadJobs('.github/workflows/release.yml').verify!);
+    for (const command of [positive, negative]) {
+      expect(release.filter((candidate) => candidate === command), `release verify: ${command}`).toHaveLength(1);
+    }
+  });
+
   it('T15 distribution runs consumer-dist after check-dist', () => {
     const commands = runs(loadJobs('.github/workflows/ci.yml').distribution!);
     const checkAt = commands.indexOf('node scripts/ci/check-dist.mjs');

@@ -1,10 +1,13 @@
 import * as ts from 'typescript';
 import { Analyzer, type AnalysisError, type ValidationMode } from '@djodjonx/neosyringe-core/analyzer';
-import type { SessionState } from './session';
+import { ProjectSession } from './projectSession';
+import { liveSession, type SessionState } from './session';
 
 export interface BuildEndUsageReport {
   errors: string[];
   warnings: string[];
+  /** The analysis errors behind `errors` and `warnings`, as the other consumers see them. */
+  analysisErrors: AnalysisError[];
 }
 
 interface LocatedUsage {
@@ -15,7 +18,7 @@ interface LocatedUsage {
 }
 
 /**
- * Re-check resolve / resolveAll once every transformed file is known.
+ * Re-check resolve / resolveAll / resolveMany once every transformed file is known.
  * Warnings stay out of the build failure. The three usage codes are read from
  * `error.code`, not from the message text.
  */
@@ -23,12 +26,22 @@ export function usageErrorsAtBuildEnd(
   sourceTexts: Map<string, string>,
   state: SessionState,
   validation: ValidationMode,
+  environment?: string,
 ): BuildEndUsageReport {
-  const program = programFromSources(sourceTexts, state);
-  if (!program) return { errors: [], warnings: [] };
+  const used = usageProgram(sourceTexts, state, environment);
+  if (!used) return { errors: [], warnings: [], analysisErrors: [] };
+  try {
+    return usageReport(used.program, sourceTexts, validation);
+  } finally {
+    used.transient?.close();
+  }
+}
+
+function usageReport(program: ts.Program, sourceTexts: Map<string, string>, validation: ValidationMode): BuildEndUsageReport {
   const analyzer = new Analyzer(program, { validation });
   const errors: LocatedUsage[] = [];
   const warnings: LocatedUsage[] = [];
+  const analysisErrors: AnalysisError[] = [];
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue;
     const normalized = sourceFile.fileName.replace(/\\/g, '/');
@@ -42,13 +55,18 @@ export function usageErrorsAtBuildEnd(
         character: position.character,
         text: `${error.message} at ${sourceFile.fileName}:${position.line + 1}:${position.character + 1}`,
       };
-      if (isResolutionUsageError(error)) errors.push(located);
-      else if (error.severity === 'warning' && error.code === 'NEO_UNKNOWN_CONTAINER') warnings.push(located);
+      if (isResolutionUsageError(error)) {
+        errors.push(located);
+        analysisErrors.push(error);
+      } else if (error.severity === 'warning' && error.code === 'NEO_UNKNOWN_CONTAINER') {
+        warnings.push(located);
+        analysisErrors.push(error);
+      }
     }
   }
   sortLocated(errors);
   sortLocated(warnings);
-  return { errors: errors.map((item) => item.text), warnings: warnings.map((item) => item.text) };
+  return { errors: errors.map((item) => item.text), warnings: warnings.map((item) => item.text), analysisErrors };
 }
 
 function sortLocated(items: LocatedUsage[]): void {
@@ -60,7 +78,8 @@ function sortLocated(items: LocatedUsage[]): void {
   );
 }
 
-function isResolutionUsageError(error: AnalysisError): boolean {
+/** A resolve / resolveAll / resolveMany call the checker refuses. These are reported once every file is known, not per file. */
+export function isResolutionUsageError(error: AnalysisError): boolean {
   if (error.severity === 'warning') return false;
   if (error.code === 'NEO_ROOT_NOT_EXPORTED') return true;
   if (error.code === 'NEO_UNKNOWN_CONTAINER' || error.code === 'NEO_MULTI_REQUIRES_RESOLVE_ALL') {
@@ -71,63 +90,25 @@ function isResolutionUsageError(error: AnalysisError): boolean {
 }
 
 /**
- * Lib and declaration files for this plugin instance.
- * Stamp is the file text, same rule as `state.cachedSources` in session.ts.
- * User files are never stored here.
+ * The Program the usage check reads. A plugin that transformed files has a project session for the environment:
+ * its snapshot is the Program the transforms analysed, every root and every overlay, and no second one is built.
+ * It is the same Program only when every usage file is already held by the session: a file the session does not
+ * hold (a file with only a `resolve(` call, which no transform analysed) is added as a root and the session builds
+ * a new, incremental Program for it. Without
+ * a session (a usage file with no marker file, or a caller that holds only the texts) a short-lived session
+ * is built from the texts, never `ts.createProgram` on a host of its own.
  */
-function declarationCache(state: SessionState): Map<string, { stamp: string; source: ts.SourceFile }> {
-  return state.declarationSources;
-}
-
-function defaultLibDirectory(options: ts.CompilerOptions): string {
-  const libFile = ts.getDefaultLibFilePath(options).replace(/\\/g, '/');
-  return libFile.slice(0, libFile.lastIndexOf('/'));
-}
-
-function reusableDeclaration(fileName: string, options: ts.CompilerOptions): boolean {
-  const normalized = fileName.replace(/\\/g, '/');
-  if (normalized.endsWith('.d.ts') || normalized.endsWith('.d.mts') || normalized.endsWith('.d.cts')) {
-    return true;
-  }
-  const libDir = defaultLibDirectory(options);
-  return libDir.length > 0 && (normalized === libDir || normalized.startsWith(`${libDir}/`));
-}
-
-function readDeclarationText(fileName: string): string | undefined {
-  try {
-    return ts.sys.readFile(fileName);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Lib and other declaration files only.
- * A path that is in sourceTexts must not reach this function: those SourceFiles
- * are parsed from the text the plugin recorded, never from this cache.
- */
-function cachedDeclaration(
-  fileName: string,
-  languageVersion: ts.ScriptTarget | ts.CreateSourceFileOptions,
+function usageProgram(
+  sourceTexts: Map<string, string>,
   state: SessionState,
-): ts.SourceFile | undefined {
-  const sourceText = readDeclarationText(fileName);
-  if (!sourceText) return undefined;
-  const cache = declarationCache(state);
-  const cached = cache.get(fileName);
-  if (cached !== undefined && cached.stamp === sourceText) return cached.source;
-  const fromSession = state.cachedSources.get(fileName);
-  if (fromSession !== undefined && fromSession.stamp === sourceText) {
-    cache.set(fileName, fromSession);
-    return fromSession.source;
-  }
-  const created = ts.createSourceFile(fileName, sourceText, languageVersion, true);
-  cache.set(fileName, { stamp: sourceText, source: created });
-  return created;
-}
-
-function programFromSources(sourceTexts: Map<string, string>, state: SessionState): ts.Program | undefined {
+  environment: string | undefined,
+): { program: ts.Program; transient: ProjectSession | undefined } | undefined {
   if (sourceTexts.size === 0) return undefined;
+  const session = liveSession(state, environment);
+  if (session) {
+    for (const file of sourceTexts.keys()) session.addRoot(file);
+    return { program: session.snapshot(), transient: undefined };
+  }
   const options = {
     ...(state.resolved?.options ?? state.previousProgram?.getCompilerOptions() ?? {
       module: ts.ModuleKind.ESNext,
@@ -135,21 +116,10 @@ function programFromSources(sourceTexts: Map<string, string>, state: SessionStat
       target: ts.ScriptTarget.ES2020,
     }),
   };
-  const host = ts.createCompilerHost(options);
-  const originalGetSourceFile = host.getSourceFile.bind(host);
-  const originalFileExists = host.fileExists.bind(host);
-  const originalReadFile = host.readFile.bind(host);
-  const textFor = (fileName: string) => sourceTexts.get(fileName) ?? sourceTexts.get(fileName.replace(/\\/g, '/'));
-  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const text = textFor(fileName);
-    // Never reuse a cached SourceFile for a path in sourceTexts.
-    if (text !== undefined) return ts.createSourceFile(fileName, text, languageVersion, true);
-    if (!reusableDeclaration(fileName, options)) {
-      return originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
-    }
-    return cachedDeclaration(fileName, languageVersion, state);
-  };
-  host.fileExists = (fileName) => textFor(fileName) !== undefined || originalFileExists(fileName);
-  host.readFile = (fileName) => textFor(fileName) ?? originalReadFile(fileName);
-  return ts.createProgram([...sourceTexts.keys()], options, host);
+  const transient = new ProjectSession(ts.sys.getCurrentDirectory(), [], options, { declarationStore: state.declarationSources });
+  for (const [file, text] of sourceTexts) {
+    transient.update(file, text);
+    transient.addRoot(file);
+  }
+  return { program: transient.snapshot(), transient };
 }

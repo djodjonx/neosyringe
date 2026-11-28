@@ -1,16 +1,20 @@
 # IDE Plugin
 
-Get real-time error detection in your editor.
+Get the same analysis as the build in your editor. It runs on each TypeScript program update, and this page promises no latency: the editor plugin has no latency measurement. The nearest one, of the build plugin's incremental session, with its scenario and machine, is in [the incremental session benchmark](../benchmarks/G04-incremental-session.md).
 
 ## Overview
 
-The NeoSyringe LSP plugin integrates with TypeScript's language service to provide comprehensive real-time validation:
+The NeoSyringe LSP plugin integrates with TypeScript's language service to provide comprehensive validation:
 
 - 🔴 **Missing dependency detection** - Shows ALL missing dependencies at once, not just the first one
-- 🔴 **Circular dependency detection** - Instant feedback when you create cycles
+- 🔴 **Circular dependency detection** - Reported once the cycle exists in the program
 - 🔴 **Duplicate registration detection** - Warnings for conflicts in parent containers or partialConfigs
 - 🎯 **Precise error positioning** - Errors point to the exact token, even for imported services
 - 💡 **Clean error messages** - Readable names without internal hash IDs
+
+### The Same Error as the CLI
+
+An error has the same stable `NEO_*` code, at the same position, in the editor, in the CLI text and in the CLI `--json` report. The message of the editor diagnostic starts with `[NeoSyringe] <code>:`. The dependency chain (`Dependency chain: A -> B`) and the targeted fix (`Fix: ...`) are its related information: the same two lines the CLI prints. Whether your editor shows related information is up to the editor.
 
 ### What's Validated
 

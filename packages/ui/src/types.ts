@@ -54,7 +54,7 @@ export interface SerializableMultiRegistration {
   registrationId?: string;
   tokenId: string;
   lifecycle: 'singleton' | 'transient';
-  type: 'explicit' | 'autowire' | 'parent' | 'factory' | 'value';
+  type: 'explicit' | 'autowire' | 'parent' | 'factory' | 'value' | 'alias';
   dependencies: string[];
   optionalDependencies: string[];
 }
@@ -75,7 +75,7 @@ export interface SerializableNode {
   /** `owned` or `borrowed`, when the analyzer set it. */
   ownership?: 'owned' | 'borrowed';
   lifecycle: 'singleton' | 'transient';
-  type: 'explicit' | 'autowire' | 'parent' | 'factory' | 'value';
+  type: 'explicit' | 'autowire' | 'parent' | 'factory' | 'value' | 'alias';
   dependencies: string[];
   optionalDependencies: string[];
 }

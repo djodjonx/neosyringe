@@ -260,7 +260,7 @@ describe('T18 cache invalidation', () => {
       'class Impl implements IPort { id = 1 }',
       'export const c = defineBuilderConfig({',
       '  injections: [',
-      "    { token: useInterface<IPort>(), useFactory: true, dependencies: [], provider: () => useInterface<IPort>() },",
+      "    { token: useInterface<IPort>(), useFactory: true, dependencies: [], provider: () => useInterface<IPort>() as IPort },",
       '  ],',
       '});',
       '',

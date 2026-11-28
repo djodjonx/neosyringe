@@ -1,0 +1,5 @@
+{"file":"base-flat10.mjs","metric":"cold-resolve","median":54.35165999999981,"perProcess":[54.3,54.4,56.7]}
+{"file":"D-flat10.mjs","metric":"cold-resolve","median":97.62749999999983,"perProcess":[97.6,97.9,96.8]}
+{"file":"G2-has-throw.mjs","metric":"cold-resolve","median":54.459159999998974,"perProcess":[53.7,54.5,54.6]}
+{"file":"V1-shared-empty-has.mjs","metric":"cold-resolve","median":96.91458000000011,"perProcess":[98.4,96.9,94.7]}
+{"file":"V2-overrides-undefined-check.mjs","metric":"cold-resolve","median":102.70041999999876,"perProcess":[90.8,102.7,107.8]}

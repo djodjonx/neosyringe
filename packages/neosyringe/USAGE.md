@@ -91,7 +91,7 @@ userService.createUser('John Doe');
 ## Key Facts (easy to get wrong)
 
 - **`useInterface<T>()` token identity is by type declaration, not call site.** Calling it for the same interface `T` in different files produces the *same token* everywhere. Confining registrations to one file per module is a readability convention, not a technical requirement.
-- **`useValue` only works with interface tokens (`useInterface<T>()`) and property tokens (`useProperty<T>()`)** — not class-constructor tokens. `{ token: SomeClass, useValue: instance }` throws `TypeMismatchError`. Use `{ token: SomeClass, provider: () => instance, useFactory: true }` instead.
+- **`useValue` only works with interface tokens (`useInterface<T>()`) and property tokens (`useProperty<T>()`)** — not class-constructor tokens. `{ token: SomeClass, useValue: instance }` throws `TypeMismatchError`. Use `{ token: SomeClass, provider: () => instance, useFactory: true, dependencies: [] }` instead.
 - **`defineBuilderConfig(...)` must be assigned to a variable** (`const container = defineBuilderConfig({...})`, optionally `return container;` afterward) or written as `export default defineBuilderConfig({...})`. A bare `return defineBuilderConfig({...})` is rejected at build time (`UnsupportedContainerShapeError`).
 - **Multiple containers in one file each get their own generated class**, uniquified by a hash — not by the `name` field. `name` only sets the display label used in error messages; it's optional and has no effect on correctness.
 - **`useContainer` shares instances** (the child resolves the parent's actual singleton). **`extends` / `definePartialConfig` shares recipes** (each container gets its own independent instances). Pick based on whether you need shared state or just shared boilerplate.
@@ -104,7 +104,7 @@ userService.createUser('John Doe');
 | `Circular dependency detected: A -> B -> A` | Two services depend on each other | Restructure — introduce an abstraction or invert the dependency direction |
 | `Type mismatch: Provider 'X' is not assignable to token type 'Y'` | The provider class doesn't implement the interface the token was declared for | Use a provider that actually implements the interface |
 | `useValue cannot be used with primitive type 'string'...` | `useValue` was given a primitive (string/number/boolean) | Use `useProperty<string>(TargetClass, 'paramName')` instead |
-| `useValue cannot be used with a class token. Use provider: X...` | `useValue` was used with a class-constructor token instead of an interface/property token | `{ token: X, provider: () => instance, useFactory: true }` |
+| `useValue cannot be used with a class token. Use provider: X...` | `useValue` was used with a class-constructor token instead of an interface/property token | `{ token: X, provider: () => instance, useFactory: true, dependencies: [] }` |
 | `Async factory for 'X' cannot use lifecycle: 'transient'` | An async factory was registered with `lifecycle: 'transient'` | Remove `lifecycle: 'transient'` — async factories are always singleton |
 | `Duplicate registration: 'X' is already registered...` | The same token is registered twice (locally, or already provided by a parent/partial) | Remove the duplicate, or add `scoped: true` for an intentional override |
 | `Token 'X' is registered both with and without 'multi: true'` | Mixed `multi`/non-`multi` registrations for the same token | Make every registration for that token consistently use `multi: true` or not |

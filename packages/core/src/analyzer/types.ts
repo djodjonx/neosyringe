@@ -12,8 +12,76 @@ export type TokenId = string;
  * - `parent`: Inherited from parent container.
  * - `factory`: Provider is a factory function.
  * - `value`: A pre-built value registered directly.
+ * - `alias`: `useExisting`, a token that answers what another token answers. It owns nothing.
  */
-export type RegistrationType = 'explicit' | 'autowire' | 'parent' | 'factory' | 'value';
+export type RegistrationType = 'explicit' | 'autowire' | 'parent' | 'factory' | 'value' | 'alias';
+
+/** The token an alias stands for, as the registration names it. A chain is not followed here: the target may be an alias too. */
+export interface AliasTarget {
+  tokenId: TokenId;
+  /** True when the target is `useInterface<T>()`: its runtime key is its id. */
+  isInterfaceToken?: boolean;
+}
+
+/**
+ * Where a copied expression sits in its source file. Plain data: `start` and `length` are
+ * UTF-16 offsets into the text of `file` as the analysis read it.
+ */
+export interface SourceOrigin {
+  file: string;
+  start: number;
+  length: number;
+}
+
+/**
+ * A change the plugin makes inside a copied expression: the range `start`..`end` of the origin file
+ * (absolute UTF-16 offsets) is written as `text`. Plain data. The text around it is still a copy.
+ */
+export interface SourceRewrite {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/**
+ * A named type a generated file can refer to. Plain data, read where the type was written.
+ * The generator names it with an `import type` (no runtime dependency), or by its own name where
+ * the type sits in the file the output is written into.
+ */
+export interface TypeReference {
+  /** The declared name of the type. */
+  name: string;
+  /** The file that declares it. */
+  file: string;
+  /** The name `file` exports it under (`default` for a default export). Absent: `file` does not export it. */
+  exportName?: string;
+  /** True for a type declared in a script file or in a lib: in scope in every file. */
+  global?: true;
+}
+
+/**
+ * A name a copied expression reads that is bound in its own file and is not part of the expression:
+ * an import, or a top-level declaration the file exports. Plain data. The expression is copied into
+ * another file, where the name means nothing until the generator imports the module and rewrites each read.
+ */
+export interface CopiedBinding {
+  /**
+   * Each read of the name inside the copied expression: absolute UTF-16 offsets in the origin file.
+   * `shorthand` is the name when the read is an object shorthand (`{ Remote }`), which also writes the key.
+   * `type` marks a read in a type position (a type reference, a `typeof` query, an `implements` clause): it is erased,
+   * so it needs no runtime import.
+   */
+  ranges: ReadonlyArray<{ start: number; end: number; shorthand?: string; type?: true }>;
+  /** The module that exports what the name stands for. */
+  file: string;
+  /** The name that module exports it under (`default` included). Absent: the name is the whole module (`import * as ns`). */
+  exportName?: string;
+  /**
+   * The name `file` itself gives the declaration (`class Tag` exported as `Label` is `Tag`). Absent for a whole
+   * module or an anonymous declaration. Where the copy lands in `file`, this is the name to read.
+   */
+  localName?: string;
+}
 
 /**
  * Represents a single service definition in the dependency graph.
@@ -52,8 +120,33 @@ export interface ServiceDefinition {
   /** The raw source text of the factory function (for code generation). */
   factorySource?: string;
 
+  /** Where `factorySource` was read: file, start and length of the provider expression. Plain data. */
+  factoryOrigin?: SourceOrigin;
+
+  /** Changes to apply inside `factoryOrigin` when the factory is copied. `factorySource` stays the original text. */
+  factoryRewrites?: readonly SourceRewrite[];
+
+  /**
+   * The names the factory text reads that its own file binds (an import, an exported top-level class).
+   * Where the factory is copied into another file, the generator imports their module and rewrites each read.
+   * A name its file does not export has no entry: nothing can import it.
+   */
+  factoryBindings?: readonly CopiedBinding[];
+
+  /**
+   * Only an `alias` registration has one. Its `lifecycle` is a filler nobody reads: an alias is a singleton of nothing,
+   * the lifecycle and the owner are the target's.
+   */
+  aliasTarget?: AliasTarget;
+
   /** The raw source text of the value expression (for 'value' type). */
   valueSource?: string;
+
+  /** Where `valueSource` was read: file, start and length of the useValue expression. Plain data. */
+  valueOrigin?: SourceOrigin;
+
+  /** Changes to apply inside `valueOrigin` when the value is copied. `valueSource` stays the original text. */
+  valueRewrites?: readonly SourceRewrite[];
 
   /**
    * Expression that reads a useValue capture.
@@ -62,17 +155,31 @@ export interface ServiceDefinition {
    */
   valueCapture?: string;
 
+  /**
+   * True when `valueCapture` is an expression read where the container is built (a partial's
+   * `P.part.injections[i].useValue`), not the name of a const hoisted before the class.
+   * Absent: `valueCapture` names a hoisted const. The generator never guesses it from the text.
+   */
+  valueCaptureRead?: boolean;
+
   /** True if this injection is scoped to the local container. */
   isScoped?: boolean;
 
   /** True if the factory function is async (requires initialize() before resolve()). */
   isAsync?: boolean;
 
-  /** True if the implementation class has dispose(): void */
+  /** True if the implementation class has dispose(): void, or `[Symbol.dispose]()` when `symbolDisposer` is set */
   isDisposable?: boolean;
 
-  /** True if the implementation class has dispose(): Promise<void> */
+  /** True if the implementation class has dispose(): Promise<void>, or `[Symbol.asyncDispose]()` when `symbolDisposer` is set */
   isAsyncDisposable?: boolean;
+
+  /**
+   * True if the disposer is a method keyed by `Symbol.dispose` (`isDisposable`) or `Symbol.asyncDispose`
+   * (`isAsyncDisposable`) and not one named `dispose`: the generated code finds it at run time. The key is the
+   * checker's symbol of the lib, never the text of a name.
+   */
+  symbolDisposer?: boolean;
 
   /**
    * Local identifier name for the implementation symbol when it is a default export.
@@ -88,6 +195,22 @@ export interface ServiceDefinition {
    * Same rationale as implementationLocalName — needed for correct `this.resolve(token)` generation.
    */
   tokenLocalName?: string;
+
+  /**
+   * The identifier the registration's own file uses for the provider class, when the provider is
+   * written as a plain identifier (`provider: Renamed`, `{ token: Renamed }`). It is the local binding of
+   * an import, so it can differ from the class name (`import { Logger as Renamed }`).
+   */
+  implementationBinding?: string;
+
+  /** Same as `implementationBinding`, for a class token. */
+  tokenBinding?: string;
+
+  /**
+   * The type an interface token stands for (`useInterface<ILogger>()`), when it is a plain named type
+   * the output can name. Absent: the token is a class, or its type is anonymous, generic or not nameable.
+   */
+  tokenType?: TypeReference;
 
   /** Stable id of this registration, distinct from the token id. */
   registrationId?: string;
@@ -106,6 +229,20 @@ export interface ServiceDefinition {
 
   /** Compatible mode: the factory has no dependencies list, so its subgraph cannot be shaken. */
   opaque?: boolean;
+
+  /**
+   * Position of a scope input in the list `scopeInputs` declares. Only a scope input has one: it is a `value`
+   * registration with no expression, borrowed, whose value the scope was given by `createScope({ values })`.
+   */
+  inputSlot?: number;
+}
+
+/** One scope input of a builder: its token, its position in `scopeInputs` and the expression that names it. */
+export interface ScopeInput {
+  tokenId: TokenId;
+  /** Index in the declared list. A scope stores its value under this number. */
+  slot: number;
+  node: Node;
 }
 
 /** One entry of a factory `dependencies` list. `containerId` is `containerKeyFor` of the config. */
@@ -227,6 +364,64 @@ export interface ConfigGraph {
 
   /** Literal `runtime.profile`. Absent means full. ADR007 "Profils de génération". */
   runtimeProfile?: 'full' | 'minimal';
+
+  /** Literal `initialization.concurrency`, a positive integer. Absent means 1, the sequential initialization. BUILDER ONLY. */
+  initializationConcurrency?: number;
+
+  /** The inputs of a literal `scopeInputs`, in declared order. A rejected entry is not listed. BUILDER ONLY. */
+  scopeInputs?: ScopeInput[];
+
+  /**
+   * Partials listed in `extends`, as configuration identities, in array order.
+   * `key` is the `containerKey` of the partial, `binding` the text written in `extends`.
+   * An element that is not a partial has no link.
+   */
+  extendsLinks?: ExtendsLink[];
+
+  /** `containerKey` of the config named by `useContainer`, followed through aliases. */
+  useContainerKey?: string;
+
+  /** What `useContainer` names: a NeoSyringe config or a `declareContainerTokens` shim. */
+  useContainerKind?: 'config' | 'declared';
+
+  /**
+   * Errors of injections that never became a registration (parser errors, a partial spread),
+   * in source order. They are also listed in `valueErrors`.
+   */
+  rejectedInjections?: AnalysisError[];
+
+  /** Errors of the literal `optimization` and `runtime` blocks. They are also listed in `valueErrors`. */
+  optimizationErrors?: AnalysisError[];
+
+  /**
+   * Parsed injections dropped because the same token is registered with and without `multi: true`.
+   * They own no registration here, but a host that extends this config may still see them as one.
+   */
+  conflicts?: InjectionInfo[];
+}
+
+/** A partial named in `extends`: its configuration identity and the expression the consumer wrote. */
+export interface ExtendsLink {
+  key: string;
+  binding: string;
+}
+
+/**
+ * A `defineBuilderConfig` call the collector could not turn into a config.
+ * `shape`: not assigned to a variable or `export default`, so it cannot be located for replacement.
+ * `not-object-literal`: the argument is not an object literal.
+ */
+export interface RejectedBuilder {
+  node: CallExpression;
+  reason: 'shape' | 'not-object-literal';
+}
+
+/** Everything one collection found, in discovery order. */
+export interface ConfigCollection {
+  configs: Map<string, ConfigGraph>;
+  rejected: RejectedBuilder[];
+  /** Builders and partials as found, with rejected builders in place. */
+  discovery: ReadonlyArray<ConfigGraph | RejectedBuilder>;
 }
 
 /**
@@ -346,6 +541,15 @@ export interface DependencyGraph {
   /** Literal `runtime.profile`. Absent means full. ADR007 "Profils de génération". */
   runtimeProfile?: 'full' | 'minimal';
 
+  /** Literal `initialization.concurrency`: how many initialization steps run at once. Absent means 1, the sequential order. */
+  initializationConcurrency?: number;
+
+  /**
+   * The scope inputs of the container, in declared order. Each one is also a node of `nodes`: a borrowed singleton `value` with an `inputSlot`.
+   * Absent: the container has no input and `createScope()` takes no argument.
+   */
+  scopeInputs?: ScopeInput[];
+
   /** One reason per registration id. ADR006 line 24. */
   retention?: Map<string, RetentionReason>;
 
@@ -369,6 +573,12 @@ export interface DependencyGraph {
 
   /** Legacy container variable names to delegate to. */
   legacyContainers?: string[];
+
+  /**
+   * Tokens the partials folded into this container declare with `expects`, in fold order, without
+   * duplicates. The host has to provide them. Nothing generates code from it.
+   */
+  expectedExternalTokens?: Set<TokenId>;
 
   /** Tokens provided by the parent container (used for validation). */
   parentProvidedTokens?: Set<TokenId>;
@@ -439,7 +649,31 @@ export interface ErrorContext {
 
   /** Dependency chain (for cycles) */
   chain?: string[];
+
+  /**
+   * Which cause of the error's code this is, set where the analyzer knows it. The fix hint reads it: it is never
+   * read back from the message.
+   */
+  reason?: DiagnosticReason;
 }
+
+/**
+ * Causes of a diagnostic code that need their own fix. A cause without a reason keeps the hint of its code.
+ * - `NEO_CONFIG_UNSUPPORTED`: `value-owned`, `open-mode-roots`, `unsupported-mode`, `eager-alias`,
+ *   `partial-scope-inputs`, `partial-initialization`.
+ * - `NEO_DUPLICATE_PROVIDER`: `parent-override` (a token the parent container already registers).
+ * - `NEO_UNKNOWN_CONTAINER`: `unknown-receiver`, `dynamic-list` (a `resolveMany` list that is not a literal).
+ */
+export type DiagnosticReason =
+  | 'value-owned'
+  | 'open-mode-roots'
+  | 'unsupported-mode'
+  | 'eager-alias'
+  | 'partial-scope-inputs'
+  | 'partial-initialization'
+  | 'parent-override'
+  | 'unknown-receiver'
+  | 'dynamic-list';
 
 /** Machine-readable diagnostic codes this analyzer emits. */
 export type DiagnosticCode =

@@ -46,7 +46,7 @@ describe('Generator - External Bindings', () => {
       roots: ['FeatureService'],
     };
 
-    const generator = new Generator(graph, false, '/src');
+    const generator = new Generator(graph, false, '/src', true, false, 'reference');
     const code = generator.generate();
 
     // 1. Verify Import — paths are relative to outputDir ('/src')
@@ -58,7 +58,7 @@ describe('Generator - External Bindings', () => {
 
     // 2. Verify FeatureService Factory
     // Should resolve SharedKernel via this.resolve()
-    expect(code).toContain('private create_FeatureService(): any {');
+    expect(code).toContain('private create_FeatureService(): InstanceType<typeof Import_0.FeatureService> {');
     // Import_0 is FeatureService, Import_1 is SharedKernel
     expect(code).toContain('return new Import_0.FeatureService(this.resolve(Import_1.SharedKernel));');
 

@@ -1,11 +1,49 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { TokenId, AnalysisError, FactoryDependency, ValidationMode } from '../types';
+import type { AliasTarget, TokenId, AnalysisError, CopiedBinding, FactoryDependency, SourceOrigin, TypeReference, ValidationMode } from '../types';
+import { NeoTokenError } from '../errors/NeoTokenError';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import { containerKeyFor } from '../shared/registrationGraph';
 import { resolveNeoMarker } from '../shared/markerProvenance';
 
-export type ParsedRegistrationType = 'explicit' | 'autowire' | 'factory' | 'value';
+export type ParsedRegistrationType = 'explicit' | 'autowire' | 'factory' | 'value' | 'alias';
+
+/**
+ * The properties an alias cannot carry, in the order the message lists them. An alias owns nothing: the target keeps
+ * its provider, its lifecycle, its owner and its dependencies.
+ */
+const ALIAS_FORBIDDEN = ['provider', 'useFactory', 'useValue', 'lifecycle', 'ownership', 'multi', 'dependencies'] as const;
+
+/** File, start and length of the exact text `node.getText(sourceFile)` returns. */
+function originOf(node: ts.Node, sourceFile: ts.SourceFile): SourceOrigin {
+  const start = node.getStart(sourceFile);
+  return { file: sourceFile.fileName, start, length: node.getEnd() - start };
+}
+
+/** The text of a plain identifier expression: the name the file binds. Anything else has no single binding. */
+function identifierText(node: ts.Expression | undefined): string | undefined {
+  return node !== undefined && TSContext.ts.isIdentifier(node) ? node.text : undefined;
+}
+
+/**
+ * How a type releases itself. `symbolDisposer`: the disposer is the method keyed by `Symbol.asyncDispose` (async) or
+ * `Symbol.dispose` (sync) and not a method named `dispose`, so the generated code must look it up at run time.
+ */
+export interface DisposableFlags {
+  isDisposable: boolean;
+  isAsyncDisposable: boolean;
+  symbolDisposer?: boolean;
+}
+
+const NOT_DISPOSABLE: DisposableFlags = { isDisposable: false, isAsyncDisposable: false };
+
+/** The key types of the protocols, as the program's own lib declares them. A lib without them has none. */
+interface DisposalKeys {
+  sync?: ts.Type;
+  async?: ts.Type;
+}
+
+const DISPOSAL_KEYS = new WeakMap<ts.TypeChecker, DisposalKeys | null>();
 
 export interface ParsedInjection {
   readonly __kind: 'parsed';
@@ -21,19 +59,29 @@ export interface ParsedInjection {
   isScoped: boolean;
   lifecycle: 'singleton' | 'transient';
   valueSource?: string;
+  valueOrigin?: SourceOrigin;
   useFactory: boolean;
   factorySource?: string;
+  factoryOrigin?: SourceOrigin;
+  factoryBindings?: readonly CopiedBinding[];
   isAsync: boolean;
   implementationSymbol?: ts.Symbol;
   registrationType: ParsedRegistrationType;
   isDisposable: boolean;
   isAsyncDisposable: boolean;
+  /** The disposer is a method keyed by `Symbol.dispose` or `Symbol.asyncDispose` (see {@link DisposableFlags}). */
+  symbolDisposer?: boolean;
   implementationLocalName?: string;
   tokenLocalName?: string;
+  implementationBinding?: string;
+  tokenBinding?: string;
+  tokenType?: TypeReference;
   factoryDependencies?: FactoryDependency[];
   opaque?: boolean;
   dependenciesWarning?: AnalysisError;
   ownership?: 'owned' | 'borrowed';
+  /** Only an alias has one: the token it stands for. */
+  aliasTarget?: AliasTarget;
 }
 
 interface FactoryContract {
@@ -41,6 +89,19 @@ interface FactoryContract {
   factoryDependencies: FactoryDependency[];
   opaque?: boolean;
   dependenciesWarning?: AnalysisError;
+}
+
+/**
+ * The id of a token expression, or `null` when it names none (a literal, an object: `NEO_TOKEN_UNSUPPORTED`). An alias
+ * reports that at its registration; a boundary error is not an alias matter and goes on.
+ */
+function namedToken(resolve: () => TokenId | null): TokenId | null {
+  try {
+    return resolve();
+  } catch (error) {
+    if (error instanceof NeoTokenError && error.code === 'NEO_TOKEN_UNSUPPORTED') return null;
+    throw error;
+  }
 }
 
 /**
@@ -69,11 +130,15 @@ export class InjectionParser {
     let isMulti = false;
     let ownershipSeen = false;
     let ownershipText: string | undefined;
+    let aliasNode: ts.Expression | undefined;
+    const declared = new Set<string>();
 
     for (const prop of obj.properties) {
       if (!TSContext.ts.isPropertyAssignment(prop) || !TSContext.ts.isIdentifier(prop.name)) continue;
+      declared.add(prop.name.text);
 
       switch (prop.name.text) {
+        case 'useExisting': aliasNode = prop.initializer; break;
         case 'token': tokenNode = prop.initializer; break;
         case 'provider': providerNode = prop.initializer; break;
         case 'lifecycle':
@@ -100,6 +165,9 @@ export class InjectionParser {
     }
 
     if (!tokenNode) return null;
+
+    // An alias is read before anything else: a property token or `ownership` would otherwise be judged as a registration.
+    if (aliasNode) return this.parseAlias(obj, sourceFile, tokenNode, aliasNode, isScoped, declared);
 
     if (ownershipSeen && ownershipText !== 'owned' && ownershipText !== 'borrowed') {
       return {
@@ -184,6 +252,7 @@ export class InjectionParser {
           message: `NEO_CONFIG_UNSUPPORTED: useValue cannot be declared owned. Register a factory with ownership: 'owned', or omit ownership.`,
           node: obj,
           sourceFile,
+          context: { reason: 'value-owned' },
         };
       }
 
@@ -200,6 +269,8 @@ export class InjectionParser {
         isScoped,
         lifecycle: 'singleton',
         valueSource: valueNode.getText(sourceFile),
+        valueOrigin: originOf(valueNode, sourceFile),
+        tokenType: this.interfaceTokenType(resolvedTokenNode),
         useFactory: false,
         isAsync: false,
         registrationType: 'value',
@@ -253,7 +324,7 @@ export class InjectionParser {
     }
 
     // 8. Detect disposable interface. Singleton factories stay unset.
-    const { isDisposable, isAsyncDisposable } = this.disposableFlagsFor(
+    const { isDisposable, isAsyncDisposable, symbolDisposer } = this.disposableFlagsFor(
       registrationType,
       lifecycle,
       implementationSymbol,
@@ -263,6 +334,8 @@ export class InjectionParser {
 
     const factorySource =
       registrationType === 'factory' && providerNode ? providerNode.getText(sourceFile) : undefined;
+    const factoryOrigin =
+      registrationType === 'factory' && providerNode ? originOf(providerNode, sourceFile) : undefined;
 
     // 9. Capture local identifier names for default exports.
     // When `import Auth from './AuthService'` is used, getSymbolAtLocation returns an alias
@@ -294,17 +367,99 @@ export class InjectionParser {
       valueSource: undefined,
       useFactory,
       factorySource,
+      factoryOrigin,
+      factoryBindings: registrationType === 'factory' && providerNode ? this.copiedBindings(providerNode) : undefined,
       isAsync,
       implementationSymbol,
       registrationType,
       isDisposable,
       isAsyncDisposable,
+      symbolDisposer,
       implementationLocalName,
       tokenLocalName,
+      implementationBinding: identifierText(providerNode ?? tokenNode),
+      tokenBinding: tokenSymbol ? identifierText(tokenNode) : undefined,
+      tokenType: isInterfaceToken ? this.interfaceTokenType(resolvedTokenNode) : undefined,
       factoryDependencies,
       opaque,
       dependenciesWarning,
       ownership: ownershipText === 'owned' || ownershipText === 'borrowed' ? ownershipText : undefined,
+    };
+  }
+
+  /**
+   * `{ token, useExisting }`: the token answers what the target answers. The registration carries none of the options of
+   * the other shapes (`ALIAS_FORBIDDEN`), and its token is a class or an interface token: a property token is read
+   * from a factory, which an alias is not. The target is any token: the checks that it is provided, that it is not
+   * multi and that its value fits are the validators', so the same registration is judged the same way everywhere.
+   */
+  private parseAlias(
+    obj: ts.ObjectLiteralExpression,
+    sourceFile: ts.SourceFile,
+    tokenNode: ts.Expression,
+    aliasNode: ts.Expression,
+    isScoped: boolean,
+    declared: ReadonlySet<string>,
+  ): ParsedInjection | AnalysisError {
+    const unsupported = (message: string): AnalysisError => ({
+      type: 'unsupported',
+      code: 'NEO_CONFIG_UNSUPPORTED',
+      message: `NEO_CONFIG_UNSUPPORTED: ${message}`,
+      node: obj,
+      sourceFile,
+    });
+    const forbidden = ALIAS_FORBIDDEN.find((name) => declared.has(name));
+    if (forbidden === 'multi') {
+      return unsupported("an alias cannot be multi: a multi token is read with resolveAll, and an alias answers one object. Remove 'multi'.");
+    }
+    if (forbidden !== undefined) {
+      return unsupported(`an alias (useExisting) cannot declare '${forbidden}': it owns nothing, and its target keeps the provider, the lifecycle and the owner. Remove '${forbidden}'.`);
+    }
+    const resolvedTokenNode = this.tokenResolverService.resolveToInitializer(tokenNode) ?? tokenNode;
+    if (this.tokenResolverService.isUsePropertyCall(resolvedTokenNode)) {
+      return unsupported('an alias cannot be a property token (useProperty): a property token is provided by a factory. Register a factory for it, or alias a class or interface token.');
+    }
+    let tokenId: TokenId | null;
+    let tokenSymbol: ts.Symbol | undefined;
+    let isInterfaceToken = false;
+    if (this.tokenResolverService.isUseInterfaceCall(resolvedTokenNode)) {
+      tokenId = this.tokenResolverService.extractInterfaceTokenId(resolvedTokenNode);
+      isInterfaceToken = true;
+    } else {
+      tokenId = namedToken(() => this.tokenResolverService.getTypeIdFromConstructor(this.checker.getTypeAtLocation(tokenNode)));
+      if (TSContext.ts.isIdentifier(tokenNode)) tokenSymbol = this.checker.getSymbolAtLocation(tokenNode) ?? undefined;
+    }
+    const targetId = namedToken(() => this.tokenResolverService.resolveTokenId(aliasNode));
+    if (!tokenId || !targetId) {
+      return unsupported('useExisting must name a token: a class, useInterface<T>() or a variable that holds one.');
+    }
+    const resolvedTarget = this.tokenResolverService.resolveToInitializer(aliasNode) ?? aliasNode;
+    const tokenText = tokenNode.getText(sourceFile);
+    return {
+      __kind: 'parsed',
+      tokenNode,
+      resolvedTokenNode,
+      tokenId,
+      tokenText,
+      tokenSymbol,
+      isInterfaceToken,
+      isValueToken: false,
+      isMulti: false,
+      isScoped,
+      // A filler nobody reads: the lifecycle and the owner of an alias are its target's.
+      lifecycle: 'singleton',
+      useFactory: false,
+      isAsync: false,
+      registrationType: 'alias',
+      isDisposable: false,
+      isAsyncDisposable: false,
+      tokenLocalName: this.resolveDefaultLocalName(tokenSymbol, TSContext.ts.isIdentifier(tokenNode) ? tokenNode : undefined),
+      tokenBinding: tokenSymbol ? identifierText(tokenNode) : undefined,
+      tokenType: isInterfaceToken ? this.interfaceTokenType(resolvedTokenNode) : undefined,
+      aliasTarget: {
+        tokenId: targetId,
+        ...(this.tokenResolverService.isUseInterfaceCall(resolvedTarget) ? { isInterfaceToken: true } : {}),
+      },
     };
   }
 
@@ -364,29 +519,29 @@ export class InjectionParser {
     implementationSymbol: ts.Symbol | undefined,
     providerNode: ts.Expression | undefined,
     tokenNode: ts.Expression,
-  ): { isDisposable: boolean; isAsyncDisposable: boolean } {
+  ): DisposableFlags {
     if (registrationType === 'factory') {
-      if (lifecycle !== 'transient') return { isDisposable: false, isAsyncDisposable: false };
+      if (lifecycle !== 'transient') return NOT_DISPOSABLE;
       return this.detectTransientFactoryDisposable(providerNode, tokenNode);
     }
-    if (!implementationSymbol) return { isDisposable: false, isAsyncDisposable: false };
-    return this.detectDisposable(implementationSymbol);
+    if (!implementationSymbol) return NOT_DISPOSABLE;
+    return this.detectDisposable(implementationSymbol, tokenNode);
   }
 
   /** `dispose` on the factory's return type, otherwise on the token's service type. */
   private detectTransientFactoryDisposable(
     providerNode: ts.Expression | undefined,
     tokenNode: ts.Expression,
-  ): { isDisposable: boolean; isAsyncDisposable: boolean } {
+  ): DisposableFlags {
     if (providerNode) {
       const providerType = this.checker.getTypeAtLocation(providerNode);
       const signature = providerType.getCallSignatures()[0];
       if (signature) {
-        const flags = this.disposableFlags(this.checker.getReturnTypeOfSignature(signature));
+        const flags = this.disposableFlags(this.checker.getReturnTypeOfSignature(signature), tokenNode);
         if (flags.isDisposable || flags.isAsyncDisposable) return flags;
       }
     }
-    return this.disposableFlags(this.tokenServiceType(tokenNode));
+    return this.disposableFlags(this.tokenServiceType(tokenNode), tokenNode);
   }
 
   /**
@@ -426,30 +581,85 @@ export class InjectionParser {
     return undefined;
   }
 
-  /** Detects whether a class symbol implements dispose(): void or dispose(): Promise<void>. */
-  private detectDisposable(symbol: ts.Symbol): { isDisposable: boolean; isAsyncDisposable: boolean } {
+  /** Detects how a class symbol releases itself: `dispose()`, `[Symbol.asyncDispose]()` or `[Symbol.dispose]()`. */
+  private detectDisposable(symbol: ts.Symbol, location: ts.Node): DisposableFlags {
     if (symbol.flags & TSContext.ts.SymbolFlags.Alias) {
       symbol = this.checker.getAliasedSymbol(symbol);
     }
-    return this.disposableFlags(this.checker.getDeclaredTypeOfSymbol(symbol));
+    return this.disposableFlags(this.checker.getDeclaredTypeOfSymbol(symbol), location);
   }
 
-  private disposableFlags(type: ts.Type): { isDisposable: boolean; isAsyncDisposable: boolean } {
-    if (type.flags & TSContext.ts.TypeFlags.Any || type.flags & TSContext.ts.TypeFlags.Unknown) {
-      return { isDisposable: false, isAsyncDisposable: false };
-    }
+  /**
+   * One protocol per type, in the order the generated code tries them at run time: a callable `dispose` first, then
+   * `[Symbol.asyncDispose]`, then `[Symbol.dispose]`. A `dispose` that is not callable gives way to the symbols.
+   * `location` is any node of the program: it is where the lib's symbols are looked up.
+   */
+  private disposableFlags(type: ts.Type, location: ts.Node): DisposableFlags {
+    if (type.flags & TSContext.ts.TypeFlags.Any || type.flags & TSContext.ts.TypeFlags.Unknown) return NOT_DISPOSABLE;
+    return this.legacyDisposeFlags(type) ?? this.symbolDisposeFlags(type, location) ?? NOT_DISPOSABLE;
+  }
+
+  /** `dispose(): void` or `dispose(): Promise<...>`, or `undefined` when the type has no callable `dispose`. */
+  private legacyDisposeFlags(type: ts.Type): DisposableFlags | undefined {
     const disposeMember = type.getProperty('dispose');
-    if (!disposeMember) return { isDisposable: false, isAsyncDisposable: false };
-
-    const disposeType = this.checker.getTypeOfSymbol(disposeMember);
-    const signatures = disposeType.getCallSignatures();
-    const signature = signatures[0];
-    if (!signature) return { isDisposable: false, isAsyncDisposable: false };
-
+    if (!disposeMember) return undefined;
+    const signature = this.checker.getTypeOfSymbol(disposeMember).getCallSignatures()[0];
+    if (!signature) return undefined;
     const returnType = this.checker.getReturnTypeOfSignature(signature);
     const isAsync = this.checker.typeToString(returnType).startsWith('Promise');
-
     return { isDisposable: !isAsync, isAsyncDisposable: isAsync };
+  }
+
+  /**
+   * A member whose key is the very symbol `Symbol.asyncDispose` or `Symbol.dispose` of the lib. The key is compared as a
+   * type, by identity: the text of a name, a string `'Symbol.dispose'` or another unique symbol never matches. Without
+   * the disposable lib the symbols do not exist for the checker and nothing is found.
+   */
+  private symbolDisposeFlags(type: ts.Type, location: ts.Node): DisposableFlags | undefined {
+    const keys = this.disposalKeys(location);
+    if (!keys) return undefined;
+    const callable = new Map<ts.Type, boolean>();
+    for (const property of this.checker.getPropertiesOfType(type)) {
+      const key = this.symbolKeyOf(property);
+      if (!key || (key !== keys.async && key !== keys.sync)) continue;
+      const member = this.checker.getNonNullableType(this.checker.getTypeOfSymbol(property));
+      if (member.getCallSignatures().length > 0) callable.set(key, true);
+    }
+    if (keys.async && callable.get(keys.async)) return { isDisposable: false, isAsyncDisposable: true, symbolDisposer: true };
+    if (keys.sync && callable.get(keys.sync)) return { isDisposable: true, isAsyncDisposable: false, symbolDisposer: true };
+    return undefined;
+  }
+
+  /** The type of the computed key of a member (`[Symbol.dispose]`), `undefined` for a member with a plain name. */
+  private symbolKeyOf(property: ts.Symbol): ts.Type | undefined {
+    for (const declaration of property.declarations ?? []) {
+      const name = TSContext.ts.getNameOfDeclaration(declaration);
+      if (name && TSContext.ts.isComputedPropertyName(name)) return this.checker.getTypeAtLocation(name.expression);
+    }
+    return undefined;
+  }
+
+  /** The unique-symbol types of `Symbol.dispose` and `Symbol.asyncDispose` the program's lib declares, read once per checker. */
+  private disposalKeys(location: ts.Node): DisposalKeys | null {
+    const cached = DISPOSAL_KEYS.get(this.checker);
+    if (cached !== undefined) return cached;
+    const keys = this.readDisposalKeys(location);
+    DISPOSAL_KEYS.set(this.checker, keys);
+    return keys;
+  }
+
+  private readDisposalKeys(location: ts.Node): DisposalKeys | null {
+    const constructor = this.checker
+      .getSymbolsInScope(location, TSContext.ts.SymbolFlags.Value)
+      .find((candidate) => candidate.name === 'Symbol' && (candidate.declarations ?? []).some((declaration) => declaration.getSourceFile().hasNoDefaultLib));
+    if (!constructor) return null;
+    const type = this.checker.getTypeOfSymbolAtLocation(constructor, location);
+    const read = (name: string): ts.Type | undefined => {
+      const member = type.getProperty(name);
+      return member ? this.checker.getTypeOfSymbol(member) : undefined;
+    };
+    const keys: DisposalKeys = { sync: read('dispose'), async: read('asyncDispose') };
+    return keys.sync || keys.async ? keys : null;
   }
 
   /**
@@ -679,7 +889,7 @@ export class InjectionParser {
       if (found) return;
       if (TSContext.ts.isCallExpression(node) && TSContext.ts.isPropertyAccessExpression(node.expression)) {
         const name = node.expression.name.text;
-        if ((name === 'resolve' || name === 'resolveAll') && this.isOtherContainerReceiver(node.expression.expression, paramSymbol)) {
+        if ((name === 'resolve' || name === 'resolveAll' || name === 'resolveMany') && this.isOtherContainerReceiver(node.expression.expression, paramSymbol)) {
           found = true;
           return;
         }
@@ -735,6 +945,142 @@ export class InjectionParser {
    * local binding name (e.g. "Auth" from `import Auth from './Foo'`) is replaced by "default".
    * This method captures the local name while the original AST node is still available.
    */
+  /**
+   * The names `expression` reads that its own file binds and that it does not declare itself, with the module
+   * that exports each one. A module-less name (a global, a lib type), a package or declaration file (no
+   * specifier can be written from here), and a top-level declaration the file keeps to itself are left out:
+   * nothing in another file could import them.
+   */
+  private copiedBindings(expression: ts.Expression): CopiedBinding[] | undefined {
+    const api = TSContext.ts;
+    const sourceFile = expression.getSourceFile();
+    const start = expression.getStart(sourceFile);
+    const end = expression.getEnd();
+    const found = new Map<string, {
+      file: string;
+      exportName?: string;
+      localName?: string;
+      ranges: Array<{ start: number; end: number; shorthand?: string; type?: true }>;
+    }>();
+    /** A read in a position TypeScript erases: a type reference, a `typeof` query, an `implements` or interface `extends` clause. */
+    const inTypePosition = (node: ts.Identifier): boolean => {
+      let current: ts.Node = node;
+      while (api.isQualifiedName(current.parent) && current.parent.left === current) current = current.parent;
+      const parent = current.parent;
+      if (api.isTypeReferenceNode(parent)) return parent.typeName === current;
+      if (api.isTypeQueryNode(parent)) return parent.exprName === current;
+      if (api.isExpressionWithTypeArguments(parent)) {
+        const clause = parent.parent;
+        return api.isHeritageClause(clause)
+          && (clause.token === api.SyntaxKind.ImplementsKeyword || api.isInterfaceDeclaration(clause.parent));
+      }
+      return false;
+    };
+    const isNameOnly = (node: ts.Identifier): boolean => {
+      const parent = node.parent;
+      if (api.isPropertyAccessExpression(parent)) return parent.name === node;
+      if (api.isQualifiedName(parent)) return parent.right === node;
+      if (api.isBindingElement(parent)) return parent.propertyName === node;
+      if (api.isPropertyAssignment(parent) || api.isMethodDeclaration(parent) || api.isPropertyDeclaration(parent)
+        || api.isPropertySignature(parent) || api.isMethodSignature(parent) || api.isGetAccessorDeclaration(parent)
+        || api.isSetAccessorDeclaration(parent) || api.isEnumMember(parent) || api.isNamedTupleMember(parent)) {
+        return parent.name === node;
+      }
+      return api.isLabeledStatement(parent) || api.isBreakOrContinueStatement(parent) || api.isJsxAttribute(parent);
+    };
+    const topLevel = (declaration: ts.Declaration): boolean => {
+      const parent = declaration.parent;
+      if (parent === declaration.getSourceFile()) return true;
+      return api.isVariableDeclaration(declaration)
+        && api.isVariableDeclarationList(parent)
+        && parent.parent.parent === declaration.getSourceFile();
+    };
+    const exportNameOf = (file: ts.SourceFile, target: ts.Symbol): string | undefined => {
+      const moduleSymbol = this.checker.getSymbolAtLocation(file);
+      if (!moduleSymbol) return undefined;
+      for (const exported of this.checker.getExportsOfModule(moduleSymbol)) {
+        const resolved = (exported.flags & api.SymbolFlags.Alias) !== 0 ? this.checker.getAliasedSymbol(exported) : exported;
+        if (resolved === target) return exported.getName();
+      }
+      return undefined;
+    };
+    const visit = (node: ts.Node): void => {
+      if (api.isIdentifier(node) && !isNameOnly(node)) {
+        const shorthand = api.isShorthandPropertyAssignment(node.parent) && node.parent.name === node;
+        const symbol = shorthand
+          ? this.checker.getShorthandAssignmentValueSymbol(node.parent)
+          : this.checker.getSymbolAtLocation(node);
+        const declaredInside = symbol?.declarations?.some((declaration) =>
+          declaration.getSourceFile() === sourceFile && declaration.getStart(sourceFile) >= start && declaration.getEnd() <= end);
+        if (symbol && !declaredInside) {
+          const alias = (symbol.flags & api.SymbolFlags.Alias) !== 0;
+          const target = alias ? this.checker.getAliasedSymbol(symbol) : symbol;
+          const declaration = target.declarations?.[0];
+          const declaringFile = declaration && api.isSourceFile(declaration) ? declaration : declaration?.getSourceFile();
+          const usable = declaration !== undefined && declaringFile !== undefined
+            && !declaringFile.isDeclarationFile
+            && !declaringFile.fileName.includes('/node_modules/')
+            && api.isExternalModule(declaringFile);
+          if (usable && declaration && declaringFile) {
+            const wholeModule = api.isSourceFile(declaration);
+            const exportName = wholeModule ? undefined : (topLevel(declaration) ? exportNameOf(declaringFile, target) : undefined);
+            if (wholeModule || exportName !== undefined) {
+              const key = `${declaringFile.fileName}\0${exportName ?? ''}`;
+              const declared = wholeModule ? undefined : api.getNameOfDeclaration(declaration);
+              const localName = declared !== undefined && api.isIdentifier(declared) ? declared.text : undefined;
+              const entry = found.get(key) ?? { file: declaringFile.fileName, exportName, ...(localName === undefined ? {} : { localName }), ranges: [] };
+              const range: { start: number; end: number; shorthand?: string; type?: true } = {
+                start: node.getStart(sourceFile),
+                end: node.getEnd(),
+              };
+              if (shorthand) range.shorthand = node.text;
+              if (inTypePosition(node)) range.type = true;
+              entry.ranges.push(range);
+              found.set(key, entry);
+            }
+          }
+        }
+      }
+      api.forEachChild(node, visit);
+    };
+    visit(expression);
+    return found.size === 0 ? undefined : [...found.values()];
+  }
+
+  /**
+   * The type behind `useInterface<T>()`, when a generated file can name it: a type argument that is a plain
+   * reference to an interface, type alias, class or enum, with no type argument of its own, declared at the
+   * top level of a file. A file-less, generic, anonymous or nested type has no reference: the generator then
+   * keeps `unknown` for that provider and narrows where the value is read.
+   */
+  private interfaceTokenType(tokenNode: ts.Expression): TypeReference | undefined {
+    const ts = TSContext.ts;
+    if (!ts.isCallExpression(tokenNode)) return undefined;
+    const typeNode = tokenNode.typeArguments?.[0];
+    if (!typeNode || !ts.isTypeReferenceNode(typeNode)) return undefined;
+    if ((typeNode.typeArguments?.length ?? 0) > 0 || !ts.isIdentifier(typeNode.typeName)) return undefined;
+    let symbol = this.checker.getSymbolAtLocation(typeNode.typeName);
+    if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0) symbol = this.checker.getAliasedSymbol(symbol);
+    const declaration = symbol?.declarations?.[0];
+    if (!symbol || !declaration) return undefined;
+    const named = ts.isInterfaceDeclaration(declaration)
+      || ts.isTypeAliasDeclaration(declaration)
+      || ts.isClassDeclaration(declaration)
+      || ts.isEnumDeclaration(declaration);
+    if (!named || declaration.parent !== declaration.getSourceFile()) return undefined;
+    if (!ts.isEnumDeclaration(declaration) && (declaration.typeParameters?.length ?? 0) > 0) return undefined;
+    const file = declaration.getSourceFile();
+    const name = symbol.getName();
+    if (!ts.isExternalModule(file)) return { name, file: file.fileName, global: true };
+    const moduleSymbol = this.checker.getSymbolAtLocation(file);
+    if (!moduleSymbol) return { name, file: file.fileName };
+    for (const exported of this.checker.getExportsOfModule(moduleSymbol)) {
+      const target = (exported.flags & ts.SymbolFlags.Alias) !== 0 ? this.checker.getAliasedSymbol(exported) : exported;
+      if (target === symbol) return { name, file: file.fileName, exportName: exported.getName() };
+    }
+    return { name, file: file.fileName };
+  }
+
   private resolveDefaultLocalName(
     symbol: ts.Symbol | undefined,
     identifierNode: ts.Expression | undefined

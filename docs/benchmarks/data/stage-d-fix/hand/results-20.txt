@@ -1,0 +1,4 @@
+{"file":"base-chain100.mjs","metric":"cold-resolve","median":10536.659999999925,"perProcess":[10536.7,11047.5,10262.9]}
+{"file":"M-merge-chain100.mjs","metric":"cold-resolve","median":12958.74999999995,"perProcess":[14078.3,12501.7,12958.7]}
+{"file":"M3-merge-notifyguard-chain100.mjs","metric":"cold-resolve","median":12834.57999999996,"perProcess":[12520.4,13507.1,12834.6]}
+{"file":"M2-merge-create-chain100.mjs","metric":"cold-resolve","median":10710.409999999798,"perProcess":[10433.7,10710.4,10783.7]}

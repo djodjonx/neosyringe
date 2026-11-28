@@ -65,6 +65,21 @@ jobs:
       - name: Negative consumer types
         run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative --expect-file expected-diagnostic.txt
 
+      - name: Positive disposable consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/positive-disposable
+
+      - name: Positive no-DOM consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/positive-nodom
+
+      - name: Negative disposable consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/negative-disposable --expect-file expected-diagnostic.txt
+
+      - name: Positive UI serialize consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/ui-serialize/positive --package ui
+
+      - name: Negative UI serialize consumer types
+        run: node scripts/ci/consumer-types.mjs tests/consumer-types/ui-serialize/negative --package ui --expect-file expected-diagnostic.txt
+
       - name: Distribution entries
         run: node scripts/ci/check-dist.mjs
 

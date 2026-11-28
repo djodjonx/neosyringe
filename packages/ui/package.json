@@ -12,6 +12,11 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
+    },
+    "./serialize": {
+      "types": "./dist/serialize.d.mts",
+      "import": "./dist/serialize.mjs",
+      "require": "./dist/serialize.cjs"
     }
   },
   "files": [

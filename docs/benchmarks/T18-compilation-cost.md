@@ -16,10 +16,10 @@ La médiane du premier passage allumé (61,9) dépassait le maximum éteint (58,
 Ce qui reste sert la correction et l'isolement, pas un gain de performance :
 
 - la chaîne `extends` est lue par le texte, avec `readDirectory` vide (`packages/unplugin/src/analysisCache.ts:45-55`)
-- le tampon de tsconfig compare ce texte (`packages/unplugin/src/session.ts:311-312`)
+- le tampon de tsconfig compare ce texte (`packages/unplugin/src/session.ts:313-314`)
 - le cache de déclarations reste par instance (`packages/unplugin/src/buildEndUsages.ts:78-80`)
-- le graphe d'un programme hôte est cloné avant réemploi (`packages/unplugin/src/session.ts:554-555`)
-- `buildEnd` et `watchChange` (suppression) lâchent le dernier graphe (`packages/unplugin/src/index.ts:154`, `packages/unplugin/src/index.ts:181`)
+- le graphe d'un programme hôte est cloné avant réemploi (`packages/unplugin/src/session.ts:556-557`)
+- `buildEnd` et `watchChange` (suppression) lâchent le dernier graphe (`packages/unplugin/src/index.ts:163`, `packages/unplugin/src/index.ts:190`)
 
 Le coût d'un transform complet par rapport à fc0bbb9 n'a pas été mesuré. La section plus bas ne mesure que la lecture de config.
 
@@ -27,8 +27,8 @@ Le coût d'un transform complet par rapport à fc0bbb9 n'a pas été mesuré. La
 
 Trois chemins, pas un cache de graphes partagé entre fichiers du plugin :
 
-- Même texte : `rememberSource` rend le `SourceFile` déjà parsé (`packages/unplugin/src/session.ts:484-486`). Après l'édition d'une feuille, les autres feuilles ne sont pas reparsées. Le test T18-A04 tient `filesParsed` à 5, puis à 6 quand le contrat partagé change. `graphsBuilt` monte quand même, parce que chaque transform relance l'analyse.
-- Programme hôte : le transformer crée un `SessionState` (`packages/unplugin/src/transformer.ts:84-93`) et le passe à chaque fichier du même programme (`packages/unplugin/src/transformer.ts:95-110`). Le second fichier ne relance pas `extractAll` (`packages/unplugin/src/session.ts:554-555`). Le test T18-A04b tient `graphsBuilt`.
+- Même texte : `rememberSource` rend le `SourceFile` déjà parsé (`packages/unplugin/src/session.ts:486-488`). Après l'édition d'une feuille, les autres feuilles ne sont pas reparsées. Le test T18-A04 tient `filesParsed` à 5, puis à 6 quand le contrat partagé change. `graphsBuilt` monte quand même, parce que chaque transform relance l'analyse.
+- Programme hôte : le transformer crée un `SessionState` (`packages/unplugin/src/transformer.ts:85-94`) et le passe à chaque fichier du même programme (`packages/unplugin/src/transformer.ts:96-111`). Le second fichier ne relance pas `extractAll` (`packages/unplugin/src/session.ts:556-557`). Le test T18-A04b tient `graphsBuilt`.
 - Plugin Vite, même fichier une deuxième fois : le graphe est reconstruit, et `state.graphs` n'est pas gardé (`packages/unplugin/src/analysisCache.ts:115-118`). Le test T18-A04b2 exige `graphsBuilt` augmenté de 1, avec le même code et la même carte. Ce n'est pas un hit de cache.
 
 Le banc n'a pas de colonne on/off. Il n'y a plus d'interrupteur (`tests/bench/compile-cost.mjs:22-23`, `tests/bench/compile-cost.mjs:39-44`).
@@ -77,7 +77,7 @@ Avant les groupes de taille 10, 100 et 1000 et avant les quatre groupes 5000 `li
 
 Le banc empaquette `packages/unplugin/src` avec esbuild 0.27.2 (`packages/unplugin/package.json:49`) sous `os.tmpdir()` (`tests/bench/compile-cost.mjs:210-212`). Le répertoire est effacé à la fin et sur SIGINT ou SIGTERM (`tests/bench/compile-cost.mjs:436-440`, `tests/bench/compile-cost.mjs:463-465`).
 
-Profil et mode sont des littéraux dans le `defineBuilderConfig` généré (`tests/bench/compile-cost.mjs:10-11`). Le parseur lit le profil (`packages/core/src/analyzer/parsers/ConfigParser.ts:657-673`) et refuse le mode fermé hors validation stricte (`packages/core/src/analyzer/parsers/ConfigParser.ts:788-794`). L'analyseur est strict par défaut (`packages/core/src/analyzer/Analyzer.ts:185`). L'émetteur optimisé sert au profil `minimal` ou au mode `closed` (`packages/core/src/generator/Generator.ts:201-203`).
+Profil et mode sont des littéraux dans le `defineBuilderConfig` généré (`tests/bench/compile-cost.mjs:10-11`). Le parseur lit le profil (`packages/core/src/analyzer/parsers/ConfigParser.ts:657-673`) et refuse le mode fermé hors validation stricte (`packages/core/src/analyzer/parsers/ConfigParser.ts:788-794`). L'analyseur est strict par défaut (`packages/core/src/analyzer/Analyzer.ts:185`). L'émetteur optimisé sert au profil `minimal` ou au mode `closed` (`packages/core/src/generator/Generator.ts:209-211`).
 
 `linear` : N conteneurs, chacun n'injecte que `Shared`. `diamond` : `Left` et `Right` injectent `Shared`, N feuilles injectent les deux (`tests/bench/compile-cost.mjs:14-15`).
 

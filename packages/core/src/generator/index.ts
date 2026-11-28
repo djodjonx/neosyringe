@@ -1,4 +1,7 @@
 export * from './Generator';
+export * from './fragments';
+export { ModuleHelpers, type HelperRefs, type SharedHelperId } from './moduleHelpers';
+export { reservedNamesOf } from './reservedNames';
 export { emitOptimizedContainer, type OptimizedContainerInput } from './DirectEmitter';
 export { writeTokensManifest, declarationEmitPath } from './tokensManifest';
 export type { WriteTokensManifestInput } from './tokensManifest';

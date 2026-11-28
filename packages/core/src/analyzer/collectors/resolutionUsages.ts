@@ -4,17 +4,27 @@ import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
 import { NeoTokenError } from '../errors/NeoTokenError';
 import { containerKeyFor } from '../shared/registrationGraph';
+import { literalTokenList } from '../shared/literalTokenList';
 import { NEO_SYRINGE_SPECIFIER, resolveNeoMarker } from '../shared/markerProvenance';
 import { DEFAULT_EXPORT_CONTAINER_NAME } from '../shared/constants';
 import { TokenResolverService } from '../shared/TokenResolverService';
 import type { ConfigGraph, ConfigType, TokenId } from '../types';
 
-/** One `resolve` / `resolveAll` call. `useInterface` is not a usage. */
+/**
+ * One `resolve` / `resolveAll` call, or one token of a `resolveMany` call. `useInterface` is not a usage.
+ *
+ * `node` is the call. `at` is where a diagnostic about this usage points: the call for `resolve` and `resolveAll`,
+ * the element for a token of a literal `resolveMany` list, the list for a `resolveMany` list that is not literal.
+ * A `resolveMany` token is a `resolve` usage; an empty literal list makes none.
+ */
 export interface ResolutionUsage {
   node: ts.CallExpression;
+  at: ts.Node;
   kind: 'resolve' | 'resolveAll';
   containerKey?: string;
   tokenId?: string;
+  /** A `resolveMany` list the analyzer cannot read: no token is known, and `at` is the part that is not literal. */
+  dynamicList?: true;
 }
 
 /** Tokens visible to one container, split the way resolve and resolveAll are. */
@@ -30,15 +40,15 @@ type ReceiverTarget =
   | { kind: 'unknown' }
   | { kind: 'ignore' };
 
-const NEO_CONTAINER_NAMES = new Set(['Container', 'CoreContainer', 'AsyncContainer', 'ContainerFor']);
+const NEO_CONTAINER_NAMES = new Set(['Container', 'CoreContainer', 'AsyncContainer', 'ContainerFor', 'ContainerTemplate', 'BoundContainer']);
 
-/** True when the text calls `resolve` or `resolveAll`, including `resolve<T>(`. */
+/** True when the text calls `resolve`, `resolveAll` or `resolveMany`, including `resolve<T>(`. */
 export function textCallsResolve(text: string): boolean {
-  return /\.resolve(All)?\s*[<(]/.test(text);
+  return /\.resolve(All|Many)?\s*[<(]/.test(text);
 }
 
 /**
- * `resolve` / `resolveAll` calls in one file.
+ * `resolve` / `resolveAll` calls in one file, and the tokens of `resolveMany` calls.
  * A receiver that is not a NeoSyringe container is omitted (`ignore`).
  */
 export function collectResolutionUsages(sourceFile: ts.SourceFile, checker: ts.TypeChecker): ResolutionUsage[] {
@@ -59,7 +69,8 @@ export function collectResolutionUsages(sourceFile: ts.SourceFile, checker: ts.T
           : undefined;
         let target: ReceiverTarget = receiver ? classifyReceiver(receiver, checker) : { kind: 'ignore' };
         if (target.kind === 'ignore') return;
-        found.push(toUsage(node, kind, target, tokens));
+        if (kind === 'resolveMany') found.push(...manyUsages(node, target, tokens));
+        else found.push(toUsage(node, kind, target, tokens));
       }
     }
     TSContext.ts.forEachChild(node, visit);
@@ -82,7 +93,19 @@ export function buildContainerTokenView(
   const multi = new Set<TokenId>();
   const closedPrivate = new Set<TokenId>();
   addView(config, allConfigs, single, multi, closedPrivate, new Set(), checker);
+  // The inputs of this container only: a scope input is not something a child reads from its parent.
+  for (const input of config.scopeInputs ?? []) single.add(input.tokenId);
   return { single, multi, closedPrivate };
+}
+
+/** The token an expression names, or `undefined` when it names none the analyzer knows. */
+function tokenIdOf(expression: ts.Expression, tokens: TokenResolverService): string | undefined {
+  try {
+    return tokens.resolveTokenId(expression) ?? undefined;
+  } catch (error) {
+    if (!(error instanceof NeoTokenError)) throw error;
+    return undefined;
+  }
 }
 
 function toUsage(
@@ -91,27 +114,43 @@ function toUsage(
   target: ReceiverTarget,
   tokens: TokenResolverService,
 ): ResolutionUsage {
-  let tokenId: string | undefined;
   const arg = node.arguments[0];
-  if (arg && target.kind === 'container') {
-    try {
-      tokenId = tokens.resolveTokenId(arg) ?? undefined;
-    } catch (error) {
-      if (!(error instanceof NeoTokenError)) throw error;
-    }
-  }
+  const tokenId = arg && target.kind === 'container' ? tokenIdOf(arg, tokens) : undefined;
   return {
     node,
+    at: node,
     kind,
     containerKey: target.kind === 'container' ? target.containerKey : undefined,
     tokenId,
   };
 }
 
-function resolutionKind(expr: ts.Expression): 'resolve' | 'resolveAll' | undefined {
+/**
+ * The usages of one `resolveMany` call. A receiver that is not a known container is one usage, at the call, like a
+ * `resolve` on it. On a known container, a literal list is one `resolve` usage per element, at that element, in call
+ * order (an empty list is none). A list that is not literal is one usage with no container, at the part that is not
+ * literal: the analyzer does not guess its tokens.
+ */
+function manyUsages(node: ts.CallExpression, target: ReceiverTarget, tokens: TokenResolverService): ResolutionUsage[] {
+  const arg = node.arguments[0];
+  if (!arg) return [];
+  if (target.kind !== 'container') return [{ node, at: node, kind: 'resolve' }];
+  const list = literalTokenList(arg);
+  if (list.kind === 'dynamic') return [{ node, at: list.node, kind: 'resolve', dynamicList: true }];
+  return list.elements.map((element): ResolutionUsage => ({
+    node,
+    at: element,
+    kind: 'resolve',
+    containerKey: target.containerKey,
+    tokenId: tokenIdOf(element, tokens),
+  }));
+}
+
+function resolutionKind(expr: ts.Expression): 'resolve' | 'resolveAll' | 'resolveMany' | undefined {
   if (!TSContext.ts.isPropertyAccessExpression(expr)) return undefined;
   if (expr.name.text === 'resolve') return 'resolve';
   if (expr.name.text === 'resolveAll') return 'resolveAll';
+  if (expr.name.text === 'resolveMany') return 'resolveMany';
   return undefined;
 }
 
@@ -131,9 +170,8 @@ function resolveConfigCall(
   const current = unwrap(expr);
   if (TSContext.ts.isCallExpression(current)) {
     // createScope() returns that defineBuilderConfig call, so the key stays the same
-    // (packages/core/src/analyzer/shared/registrationGraph.ts:31). The type takes no
-    // argument (packages/neosyringe/src/types.ts:47). createScope?.() is followed the
-    // same way when the receiver is a Neo container.
+    // (packages/core/src/analyzer/shared/registrationGraph.ts:31), with or without the values a builder with
+    // scopeInputs asks for. createScope?.() is followed the same way when the receiver is a Neo container.
     if (
       TSContext.ts.isPropertyAccessExpression(current.expression)
       && current.expression.name.text === 'createScope'
@@ -283,10 +321,13 @@ function isNeoContainerType(
     );
     return parts.length > 0 && parts.every((part) => isNeoContainerType(part, checker, seen));
   }
+  // `BoundContainer<I, P>` is an intersection alias: its own name decides, its parts (`BoundCore`, `FullMembers`) are not container names.
+  const aliasName = type.aliasSymbol?.getName();
+  if (aliasName !== undefined && NEO_CONTAINER_NAMES.has(aliasName) && typeDeclaredByNeoSyringe(type, checker)) return true;
   if (type.isIntersection()) {
     return type.types.some((part) => isNeoContainerType(part, checker, seen));
   }
-  const name = type.aliasSymbol?.getName() ?? type.getSymbol()?.getName();
+  const name = aliasName ?? type.getSymbol()?.getName();
   if (name === 'FactoryContext') return false;
   if (name && NEO_CONTAINER_NAMES.has(name)) return typeDeclaredByNeoSyringe(type, checker);
   const bases = type.getBaseTypes?.() ?? [];

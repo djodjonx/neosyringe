@@ -71,11 +71,17 @@ describe('E2E - Local Tokens Object', () => {
 
         expect(code).toContain('IOperationTracker_');
 
-        // Ensure factories are generated
+        // Ensure the accessors that build them are generated
 
-        expect(code).toMatch(/create_IRequestContext_/);
+        expect(code).toMatch(/_get_IRequestContext_/);
 
-        expect(code).toMatch(/create_IOperationTracker_/);
+        expect(code).toMatch(/_get_IOperationTracker_/);
+
+        // The accessors build the classes: the construction sits in them, not only their name in the output.
+
+        expect(code).toMatch(/new \w+\.RequestContext\(/);
+
+        expect(code).toMatch(/new \w+\.OperationTracker\(/);
 
       });
 

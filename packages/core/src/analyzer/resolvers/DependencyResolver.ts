@@ -1,6 +1,6 @@
 import type * as ts from 'typescript';
 import { TSContext } from '../../TSContext';
-import type { DependencyGraph, DependencyNode } from '../types';
+import type { DependencyEdge, DependencyGraph, DependencyNode } from '../types';
 import { declaredFactoryEdges, resolveConstructorSignature } from '../shared/registrationGraph';
 import { TokenResolverService } from '../shared/TokenResolverService';
 
@@ -98,6 +98,21 @@ export class DependencyResolver {
       return;
     }
     if (node.service.type === 'value') {
+      return;
+    }
+    // An alias depends on its target alone, whether a registration here or a token a parent provides.
+    if (node.service.type === 'alias') {
+      const target = node.service.aliasTarget;
+      if (!target) return;
+      const edge: DependencyEdge = {
+        tokenId: target.tokenId,
+        paramIndex: 0,
+        optional: false,
+        multi: graph.multiNodes?.has(target.tokenId) === true,
+        origin: 'declared',
+      };
+      node.service.dependencyEdges = [edge];
+      node.dependencies = [target.tokenId];
       return;
     }
 

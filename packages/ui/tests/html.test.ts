@@ -284,6 +284,20 @@ describe('buildProjectHtml', () => {
     });
   });
 
+  it('E20-F6 an alias keeps its type, is counted under the lifecycle it shows, and its detail says it is an alias', () => {
+    const html = buildProjectHtml([{ projectName: 'App', graphs: [graph({
+      containerId: 'C',
+      nodes: [
+        svc('Engine', { lifecycle: 'transient' }),
+        svc('Logger', { lifecycle: 'transient', type: 'alias', dependencies: ['Engine'] }),
+      ],
+    })] }]);
+    const container = readData(html)[0]?.containers[0];
+    expect(container?.nodes.map((entry) => entry.type), 'the alias node keeps its type').toEqual(['explicit', 'alias']);
+    expect(container?.stats, 'an alias is counted under the lifecycle of its target').toMatchObject({ total: 2, singleton: 0, transient: 2 });
+    expect(html, 'the detail panel names it').toContain("'alias \u00B7 '");
+  });
+
   it('uses cspSource in the CSP script-src', () => {
     const graphs = [{ projectName: 'App', graphs: [graph({ containerId: 'C', nodes: [svc('S')] })] }];
     const withCsp = buildProjectHtml(graphs, undefined, 'https://vscode.example');

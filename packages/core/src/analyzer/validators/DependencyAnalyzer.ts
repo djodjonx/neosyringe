@@ -36,6 +36,9 @@ export class DependencyAnalyzer {
       return declaredFactoryEdges(definition);
     }
 
+    // An alias has one required dependency: its target. Missing providers, cycles, retention and ordering follow.
+    if (definition.type === 'alias') return this.readSignature(definition, knownTokenIds).edges.map((edge) => edge.tokenId);
+
     // No implementation symbol means no dependencies to analyze
     if (!definition.implementationSymbol) {
       return [];
@@ -71,6 +74,13 @@ export class DependencyAnalyzer {
     definition: ServiceDefinition,
     knownTokenIds?: Set<TokenId>,
   ): ConstructorSignature {
+    if (definition.type === 'alias') {
+      const target = definition.aliasTarget;
+      const edges: DependencyEdge[] = target === undefined
+        ? []
+        : [{ tokenId: target.tokenId, paramIndex: 0, optional: false, multi: false, origin: 'declared' }];
+      return { edges, diagnostics: [] };
+    }
     if (definition.type === 'factory' || definition.type === 'value' || !definition.implementationSymbol) {
       return { edges: [], diagnostics: [] };
     }

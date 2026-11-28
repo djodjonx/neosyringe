@@ -13,6 +13,7 @@ All the ways to define and inject dependencies in NeoSyringe.
 | **Value** | `{ token: X, useValue: myValue }` | Pre-built objects |
 | **Property** | `{ token: useProperty(Class, 'param') }` | Primitives |
 | **Multi** | `{ token: X, provider: Y, multi: true }` | Plugin / strategy lists |
+| **Alias** | `{ token: X, useExisting: Y }` | A second token for a registered service, see [aliases](./aliases.md) |
 
 ## Class Token
 
@@ -196,7 +197,7 @@ The factory examples below are regions of `examples/new-api/factories.ts`. `test
 
 ### Factory with Dependencies
 
-The factory receives a `FactoryContext`: `resolve` and `resolveAll`, for the tokens listed in `dependencies` only.
+The factory receives a `FactoryContext`: `resolve`, `resolveAll` and `resolveMany`, for the tokens listed in `dependencies` only, and a `signal` that aborts when the initialization is cancelled (see [Async Factories](./async-factories.md#what-a-factory-sees)).
 
 <<< @/../examples/new-api/factories.ts#with-dependencies
 

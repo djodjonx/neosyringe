@@ -23,7 +23,8 @@ export class MissingDependencyValidator implements IValidator {
   ) {}
 
   /**
-   * Checks each resolve / resolveAll in this file against that call's container.
+   * Checks each resolve / resolveAll, and each token of a resolveMany list, in this file against that call's container.
+   * A diagnostic points at `usage.at`: the call, or the element of a resolveMany list.
    * Constructor checks stay on {@link validate} and still union single and multi.
    */
   validateResolutionUsages(sourceFile: ts.SourceFile, allConfigs: Map<string, ConfigGraph>): AnalysisError[] {
@@ -32,12 +33,12 @@ export class MissingDependencyValidator implements IValidator {
     const views = new Map<string, ContainerTokenView>();
     for (const usage of usages) {
       if (!usage.containerKey) {
-        errors.push(this.unknownContainer(usage.node, sourceFile));
+        errors.push(this.unknownContainer(usage.at, sourceFile, usage.dynamicList === true));
         continue;
       }
       const view = this.viewFor(allConfigs, usage.containerKey, views);
       if (!view) {
-        errors.push(this.unknownContainer(usage.node, sourceFile));
+        errors.push(this.unknownContainer(usage.at, sourceFile));
         continue;
       }
       if (!usage.tokenId) continue;
@@ -49,7 +50,7 @@ export class MissingDependencyValidator implements IValidator {
           code: 'NEO_ROOT_NOT_EXPORTED',
           severity: 'error',
           message: `NEO_ROOT_NOT_EXPORTED: '${getSimpleName(usage.tokenId)}' is not an exported root of this closed container.`,
-          node: usage.node,
+          node: usage.at,
           sourceFile,
           containerId: usage.containerKey,
         });
@@ -58,7 +59,7 @@ export class MissingDependencyValidator implements IValidator {
       if (allowed.has(usage.tokenId)) {
         // The token exists. A closed container still refuses it outside its roots.
         // ADR006 lines 29-31. Factory context is not this path.
-        const denied = this.privateRoot(allConfigs.get(usage.containerKey), usage.kind, usage.tokenId, usage.node, sourceFile, usage.containerKey);
+        const denied = this.privateRoot(allConfigs.get(usage.containerKey), usage.kind, usage.tokenId, usage.at, sourceFile, usage.containerKey);
         if (denied) errors.push(denied);
         continue;
       }
@@ -68,7 +69,7 @@ export class MissingDependencyValidator implements IValidator {
           code: 'NEO_MULTI_REQUIRES_RESOLVE_ALL',
           severity: 'error',
           message: `NEO_MULTI_REQUIRES_RESOLVE_ALL: '${getSimpleName(usage.tokenId)}' is multi; use resolveAll`,
-          node: usage.node,
+          node: usage.at,
           sourceFile,
           containerId: usage.containerKey,
           context: { tokenText: usage.tokenId },
@@ -82,7 +83,7 @@ export class MissingDependencyValidator implements IValidator {
         code: 'NEO_MISSING_PROVIDER',
         severity: 'error',
         message: `NEO_MISSING_PROVIDER: '${getSimpleName(usage.tokenId)}' is not in container '${usage.containerKey}'`,
-        node: usage.node,
+        node: usage.at,
         sourceFile,
         containerId: usage.containerKey,
         context: { tokenText: usage.tokenId },
@@ -128,14 +129,18 @@ export class MissingDependencyValidator implements IValidator {
     };
   }
 
-  private unknownContainer(node: ts.Node, sourceFile: ts.SourceFile): AnalysisError {
+  /** `dynamicList`: a resolveMany list the analyzer cannot read, on a container it knows. Same rule, same severity. */
+  private unknownContainer(node: ts.Node, sourceFile: ts.SourceFile, dynamicList = false): AnalysisError {
     return {
       type: 'unsupported',
       code: 'NEO_UNKNOWN_CONTAINER',
       severity: this.validation === 'compatible' ? 'warning' : 'error',
-      message: 'NEO_UNKNOWN_CONTAINER: resolve receiver is not a known container',
+      message: dynamicList
+        ? 'NEO_UNKNOWN_CONTAINER: resolveMany tokens are not a literal list'
+        : 'NEO_UNKNOWN_CONTAINER: resolve receiver is not a known container',
       node,
       sourceFile,
+      context: { reason: dynamicList ? 'dynamic-list' : 'unknown-receiver' },
     };
   }
 
@@ -162,6 +167,20 @@ export class MissingDependencyValidator implements IValidator {
         info.definition,
         availableTokens,
       );
+      if (info.definition.type === 'alias') {
+        const multi = info.definition.dependencyEdges?.some((edge) => edge.multi) === true;
+        if (multi) {
+          errors.push({
+            type: 'unsupported',
+            code: 'NEO_MULTI_REQUIRES_RESOLVE_ALL',
+            message: `NEO_MULTI_REQUIRES_RESOLVE_ALL: alias '${info.tokenText}' targets the multi token '${getSimpleName(requiredDeps[0] ?? '')}'; an alias answers one object, use resolveAll on the target.`,
+            node: findTokenAssignment(info.node) ?? info.node,
+            sourceFile: config.sourceFile,
+            context: { tokenText: requiredDeps[0] },
+          });
+          return;
+        }
+      }
       for (const depTokenId of requiredDeps) {
         if (!availableTokens.has(depTokenId) && !optionalDeps.has(depTokenId)) {
           const tokenNode = findTokenAssignment(info.node);
@@ -217,6 +236,11 @@ export class MissingDependencyValidator implements IValidator {
       available.add(tokenId);
     }
 
+    // A scope input is provided by every scope: a consumer of it is satisfied.
+    for (const input of config.scopeInputs ?? []) {
+      available.add(input.tokenId);
+    }
+
     // Add local multi-registration tokens — a consumer of a multi-registered
     // token is valid; the token IS provided, just via resolveAll().
     if (config.multiInjections) {
@@ -236,6 +260,13 @@ export class MissingDependencyValidator implements IValidator {
     // For builders, add inherited tokens
     if (config.type === 'builder' && context.inheritedTokens) {
       for (const tokenId of context.inheritedTokens.keys()) {
+        available.add(tokenId);
+      }
+    }
+
+    // A multi token of a parent or of an extended partial is provided, read with `{ all }`.
+    if (config.type === 'builder' && context.inheritedMultiTokens) {
+      for (const tokenId of context.inheritedMultiTokens) {
         available.add(tokenId);
       }
     }
@@ -266,15 +297,14 @@ export class MissingDependencyValidator implements IValidator {
     // declaration file in both the partial and the builder, their tokenIds are identical
     // (the hash is derived from the symbol's declaration location, not the call site).
     // Using strict comparison preserves the hash-based collision protection.
-    for (const extendRef of config.extendsRefs) {
-      const partial = this.findPartialConfigByName(extendRef, context.allConfigs);
-      if (!partial?.expectedExternalTokens) continue;
+    for (const { partial, label } of this.extendedPartials(config, context.allConfigs)) {
+      if (!partial.expectedExternalTokens) continue;
 
       for (const tokenId of partial.expectedExternalTokens) {
         if (!availableTokens.has(tokenId)) {
           errors.push({
             type: 'missing',
-            message: `Missing token: '${getSimpleName(tokenId)}' is declared in '${extendRef}.expects' but is not provided by this builder or its parent container.`,
+            message: `Missing token: '${getSimpleName(tokenId)}' is declared in '${label}.expects' but is not provided by this builder or its parent container.`,
             node: config.node,
             sourceFile: config.sourceFile,
             context: { tokenText: tokenId },
@@ -284,6 +314,29 @@ export class MissingDependencyValidator implements IValidator {
     }
 
     return errors;
+  }
+
+  /**
+   * The partials a builder extends, by configuration identity. The label is the text the user wrote in
+   * `extends` (`shared`, `B.basePart`), the one they can search for. A builder without links keeps the names it wrote.
+   */
+  private extendedPartials(
+    config: ConfigGraph,
+    allConfigs: Map<string, ConfigGraph>,
+  ): { partial: ConfigGraph; label: string }[] {
+    const found: { partial: ConfigGraph; label: string }[] = [];
+    if (config.extendsLinks) {
+      for (const link of config.extendsLinks) {
+        const partial = allConfigs.get(link.key);
+        if (partial) found.push({ partial, label: link.binding });
+      }
+      return found;
+    }
+    for (const name of config.extendsRefs) {
+      const partial = this.findPartialConfigByName(name, allConfigs);
+      if (partial) found.push({ partial, label: name });
+    }
+    return found;
   }
 
   /** Finds a partial ConfigGraph by its variable name across all collected configs. */

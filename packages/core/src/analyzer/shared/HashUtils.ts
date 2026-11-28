@@ -44,13 +44,13 @@ export class HashUtils {
    * @example
    * ```typescript
    * // In build plugin (TSContext.projectRoot set by the plugin):
-   * TSContext.projectRoot = '/Users/me/project';
-   * HashUtils.hashFilePath('/Users/me/project/src/Logger.ts');
+   * TSContext.projectRoot = 'project';
+   * HashUtils.hashFilePath('project/src/Logger.ts');
    * // Returns: "a1b2c3d4"  (relative: "src/Logger.ts")
    *
    * // In LSP plugin (TSContext.projectRoot set from tsserver project root):
-   * TSContext.projectRoot = '/Users/me/project';
-   * HashUtils.hashFilePath('/Users/me/project/src/Logger.ts');
+   * TSContext.projectRoot = 'project';
+   * HashUtils.hashFilePath('project/src/Logger.ts');
    * // Returns: "a1b2c3d4"  ← same, even though process.cwd() differs between contexts
    * ```
    */

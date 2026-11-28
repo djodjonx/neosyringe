@@ -1,0 +1,1340 @@
+{
+  "node": "v22.23.2",
+  "emitter": "optimized",
+  "profile": "full",
+  "unit": "raw bytes of the generated JavaScript, before minification",
+  "categories": [
+    "creators",
+    "factory-policy",
+    "accessors",
+    "dispatch-tables",
+    "resolve",
+    "lifecycle",
+    "events",
+    "runtime-helpers",
+    "debug-metadata",
+    "user-code",
+    "state",
+    "other-members",
+    "class-shell",
+    "imports",
+    "glue"
+  ],
+  "graphs": [
+    {
+      "label": "small",
+      "providers": 3,
+      "containers": 1,
+      "configs": {
+        "open-debug-off": {
+          "total": 43904,
+          "categories": {
+            "creators": 13419,
+            "factory-policy": 0,
+            "accessors": 3135,
+            "dispatch-tables": 0,
+            "resolve": 3024,
+            "lifecycle": 21039,
+            "events": 449,
+            "runtime-helpers": 1811,
+            "debug-metadata": 149,
+            "user-code": 187,
+            "state": 410,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 43904,
+              "categories": {
+                "creators": 13419,
+                "factory-policy": 0,
+                "accessors": 3135,
+                "dispatch-tables": 0,
+                "resolve": 3024,
+                "lifecycle": 21039,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 149,
+                "user-code": 187,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "open-debug-on": {
+          "total": 44894,
+          "categories": {
+            "creators": 13419,
+            "factory-policy": 0,
+            "accessors": 3135,
+            "dispatch-tables": 0,
+            "resolve": 3024,
+            "lifecycle": 21039,
+            "events": 449,
+            "runtime-helpers": 1811,
+            "debug-metadata": 1139,
+            "user-code": 187,
+            "state": 410,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 44894,
+              "categories": {
+                "creators": 13419,
+                "factory-policy": 0,
+                "accessors": 3135,
+                "dispatch-tables": 0,
+                "resolve": 3024,
+                "lifecycle": 21039,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 1139,
+                "user-code": 187,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "closed-debug-off": {
+          "total": 31471,
+          "categories": {
+            "creators": 7743,
+            "factory-policy": 0,
+            "accessors": 2071,
+            "dispatch-tables": 0,
+            "resolve": 2298,
+            "lifecycle": 15707,
+            "events": 449,
+            "runtime-helpers": 2112,
+            "debug-metadata": 149,
+            "user-code": 136,
+            "state": 525,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 31471,
+              "categories": {
+                "creators": 7743,
+                "factory-policy": 0,
+                "accessors": 2071,
+                "dispatch-tables": 0,
+                "resolve": 2298,
+                "lifecycle": 15707,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 149,
+                "user-code": 136,
+                "state": 525,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "closed-debug-on": {
+          "total": 32260,
+          "categories": {
+            "creators": 7743,
+            "factory-policy": 0,
+            "accessors": 2071,
+            "dispatch-tables": 0,
+            "resolve": 2298,
+            "lifecycle": 15707,
+            "events": 449,
+            "runtime-helpers": 2112,
+            "debug-metadata": 938,
+            "user-code": 136,
+            "state": 525,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 32260,
+              "categories": {
+                "creators": 7743,
+                "factory-policy": 0,
+                "accessors": 2071,
+                "dispatch-tables": 0,
+                "resolve": 2298,
+                "lifecycle": 15707,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 938,
+                "user-code": 136,
+                "state": 525,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "medium",
+      "providers": 12,
+      "containers": 1,
+      "configs": {
+        "open-debug-off": {
+          "total": 82566,
+          "categories": {
+            "creators": 31183,
+            "factory-policy": 0,
+            "accessors": 8032,
+            "dispatch-tables": 0,
+            "resolve": 3811,
+            "lifecycle": 35865,
+            "events": 449,
+            "runtime-helpers": 1811,
+            "debug-metadata": 149,
+            "user-code": 575,
+            "state": 410,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 82566,
+              "categories": {
+                "creators": 31183,
+                "factory-policy": 0,
+                "accessors": 8032,
+                "dispatch-tables": 0,
+                "resolve": 3811,
+                "lifecycle": 35865,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 149,
+                "user-code": 575,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "open-debug-on": {
+          "total": 84326,
+          "categories": {
+            "creators": 31183,
+            "factory-policy": 0,
+            "accessors": 8032,
+            "dispatch-tables": 0,
+            "resolve": 3811,
+            "lifecycle": 35865,
+            "events": 449,
+            "runtime-helpers": 1811,
+            "debug-metadata": 1909,
+            "user-code": 575,
+            "state": 410,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 84326,
+              "categories": {
+                "creators": 31183,
+                "factory-policy": 0,
+                "accessors": 8032,
+                "dispatch-tables": 0,
+                "resolve": 3811,
+                "lifecycle": 35865,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 1909,
+                "user-code": 575,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "closed-debug-off": {
+          "total": 69344,
+          "categories": {
+            "creators": 25507,
+            "factory-policy": 0,
+            "accessors": 6967,
+            "dispatch-tables": 0,
+            "resolve": 2300,
+            "lifecycle": 30529,
+            "events": 449,
+            "runtime-helpers": 2112,
+            "debug-metadata": 149,
+            "user-code": 524,
+            "state": 526,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 69344,
+              "categories": {
+                "creators": 25507,
+                "factory-policy": 0,
+                "accessors": 6967,
+                "dispatch-tables": 0,
+                "resolve": 2300,
+                "lifecycle": 30529,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 149,
+                "user-code": 524,
+                "state": 526,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "closed-debug-on": {
+          "total": 70903,
+          "categories": {
+            "creators": 25507,
+            "factory-policy": 0,
+            "accessors": 6967,
+            "dispatch-tables": 0,
+            "resolve": 2300,
+            "lifecycle": 30529,
+            "events": 449,
+            "runtime-helpers": 2112,
+            "debug-metadata": 1708,
+            "user-code": 524,
+            "state": 526,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 70903,
+              "categories": {
+                "creators": 25507,
+                "factory-policy": 0,
+                "accessors": 6967,
+                "dispatch-tables": 0,
+                "resolve": 2300,
+                "lifecycle": 30529,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 1708,
+                "user-code": 524,
+                "state": 526,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "large",
+      "providers": 48,
+      "containers": 1,
+      "configs": {
+        "open-debug-off": {
+          "total": 237798,
+          "categories": {
+            "creators": 102391,
+            "factory-policy": 0,
+            "accessors": 27868,
+            "dispatch-tables": 0,
+            "resolve": 7015,
+            "lifecycle": 95265,
+            "events": 449,
+            "runtime-helpers": 1811,
+            "debug-metadata": 149,
+            "user-code": 2159,
+            "state": 410,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 237798,
+              "categories": {
+                "creators": 102391,
+                "factory-policy": 0,
+                "accessors": 27868,
+                "dispatch-tables": 0,
+                "resolve": 7015,
+                "lifecycle": 95265,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 149,
+                "user-code": 2159,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "open-debug-on": {
+          "total": 242726,
+          "categories": {
+            "creators": 102391,
+            "factory-policy": 0,
+            "accessors": 27868,
+            "dispatch-tables": 0,
+            "resolve": 7015,
+            "lifecycle": 95265,
+            "events": 449,
+            "runtime-helpers": 1811,
+            "debug-metadata": 5077,
+            "user-code": 2159,
+            "state": 410,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 242726,
+              "categories": {
+                "creators": 102391,
+                "factory-policy": 0,
+                "accessors": 27868,
+                "dispatch-tables": 0,
+                "resolve": 7015,
+                "lifecycle": 95265,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 5077,
+                "user-code": 2159,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "closed-debug-off": {
+          "total": 221372,
+          "categories": {
+            "creators": 96715,
+            "factory-policy": 0,
+            "accessors": 26803,
+            "dispatch-tables": 0,
+            "resolve": 2300,
+            "lifecycle": 89929,
+            "events": 449,
+            "runtime-helpers": 2112,
+            "debug-metadata": 149,
+            "user-code": 2108,
+            "state": 526,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 221372,
+              "categories": {
+                "creators": 96715,
+                "factory-policy": 0,
+                "accessors": 26803,
+                "dispatch-tables": 0,
+                "resolve": 2300,
+                "lifecycle": 89929,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 149,
+                "user-code": 2108,
+                "state": 526,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "closed-debug-on": {
+          "total": 226099,
+          "categories": {
+            "creators": 96715,
+            "factory-policy": 0,
+            "accessors": 26803,
+            "dispatch-tables": 0,
+            "resolve": 2300,
+            "lifecycle": 89929,
+            "events": 449,
+            "runtime-helpers": 2112,
+            "debug-metadata": 4876,
+            "user-code": 2108,
+            "state": 526,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 226099,
+              "categories": {
+                "creators": 96715,
+                "factory-policy": 0,
+                "accessors": 26803,
+                "dispatch-tables": 0,
+                "resolve": 2300,
+                "lifecycle": 89929,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 4876,
+                "user-code": 2108,
+                "state": 526,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "many-small",
+      "providers": 3,
+      "containers": 6,
+      "configs": {
+        "open-debug-off": {
+          "total": 266095,
+          "categories": {
+            "creators": 81054,
+            "factory-policy": 0,
+            "accessors": 19895,
+            "dispatch-tables": 0,
+            "resolve": 18495,
+            "lifecycle": 126821,
+            "events": 2694,
+            "runtime-helpers": 10866,
+            "debug-metadata": 894,
+            "user-code": 1176,
+            "state": 2460,
+            "other-members": 0,
+            "class-shell": 252,
+            "imports": 0,
+            "glue": 1488
+          },
+          "parts": [
+            {
+              "container": "SizeFixtureC0",
+              "total": 44100,
+              "categories": {
+                "creators": 13459,
+                "factory-policy": 0,
+                "accessors": 3215,
+                "dispatch-tables": 0,
+                "resolve": 3050,
+                "lifecycle": 21081,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 149,
+                "user-code": 191,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 243
+              }
+            },
+            {
+              "container": "SizeFixtureC1x",
+              "total": 44203,
+              "categories": {
+                "creators": 13479,
+                "factory-policy": 0,
+                "accessors": 3256,
+                "dispatch-tables": 0,
+                "resolve": 3063,
+                "lifecycle": 21106,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 149,
+                "user-code": 193,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 245
+              }
+            },
+            {
+              "container": "SizeFixtureC2xx",
+              "total": 44301,
+              "categories": {
+                "creators": 13499,
+                "factory-policy": 0,
+                "accessors": 3296,
+                "dispatch-tables": 0,
+                "resolve": 3076,
+                "lifecycle": 21127,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 149,
+                "user-code": 195,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 247
+              }
+            },
+            {
+              "container": "SizeFixtureC3xxx",
+              "total": 44399,
+              "categories": {
+                "creators": 13519,
+                "factory-policy": 0,
+                "accessors": 3336,
+                "dispatch-tables": 0,
+                "resolve": 3089,
+                "lifecycle": 21148,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 149,
+                "user-code": 197,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 249
+              }
+            },
+            {
+              "container": "SizeFixtureC4xxxx",
+              "total": 44497,
+              "categories": {
+                "creators": 13539,
+                "factory-policy": 0,
+                "accessors": 3376,
+                "dispatch-tables": 0,
+                "resolve": 3102,
+                "lifecycle": 21169,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 149,
+                "user-code": 199,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 251
+              }
+            },
+            {
+              "container": "SizeFixtureC5xxxxx",
+              "total": 44595,
+              "categories": {
+                "creators": 13559,
+                "factory-policy": 0,
+                "accessors": 3416,
+                "dispatch-tables": 0,
+                "resolve": 3115,
+                "lifecycle": 21190,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 149,
+                "user-code": 201,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 253
+              }
+            }
+          ]
+        },
+        "open-debug-on": {
+          "total": 272386,
+          "categories": {
+            "creators": 81054,
+            "factory-policy": 0,
+            "accessors": 19895,
+            "dispatch-tables": 0,
+            "resolve": 18495,
+            "lifecycle": 126821,
+            "events": 2694,
+            "runtime-helpers": 10866,
+            "debug-metadata": 7185,
+            "user-code": 1176,
+            "state": 2460,
+            "other-members": 0,
+            "class-shell": 252,
+            "imports": 0,
+            "glue": 1488
+          },
+          "parts": [
+            {
+              "container": "SizeFixtureC0",
+              "total": 45116,
+              "categories": {
+                "creators": 13459,
+                "factory-policy": 0,
+                "accessors": 3215,
+                "dispatch-tables": 0,
+                "resolve": 3050,
+                "lifecycle": 21081,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 1165,
+                "user-code": 191,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 243
+              }
+            },
+            {
+              "container": "SizeFixtureC1x",
+              "total": 45232,
+              "categories": {
+                "creators": 13479,
+                "factory-policy": 0,
+                "accessors": 3256,
+                "dispatch-tables": 0,
+                "resolve": 3063,
+                "lifecycle": 21106,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 1178,
+                "user-code": 193,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 245
+              }
+            },
+            {
+              "container": "SizeFixtureC2xx",
+              "total": 45343,
+              "categories": {
+                "creators": 13499,
+                "factory-policy": 0,
+                "accessors": 3296,
+                "dispatch-tables": 0,
+                "resolve": 3076,
+                "lifecycle": 21127,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 1191,
+                "user-code": 195,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 247
+              }
+            },
+            {
+              "container": "SizeFixtureC3xxx",
+              "total": 45454,
+              "categories": {
+                "creators": 13519,
+                "factory-policy": 0,
+                "accessors": 3336,
+                "dispatch-tables": 0,
+                "resolve": 3089,
+                "lifecycle": 21148,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 1204,
+                "user-code": 197,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 249
+              }
+            },
+            {
+              "container": "SizeFixtureC4xxxx",
+              "total": 45565,
+              "categories": {
+                "creators": 13539,
+                "factory-policy": 0,
+                "accessors": 3376,
+                "dispatch-tables": 0,
+                "resolve": 3102,
+                "lifecycle": 21169,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 1217,
+                "user-code": 199,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 251
+              }
+            },
+            {
+              "container": "SizeFixtureC5xxxxx",
+              "total": 45676,
+              "categories": {
+                "creators": 13559,
+                "factory-policy": 0,
+                "accessors": 3416,
+                "dispatch-tables": 0,
+                "resolve": 3115,
+                "lifecycle": 21190,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 1230,
+                "user-code": 201,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 253
+              }
+            }
+          ]
+        },
+        "closed-debug-off": {
+          "total": 190959,
+          "categories": {
+            "creators": 46836,
+            "factory-policy": 0,
+            "accessors": 13344,
+            "dispatch-tables": 0,
+            "resolve": 13896,
+            "lifecycle": 94782,
+            "events": 2694,
+            "runtime-helpers": 12672,
+            "debug-metadata": 894,
+            "user-code": 870,
+            "state": 3231,
+            "other-members": 0,
+            "class-shell": 252,
+            "imports": 0,
+            "glue": 1488
+          },
+          "parts": [
+            {
+              "container": "SizeFixtureC0",
+              "total": 31629,
+              "categories": {
+                "creators": 7771,
+                "factory-policy": 0,
+                "accessors": 2139,
+                "dispatch-tables": 0,
+                "resolve": 2306,
+                "lifecycle": 15747,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 149,
+                "user-code": 140,
+                "state": 531,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 243
+              }
+            },
+            {
+              "container": "SizeFixtureC1x",
+              "total": 31708,
+              "categories": {
+                "creators": 7785,
+                "factory-policy": 0,
+                "accessors": 2173,
+                "dispatch-tables": 0,
+                "resolve": 2310,
+                "lifecycle": 15767,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 149,
+                "user-code": 142,
+                "state": 534,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 245
+              }
+            },
+            {
+              "container": "SizeFixtureC2xx",
+              "total": 31787,
+              "categories": {
+                "creators": 7799,
+                "factory-policy": 0,
+                "accessors": 2207,
+                "dispatch-tables": 0,
+                "resolve": 2314,
+                "lifecycle": 15787,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 149,
+                "user-code": 144,
+                "state": 537,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 247
+              }
+            },
+            {
+              "container": "SizeFixtureC3xxx",
+              "total": 31866,
+              "categories": {
+                "creators": 7813,
+                "factory-policy": 0,
+                "accessors": 2241,
+                "dispatch-tables": 0,
+                "resolve": 2318,
+                "lifecycle": 15807,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 149,
+                "user-code": 146,
+                "state": 540,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 249
+              }
+            },
+            {
+              "container": "SizeFixtureC4xxxx",
+              "total": 31945,
+              "categories": {
+                "creators": 7827,
+                "factory-policy": 0,
+                "accessors": 2275,
+                "dispatch-tables": 0,
+                "resolve": 2322,
+                "lifecycle": 15827,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 149,
+                "user-code": 148,
+                "state": 543,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 251
+              }
+            },
+            {
+              "container": "SizeFixtureC5xxxxx",
+              "total": 32024,
+              "categories": {
+                "creators": 7841,
+                "factory-policy": 0,
+                "accessors": 2309,
+                "dispatch-tables": 0,
+                "resolve": 2326,
+                "lifecycle": 15847,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 149,
+                "user-code": 150,
+                "state": 546,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 253
+              }
+            }
+          ]
+        },
+        "closed-debug-on": {
+          "total": 195963,
+          "categories": {
+            "creators": 46836,
+            "factory-policy": 0,
+            "accessors": 13344,
+            "dispatch-tables": 0,
+            "resolve": 13896,
+            "lifecycle": 94782,
+            "events": 2694,
+            "runtime-helpers": 12672,
+            "debug-metadata": 5898,
+            "user-code": 870,
+            "state": 3231,
+            "other-members": 0,
+            "class-shell": 252,
+            "imports": 0,
+            "glue": 1488
+          },
+          "parts": [
+            {
+              "container": "SizeFixtureC0",
+              "total": 32438,
+              "categories": {
+                "creators": 7771,
+                "factory-policy": 0,
+                "accessors": 2139,
+                "dispatch-tables": 0,
+                "resolve": 2306,
+                "lifecycle": 15747,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 958,
+                "user-code": 140,
+                "state": 531,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 243
+              }
+            },
+            {
+              "container": "SizeFixtureC1x",
+              "total": 32527,
+              "categories": {
+                "creators": 7785,
+                "factory-policy": 0,
+                "accessors": 2173,
+                "dispatch-tables": 0,
+                "resolve": 2310,
+                "lifecycle": 15767,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 968,
+                "user-code": 142,
+                "state": 534,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 245
+              }
+            },
+            {
+              "container": "SizeFixtureC2xx",
+              "total": 32616,
+              "categories": {
+                "creators": 7799,
+                "factory-policy": 0,
+                "accessors": 2207,
+                "dispatch-tables": 0,
+                "resolve": 2314,
+                "lifecycle": 15787,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 978,
+                "user-code": 144,
+                "state": 537,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 247
+              }
+            },
+            {
+              "container": "SizeFixtureC3xxx",
+              "total": 32705,
+              "categories": {
+                "creators": 7813,
+                "factory-policy": 0,
+                "accessors": 2241,
+                "dispatch-tables": 0,
+                "resolve": 2318,
+                "lifecycle": 15807,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 988,
+                "user-code": 146,
+                "state": 540,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 249
+              }
+            },
+            {
+              "container": "SizeFixtureC4xxxx",
+              "total": 32794,
+              "categories": {
+                "creators": 7827,
+                "factory-policy": 0,
+                "accessors": 2275,
+                "dispatch-tables": 0,
+                "resolve": 2322,
+                "lifecycle": 15827,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 998,
+                "user-code": 148,
+                "state": 543,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 251
+              }
+            },
+            {
+              "container": "SizeFixtureC5xxxxx",
+              "total": 32883,
+              "categories": {
+                "creators": 7841,
+                "factory-policy": 0,
+                "accessors": 2309,
+                "dispatch-tables": 0,
+                "resolve": 2326,
+                "lifecycle": 15847,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 1008,
+                "user-code": 150,
+                "state": 546,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 253
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "above-threshold",
+      "providers": 200,
+      "containers": 1,
+      "configs": {
+        "open-debug-off": {
+          "total": 895333,
+          "categories": {
+            "creators": 403544,
+            "factory-policy": 0,
+            "accessors": 112523,
+            "dispatch-tables": 0,
+            "resolve": 20743,
+            "lifecycle": 346477,
+            "events": 449,
+            "runtime-helpers": 1811,
+            "debug-metadata": 149,
+            "user-code": 8946,
+            "state": 410,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 895333,
+              "categories": {
+                "creators": 403544,
+                "factory-policy": 0,
+                "accessors": 112523,
+                "dispatch-tables": 0,
+                "resolve": 20743,
+                "lifecycle": 346477,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 149,
+                "user-code": 8946,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "open-debug-on": {
+          "total": 913936,
+          "categories": {
+            "creators": 403544,
+            "factory-policy": 0,
+            "accessors": 112523,
+            "dispatch-tables": 0,
+            "resolve": 20743,
+            "lifecycle": 346477,
+            "events": 449,
+            "runtime-helpers": 1811,
+            "debug-metadata": 18752,
+            "user-code": 8946,
+            "state": 410,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 913936,
+              "categories": {
+                "creators": 403544,
+                "factory-policy": 0,
+                "accessors": 112523,
+                "dispatch-tables": 0,
+                "resolve": 20743,
+                "lifecycle": 346477,
+                "events": 449,
+                "runtime-helpers": 1811,
+                "debug-metadata": 18752,
+                "user-code": 8946,
+                "state": 410,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "closed-debug-off": {
+          "total": 865167,
+          "categories": {
+            "creators": 397868,
+            "factory-policy": 0,
+            "accessors": 111455,
+            "dispatch-tables": 0,
+            "resolve": 2302,
+            "lifecycle": 341129,
+            "events": 449,
+            "runtime-helpers": 2112,
+            "debug-metadata": 149,
+            "user-code": 8895,
+            "state": 527,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 865167,
+              "categories": {
+                "creators": 397868,
+                "factory-policy": 0,
+                "accessors": 111455,
+                "dispatch-tables": 0,
+                "resolve": 2302,
+                "lifecycle": 341129,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 149,
+                "user-code": 8895,
+                "state": 527,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        },
+        "closed-debug-on": {
+          "total": 883569,
+          "categories": {
+            "creators": 397868,
+            "factory-policy": 0,
+            "accessors": 111455,
+            "dispatch-tables": 0,
+            "resolve": 2302,
+            "lifecycle": 341129,
+            "events": 449,
+            "runtime-helpers": 2112,
+            "debug-metadata": 18551,
+            "user-code": 8895,
+            "state": 527,
+            "other-members": 0,
+            "class-shell": 42,
+            "imports": 0,
+            "glue": 239
+          },
+          "parts": [
+            {
+              "container": "SizeFixture",
+              "total": 883569,
+              "categories": {
+                "creators": 397868,
+                "factory-policy": 0,
+                "accessors": 111455,
+                "dispatch-tables": 0,
+                "resolve": 2302,
+                "lifecycle": 341129,
+                "events": 449,
+                "runtime-helpers": 2112,
+                "debug-metadata": 18551,
+                "user-code": 8895,
+                "state": 527,
+                "other-members": 0,
+                "class-shell": 42,
+                "imports": 0,
+                "glue": 239
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -124,7 +124,15 @@ describe('Analyzer - Duplicate Config Names (buildNameIndex)', () => {
     // With the guard in buildNameIndex, if both configs somehow get resolved
     // for the same name, the first one's tokens would be used.
     // In this test, main explicitly imports config1, so FirstService is used.
-    expect(hasFirstService).toBe(true);
+    // T03 C1: the parent is skipped by configuration identity, not by variable name.
+    // `config1` is file1's `sharedConfig`, so its tokens come from the parent, and the homonym of
+    // file2 is a builder of its own that stays in the merged graph.
+    const parentProvidesFirst = Array.from(graph.parentProvidedTokens ?? []).some((k: string) =>
+      k.includes('FirstService')
+    );
+    expect(hasFirstService).toBe(false);
+    expect(parentProvidesFirst).toBe(true);
+    expect(hasSecondService).toBe(true);
     expect(hasMainService).toBe(true);
 
     // This test primarily verifies that the code doesn't crash and

@@ -8,7 +8,7 @@ Services that hold external resources need explicit cleanup. Without a lifecycle
 
 ## The Solution
 
-Implement `IDisposable` or `IAsyncDisposable`. NeoSyringe calls `dispose()` automatically when `container.destroy()` is invoked.
+Implement `IDisposable` or `IAsyncDisposable`. NeoSyringe calls `dispose()` automatically when `container.destroy()` is invoked. A class that implements the standard `[Symbol.dispose]()` or `[Symbol.asyncDispose]()` (TypeScript 5.2, `lib: ["ESNext.Disposable"]`) is released the same way. See [Standard protocols](#standard-protocols).
 
 ```typescript
 import { IDisposable, IAsyncDisposable } from '@djodjonx/neosyringe';
@@ -51,13 +51,58 @@ await container.destroy();
 
 ## How It Works
 
-NeoSyringe detects `dispose()` at compile time by inspecting the class's declared type. The generated `destroy()` method:
+NeoSyringe detects the disposer at compile time by inspecting the class's declared type: a `dispose` method, or a method keyed by `Symbol.dispose` or `Symbol.asyncDispose`. The generated `destroy()` method:
 
-1. Calls `dispose()` on each cached singleton **in reverse dependency order** (dependents before dependencies)
+1. Calls the disposer of each cached singleton **in reverse dependency order** (dependents before dependencies)
 2. Checks `instances.has()` first — services never resolved are skipped
 3. Clears the instance cache last
 
-If any service has `dispose(): Promise<void>`, the generated `destroy()` becomes `async`.
+When a container has a disposal slot, the generated `destroy()` is `async` (`packages/core/src/generator/LifecycleEmitter.ts:971`): the disposers are called at once, in the same order, and `destroy()` resolves when every promise they returned has settled.
+
+## Standard protocols
+
+One method releases one instance, and it is called once, on the instance itself. The order is the one the generated code tries at run time (`packages/core/src/generator/LifecycleEmitter.ts:36-52`):
+
+| Order | Method | Used when |
+|-------|--------|-----------|
+| 1 | `dispose()` | it is a function, own or inherited |
+| 2 | `[Symbol.asyncDispose]()` | no callable `dispose`, and the method is not `null` or `undefined` |
+| 3 | `[Symbol.dispose]()` | none of the above |
+
+- A class with three methods runs `dispose()` only. If you want the others, call them from `dispose()`.
+- A `dispose` that is not a function gives way to the symbols. A symbol member that is neither a function, `null` nor `undefined` is refused: `destroy()` reports a `TypeError` with the message `disposal protocol must be callable` and still releases the other services (`packages/core/src/generator/LifecycleEmitter.ts:47`).
+- Everything a disposer returns is awaited when it is a promise, whatever its declared type: a `dispose(): void` that returns a pending promise at run time is awaited too (`packages/core/src/generator/LifecycleEmitter.ts:1027-1029` and `packages/core/src/generator/LifecycleEmitter.ts:1061-1065`). Every failure is collected, the cleanup goes on, and `destroy()` rejects with one `AggregateError` that lists them all (`packages/core/src/generator/LifecycleEmitter.ts:1074`).
+- The build finds a symbol-keyed method through the TypeScript checker, by the identity of the symbol, never by the text of a name. A method called `'Symbol.dispose'`, or keyed by another `unique symbol`, is not a disposer. With no disposable lib in the program the symbols do not exist for the checker and the build finds only `dispose()` (`packages/core/src/analyzer/parsers/InjectionParser.ts:617`).
+- A singleton returned by a factory is looked at when it is disposed: a value that is not an object or a function is skipped (`packages/core/src/generator/LifecycleEmitter.ts:38`), and the three methods are tried in the order above. Transients, values, borrowed results, parent services, scope inputs, aliases' targets owned elsewhere and `override()` mocks are never disposed by this container, as before.
+
+The symbols are read from `Symbol` when a value is disposed, never when the module loads, and nothing is installed on `Symbol`. A runtime that has no `Symbol.dispose` simply never finds one (`packages/core/src/generator/LifecycleEmitter.ts:42-43`).
+
+## `await using`
+
+A container and a scope are `await using` resources when the consumer's TypeScript lib declares `Symbol.asyncDispose`: `[Symbol.asyncDispose]()` calls `destroy()` (`packages/core/src/generator/LifecycleEmitter.ts:80`, `packages/neosyringe/src/types.ts:21`).
+
+```typescript
+// tsconfig: "lib": ["ES2022", "ESNext.Disposable"]
+async function handle(request: Request) {
+  await using scope = container.createScope();
+  return scope.resolve(Handler).run(request);
+} // scope.destroy() ran here; the parent container is open
+```
+
+- The scope is closed when the block ends. The parent stays open. A scope made from a `scopeInputs` template is released the same way, and so is the template itself.
+- The language decides what happens to the errors. When the body throws and the disposal fails too, you get a `SuppressedError`: `error` is the disposal failure (an `AggregateError` from `destroy()`) and `suppressed` is the error of the body (`packages/core/tests/generator/t21-disposal-runtime.test.ts`, `T21-P12`).
+- There is no synchronous `using`: the cleanup may be asynchronous, so a container has no `[Symbol.dispose]()` and `using scope = container.createScope()` is a compile error (`tests/consumer-types/negative-disposable/consumer.ts`).
+- The type is added only when the lib has the symbol. A consumer without `ESNext.Disposable` sees no new member and no missing global type, and the minimum TypeScript version does not change. `destroy()` ends a container everywhere (`packages/neosyringe/src/types.ts:21-23`).
+- Where the runtime has no `Symbol.asyncDispose` the protocol does not exist; the generated class stores the delegate under the key `undefined` and nothing else changes. `await container.destroy()` works on every runtime. No `Symbol.for` stand-in is installed, and NeoSyringe adds no polyfill.
+
+## Migration
+
+- **A resource that only has `[Symbol.dispose]` or `[Symbol.asyncDispose]` used to be ignored. It is now closed by `destroy()`**, `override()` and the rollback of a failed `initialize()`. If your code already closed it by hand, it is now closed twice: remove one of the two calls, or make the method idempotent.
+- **A `dispose(): void` that returns a promise is now awaited.** Before, `destroy()` did not wait for it. Now `destroy()` resolves after the promise settles, and rejects if it rejects. A container with a disposal slot has an `async` `destroy()`: the disposers are still called during the call, and the promise it returns settles once the promises they returned have settled, not at once (`packages/core/src/generator/LifecycleEmitter.ts:971`, `packages/core/src/generator/LifecycleEmitter.ts:1268`).
+- A class that has both `dispose()` and a symbol method keeps running `dispose()` only.
+- **A hand-built object typed `CoreContainer`, `Container`, `AsyncContainer`, `ContainerTemplate` or `BoundContainer` (a test double, an adapter) needs `[Symbol.asyncDispose]()` when the lib declares the symbol** (`ESNext` or `ESNext.Disposable`). The member is required there, and without it the object stops compiling with `TS2741` (`tests/consumer-types/negative-disposable/consumer.ts:34` to `:37`). Add `async [Symbol.asyncDispose]() { await this.destroy(); }` and it compiles again (`tests/consumer-types/positive-disposable/consumer.ts:61` to `:84`). With a lib that has no such symbol nothing changes.
+- **`override()` and `clearOverrides()` can now answer `NEO_CONTAINER_BUSY` instead of `NEO_CONTAINER_DESTROYED`.** A synchronous graph whose only disposal slots are `dispose()` classes used to finish `destroy()` before it returned. Its `destroy()` is now `async`, so the container stays busy until the promise settles, and a call made in that window is refused with `NEO_CONTAINER_BUSY`. After the promise settles, the code is `NEO_CONTAINER_DESTROYED` as before (`packages/core/src/generator/LifecycleEmitter.ts:1144` and `:1199`, `packages/core/tests/generator/t21-disposal-runtime.test.ts`, `T21-W18`).
+- A transient with only a symbol disposer, captured by a singleton, is now refused with `NEO_DISPOSABLE_TRANSIENT_CAPTURED`, like a transient with `dispose()`.
 
 ## Constraints
 
@@ -72,6 +117,12 @@ A singleton factory is disposed when its result has a callable `dispose`. Opt ou
 ## Dispose Order
 
 Services are disposed in reverse dependency order: if `UserService` depends on `DbConnection`, then `UserService.dispose()` is called before `DbConnection.dispose()`.
+
+This example is compiled and run by `tests/e2e/g07-docs-examples.test.ts`: a scope resolves a `Repo` that needs a `Connection`, and `destroy()` closes the repo, then the connection. A second `destroy()` closes nothing more.
+
+<<< @/../examples/new-api/disposal.ts#container
+
+<<< @/../examples/new-api/disposal.ts#destroy
 
 ## Testing
 

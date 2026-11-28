@@ -1,0 +1,25 @@
+esbuild only. Rollup is not used. scripts/ci/consumer-dist.mjs is a CI check, not this measure.
+node: v22.23.2
+zlib: 1.3.1-e00f703
+os: Darwin 27.2.0 darwin
+cpu: Apple M4 Max x16
+esbuild: 0.27.2
+typescript: 5.9.3
+neosyringe: 0.3.0
+command: node scripts/measure-chunk-split.mjs
+gzip: level 9, Brotli: quality 11, both on the minified text
+scenario          role       entry       raw    minified      gzip    brotli  sentinel  marker
+open-full  mode=open profile=full result={"tag":"CHUNK_SPLIT_HEAVY","marker":"CHUNK_SPLIT_CONTAINER"}
+                  initial     true     16827        8459      2449      2166     false    true
+                  deferred   false     29546       22481      8698      7072      true   false
+open-minimal  mode=open profile=minimal result={"tag":"CHUNK_SPLIT_HEAVY","marker":"CHUNK_SPLIT_CONTAINER"}
+                  initial     true     11461        6364      2069      1818     false    true
+                  deferred   false     29546       22481      8698      7072      true   false
+closed-full  mode=closed profile=full result={"tag":"CHUNK_SPLIT_HEAVY","marker":"CHUNK_SPLIT_CONTAINER"}
+                  initial     true     16471        8462      2489      2196     false    true
+                  deferred   false     29546       22481      8698      7072      true   false
+closed-minimal  mode=closed profile=minimal result={"tag":"CHUNK_SPLIT_HEAVY","marker":"CHUNK_SPLIT_CONTAINER"}
+                  initial     true     11755        6564      2150      1896     false    true
+                  deferred   false     29546       22481      8698      7072      true   false
+control-static  mode=open profile=full result={"tag":"CHUNK_SPLIT_HEAVY","marker":"CHUNK_SPLIT_CONTAINER"}
+                  initial     true     42379       28640     11134      8632      true    true

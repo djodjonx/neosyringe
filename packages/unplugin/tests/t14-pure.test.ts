@@ -210,7 +210,7 @@ function expectSentinelAbsent(proof: BundleProof): void {
 }
 
 function neoContainerClasses(source: string): string[] {
-  return [...new Set(source.match(/NeoContainer_[0-9a-f]{8}/g) ?? [])];
+  return [...new Set(source.match(/NeoContainer_[0-9a-f]{24}/g) ?? [])];
 }
 
 function parseErrorCount(source: string): number {

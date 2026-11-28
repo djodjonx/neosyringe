@@ -1,4 +1,4 @@
-import { toStableDiagnostic, type AnalysisError, type ContainerLookup, type DiagnosticCode } from '@djodjonx/neosyringe-core/analyzer';
+import { fixHintOfError, toStableDiagnostic, type AnalysisError, type ContainerLookup, type DiagnosticCode } from '@djodjonx/neosyringe-core/analyzer';
 import { relative } from 'node:path';
 
 export interface CliArgs {
@@ -36,6 +36,14 @@ Options:
   --container <name|key>        narrow --explain to one container (containerKey first, then name)
   --retention-report [path]     write the versioned retention report to path, or print it to stdout
   --help                        print this text
+
+Commands:
+  doctor [--json] [-p, --project <path>]
+                                check the environment: typescript, NeoSyringe packages, package exports,
+                                the tsconfig and the integration declared in the bundler config.
+                                Read-only. Exit 1 when a check is an error, 0 otherwise (warning and unknown
+                                are printed, they do not fail). A flag other than --json, --project, --help
+                                is a usage error (exit 2).
 
 --explain exits 0 when the token is found, 1 when it is absent or when --container matches no container
 (that result carries containerFound: false). --explain is exclusive: with --retention-report, --graph or
@@ -127,7 +135,30 @@ export function findUsageError(argv: string[], args: CliArgs): string | undefine
   return undefined;
 }
 
-/** Version of the `--json` report. Bump on a breaking change of its shape. */
+/** True when the first argument selects the `doctor` command. */
+export function isDoctorCommand(argv: string[]): boolean {
+  return argv[0] === 'doctor';
+}
+
+/**
+ * The first misuse of `doctor`, or undefined. `argv` is what follows `doctor`. Pure: the caller prints it and exits 2.
+ * `doctor` takes `--json`, `--help` and `--project <path>` (or `-p`) and nothing else.
+ */
+export function findDoctorUsageError(argv: string[]): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    const argument = argv[i] ?? '';
+    if (argument === '--json' || argument === '--help') continue;
+    if (argument === '--project' || argument === '-p') {
+      if (!isValue(argv[i + 1])) return `doctor: ${argument} needs a tsconfig path.`;
+      i += 1;
+      continue;
+    }
+    return `doctor: unknown argument ${argument}. It takes --json and --project <path>.`;
+  }
+  return undefined;
+}
+
+/** Version of the `--json` report. Bump on a breaking change of its shape. Adding a field is not one. */
 export const REPORT_SCHEMA_VERSION = 1;
 
 export interface JsonReportError {
@@ -146,6 +177,8 @@ export interface JsonReportError {
   containerFile?: string;
   token?: string;
   chain?: string[];
+  /** One targeted fix, from the same converter as the text report. Absent when the error has no code. */
+  hint?: string;
 }
 
 export interface JsonReport {
@@ -172,6 +205,7 @@ export function buildJsonReport(errors: AnalysisError[], cwd: string, lookup?: C
     errorCount: errors.length,
     errors: errors.map(err => {
       const diagnostic = toStableDiagnostic(err, lookup);
+      const hint = fixHintOfError(err, lookup);
       return {
         ...(diagnostic.code !== undefined ? { code: diagnostic.code } : {}),
         severity: diagnostic.severity,
@@ -185,6 +219,7 @@ export function buildJsonReport(errors: AnalysisError[], cwd: string, lookup?: C
         ...(diagnostic.containerFile !== undefined ? { containerFile: relative(cwd, diagnostic.containerFile) } : {}),
         ...(diagnostic.token !== undefined ? { token: diagnostic.token } : {}),
         ...(diagnostic.chain !== undefined ? { chain: diagnostic.chain } : {}),
+        ...(hint !== undefined ? { hint } : {}),
       };
     }),
   };

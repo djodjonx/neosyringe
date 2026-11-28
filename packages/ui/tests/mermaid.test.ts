@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { graphToMermaid } from '../src/mermaid';
 import type { SerializableGraph } from '../src/types';
 
-function graph(nodes: Array<{ tokenId: string; deps?: string[]; optDeps?: string[]; lifecycle?: 'singleton' | 'transient'; type?: 'explicit' | 'factory' | 'value' | 'autowire' | 'parent' }>): SerializableGraph {
+function graph(nodes: Array<{ tokenId: string; deps?: string[]; optDeps?: string[]; lifecycle?: 'singleton' | 'transient'; type?: 'explicit' | 'factory' | 'value' | 'autowire' | 'parent' | 'alias' }>): SerializableGraph {
   return {
     containerId: 'Test',
     nodes: nodes.map(n => ({
@@ -77,5 +77,13 @@ describe('graphToMermaid', () => {
     expect(result).toContain('  Maker["Maker\\n[transient]"]:::factory');
     expect(result).toContain('  ExplicitSvc["ExplicitSvc\\n[transient]"]:::transient');
     expect(result).toContain('  AutoSvc["AutoSvc\\n[singleton]"]:::singleton');
+  });
+  it('E20-F6 an alias is labelled as one and drawn with the lifecycle of its target', () => {
+    const result = graphToMermaid(graph([
+      { tokenId: 'Engine', lifecycle: 'transient' },
+      { tokenId: 'Logger', type: 'alias', lifecycle: 'transient', deps: ['Engine'] },
+    ]));
+    expect(result).toContain('  Logger["Logger\\n[alias, transient]"]:::transient');
+    expect(result).toContain('  Logger --> Engine');
   });
 });

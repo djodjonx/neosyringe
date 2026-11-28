@@ -6,6 +6,7 @@
 // outside this repo, then typechecks, bundles and resolves a published token.
 // T21: each tarball is proven to carry the build on disk (scripts/ci/lib/tarball-proof.mjs), then the
 // integrated scenario and the closed bundle are compiled by the installed plugin and run.
+// G07: the examples of examples/new-api are typechecked against the tarballs, built by the installed plugin and run.
 // The temporary directory is removed in finally.
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -50,6 +51,7 @@ const NAMED = [
   ['@djodjonx/neosyringe', 'useInterface'],
   ['@djodjonx/neosyringe-plugin', 'neoSyringePlugin'],
   ['@djodjonx/neosyringe-ui', 'buildStandaloneHtml'],
+  ['@djodjonx/neosyringe-ui/serialize', 'serializeGraph'],
 ];
 
 const FORBIDDEN_BUNDLE = [
@@ -282,7 +284,8 @@ try {
     "import { neoSyringePlugin } from '@djodjonx/neosyringe-plugin';",
     "import transformer from '@djodjonx/neosyringe-plugin/transformer';",
     "import { buildStandaloneHtml } from '@djodjonx/neosyringe-ui';",
-    'export const surface = [Analyzer, Generator, TSContext, useInterface, neoSyringePlugin, transformer, buildStandaloneHtml];',
+    "import { serializeGraph } from '@djodjonx/neosyringe-ui/serialize';",
+    'export const surface = [Analyzer, Generator, TSContext, useInterface, neoSyringePlugin, transformer, buildStandaloneHtml, serializeGraph];',
     '',
   ].join('\n'));
   writeFileSync(path.join(consumerDir, 'lsp.cts'), [
@@ -535,7 +538,7 @@ insideConsumer(require.resolve('@djodjonx/neosyringe-lsp'));
   if (t21Types.status !== 0) fail(`t21 fixtures do not typecheck against the tarballs\n${t21Types.output}`);
   const installedPlugin = requireConsumer('@djodjonx/neosyringe-plugin').neoSyringePlugin;
   const t21Warnings = [];
-  async function bundleT21(entry, pluginOptions, nodeEnv) {
+  async function bundleT21(entry, pluginOptions, nodeEnv, project = t21Config) {
     const previousEnv = process.env.NODE_ENV;
     const previousWarn = console.warn;
     process.env.NODE_ENV = nodeEnv;
@@ -551,7 +554,7 @@ insideConsumer(require.resolve('@djodjonx/neosyringe-lsp'));
         platform: 'node',
         logLevel: 'silent',
         define: { 'process.env.NODE_ENV': JSON.stringify(nodeEnv) },
-        plugins: [installedPlugin.esbuild({ project: t21Config, ...pluginOptions })],
+        plugins: [installedPlugin.esbuild({ project, ...pluginOptions })],
       });
       return { code: result.outputFiles[0].text, metafile: result.metafile };
     } finally {
@@ -592,6 +595,39 @@ insideConsumer(require.resolve('@djodjonx/neosyringe-lsp'));
     fail(`t21 closed bundle run differs\n${JSON.stringify(closedReport)}`);
   }
   step('t21 closed bundle from the tarballs: sentinel absent, effect run once, eager root started');
+
+  // G07: the examples of examples/new-api that tests/e2e/g07-docs-examples.test.ts runs from the sources are typechecked
+  // against the tarballs, built by the installed plugin and run. The names and the expected values are in one file.
+  const g07Expected = readJson(path.join(t21Fixtures, 'g07-examples.expected.json'));
+  const g07Names = Object.keys(g07Expected);
+  const g07Dir = path.join(consumerDir, 'g07');
+  mkdirSync(g07Dir, { recursive: true });
+  for (const name of g07Names) cpSync(path.join(root, 'examples/new-api', `${name}.ts`), path.join(g07Dir, `${name}.ts`));
+  const g07Config = path.join(consumerDir, 'tsconfig.g07.json');
+  writeFileSync(g07Config, `${JSON.stringify({
+    compilerOptions: {
+      target: 'ES2022',
+      module: 'ESNext',
+      moduleResolution: 'bundler',
+      strict: true,
+      skipLibCheck: true,
+      noEmit: true,
+      types: [],
+    },
+    include: ['g07/**/*.ts'],
+  }, null, 2)}\n`);
+  const g07Types = run(tsc, ['--noEmit', '-p', g07Config], consumerDir);
+  if (g07Types.status !== 0) fail(`g07 examples do not typecheck against the tarballs\n${g07Types.output}`);
+  const warningsBefore = t21Warnings.length;
+  for (const name of g07Names) {
+    const built = await bundleT21(`g07/${name}.ts`, { validation: 'strict' }, 'production', g07Config);
+    const report = runBundled(`g07-${name}.cjs`, built.code);
+    if (!isDeepStrictEqual(report, g07Expected[name])) {
+      fail(`g07 example ${name} from the tarballs differs from tests/e2e/fixtures/g07-examples.expected.json\n${JSON.stringify(report)}`);
+    }
+  }
+  if (t21Warnings.length > warningsBefore) fail(`g07 examples build warned\n${t21Warnings.slice(warningsBefore).join('\n')}`);
+  step(`g07 examples from the tarballs (${g07Names.length}): typechecked, built by the installed plugin and run, equal to the pinned values`);
 
   const runtimeTarball = packed.find((item) => item.name === '@djodjonx/neosyringe')?.tarball;
   if (!runtimeTarball) fail('runtime tarball was not packed');

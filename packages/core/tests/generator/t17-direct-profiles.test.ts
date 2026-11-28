@@ -283,6 +283,8 @@ interface OpenOptions {
   suffix?: string;
   /** Trace shared with another container of the same run (a parent logs into its child's trace). */
   sink?: string[];
+  /** Rows up to which a table is the linear cases. Absent: the default of the Generator. */
+  linearMax?: number;
 }
 
 const closers: Array<() => Promise<void>> = [];
@@ -343,6 +345,9 @@ function open(graph: DependencyGraph, emitter: Emitter | undefined, options: Ope
     options.debug ?? false,
     options.testOverrides ?? false,
     emitter,
+    undefined,
+    undefined,
+    options.linearMax === undefined ? undefined : { linearMax: options.linearMax },
   ).generate();
   const code = `${generated}\n${options.suffix ?? ''}`;
   const js = ts.transpileModule(code, {
@@ -562,14 +567,12 @@ describe('T17 direct accessors and runtime profiles', () => {
       expect(run.trace).toContain('transient distinct true');
       expect(run.trace).toContain('consumer holds single true');
     }
-    // Known reference divergence: the reference reads a cached `undefined` as "absent" and
-    // falls through to not-found. The optimized emitter keeps the value (spec: "valeur undefined conservée").
+    // A stored undefined singleton is returned by both emitters (packages/core/src/generator/Generator.ts:394).
     expect(optimized.trace).toContain('undef first undefined');
     expect(optimized.trace).toContain('undef second undefined');
-    expect(reference.trace).toContain('undef first not-found');
-    expect(reference.trace).toContain('undef second not-found');
-    const comparable = (trace: readonly string[]): string[] => trace.filter((line) => !line.startsWith('undef '));
-    expect(comparable(optimized.trace)).toEqual(comparable(reference.trace));
+    expect(reference.trace).toContain('undef first undefined');
+    expect(reference.trace).toContain('undef second undefined');
+    expect(optimized.trace).toEqual(reference.trace);
   });
 
   it('T17-A01 closed mode: a local undefined shadows a parent token instead of falling through to it', async () => {
@@ -597,9 +600,10 @@ describe('T17 direct accessors and runtime profiles', () => {
     expect((byDefault.container.resolve('Consumer') as { x: unknown }).x).toBeUndefined();
     expect(count(sink, 'create X')).toBe(1);
 
-    // Recorded reference divergence (Generator.ts `result !== undefined`): the parent value wins.
-    expect(reference.container.resolve('X')).toBe('from-parent');
-    expect((reference.container.resolve('Consumer') as { x: unknown }).x).toBe('from-parent');
+    // A stored undefined stays local on the reference emitter too (packages/core/src/generator/Generator.ts:394).
+    expect(reference.container.resolve('X')).toBeUndefined();
+    expect(reference.container.resolve('X')).toBeUndefined();
+    expect((reference.container.resolve('Consumer') as { x: unknown }).x).toBeUndefined();
   });
 
   it('T17-A02 two scopes and a shared parent behave the same after optimization', async () => {
@@ -911,7 +915,7 @@ describe('T17 direct accessors and runtime profiles', () => {
     const depKey = tokenId(graph, 'PrivDep');
     const rootKey = tokenId(graph, 'PrivRoot');
     const { container, source: code } = open(graph, undefined, { modules: () => ({ dep: depKey }) });
-    expect(methodText(code, 'public resolve<T>(token: any): T {')).not.toContain('_resolveInternal(');
+    expect(methodText(code, 'public resolve(token: unknown): unknown {')).not.toContain('_resolveInternal(');
     expect(code).not.toContain('_resolveInternal');
     expect(code).not.toContain('_resolveAllInternal');
     expect(container.resolve(rootKey)).toEqual({ n: 5 });
@@ -949,27 +953,37 @@ describe('T17 direct accessors and runtime profiles', () => {
     const { reference, optimized } = await differential(closedGraph(false), async ({ container, log }) => {
       const value = container.resolve('Consumer') as { p: unknown; l: unknown; items: unknown[] };
       log(`parent ${String(value.p)} local ${describeValue(value.l)} items ${value.items.map(describeValue).join(',')}`);
-    }, { parentGraph });
+    }, { parentGraph, linearMax: 0 });
     expect(optimized.trace).toEqual(reference.trace);
     expect(optimized.trace).toEqual(['parent from-parent local local items n1,n2']);
 
-    const internal = methodText(optimized.source, 'private _resolveInternal<T>(token: any): T {');
+    const internal = methodText(optimized.source, 'private _resolveInternal(token: unknown): unknown {');
     expect(internal).not.toContain('_get_');
     expect(internal).not.toContain('_direct_');
-    expect(internal).not.toContain('token === "Local"');
-    const internalAll = methodText(optimized.source, 'private _resolveAllInternal<T>(token: any): T[] {');
-    expect(internalAll).toContain('token === "Item_1"');
-    expect(internalAll).not.toContain('token === "Other_1"');
-    expect(methodText(optimized.source, 'public resolveAll<T>(token: any): T[] {')).not.toContain('_resolveAllInternal(');
+    // No local provider has a row in a closed container that no factory reads freely: the class has no dispatch table.
+    expect(internal).not.toContain('__neoDispatch');
+    expect(optimized.source).not.toMatch(/__neoDispatch\b/);
+    // The internal list resolver reads the declared multi token only; the exported root has its own table.
+    const internalAll = methodText(optimized.source, 'private _resolveAllInternal(token: unknown): unknown[] {');
+    expect(internalAll).toContain('__neoListsTable()');
+    expect(internalAll).not.toContain('__neoRootListsTable()');
+    expect(methodText(optimized.source, 'private static __neoListsTable()')).toContain('"Item_1"');
+    expect(methodText(optimized.source, 'private static __neoListsTable()')).not.toContain('"Other_1"');
+    const publicAll = methodText(optimized.source, 'public resolveAll(token: unknown): unknown[] {');
+    expect(publicAll).not.toContain('_resolveAllInternal(');
+    expect(publicAll).toContain('__neoRootListsTable()');
+    expect(methodText(optimized.source, 'private static __neoRootListsTable()')).toContain('"Other_1"');
+    expect(methodText(optimized.source, 'private static __neoRootListsTable()')).not.toContain('"Item_1"');
 
     // An opaque factory may ask for any token, so the dispatcher lists every local provider again.
     const opaqueRun = await differential(closedGraph(true), async ({ container, log }) => {
       const value = container.resolve('Consumer') as { l: unknown };
       log(`local ${describeValue(value.l)}`);
-    }, { parentGraph });
+    }, { parentGraph, linearMax: 0 });
     expect(opaqueRun.optimized.trace).toEqual(opaqueRun.reference.trace);
     expect(opaqueRun.optimized.trace).toEqual(['local local']);
-    expect(methodText(opaqueRun.optimized.source, 'private _resolveInternal<T>(token: any): T {')).toContain('token === "Local"');
+    expect(methodText(opaqueRun.optimized.source, 'private _resolveInternal(token: unknown): unknown {')).toContain('__neoDispatchTable()');
+    expect(methodText(opaqueRun.optimized.source, 'private static __neoDispatchTable()')).toContain('"Local"');
   });
 
   it('T17-W12 an override on a token nobody registered wins on resolve and notifies', async () => {
@@ -1031,13 +1045,18 @@ describe('T17 direct accessors and runtime profiles', () => {
     expect(typeof full.container.on).toBe('function');
   });
 
-  it('T17-P9 the default full profile keeps the reference emission', async () => {
+  it('T17-P9 the default full profile uses the optimized emission', async () => {
     const graph = graphOf([
       ['Local', factoryNode('Local', '() => ({ name: "local" })')],
     ]);
     const byDefault = open(graph, undefined, { testOverrides: true });
+    const optimized = open(graph, 'optimized', { testOverrides: true });
     const reference = open(graph, 'reference', { testOverrides: true });
-    expect(byDefault.source).toBe(reference.source);
+    expect(byDefault.source).toBe(optimized.source);
+    expect(byDefault.source).not.toBe(reference.source);
+    expect(byDefault.source).toContain('private _get_Local');
+    expect(byDefault.source).not.toContain('_direct_Local');
+    expect(byDefault.source).not.toContain('resolveLocal');
     const { container } = byDefault;
     assertFull(container);
     const seen: string[] = [];

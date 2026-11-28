@@ -120,7 +120,7 @@ Vérifié sur ce dépôt :
 - Le lockfile ne contient que `typescript@5.9.3` (`pnpm-lock.yaml:4259`, importeur `packages/core` `pnpm-lock.yaml:86`). `scripts/ci/consumer-dist.mjs` lit cette version et typecheck avec le `tsc` du consommateur.
 - esbuild 0.27.2 et rollup 4.55.2 viennent de l'importeur `packages/unplugin` (`pnpm-lock.yaml:151-155`). Le script les installe depuis le registre et les charge depuis le `node_modules` du consommateur.
 - Le job CI `test` déclare Node 20 et Node 22 (`.github/workflows/ci.yml:15`).
-- Les jobs `e2e`, `consumer-types` et `distribution` déclarent Node 22 seulement (`.github/workflows/ci.yml:67`, `.github/workflows/ci.yml:83`, `.github/workflows/ci.yml:102`).
+- Les jobs `e2e`, `consumer-types` et `distribution` déclarent Node 22 seulement (`.github/workflows/ci.yml:67`, `.github/workflows/ci.yml:83`, `.github/workflows/ci.yml:138`).
 - `@djodjonx/neosyringe` a `"sideEffects": false` (`packages/neosyringe/package.json:6`). L'audit des fichiers publiés (`tests/ci/side-effects-audit.test.ts:74-87`) parcourt `dist` en entier. Il refuse un énoncé exécutable au sommet d'un `.mjs` et d'un `.cjs`. Un `require(...)`, un `exports.x =` et un `Object.defineProperty(exports, ...)` sont le patron CJS, pas un effet. Le bundle consommateur (esbuild, et rollup via `sideEffects` lu dans `scripts/ci/consumer-dist.mjs:435-442`) laisse tomber un import inutilisé, garde un fichier listé, et laisse tomber un fichier à effet non listé.
 - `@djodjonx/neosyringe-plugin` n'a pas de champ `sideEffects`. `createUnplugin` s'exécute à l'import (`packages/unplugin/src/index.ts:57`). L'audit refuse `sideEffects: false` sur ce paquet.
 - `@djodjonx/neosyringe-ui` n'a pas de champ `sideEffects` (`packages/ui/package.json:1-14`).
@@ -191,5 +191,5 @@ Il lance le binaire `neosyringe-check` à travers le lien symbolique `node_modul
 
 Il rejoue un producteur : compilation des déclarations, manifeste écrit par le CLI installé, archive installée, clé lue par l'analyseur installé, puis la même clé après déplacement du dossier.
 
-Le job `distribution` le lance après `check-dist` (`.github/workflows/ci.yml:110-111`).
+Le job `distribution` le lance après `check-dist` (`.github/workflows/ci.yml:143-147`).
 

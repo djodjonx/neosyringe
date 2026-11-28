@@ -1,0 +1,5 @@
+{"file":"base-flat10.mjs","metric":"cold-resolve","median":56.43041999999922,"perProcess":[56.4,68.7,55.6]}
+{"file":"D-flat10.mjs","metric":"cold-resolve","median":97.52875000000017,"perProcess":[94.5,97.5,99]}
+{"file":"L3-shared-overrides.mjs","metric":"cold-resolve","median":61.342090000000546,"perProcess":[61.8,61.3,61.3]}
+{"file":"W2-overrides-and-listeners-shared.mjs","metric":"cold-resolve","median":53.61999999999966,"perProcess":[53.9,53.6,53.5]}
+{"file":"W3-all-collections-shared.mjs","metric":"cold-resolve","median":24.79291999999987,"perProcess":[24.8,26.1,24.7]}

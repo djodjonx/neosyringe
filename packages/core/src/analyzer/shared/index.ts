@@ -1,5 +1,15 @@
 export { HashUtils } from './HashUtils';
+export {
+  artifactDescriptor,
+  artifactId,
+  hashArtifactDescriptor,
+  resolveArtifactIdentity,
+  CollisionRegistry,
+} from './artifactIdentity';
+export type { ArtifactIdentity, ArtifactSource } from './artifactIdentity';
 export { TokenResolverService } from './TokenResolverService';
+export { literalTokenList } from './literalTokenList';
+export type { LiteralTokenList } from './literalTokenList';
 export {
   TOKEN_DESCRIPTOR_SCHEMA,
   canonicalDescriptor,
