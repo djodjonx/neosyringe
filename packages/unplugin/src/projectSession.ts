@@ -290,6 +290,9 @@ export class ProjectSession {
     this.#assertOpen();
     if (this.#program && this.#builtRevision === this.#revision) return this.#program;
     const host = ts.createCompilerHost(this.#options, true);
+    // No `realpath`: a package linked into node_modules keeps its node_modules path, which is what the token
+    // boundary and the package origin key on. A host that follows the link reads it as project source.
+    delete host.realpath;
     const accessed = new Set<string>();
     const oldProgram = this.#environmentDirty ? undefined : this.#program;
     if (oldProgram === undefined) this.#edges.clear();
